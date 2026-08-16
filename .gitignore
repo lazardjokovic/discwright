@@ -1,0 +1,11 @@
+# Timestamped backups of the script - local history, not for the repo
+*.bak
+
+# Shortcuts store their target as an absolute path, so they carry the author's
+# username and are broken on every other machine. Users make their own.
+*.lnk
+
+# Build output, in case an output folder ever gets pointed inside the repo
+*.iso
+disc/
+discproject.json

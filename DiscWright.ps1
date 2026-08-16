@@ -1,0 +1,1591 @@
+<#
+  DiscWright
+  Turns a GOG offline-installer folder into a burnable "retro game disc" image:
+  custom drive icon + label, and an optional autorun splash menu (background, music,
+  Play/Install/Manual/Extras/Exit buttons).
+
+  Runs on Smart App Control-locked PCs: launched via signed powershell.exe, uses
+  in-process Add-Type (allowed) and the signed mshta.exe to run the generated menu.
+  Reuses the same build pipeline proven on the Dead Space disc.
+
+  NOTE: keep this file pure ASCII - PS 5.1 mis-parses em-dashes / ellipses.
+#>
+
+# =================== STARTUP ENVIRONMENT GUARD ===================
+# Runs before Add-Type on purpose: the things it checks are what make Add-Type and
+# the window itself fail, and both failures look like "the app is just broken".
+#
+#   PS 5.1  New-Iso compiles the ISOFile helper with "Add-Type -CompilerParameters"
+#           and /unsafe. PowerShell 6 dropped -CompilerParameters entirely, so on 7
+#           the app runs fine right up until BUILD ISO and dies at the last step.
+#   STA     WinForms needs a single-threaded apartment. powershell.exe -File is STA
+#           by default, but -MTA and several hosting paths are not, and there the
+#           dialogs and file pickers misbehave rather than fail outright.
+
+# No WinForms yet, so MessageBox is not available. WScript.Shell is present in every
+# PowerShell on Windows and still gives a real modal window, which is what the rule
+# about errors getting a window actually asks for.
+function Show-StartupError([string]$msg) {
+    try { [void](New-Object -ComObject WScript.Shell).Popup($msg,0,'DiscWright',0x10) }
+    catch { Write-Host $msg }
+}
+
+if ($PSVersionTable.PSVersion.Major -ne 5) {
+    Show-StartupError (
+        "DiscWright needs Windows PowerShell 5.1, but this is PowerShell $($PSVersionTable.PSVersion).`r`n`r`n" +
+        "Building the ISO uses a compiler option that PowerShell 6 and later removed, so the build would " +
+        "fail at the very last step.`r`n`r`n" +
+        "Start DiscWright with its shortcut, or with 'Run DiscWright.cmd'.")
+    exit 1
+}
+
+if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
+    Show-StartupError (
+        "DiscWright has to run in single-threaded apartment (STA) mode, and this session is " +
+        "$([Threading.Thread]::CurrentThread.GetApartmentState()).`r`n`r`n" +
+        "The file pickers and dialogs do not work reliably otherwise.`r`n`r`n" +
+        "Start DiscWright with its shortcut, or with 'Run DiscWright.cmd' - both pass the -STA switch.")
+    exit 1
+}
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+$PROJECT_FILE = 'discproject.json'
+
+# =================== SMALL HELPERS ===================
+
+function Test-SamePath([string]$a,[string]$b) {
+    if ([string]::IsNullOrWhiteSpace($a) -or [string]::IsNullOrWhiteSpace($b)) { return $false }
+    try { return ([IO.Path]::GetFullPath($a).TrimEnd('\') -ieq [IO.Path]::GetFullPath($b).TrimEnd('\')) } catch { return $false }
+}
+
+# $child is $parent itself, or lives underneath it
+function Test-SubPath([string]$child,[string]$parent) {
+    if ([string]::IsNullOrWhiteSpace($child) -or [string]::IsNullOrWhiteSpace($parent)) { return $false }
+    try {
+        $c=[IO.Path]::GetFullPath($child).TrimEnd('\'); $p=[IO.Path]::GetFullPath($parent).TrimEnd('\')
+        return ($c -ieq $p) -or $c.StartsWith($p+'\',[StringComparison]::OrdinalIgnoreCase)
+    } catch { return $false }
+}
+
+# Files copied off a mounted ISO or any read-only media keep the ReadOnly attribute.
+# Overwriting one later fails - and GDI+ reports that as "a generic error occurred
+# in GDI+" rather than access denied, which is impossible to diagnose from the message.
+function Clear-ReadOnly([string]$path) {
+    if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path $path)) { return }
+    try {
+        $item = Get-Item -LiteralPath $path -Force
+        if ($item.PSIsContainer) {
+            Get-ChildItem -Recurse -Force -File $path -EA SilentlyContinue |
+                Where-Object { $_.IsReadOnly } | ForEach-Object { $_.IsReadOnly = $false }
+        } elseif ($item.IsReadOnly) { $item.IsReadOnly = $false }
+    } catch {}
+}
+
+# Write to temp then move: never leaves a half-written image if encoding fails, and
+# sidesteps a read-only or transiently locked destination.
+function Save-PngAtomic($bmp,[string]$outPng) {
+    $tmp = [IO.Path]::Combine([IO.Path]::GetTempPath(), ([Guid]::NewGuid().ToString('N')+'.png'))
+    $bmp.Save($tmp,[System.Drawing.Imaging.ImageFormat]::Png)
+    Clear-ReadOnly $outPng
+    Move-Item -LiteralPath $tmp -Destination $outPng -Force
+}
+
+# Sub-gigabyte payloads read badly in GB - a CD-sized game becomes "0.39 GB", and a
+# few megabytes of extras rounds to "0.00 GB", which looks like nothing at all.
+# Switch units instead of printing a meaningless zero.
+function Format-Size([double]$bytes) {
+    if ($bytes -ge 1GB) { return ('{0:N2} GB' -f ($bytes/1GB)) }
+    if ($bytes -ge 1MB) { return ('{0:N0} MB' -f ($bytes/1MB)) }
+    if ($bytes -ge 1KB) { return ('{0:N0} KB' -f ($bytes/1KB)) }
+    return ('{0:N0} bytes' -f $bytes)
+}
+
+# For text that lands in HTML markup (title, button captions).
+function ConvertTo-HtmlText([string]$s) {
+    if ([string]::IsNullOrEmpty($s)) { return '' }
+    return ($s -replace '&','&amp;' -replace '<','&lt;' -replace '>','&gt;' -replace '"','&quot;')
+}
+
+# For text that lands inside a JS string literal. HTML entities are NOT decoded
+# inside <script>, so these must be backslash-escaped, not entity-escaped.
+function ConvertTo-JsString([string]$s) {
+    if ([string]::IsNullOrEmpty($s)) { return '' }
+    return ($s -replace '\\','\\' -replace '"','\"' -replace '<','\x3c' -replace '>','\x3e')
+}
+
+# =================== BUILD PIPELINE ===================
+
+function Get-GameInfo([string]$folder) {
+    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; Msg=''; TotalBytes=0; Folder=$null
+               Warning=''; MissingParts=@() }
+    if (-not (Test-Path $folder)) { $info.Msg='Folder not found.'; return $info }
+    $exes = @(Get-ChildItem $folder -Filter 'setup_*.exe' -File -ErrorAction SilentlyContinue |
+              Sort-Object Length -Descending)
+    if ($exes.Count -eq 0) { $info.Msg='No GOG "setup_*.exe" found in this folder.'; return $info }
+    $exe = $exes[0]
+
+    # Parts belong to ONE installer and are named "<installer>-1.bin", "-2.bin"...
+    # Taking every setup_*.bin in the folder swept in the parts of a DLC or of a
+    # second game stored alongside, and wrote them to the disc as if they belonged
+    # to this installer. Match on the chosen exe's own name instead - compared as
+    # plain strings, never wildcards, because GOG names are full of brackets and
+    # dots that -like and -match would read as syntax.
+    $stem = $exe.BaseName + '-'
+    $bins = @(Get-ChildItem $folder -Filter '*.bin' -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name.StartsWith($stem,[StringComparison]::OrdinalIgnoreCase) } |
+              Sort-Object Name)
+
+    # A download that stopped early leaves a gap in the numbering. Building it
+    # produces a clean-looking ISO that only fails when someone runs the installer
+    # off the burned disc - the worst possible place to discover it, because the
+    # disc is already spent. Games with no parts at all are normal; only a gap in
+    # an existing sequence is suspicious.
+    $nums = @()
+    foreach ($b in $bins) { if ($b.BaseName -match '-(\d+)$') { $nums += [int]$Matches[1] } }
+    if ($nums.Count -gt 0) {
+        $nums = @($nums | Sort-Object -Unique)
+        $info.MissingParts = @(1..($nums[-1]) | Where-Object { $nums -notcontains $_ })
+    }
+    if ($info.MissingParts.Count -gt 0) {
+        $info.Warning = 'INCOMPLETE: installer part(s) ' + (($info.MissingParts | ForEach-Object { "-$_" }) -join ', ') +
+                        ' are missing - the download looks unfinished.'
+    } elseif ($exes.Count -gt 1) {
+        # Several installers in one folder is normal (base game plus DLC). Say which
+        # one was picked, so a wrong guess is visible before the disc is burned.
+        $info.Warning = "$($exes.Count) installers in this folder - using the largest, $($exe.Name)."
+    }
+
+    $name = $exe.VersionInfo.ProductName
+    if ([string]::IsNullOrWhiteSpace($name)) { $name = ($exe.BaseName -replace '^setup_','' -replace '_',' ' -replace '\s*\d.*$','') }
+    # Inno pads VersionInfo strings with trailing spaces - trim or they leak into
+    # folder names ("...Edition                    Disc").
+    $name = $name.Trim()
+    $info.Ok=$true; $info.SetupExe=$exe; $info.Files=@($exe)+@($bins); $info.GameName=$name
+    $info.Folder = $exe.DirectoryName
+    $info.TotalBytes = ($info.Files | Measure-Object Length -Sum).Sum
+    $plural = if ($info.Files.Count -eq 1) { 'file' } else { 'files' }
+    $info.Msg = "Detected: $name  ($($info.Files.Count) $plural, $(Format-Size $info.TotalBytes))"
+    return $info
+}
+
+# Recommend the smallest media that fits the payload (usable capacities, GiB).
+function Get-MediaRec([double]$bytes) {
+    $gib = $bytes/1GB
+    # An 80-minute CD-R is 360,000 sectors of 2048 bytes = 0.686 GiB; 0.68 leaves a
+    # little room for the filesystem. Worth having as its own tier rather than
+    # rounding up to DVD: the sub-700 MB back catalogue is exactly the audience for
+    # a tool about authentic period discs, and telling someone to put a 1998 game
+    # on a DVD gets the whole premise wrong.
+    if     ($gib -le 0.68) { return @{ Fit=$true;  Text='fits CD-R 700 MB' } }
+    elseif ($gib -le 4.37) { return @{ Fit=$true;  Text='fits DVD5 4.7 GB (single layer)' } }
+    elseif ($gib -le 7.95) { return @{ Fit=$true;  Text='needs DVD9 8.5 GB (dual layer)' } }
+    elseif ($gib -le 23.3) { return @{ Fit=$true;  Text='too big for DVD - needs BD-R 25 GB' } }
+    elseif ($gib -le 46.6) { return @{ Fit=$true;  Text='needs BD-R DL 50 GB (dual layer)' } }
+    elseif ($gib -le 93.0) { return @{ Fit=$true;  Text='needs BD-R XL 100 GB' } }
+    else                   { return @{ Fit=$false; Text=("too big for one disc ({0:N1} GB) - multi-disc not supported" -f $gib) } }
+}
+
+# Total bytes of a mixed list of files and folders.
+function Get-ItemsSize($items) {
+    $sum = [double]0
+    foreach ($i in @($items)) {
+        if ([string]::IsNullOrWhiteSpace($i) -or -not (Test-Path $i)) { continue }
+        if (Test-Path $i -PathType Container) {
+            $s = (Get-ChildItem -Recurse -File -Force $i -EA SilentlyContinue | Measure-Object Length -Sum).Sum
+            if ($s) { $sum += $s }
+        } else { $sum += (Get-Item -LiteralPath $i).Length }
+    }
+    return $sum
+}
+
+# Every disc used to ship its icon as "disc.ico". Explorer caches icon bitmaps
+# keyed by path, so "E:\disc.ico" was the SAME cache key for every disc that ever
+# passed through that drive letter - insert a new disc and Explorer would happily
+# redraw the previous disc's icon without re-reading the file. Naming the icon
+# after the disc gives each one its own key.
+# Strips accents down to the plain letter underneath: a Polish z-acute becomes a
+# plain z, a German U-umlaut becomes a plain U. Works by splitting each character
+# into its base letter plus its combining marks, then dropping the marks.
+# Alphabets with no Latin equivalent - Cyrillic, Greek, CJK - come back untouched,
+# which is exactly what the callers test for.
+function ConvertTo-AsciiFold([string]$s) {
+    if ([string]::IsNullOrEmpty($s)) { return '' }
+    $out = New-Object System.Text.StringBuilder
+    foreach ($c in $s.Normalize([Text.NormalizationForm]::FormD).ToCharArray()) {
+        if ([Globalization.CharUnicodeInfo]::GetUnicodeCategory($c) -ne [Globalization.UnicodeCategory]::NonSpacingMark) {
+            [void]$out.Append($c)
+        }
+    }
+    return $out.ToString().Normalize([Text.NormalizationForm]::FormC)
+}
+
+function Get-DiscIconName([string]$label) {
+    if ([string]::IsNullOrWhiteSpace($label)) { return 'disc.ico' }
+    # Fold before stripping, or an accented letter is deleted outright rather than
+    # reduced: an accented letter used to vanish outright, so the Polish spelling of
+    # "Wiedzmin" produced "Wiedmin". Folding first gives back "Wiedzmin".
+    $n = ((ConvertTo-AsciiFold $label) -replace '[^A-Za-z0-9]','')
+    if ($n.Length -gt 40) { $n = $n.Substring(0,40) }
+    if ([string]::IsNullOrWhiteSpace($n)) {
+        # A label with no Latin letters or digits at all fell back to the constant
+        # "disc.ico" - which is exactly the shared per-path cache key this naming
+        # rule exists to break. Hash the label instead, so two Cyrillic or CJK discs
+        # in the same drive letter still get different icon filenames.
+        $md5 = [System.Security.Cryptography.MD5]::Create()
+        try { $h = $md5.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($label)) } finally { $md5.Dispose() }
+        $n = 'disc' + ((($h[0..3]) | ForEach-Object { $_.ToString('x2') }) -join '')
+    }
+    return ($n + '.ico')
+}
+
+# Names the build pipeline owns at the disc root - extra content may not use them.
+# 'disc.ico' stays reserved even when unused, so extra content cannot collide with
+# discs built before the icon was named after the game.
+function Test-ReservedDiscName([string]$name,[string]$iconName='disc.ico') {
+    if ($name -like 'setup_*') { return $true }
+    return (@('autorun.inf','disc.ico',$iconName,'AUTORUN','Extras',$PROJECT_FILE) -contains $name)
+}
+
+function Test-IconInput([string]$path) {
+    $r = @{ Ok=$false; IsIco=$false; W=0; H=0; Msg='' }
+    if (-not (Test-Path $path)) { $r.Msg='File not found.'; return $r }
+    $ext = [IO.Path]::GetExtension($path).ToLower()
+    try {
+        if ($ext -eq '.ico') {
+            $ic = New-Object System.Drawing.Icon($path)
+            $r.IsIco=$true; $r.W=$ic.Width; $r.H=$ic.Height; $ic.Dispose()
+            $r.Ok=$true; $r.Msg="Valid .ico ($($r.W)x$($r.H) default frame). Will be used as-is."
+        } else {
+            $img=[System.Drawing.Image]::FromFile($path); $r.W=$img.Width; $r.H=$img.Height; $img.Dispose()
+            if ($r.W -lt 64 -or $r.H -lt 64) { $r.Msg="Image is only $($r.W)x$($r.H) - too small (min 64, 256+ recommended)."; return $r }
+            $r.Ok=$true
+            $sq = ($r.W -eq $r.H)
+            $r.Msg = "Image $($r.W)x$($r.H)" + $(if(-not $sq){" (not square - will be cropped to a square icon)"}else{" - good."}) + $(if($r.W -lt 256){" [under 256px: may look soft]"}else{""})
+        }
+    } catch { $r.Msg="Not a readable image: $($_.Exception.Message)" }
+    return $r
+}
+
+# The icon is validated the moment it is picked; the background never was, so a
+# corrupt or unsupported image sailed through the whole form and only failed at
+# build time as "A generic error occurred in GDI+" - a message that tells the user
+# nothing about which file is at fault.
+function Test-BgInput([string]$path) {
+    $r = @{ Ok=$false; W=0; H=0; Msg='' }
+    if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path $path)) { $r.Msg='File not found.'; return $r }
+    try {
+        $img=[System.Drawing.Image]::FromFile($path); $r.W=$img.Width; $r.H=$img.Height; $img.Dispose()
+        if ($r.W -lt 200 -or $r.H -lt 150) {
+            $r.Msg="The image is only $($r.W)x$($r.H). The menu is 760x480, so this would be stretched past recognition."
+            return $r
+        }
+        $r.Ok=$true
+    } catch {
+        # Deliberately NOT surfacing the GDI+ text: it reports "Out of memory" for
+        # any file it cannot decode, which sends people hunting a memory problem
+        # they do not have. Say what is actually wrong instead.
+        $r.Msg = "Windows cannot read that file as an image. It may be corrupt, still downloading, " +
+                 "or a format GDI+ does not support (WebP and HEIC are the usual culprits). " +
+                 "PNG, JPG and BMP always work."
+    }
+    return $r
+}
+
+function Get-DibBytes([System.Drawing.Bitmap]$bmp) {
+    $w=$bmp.Width;$h=$bmp.Height
+    $rect=New-Object System.Drawing.Rectangle(0,0,$w,$h)
+    $data=$bmp.LockBits($rect,[System.Drawing.Imaging.ImageLockMode]::ReadOnly,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $stride=$data.Stride; $buf=New-Object byte[] ($stride*$h)
+    [System.Runtime.InteropServices.Marshal]::Copy($data.Scan0,$buf,0,$buf.Length); $bmp.UnlockBits($data)
+    $ms=New-Object System.IO.MemoryStream; $bw=New-Object System.IO.BinaryWriter($ms)
+    $bw.Write([int]40);$bw.Write([int]$w);$bw.Write([int]($h*2));$bw.Write([int16]1);$bw.Write([int16]32)
+    $bw.Write([int]0);$bw.Write([int]0);$bw.Write([int]0);$bw.Write([int]0);$bw.Write([int]0);$bw.Write([int]0)
+    for($y=$h-1;$y -ge 0;$y--){ $bw.Write($buf,$y*$stride,$w*4) }
+    $maskRow=[int]([math]::Floor(($w+31)/32))*4; $bw.Write((New-Object byte[] ($maskRow*$h)),0,($maskRow*$h))
+    $bw.Flush(); return $ms.ToArray()
+}
+
+function Convert-ToIco([string]$imgPath, [string]$outIco) {
+    $src=[System.Drawing.Image]::FromFile($imgPath)
+    # square master (center-crop)
+    $side=[math]::Min($src.Width,$src.Height)
+    $master=New-Object System.Drawing.Bitmap($side,$side,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g=[System.Drawing.Graphics]::FromImage($master); $g.InterpolationMode='HighQualityBicubic'
+    $g.DrawImage($src,(New-Object System.Drawing.Rectangle(0,0,$side,$side)),
+        (New-Object System.Drawing.Rectangle([int](($src.Width-$side)/2),[int](($src.Height-$side)/2),$side,$side)),[System.Drawing.GraphicsUnit]::Pixel)
+    $g.Dispose(); $src.Dispose()
+    $sizes=@(16,24,32,48,64,128,256); $entries=@()
+    foreach($s in $sizes){
+        $b=New-Object System.Drawing.Bitmap($s,$s,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        $g2=[System.Drawing.Graphics]::FromImage($b); $g2.InterpolationMode='HighQualityBicubic'; $g2.PixelOffsetMode='HighQuality'
+        $g2.DrawImage($master,0,0,$s,$s); $g2.Dispose()
+        if ($s -ge 256) {
+            # Vista onwards, the 256px frame of an .ico is stored as a PNG file
+            # rather than a raw DIB. A 32-bit DIB at that size is a quarter of a
+            # megabyte on its own and some shells render it poorly. The directory
+            # entry already writes 0 for a 256px dimension, which is the same
+            # convention, so only the payload changes.
+            $msPng = New-Object System.IO.MemoryStream
+            $b.Save($msPng,[System.Drawing.Imaging.ImageFormat]::Png)
+            $entries += @{ w=$s; data=$msPng.ToArray() }
+            $msPng.Dispose()
+        } else {
+            $entries += @{ w=$s; data=(Get-DibBytes $b) }
+        }
+        $b.Dispose()
+    }
+    $master.Dispose()
+    $fs=New-Object System.IO.MemoryStream; $w=New-Object System.IO.BinaryWriter($fs)
+    $w.Write([int16]0);$w.Write([int16]1);$w.Write([int16]$entries.Count); $off=6+16*$entries.Count
+    foreach($e in $entries){ $wb=if($e.w -ge 256){0}else{$e.w}
+        $w.Write([byte]$wb);$w.Write([byte]$wb);$w.Write([byte]0);$w.Write([byte]0)
+        $w.Write([int16]1);$w.Write([int16]32);$w.Write([int]$e.data.Length);$w.Write([int]$off); $off+=$e.data.Length }
+    foreach($e in $entries){ $w.Write($e.data,0,$e.data.Length) }
+    $w.Flush(); Clear-ReadOnly $outIco; [System.IO.File]::WriteAllBytes($outIco,$fs.ToArray())
+}
+
+# $unit matters: Font sizes in POINTS by default, so on a 300 dpi bitmap a "size"
+# meant as pixels comes out ~4x too big. Callers working in pixels must say so.
+function New-TitleFont([single]$size,[System.Drawing.GraphicsUnit]$unit=[System.Drawing.GraphicsUnit]::Point) {
+    try { return New-Object System.Drawing.Font("Bahnschrift SemiBold",$size,[System.Drawing.FontStyle]::Bold,$unit) }
+    catch { return New-Object System.Drawing.Font("Segoe UI",$size,[System.Drawing.FontStyle]::Bold,$unit) }
+}
+
+# $panelSide = 'Right' (default) or 'Left' - which edge the button column sits on.
+# Pick the side OPPOSITE the focal point of the artwork, or the buttons cover it.
+function New-Background([string]$imgPath,[string]$title,[string]$outPng,[string]$panelSide='Right',[bool]$divider=$false,[bool]$showTitle=$false) {
+    $W=760;$H=480;$PW=290
+    $left = ($panelSide -ieq 'Left')
+    $px   = if($left){0}else{$W-$PW}      # panel x
+    $dx   = if($left){$PW}else{$W-$PW}    # divider x
+
+    $img=[System.Drawing.Image]::FromFile($imgPath)
+    $bmp=New-Object System.Drawing.Bitmap($W,$H)
+    $g=[System.Drawing.Graphics]::FromImage($bmp)
+    $g.InterpolationMode='HighQualityBicubic';$g.SmoothingMode='AntiAlias';$g.TextRenderingHint='ClearTypeGridFit'
+    $scale=[math]::Max($W/$img.Width,$H/$img.Height); $sw=[int]($img.Width*$scale);$sh=[int]($img.Height*$scale)
+    $g.DrawImage($img,[int](($W-$sw)/2),[int](($H-$sh)/2),$sw,$sh); $img.Dispose()
+    $g.FillRectangle((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(70,0,0,0))),0,0,$W,$H)
+
+    # darkest under the buttons, fading toward the divider
+    $rect=New-Object System.Drawing.Rectangle($px,0,$PW,$H)
+    $cNear=[System.Drawing.Color]::FromArgb(225,2,5,7); $cFar=[System.Drawing.Color]::FromArgb(120,3,8,10)
+    $c1 = if($left){$cNear}else{$cFar}; $c2 = if($left){$cFar}else{$cNear}
+    $grad=New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect,$c1,$c2,0.0)
+    $g.FillRectangle($grad,$rect)
+    # The divider reads as a hard line drawn across the artwork; off by default.
+    if ($divider) { $g.DrawLine((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(200,0,190,200),2)),$dx,0,$dx,$H) }
+
+    # Title on the artwork is OFF by default: cover art usually carries the game's
+    # own logo already, and a second title drawn over it just fights the artwork.
+    if ($showTitle -and -not [string]::IsNullOrWhiteSpace($title)) {
+        # title goes on the artwork side, shrunk to fit
+        $tx = if($left){$PW+40}else{27}
+        $maxW = $W-$PW-54
+        $size=30.0; $f=New-TitleFont $size
+        while ($size -gt 12 -and $g.MeasureString($title,$f).Width -gt $maxW) {
+            $f.Dispose(); $size -= 1.5; $f=New-TitleFont $size
+        }
+        $g.DrawString($title,$f,(New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(180,0,0,0))),($tx+2),29)
+        $g.DrawString($title,$f,(New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(235,235,245,248))),$tx,27)
+        $f.Dispose()
+    }
+    $g.Dispose(); Save-PngAtomic $bmp $outPng; $bmp.Dispose()
+}
+
+# What a label will actually look like once it has been through autorun.inf.
+# AutoRun reads the file in the system ANSI codepage - it has no Unicode mode at
+# all - so this is a property of Windows, not something the tool can fix. Returns
+# the surviving text plus whether anything was lost, so callers can warn rather
+# than silently ship a drive called "???????".
+function Get-AutorunLabelPreview([string]$label) {
+    $enc  = [System.Text.Encoding]::Default
+    $seen = $enc.GetString($enc.GetBytes($label))
+    return @{ Text=$seen; Lossy=($seen -ne $label); Codepage=$enc.WebName }
+}
+
+function New-AutorunInf([string]$label,[string]$iconName,[bool]$menu,[string]$out) {
+    $lines = @('[autorun]')
+    if ($menu) { $lines += 'shellexecute=AUTORUN\menu.hta' }
+    $lines += "icon=$iconName"
+    $lines += "label=$label"
+    if ($menu) { $lines += 'action=Run ' + $label }
+    $lines += @('','[Content]','MusicFiles=false','PictureFiles=false','VideoFiles=false')
+    # ANSI, not ASCII. ASCII turned every accented character into a literal "?", so
+    # "Uber Alles" reached Explorer as "?ber Alles". The ANSI codepage carries the
+    # Latin-1 accents and the typographic dashes GOG titles are full of, and best-fit
+    # maps most of what it cannot hold - a Polish z-acute arrives as a plain z
+    # rather than as a question mark.
+    # Not UTF8: PowerShell 5.1 writes a BOM, which AutoRun does not understand.
+    Clear-ReadOnly $out; Set-Content -LiteralPath $out -Value ($lines -join "`r`n") -Encoding Default
+}
+
+function New-MenuHta([hashtable]$cfg,[string]$out) {
+    # cfg: GameName, MatchName, SetupExe, Buttons(ordered array), MusicFile, ManualFile, PanelSide
+    # Labels stay short on purpose: the game name is already on the artwork and in
+    # the window title, and a long one wrapped past the fixed 46px button height,
+    # which also threw off the panel's vertical centering below.
+    $btnDefs = [ordered]@{
+        Play    = @{ cls='play';    label='Play';                   fn='doPlay' }
+        Install = @{ cls='install'; label='Install';                fn='doInstall' }
+        Manual  = @{ cls='';        label='Game Manual';            fn='doManual' }
+        Extras  = @{ cls='';        label='Extras';                 fn='doExtras' }
+        Exit    = @{ cls='exit';    label='Exit';                   fn='doExit' }
+    }
+    $btns=@($cfg.Buttons)
+    $n=$btns.Count
+    $bh=46; $gap=12; $block=$n*$bh+($n-1)*$gap; $top=[int]((480-$block)/2); if($top -lt 20){$top=20}
+    $panelLeft = if($cfg.PanelSide -ieq 'Left'){20}else{490}
+    $btnHtml = ($btns | ForEach-Object {
+        $d=$btnDefs[$_]; "      <a id=`"btn_$_`" class=`"btn $($d.cls)`" onclick=`"$($d.fn)()`">$($d.label -replace ' ','&nbsp;')</a>"
+    }) -join "`r`n"
+    # <bgsound> no longer plays MP3 in current MSHTML - it silently does nothing.
+    # The menu renders in quirks mode (no doctype), so switching to a standards
+    # document mode for <audio> would break the button box model. Use the Windows
+    # Media Player control instead, which works in this document mode.
+    $musicJs = ''
+    if ($cfg.MusicFile) { $musicJs = ConvertTo-JsString $cfg.MusicFile }
+    $tpl = @'
+<html>
+<head>
+<hta:application id="app" applicationname="%%APPNAME%%" border="none" caption="no"
+  showintaskbar="yes" singleinstance="yes" sysmenu="no" scroll="no" selection="no"
+  contextmenu="no" innerborder="no" maximizebutton="no" minimizebutton="no"
+  icon="%%ICONFILE%%" />
+<title>%%TITLE%%</title>
+<style>
+  html,body{margin:0;padding:0;width:760px;height:480px;overflow:hidden;background:#04080a;font-family:'Bahnschrift','Segoe UI',Arial,sans-serif;}
+  #stage{position:absolute;left:0;top:0;width:760px;height:480px;background:#04080a url('bg.png') no-repeat 0 0;%%STAGEBORDER%%}
+  .panel{position:absolute;left:%%PANELLEFT%%px;top:%%TOP%%px;width:250px;}
+  .btn{display:block;width:250px;height:46px;margin:0 0 12px 0;line-height:46px;color:#e6ebef;text-decoration:none;
+    font-size:15px;font-weight:600;letter-spacing:2px;text-transform:uppercase;cursor:pointer;background:#0a1519;
+    %%BTNBORDER%%padding-left:16px;}
+  .btn:hover{background:#12242b;border-color:#00bec8;color:#fff;}
+  .btn.play{border-left-color:#35c46a;} .btn.play:hover{border-color:#66e090;}
+  .btn.install{border-left-color:#ff781e;} .btn.install:hover{border-color:#ff9a4d;}
+  .btn.exit{border-left-color:#a03434;} .btn.exit:hover{border-color:#c86464;}
+  #x{position:absolute;right:8px;top:8px;width:28px;height:26px;line-height:26px;text-align:center;color:#e6ebef;
+    font-family:'Segoe UI',Arial;font-weight:bold;background:#0a1519;border:1px solid #7a2c2c;cursor:pointer;}
+  #x:hover{color:#fff;border-color:#c86464;}
+  #mute{position:absolute;right:44px;top:8px;width:28px;height:26px;line-height:26px;text-align:center;color:#e6ebef;
+    font-family:'Segoe UI',Arial;font-size:15px;background:#0a1519;border:1px solid #16545a;cursor:pointer;display:none;}
+  #mute:hover{color:#fff;border-color:#00bec8;}
+  #status{position:absolute;left:%%PANELLEFT%%px;bottom:18px;width:250px;text-align:center;display:none;
+    color:#9fb3ba;font-size:12px;line-height:17px;}
+</style>
+<script language="JScript">
+  var fso=new ActiveXObject("Scripting.FileSystemObject");
+  var shell=new ActiveXObject("Shell.Application");
+  var root="";
+  var GAME="%%GAME%%"; var GAMEMATCH="%%GAMEMATCH%%"; var SETUP="%%SETUP%%"; var MANUAL="%%MANUAL%%"; var MUSIC="%%MUSIC%%";
+  var PREVIEW=%%PREVIEW%%;   // true only for the app's Preview - see refreshButtons
+  var player=null, musicOn=false;
+  // Where this .hta actually lives. document.URL is always an absolute file: URL,
+  // unlike app.commandLine - AutoRun can launch the menu with a path relative to the
+  // disc root, which has no drive letter and used to leave root pointing at nonsense.
+  function htaPath(){
+    var u="";
+    try{ u=String(document.URL); }catch(e){ u=""; }
+    if(u.length){
+      var p=u.replace(/^file:/i,"").replace(/\//g,"\\");
+      try{ p=decodeURIComponent(p); }catch(e){}
+      // HTAs report file://D:\AUTORUN\menu.hta (two slashes, backslashes already),
+      // not the textbook file:///D:/... - so decide by what follows the slashes.
+      var lead=p.match(/^\\+/);
+      if(lead){
+        var n=lead[0].length, rest=p.substring(n);
+        if(/^[A-Za-z]:/.test(rest)) p=rest;          // drive letter: drop them all
+        else if(n>=3) p="\\\\"+rest;                 // UNC: normalise to two
+      }
+      return p;
+    }
+    try{ var cl=app.commandLine; var m=cl.match(/([A-Za-z]:\\[^"]*\.hta)/i);
+      if(!m) m=cl.match(/(\\\\[^"]*\.hta)/i);
+      if(m) return m[1]; }catch(e){}
+    return "";
+  }
+  function init(){
+    try{ window.resizeTo(760,480);
+      var dw=760-document.body.clientWidth, dh=480-document.body.clientHeight;
+      if(dw<0)dw=0; if(dh<0)dh=0; var ow=760+dw, oh=480+dh;
+      window.resizeTo(ow,oh); window.moveTo(Math.max(0,(screen.availWidth-ow)/2),Math.max(0,(screen.availHeight-oh)/2));
+    }catch(e){}
+    root=fso.GetParentFolderName(fso.GetParentFolderName(htaPath()));
+    setupHover(); document.onmousedown=startDrag; document.onmousemove=doDrag; document.onmouseup=endDrag;
+    refreshButtons();
+    initMusic();
+  }
+  function initMusic(){
+    var mb=document.getElementById("mute");
+    if(!MUSIC||!root){ return; }
+    var p=fso.BuildPath(root,"AUTORUN\\"+MUSIC);
+    if(!fso.FileExists(p)){ return; }
+    try{
+      player=new ActiveXObject("WMPlayer.OCX");
+      player.settings.setMode("loop",true);
+      player.settings.volume=55;
+      player.URL=p;
+      player.controls.play();
+      musicOn=true;
+      if(mb){ mb.style.display="block"; mb.onclick=toggleMusic; }
+    }catch(e){ player=null; }   // Media Player absent - menu still works, just silent
+  }
+  function toggleMusic(){
+    if(!player) return;
+    try{
+      if(musicOn){ player.controls.pause(); musicOn=false; } else { player.controls.play(); musicOn=true; }
+      var mb=document.getElementById("mute");
+      if(mb){ mb.style.color = musicOn?"#e6ebef":"#5d6c72"; mb.style.borderColor = musicOn?"#16545a":"#39464a"; }
+    }catch(e){}
+  }
+  var _drag=false,_ox=0,_oy=0;
+  function startDrag(){ var e=window.event; var t=e.srcElement; if((t.className||"").indexOf("btn")>=0||t.id=="x")return;
+    _drag=true; _ox=e.screenX-window.screenLeft; _oy=e.screenY-window.screenTop; }
+  function doDrag(){ if(!_drag)return; var e=window.event; window.moveTo(e.screenX-_ox,e.screenY-_oy); }
+  function endDrag(){ _drag=false; }
+  function setupHover(){ var a=document.getElementsByTagName("A");
+    for(var i=0;i<a.length;i++){ if((a[i].className||"").indexOf("btn")>=0){
+      try{ a[i].accent = a[i].currentStyle.borderLeftColor; }catch(e){ a[i].accent = "#00bec8"; }
+      a[i].onmouseover=function(){ if(this.btnOff) return; this.style.backgroundColor="#14282f"; this.style.color="#fff";
+        this.style.borderTopColor="#00bec8"; this.style.borderRightColor="#00bec8"; this.style.borderBottomColor="#00bec8"; };
+      a[i].onmouseout=function(){ if(this.btnOff) return; this.style.backgroundColor="#0a1519"; this.style.color="#e6ebef";
+        this.style.borderTopColor="#16545a"; this.style.borderRightColor="#16545a"; this.style.borderBottomColor="#16545a"; }; } }
+    var xb=document.getElementById("x"); if(xb){ xb.onmouseover=function(){ this.style.color="#fff"; this.style.borderColor="#c86464"; };
+      xb.onmouseout=function(){ this.style.color="#e6ebef"; this.style.borderColor="#7a2c2c"; }; } }
+  function openItem(p,isFolder){ try{
+    if(!root){ alert("Could not work out the disc folder.\nRun the menu from the disc root."); return; }
+    var f=fso.BuildPath(root,p);
+    if(isFolder){ if(fso.FolderExists(f)) shell.ShellExecute(f); else alert("Not found:\n"+f); }
+    else { if(fso.FileExists(f)) shell.ShellExecute(f); else alert("Not found:\n"+f); } }catch(e){alert(e.message);} }
+  // Grey a button out rather than let it fail. Inline styles, not a CSS class:
+  // this document runs in quirks mode, where compound selectors like .btn.off
+  // are unreliable.
+  function setEnabled(id,ok,why){
+    var e=document.getElementById(id); if(!e) return;
+    e.btnOff = !ok;
+    e.title = ok ? "" : why;
+    e.style.backgroundColor = "#0a1519";
+    if(ok){ e.style.color="#e6ebef"; e.style.cursor="pointer"; e.style.borderLeftColor=e.accent; }
+    else  { e.style.color="#5d6c72"; e.style.cursor="default"; e.style.borderLeftColor="#39464a"; }
+  }
+  function off(id){ var e=document.getElementById(id); return (e && e.btnOff); }
+  function refreshButtons(){
+    if(!root) return;
+    // In preview the game files are not beside the menu, so the existence checks
+    // would grey out buttons that will be fine on the real disc. Show them live.
+    setEnabled("btn_Install", (PREVIEW || (SETUP!="" && fso.FileExists(fso.BuildPath(root,SETUP)))),
+               "The installer is not next to this menu.");
+    setEnabled("btn_Manual", (PREVIEW || (MANUAL!="" && fso.FileExists(fso.BuildPath(root,"Extras\\"+MANUAL)))),
+               "The manual is not on this disc.");
+    setEnabled("btn_Extras", (PREVIEW || fso.FolderExists(fso.BuildPath(root,"Extras"))),
+               "There is no Extras folder on this disc.");
+    // Play is registry-based, so it tells the truth even in preview.
+    setEnabled("btn_Play", (findGame()!=null),
+               GAME+" is not installed yet - use Install first.");
+    if(PREVIEW){
+      var ids=["btn_Install","btn_Manual","btn_Extras"];
+      for(var i=0;i<ids.length;i++){ var e=document.getElementById(ids[i]);
+        if(e) e.title="Preview only - this works on the built disc"; }
+    }
+  }
+  function previewStop(what){
+    alert("This is a preview of the menu.\n\n"+what+" works on the built disc, but the game files are not in the preview folder.");
+  }
+  function setStatus(msg){
+    var s=document.getElementById("status");
+    if(s){ s.innerHTML=msg; s.style.display = msg ? "block" : "none"; }
+  }
+  // ShellExecute returns the moment it hands off, long before the installer draws
+  // anything - and a 1 GB setup read off optical media can take minutes. Show that
+  // something is happening, and block a second click while it loads.
+  function launchWithStatus(id,msg,path,isFolder){
+    setStatus(msg);
+    setEnabled(id,false,"Starting...");
+    window.setTimeout(function(){          // let the window repaint before we block
+      openItem(path,isFolder);
+      window.setTimeout(function(){ setStatus(""); refreshButtons(); }, 45000);
+    }, 60);
+  }
+  function doInstall(){ if(off("btn_Install")) return; if(PREVIEW){ previewStop("Install"); return; }
+    launchWithStatus("btn_Install","Starting the installer...<br>Reading from disc can take a minute.",SETUP,false); }
+  function doManual(){ if(off("btn_Manual")) return; if(PREVIEW){ previewStop("Game Manual"); return; }
+    launchWithStatus("btn_Manual","Opening the manual...","Extras\\"+MANUAL,false); }
+  function doExtras(){ if(off("btn_Extras")) return; if(PREVIEW){ previewStop("Extras"); return; } openItem("Extras",true); }
+  function doExit(){ window.close(); }
+  function regGet(reg,h,sub,val){ try{ var i=reg.Methods_.Item("GetStringValue").InParameters.SpawnInstance_();
+    i.hDefKey=h;i.sSubKeyName=sub;i.sValueName=val; var o=reg.ExecMethod_("GetStringValue",i); if(o.ReturnValue==0)return o.sValue; }catch(e){} return null; }
+  // GOG's registry gameName drops or changes punctuation ("The Witcher Enhanced Edition
+  // Director's Cut" vs "The Witcher - Enhanced Edition"), so compare on letters+digits only.
+  function norm(s){ return String(s).toLowerCase().replace(/[^a-z0-9]+/g,""); }
+  function nameHit(nm){ var a=norm(nm), b=norm(GAMEMATCH);
+    if(!a||!b) return false;
+    if(a.indexOf(b)>=0) return true;
+    if(a.length>=6 && b.indexOf(a)>=0) return true;   // registry name shorter than ours
+    return false; }
+  function findGame(){ try{ var HKLM=0x80000002; var svc=GetObject("winmgmts:\\\\.\\root\\default"); var reg=svc.Get("StdRegProv");
+    var bases=["SOFTWARE\\WOW6432Node\\GOG.com\\Games","SOFTWARE\\GOG.com\\Games"];
+    for(var b=0;b<bases.length;b++){ var mi=reg.Methods_.Item("EnumKey").InParameters.SpawnInstance_(); mi.hDefKey=HKLM; mi.sSubKeyName=bases[b];
+      var mo=reg.ExecMethod_("EnumKey",mi); if(mo.ReturnValue!=0||mo.sNames==null)continue; var ids=new VBArray(mo.sNames).toArray();
+      for(var k=0;k<ids.length;k++){ var sub=bases[b]+"\\"+ids[k]; var nm=regGet(reg,HKLM,sub,"gameName");
+        if(nm && nameHit(nm)){ var exe=regGet(reg,HKLM,sub,"exe");
+          if(exe && fso.FileExists(exe))return exe; var p=regGet(reg,HKLM,sub,"path"), ef=regGet(reg,HKLM,sub,"exeFile");
+          if(p&&ef&&fso.FileExists(fso.BuildPath(p,ef)))return fso.BuildPath(p,ef); } } } }catch(e){} return null; }
+  function doPlay(){ if(off("btn_Play")) return;
+    var exe=findGame(); if(exe){ try{ shell.ShellExecute(exe,"",fso.GetParentFolderName(exe),"open",1); window.close(); }catch(e){alert(e.message);} }
+    else { alert(GAME+" isn't installed yet.\n\nUse INSTALL first, then PLAY."); } }
+  // Re-check when the menu regains focus, so Play lights up after the installer finishes.
+  window.onfocus = refreshButtons;
+  document.onkeydown=function(){ if(window.event.keyCode==27) window.close(); };
+</script>
+</head>
+<body onload="init()">
+  <div id="stage">
+    <div id="x" onclick="doExit()">X</div>
+    <div id="mute" title="Music on / off">&#9835;</div>
+    <div id="status"></div>
+    <div class="panel">
+%%BUTTONS%%
+    </div>
+  </div>
+</body>
+</html>
+'@
+    $matchName = $cfg.MatchName; if ([string]::IsNullOrWhiteSpace($matchName)) { $matchName = $cfg.GameName }
+    # Quirks-mode box model: width includes padding+border, so dropping the 1px
+    # outline does not change the button footprint.
+    $stageBorder = if ($cfg.WindowBorder) { 'border:1px solid #00a6b0;' } else { 'border:0;' }
+    $btnBorder   = if ($cfg.ButtonStyle -ieq 'Minimal') { 'border:0;border-left:5px solid #00bec8;' }
+                   else { 'border:1px solid #16545a;border-left:5px solid #00bec8;' }
+    $previewFlag = if ($cfg.Preview) { 'true' } else { 'false' }
+    # singleinstance="yes" keys off applicationname, so a shared name means a second
+    # menu never opens - Windows just refocuses whatever is already running. A stale
+    # Preview window would silently stand in for the disc's own menu.
+    $appName = 'DiscMenu_' + (($cfg.GameName -replace '[^A-Za-z0-9]','') )
+    if ([string]::IsNullOrWhiteSpace($appName)) { $appName = 'DiscMenu' }
+    if ($cfg.Preview) { $appName += '_Preview' }
+    # The taskbar icon is cached by path too, so it follows the disc's icon name.
+    $iconFile = if ($cfg.IconName) { $cfg.IconName } else { 'disc.ico' }
+    $html = $tpl.Replace('%%APPNAME%%',$appName).
+                 Replace('%%ICONFILE%%',(ConvertTo-HtmlText $iconFile)).
+                 Replace('%%PREVIEW%%',$previewFlag).
+                 Replace('%%STAGEBORDER%%',$stageBorder).
+                 Replace('%%BTNBORDER%%',$btnBorder).
+                 Replace('%%TITLE%%',(ConvertTo-HtmlText $cfg.GameName)).
+                 Replace('%%TOP%%',"$top").
+                 Replace('%%PANELLEFT%%',"$panelLeft").
+                 Replace('%%GAME%%',(ConvertTo-JsString $cfg.GameName)).
+                 Replace('%%GAMEMATCH%%',(ConvertTo-JsString $matchName)).
+                 Replace('%%SETUP%%',(ConvertTo-JsString $cfg.SetupExe)).
+                 Replace('%%MANUAL%%',(ConvertTo-JsString $cfg.ManualFile)).
+                 Replace('%%BUTTONS%%',$btnHtml).
+                 Replace('%%MUSIC%%',$musicJs)
+    Clear-ReadOnly $out; Set-Content -LiteralPath $out -Value $html -Encoding ASCII
+}
+
+function New-Iso([string]$stageDir,[string]$isoPath,[string]$volLabel) {
+    if (-not ([System.Management.Automation.PSTypeName]'ISOFile').Type) {
+        $code=@'
+public class ISOFile {
+  public unsafe static void Create(string Path, object Stream, int BlockSize, int TotalBlocks) {
+    int bytes=0; byte[] buf=new byte[BlockSize]; var ptr=(System.IntPtr)(&bytes);
+    System.IO.FileStream o=System.IO.File.OpenWrite(Path);
+    System.Runtime.InteropServices.ComTypes.IStream i=Stream as System.Runtime.InteropServices.ComTypes.IStream;
+    if(o!=null){ while(TotalBlocks-->0){ i.Read(buf,BlockSize,ptr); o.Write(buf,0,bytes);} o.Flush(); o.Close(); }
+  }
+}
+'@
+        $cp=New-Object System.CodeDom.Compiler.CompilerParameters; $cp.CompilerOptions='/unsafe'
+        Add-Type -CompilerParameters $cp -TypeDefinition $code
+    }
+    # A mounted ISO cannot be overwritten, and "used by another process" on its own
+    # does not tell the user that the drive they opened in This PC is the cause.
+    if (Test-Path $isoPath) {
+        try { Remove-Item -LiteralPath $isoPath -Force -ErrorAction Stop }
+        catch {
+            throw ("The existing ISO cannot be replaced - something is still using it:" +
+                   "`r`n`r`n$isoPath`r`n`r`n" +
+                   "If you mounted it to check the disc, eject it first: right-click the drive in This PC and choose Eject. " +
+                   "Then build again.`r`n`r`nWindows said: $($_.Exception.Message)")
+        }
+    }
+    $fsi=New-Object -ComObject IMAPI2FS.MsftFileSystemImage
+
+    # Size the virtual medium to the actual payload. The old fixed 12.5M blocks
+    # (~25 GB) silently capped builds well below the BD-R DL / XL sizes the UI
+    # recommends.
+    $payload = (Get-ChildItem -Recurse -File -Force $stageDir | Measure-Object Length -Sum).Sum
+    $blocks  = [long][math]::Ceiling(($payload * 1.05) / 2048) + 65536
+    if ($blocks -lt 12500000) { $blocks = 12500000 }
+    if ($blocks -gt 2147483000) { $blocks = 2147483000 }
+    $fsi.FreeMediaBlocks=[int]$blocks
+
+    # UDF only. GOG part filenames run past 64 chars, which Joliet cannot hold,
+    # and the .bin parts sit at the ISO9660 4 GiB ceiling.
+    $fsi.FileSystemsToCreate=4
+    try { $fsi.UDFRevision=0x250 } catch {}
+    $vn = ($volLabel -replace '[^A-Za-z0-9_]','_'); if($vn.Length -gt 16){$vn=$vn.Substring(0,16)}
+    $fsi.VolumeName=$vn
+    $fsi.Root.AddTree($stageDir,$false)
+    $img=$fsi.CreateResultImage()
+    [ISOFile]::Create($isoPath,$img.ImageStream,$img.BlockSize,$img.TotalBlocks)
+}
+
+# =================== PROJECT SAVE / REOPEN ===================
+
+function Save-Project([hashtable]$s,[string]$outDir) {
+    $o = [ordered]@{
+        Version      = 1
+        SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
+        SourceFolder = $s.Game.Folder
+        GameName     = $s.Game.GameName
+        Label        = $s.Label
+        IconPath     = $s.IconPath
+        IconIsIco    = [bool]$s.IconIsIco
+        Menu         = [bool]$s.Menu
+        BgPath       = $s.BgPath
+        BgAsIs       = [bool]$s.BgAsIs
+        PanelSide    = $s.PanelSide
+        Divider      = [bool]$s.Divider
+        ShowTitle    = [bool]$s.ShowTitle
+        TitleText    = $s.TitleText
+        WindowBorder = [bool]$s.WindowBorder
+        ButtonStyle  = $s.ButtonStyle
+        MusicFile    = $s.MusicFile
+        Buttons      = @($s.Buttons)
+        ManualPath   = $s.ManualPath
+        ExtrasPath   = $s.ExtrasPath
+        ExtraItems   = @($s.ExtraItems)
+        OutDir       = $outDir
+    }
+    $o | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outDir $PROJECT_FILE) -Encoding UTF8
+}
+
+function Import-Project([string]$jsonPath) {
+    try {
+        $j = Get-Content -Raw -LiteralPath $jsonPath | ConvertFrom-Json
+        return @{
+            SourceFolder=$j.SourceFolder; Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
+            Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
+            PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
+            Divider=[bool]$j.Divider; ShowTitle=[bool]$j.ShowTitle; TitleText=[string]$j.TitleText
+            WindowBorder=[bool]$j.WindowBorder
+            ButtonStyle=$(if($j.ButtonStyle){$j.ButtonStyle}else{'Bordered'})
+            MusicFile=$j.MusicFile; Buttons=@($j.Buttons); ManualPath=$j.ManualPath; ExtrasPath=$j.ExtrasPath
+            ExtraItems=@($j.ExtraItems); OutDir=$j.OutDir; Origin='project file'
+        }
+    } catch { return $null }
+}
+
+# Reconstruct settings from a built disc folder that has no project file
+# (anything authored before manifests existed, or hand-edited on disc).
+function Import-DiscFolder([string]$discDir) {
+    $inf = Join-Path $discDir 'autorun.inf'
+    if (-not (Test-Path $inf)) { return $null }
+    $text = Get-Content -Raw -LiteralPath $inf
+    $label = ''; if ($text -match '(?im)^\s*label\s*=\s*(.+?)\s*$') { $label = $Matches[1] }
+    $icon  = 'disc.ico'; if ($text -match '(?im)^\s*icon\s*=\s*(.+?)\s*$') { $icon = $Matches[1] }
+    $menu  = ($text -match '(?im)^\s*shellexecute\s*=')
+
+    $r = @{ SourceFolder=$discDir; Label=$label; IconPath=(Join-Path $discDir $icon); IconIsIco=$true
+            Menu=$menu; BgPath=$null; BgAsIs=$true; PanelSide='Right'; MusicFile=$null
+            Buttons=@(); ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
+            Divider=$false; ShowTitle=$false; TitleText=''
+            WindowBorder=$true; ButtonStyle='Bordered'
+            OutDir=(Split-Path $discDir -Parent); Origin='disc folder' }
+
+    # Anything at the disc root the pipeline does not generate is user content.
+    $r.ExtraItems = @(Get-ChildItem -Force $discDir | Where-Object { -not (Test-ReservedDiscName $_.Name $icon) } | ForEach-Object { $_.FullName })
+
+    $hta = Join-Path $discDir 'AUTORUN\menu.hta'
+    if ($menu -and (Test-Path $hta)) {
+        $h = Get-Content -Raw -LiteralPath $hta
+        $map = @{ doPlay='Play'; doInstall='Install'; doManual='Manual'; doExtras='Extras'; doExit='Exit' }
+        $found = @()
+        foreach ($m in [regex]::Matches($h,'class="btn[^"]*"\s+onclick="(do\w+)\(\)"')) {
+            $k=$m.Groups[1].Value; if ($map.ContainsKey($k) -and ($found -notcontains $map[$k])) { $found += $map[$k] }
+        }
+        $r.Buttons = $found
+        if ($h -match '\.panel\{position:absolute;left:(\d+)px') { $r.PanelSide = if([int]$Matches[1] -lt 300){'Left'}else{'Right'} }
+        if ($h -match '#stage\{[^}]*border:0;') { $r.WindowBorder = $false }
+        if ($h -match '(?m)^\s*border:0;border-left:5px') { $r.ButtonStyle = 'Minimal' }
+        # menus built before the WMP switch used <bgsound>; accept either form
+        $mn = $null
+        if ($h -match 'var MUSIC="([^"]*)"') { $mn = $Matches[1] }
+        elseif ($h -match '<bgsound src="([^"]+)"') { $mn = $Matches[1] }
+        if ($mn) { $mf = Join-Path $discDir ('AUTORUN\'+$mn); if (Test-Path $mf) { $r.MusicFile=$mf } }
+        if ($h -match 'var MANUAL="([^"]*)"') {
+            $mn=$Matches[1]
+            if ($mn) { $mp = Join-Path $discDir ('Extras\'+$mn); if (Test-Path $mp) { $r.ManualPath=$mp } }
+        }
+        $bg = Join-Path $discDir 'AUTORUN\bg.png'
+        if (Test-Path $bg) { $r.BgPath=$bg; $r.BgAsIs=$true }
+    }
+    $ex = Join-Path $discDir 'Extras'
+    if (Test-Path $ex) {
+        $others = @(Get-ChildItem -Recurse -File $ex | Where-Object { -not (Test-SamePath $_.FullName $r.ManualPath) })
+        if ($others.Count -gt 0) { $r.ExtrasPath = $ex }
+    }
+    if (-not (Test-Path $r.IconPath)) { $r.IconPath=$null }
+    return $r
+}
+
+# =================== BUILD ORCHESTRATION ===================
+function Invoke-Build([hashtable]$s, [scriptblock]$log) {
+    $stage = Join-Path $s.OutDir 'disc'
+    $tmpKeep = $null
+
+    # Rebuilding a disc folder in place: the payload already lives in the stage,
+    # so do NOT wipe it.
+    $inPlace = (Test-SamePath $s.Game.Folder $stage)
+
+    if ($inPlace) {
+        & $log "Rebuilding in place - installer files left untouched."
+        New-Item -ItemType Directory -Force -Path $stage,"$stage\AUTORUN" | Out-Null
+    } else {
+        # Any asset the user picked from inside the old stage would be destroyed
+        # by the wipe - copy it out to temp first and repoint at the copy.
+        if (Test-Path $stage) {
+            foreach ($k in @('IconPath','BgPath','MusicFile','ManualPath')) {
+                $p = $s[$k]
+                if ($p -and (Test-Path $p) -and (Test-SubPath $p $stage)) {
+                    if (-not $tmpKeep) { $tmpKeep = Join-Path ([IO.Path]::GetTempPath()) ('discwright_'+[Guid]::NewGuid().ToString('N').Substring(0,8)); New-Item -ItemType Directory -Force -Path $tmpKeep | Out-Null }
+                    $n = Join-Path $tmpKeep ([IO.Path]::GetFileName($p)); Copy-Item -LiteralPath $p -Destination $n -Force
+                    $s[$k] = $n; & $log "  preserved $([IO.Path]::GetFileName($p))"
+                }
+            }
+            if ($s.ExtrasPath -and (Test-Path $s.ExtrasPath) -and (Test-SubPath $s.ExtrasPath $stage)) {
+                if (-not $tmpKeep) { $tmpKeep = Join-Path ([IO.Path]::GetTempPath()) ('discwright_'+[Guid]::NewGuid().ToString('N').Substring(0,8)); New-Item -ItemType Directory -Force -Path $tmpKeep | Out-Null }
+                $ne = Join-Path $tmpKeep 'Extras'; New-Item -ItemType Directory -Force -Path $ne | Out-Null
+                Copy-Item "$($s.ExtrasPath)\*" $ne -Recurse -Force -EA SilentlyContinue
+                $s.ExtrasPath = $ne; & $log "  preserved Extras folder"
+            }
+            $kept = @()
+            foreach ($it in @($s.ExtraItems)) {
+                if ($it -and (Test-Path $it) -and (Test-SubPath $it $stage)) {
+                    if (-not $tmpKeep) { $tmpKeep = Join-Path ([IO.Path]::GetTempPath()) ('discwright_'+[Guid]::NewGuid().ToString('N').Substring(0,8)); New-Item -ItemType Directory -Force -Path $tmpKeep | Out-Null }
+                    $nm = [IO.Path]::GetFileName($it.TrimEnd('\')); $np = Join-Path $tmpKeep $nm
+                    if (Test-Path $it -PathType Container) { New-Item -ItemType Directory -Force -Path $np | Out-Null; Copy-Item "$it\*" $np -Recurse -Force -EA SilentlyContinue }
+                    else { Copy-Item -LiteralPath $it -Destination $np -Force }
+                    $kept += $np; & $log "  preserved $nm"
+                } else { $kept += $it }
+            }
+            $s.ExtraItems = $kept
+        }
+        & $log "Preparing staging folder..."
+        # Mounting the ISO to check it and then rebuilding is the obvious workflow,
+        # and it leaves a handle on the folder. Raw exception text here reads as a
+        # crash; say which folder and what to do about it.
+        if (Test-Path $stage) {
+            try { Remove-Item $stage -Recurse -Force -ErrorAction Stop }
+            catch {
+                throw ("The old disc folder cannot be replaced - something is still using it:" +
+                       "`r`n`r`n$stage`r`n`r`n" +
+                       "Close any Explorer window showing that folder, eject the ISO if you have it mounted, " +
+                       "then build again.`r`n`r`nWindows said: $($_.Exception.Message)")
+            }
+        }
+        New-Item -ItemType Directory -Force -Path $stage,"$stage\AUTORUN" | Out-Null
+
+        # installer files: hardlink if same volume, else copy
+        $sameVol = ([IO.Path]::GetPathRoot($s.Game.SetupExe.FullName) -eq [IO.Path]::GetPathRoot($stage))
+        foreach ($f in $s.Game.Files) {
+            $dest = Join-Path $stage $f.Name
+            if ($sameVol) { try { New-Item -ItemType HardLink -Path $dest -Target $f.FullName -EA Stop | Out-Null; & $log "  linked $($f.Name)" }
+                            catch { Copy-Item $f.FullName $dest; & $log "  copied $($f.Name)" } }
+            else { & $log "  copying $($f.Name) ..."; Copy-Item $f.FullName $dest }
+        }
+    }
+
+    # icon - named after the disc so Explorer's per-path icon cache cannot serve a
+    # previous disc's bitmap for the same drive letter.
+    $icoName = Get-DiscIconName $s.Label
+    $icoOut = Join-Path $stage $icoName
+    if ($s.IconIsIco) {
+        if (Test-SamePath $s.IconPath $icoOut) { & $log "Icon already in place." }
+        else { Clear-ReadOnly $icoOut; Copy-Item $s.IconPath $icoOut -Force; Clear-ReadOnly $icoOut; & $log "Icon copied (.ico used as-is)." }
+    }
+    else { & $log "Building multi-size icon from image..."; Convert-ToIco $s.IconPath $icoOut }
+    & $log "Disc icon: $icoName"
+    # Rebuilding a disc whose label (or the icon naming rule) changed would
+    # otherwise leave the previous icon behind as dead weight on the disc. Runs
+    # AFTER the copy above, because the old icon is often the copy's source.
+    foreach ($stale in @(Get-ChildItem $stage -Filter '*.ico' -File -EA SilentlyContinue)) {
+        if ($stale.Name -ne $icoName) {
+            Clear-ReadOnly $stale.FullName; Remove-Item -LiteralPath $stale.FullName -Force -EA SilentlyContinue
+            & $log "  removed old icon: $($stale.Name)"
+        }
+    }
+
+    # menu + background + music
+    if ($s.Menu) {
+        $bgOut = Join-Path $stage 'AUTORUN\bg.png'
+        if ($s.BgAsIs) {
+            if (Test-SamePath $s.BgPath $bgOut) { & $log "Background kept as-is (already on disc)." }
+            else { Clear-ReadOnly $bgOut; Copy-Item $s.BgPath $bgOut -Force; Clear-ReadOnly $bgOut; & $log "Background copied as-is (no compositing)." }
+        } else {
+            & $log "Composing menu background ($($s.PanelSide) panel)..."
+            # An empty title box means "use the disc label" - the box is only for
+            # overriding it, so a blank one must not paint an empty title.
+            $bgTitle = if ([string]::IsNullOrWhiteSpace($s.TitleText)) { $s.Label } else { $s.TitleText }
+            if ($s.ShowTitle) { & $log "  title on artwork: $bgTitle" }
+            New-Background $s.BgPath $bgTitle $bgOut $s.PanelSide ([bool]$s.Divider) ([bool]$s.ShowTitle)
+        }
+
+        $manualName=''
+        if ($s.Buttons -contains 'Manual' -and $s.ManualPath) {
+            New-Item -ItemType Directory -Force -Path "$stage\Extras" | Out-Null
+            $manualName = [IO.Path]::GetFileName($s.ManualPath)
+            $mDest = "$stage\Extras\$manualName"
+            if (-not (Test-SamePath $s.ManualPath $mDest)) { Clear-ReadOnly $mDest; Copy-Item $s.ManualPath $mDest -Force; Clear-ReadOnly $mDest }
+        }
+        if ($s.Buttons -contains 'Extras' -and $s.ExtrasPath -and (Test-Path $s.ExtrasPath)) {
+            New-Item -ItemType Directory -Force -Path "$stage\Extras" | Out-Null
+            if (-not (Test-SamePath $s.ExtrasPath "$stage\Extras")) {
+                Copy-Item "$($s.ExtrasPath)\*" "$stage\Extras\" -Recurse -Force -EA SilentlyContinue; Clear-ReadOnly "$stage\Extras"
+            } else { & $log "Extras already in place." }
+        }
+        $musicName=''
+        if ($s.MusicFile -and (Test-Path $s.MusicFile)) {
+            $musicName = 'music'+[IO.Path]::GetExtension($s.MusicFile)
+            $muDest = "$stage\AUTORUN\$musicName"
+            if (-not (Test-SamePath $s.MusicFile $muDest)) { Clear-ReadOnly $muDest; Copy-Item $s.MusicFile $muDest -Force; Clear-ReadOnly $muDest }
+        }
+        # The hta:application icon= attribute resolves next to the .hta, not at the
+        # disc root, so the icon needs a copy inside AUTORUN. Without it the menu
+        # window shows the generic mshta icon in the taskbar.
+        $icoMenu = Join-Path $stage "AUTORUN\$icoName"
+        if (-not (Test-SamePath $icoOut $icoMenu)) {
+            Clear-ReadOnly $icoMenu; Copy-Item $icoOut $icoMenu -Force; Clear-ReadOnly $icoMenu
+        }
+        foreach ($stale in @(Get-ChildItem (Join-Path $stage 'AUTORUN') -Filter '*.ico' -File -EA SilentlyContinue)) {
+            if ($stale.Name -ne $icoName) {
+                Clear-ReadOnly $stale.FullName; Remove-Item -LiteralPath $stale.FullName -Force -EA SilentlyContinue
+            }
+        }
+        & $log "Generating autorun menu (menu.hta)..."
+        New-MenuHta @{ GameName=$s.Label; MatchName=$s.Game.GameName; SetupExe=$s.Game.SetupExe.Name; Buttons=$s.Buttons;
+                       MusicFile=$musicName; ManualFile=$manualName; PanelSide=$s.PanelSide; IconName=$icoName
+                       WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle } (Join-Path $stage 'AUTORUN\menu.hta')
+    }
+
+    # extra content - copied to the disc root, keeping its own name
+    if (@($s.ExtraItems).Count) {
+        & $log "Adding extra content..."
+        foreach ($it in @($s.ExtraItems)) {
+            if ([string]::IsNullOrWhiteSpace($it)) { continue }
+            if (-not (Test-Path $it)) { & $log "  MISSING, skipped: $it"; continue }
+            $nm = [IO.Path]::GetFileName($it.TrimEnd('\'))
+            if (Test-ReservedDiscName $nm $icoName) { & $log "  SKIPPED (reserved disc name): $nm"; continue }
+            $dest = Join-Path $stage $nm
+            if (Test-SamePath $it $dest) { & $log "  already in place: $nm"; continue }
+            if (Test-Path $it -PathType Container) {
+                New-Item -ItemType Directory -Force -Path $dest | Out-Null
+                Copy-Item "$it\*" $dest -Recurse -Force -EA SilentlyContinue; Clear-ReadOnly $dest
+                & $log "  folder: $nm"
+            } else {
+                Clear-ReadOnly $dest; Copy-Item -LiteralPath $it -Destination $dest -Force; Clear-ReadOnly $dest
+                & $log "  file:   $nm"
+            }
+        }
+    }
+
+    & $log "Writing autorun.inf..."
+    New-AutorunInf $s.Label $icoName $s.Menu (Join-Path $stage 'autorun.inf')
+
+    & $log "Building ISO (UDF, this can take ~30-60s for a full game)..."
+    $iso = Join-Path $s.OutDir (($s.Label -replace '[^A-Za-z0-9_\- ]','_').Trim()+'.iso')
+    New-Iso $stage $iso $s.Label
+    & $log ("DONE.  ISO: {0}  ({1:N2} GB)" -f $iso, ((Get-Item $iso).Length/1GB))
+
+    Save-Project $s $s.OutDir
+    & $log "Saved $PROJECT_FILE - use 'Open existing disc project' to edit and rebuild."
+    if ($tmpKeep -and (Test-Path $tmpKeep)) { Remove-Item $tmpKeep -Recurse -Force -EA SilentlyContinue }
+    return $iso
+}
+
+# =================== UI ===================
+$state = @{ Game=$null; IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@() }
+
+$form=New-Object System.Windows.Forms.Form
+$form.Text='DiscWright'
+$form.Size=New-Object System.Drawing.Size(700,996)
+$form.StartPosition='CenterScreen'
+$form.Font=New-Object System.Drawing.Font('Segoe UI',9)
+$form.AutoScroll=$true
+
+function AddLabel($t,$x,$y,$w){ $l=New-Object System.Windows.Forms.Label; $l.Text=$t; $l.Location=New-Object System.Drawing.Point($x,$y); $l.Size=New-Object System.Drawing.Size($w,20); $form.Controls.Add($l); return $l }
+function AddText($x,$y,$w){ $t=New-Object System.Windows.Forms.TextBox; $t.Location=New-Object System.Drawing.Point($x,$y); $t.Size=New-Object System.Drawing.Size($w,24); $form.Controls.Add($t); return $t }
+function AddBtn($t,$x,$y,$w){ $b=New-Object System.Windows.Forms.Button; $b.Text=$t; $b.Location=New-Object System.Drawing.Point($x,$y); $b.Size=New-Object System.Drawing.Size($w,24); $form.Controls.Add($b); return $b }
+
+# --- reopen / inspect row ---
+$btnOpenProj = AddBtn 'Open existing disc...' 15 8 210
+$btnOpenDisc = AddBtn 'Show disc folder' 235 8 200
+$btnPreview  = AddBtn 'Preview menu' 445 8 210
+
+AddLabel '1)  GOG game folder (contains setup_*.exe + .bin):' 15 46 520 | Out-Null
+$txtFolder=AddText 15 68 520
+$btnFolder=AddBtn 'Browse...' 545 68 110
+$lblGame=AddLabel '' 15 96 640; $lblGame.ForeColor=[System.Drawing.Color]::DimGray
+
+AddLabel '2)  Disc label (shown in This PC):' 15 126 520 | Out-Null
+$txtLabel=AddText 15 148 300
+
+AddLabel '3)  Disc icon (.ico, or .png/.jpg to auto-convert):' 15 184 520 | Out-Null
+$txtIcon=AddText 15 206 520
+$btnIcon=AddBtn 'Browse...' 545 206 110
+$lblIcon=AddLabel '' 15 234 500; $lblIcon.ForeColor=[System.Drawing.Color]::DimGray
+$picIcon=New-Object System.Windows.Forms.PictureBox; $picIcon.Location=New-Object System.Drawing.Point(560,230); $picIcon.Size=New-Object System.Drawing.Size(64,64); $picIcon.SizeMode='Zoom'; $picIcon.BorderStyle='FixedSingle'; $form.Controls.Add($picIcon)
+
+$grp=New-Object System.Windows.Forms.GroupBox; $grp.Text='4)  Autorun menu'; $grp.Location=New-Object System.Drawing.Point(15,304); $grp.Size=New-Object System.Drawing.Size(645,326); $form.Controls.Add($grp)
+$chkMenu=New-Object System.Windows.Forms.CheckBox; $chkMenu.Text='Run splash menu when disc is inserted'; $chkMenu.Location=New-Object System.Drawing.Point(15,24); $chkMenu.Size=New-Object System.Drawing.Size(400,22); $chkMenu.Checked=$true; $grp.Controls.Add($chkMenu)
+
+$lblBg=New-Object System.Windows.Forms.Label; $lblBg.Text='Background image:'; $lblBg.Location=New-Object System.Drawing.Point(15,56); $lblBg.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblBg)
+$txtBg=New-Object System.Windows.Forms.TextBox; $txtBg.Location=New-Object System.Drawing.Point(150,54); $txtBg.Size=New-Object System.Drawing.Size(350,24); $grp.Controls.Add($txtBg)
+$btnBg=New-Object System.Windows.Forms.Button; $btnBg.Text='Browse...'; $btnBg.Location=New-Object System.Drawing.Point(510,53); $btnBg.Size=New-Object System.Drawing.Size(110,24); $grp.Controls.Add($btnBg)
+
+$chkBgAsIs=New-Object System.Windows.Forms.CheckBox; $chkBgAsIs.Text='Use as-is (already 760x480, no overlay)'; $chkBgAsIs.Location=New-Object System.Drawing.Point(150,84); $chkBgAsIs.Size=New-Object System.Drawing.Size(250,22); $grp.Controls.Add($chkBgAsIs)
+$lblSide=New-Object System.Windows.Forms.Label; $lblSide.Text='Buttons:'; $lblSide.Location=New-Object System.Drawing.Point(410,86); $lblSide.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblSide)
+$cmbSide=New-Object System.Windows.Forms.ComboBox; $cmbSide.DropDownStyle='DropDownList'; $cmbSide.Location=New-Object System.Drawing.Point(468,83); $cmbSide.Size=New-Object System.Drawing.Size(100,24); [void]$cmbSide.Items.AddRange(@('Right','Left')); $cmbSide.SelectedIndex=0; $grp.Controls.Add($cmbSide)
+
+$lblTitle=New-Object System.Windows.Forms.Label; $lblTitle.Text='Title on artwork:'; $lblTitle.Location=New-Object System.Drawing.Point(15,114); $lblTitle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblTitle)
+$chkTitle=New-Object System.Windows.Forms.CheckBox; $chkTitle.Text='Show title'; $chkTitle.Location=New-Object System.Drawing.Point(150,112); $chkTitle.Size=New-Object System.Drawing.Size(145,22); $grp.Controls.Add($chkTitle)
+$txtTitle=New-Object System.Windows.Forms.TextBox; $txtTitle.Location=New-Object System.Drawing.Point(300,110); $txtTitle.Size=New-Object System.Drawing.Size(320,24); $txtTitle.Enabled=$false; $grp.Controls.Add($txtTitle)
+
+$chkMusic=New-Object System.Windows.Forms.CheckBox; $chkMusic.Text='Background music'; $chkMusic.Location=New-Object System.Drawing.Point(15,152); $chkMusic.Size=New-Object System.Drawing.Size(130,22); $grp.Controls.Add($chkMusic)
+$txtMusic=New-Object System.Windows.Forms.TextBox; $txtMusic.Location=New-Object System.Drawing.Point(150,150); $txtMusic.Size=New-Object System.Drawing.Size(350,24); $txtMusic.Enabled=$false; $grp.Controls.Add($txtMusic)
+$btnMusic=New-Object System.Windows.Forms.Button; $btnMusic.Text='Browse...'; $btnMusic.Location=New-Object System.Drawing.Point(510,149); $btnMusic.Size=New-Object System.Drawing.Size(110,24); $btnMusic.Enabled=$false; $grp.Controls.Add($btnMusic)
+
+$lblBtns=New-Object System.Windows.Forms.Label; $lblBtns.Text='Menu buttons:'; $lblBtns.Location=New-Object System.Drawing.Point(15,186); $lblBtns.Size=New-Object System.Drawing.Size(120,20); $grp.Controls.Add($lblBtns)
+$cbPlay =New-Object System.Windows.Forms.CheckBox; $cbPlay.Text='Play'; $cbPlay.Checked=$true; $cbPlay.Location=New-Object System.Drawing.Point(150,184); $cbPlay.Size=New-Object System.Drawing.Size(70,22); $grp.Controls.Add($cbPlay)
+$cbInst =New-Object System.Windows.Forms.CheckBox; $cbInst.Text='Install'; $cbInst.Checked=$true; $cbInst.Location=New-Object System.Drawing.Point(225,184); $cbInst.Size=New-Object System.Drawing.Size(75,22); $grp.Controls.Add($cbInst)
+$cbMan  =New-Object System.Windows.Forms.CheckBox; $cbMan.Text='Manual'; $cbMan.Location=New-Object System.Drawing.Point(305,184); $cbMan.Size=New-Object System.Drawing.Size(80,22); $grp.Controls.Add($cbMan)
+$cbExtra=New-Object System.Windows.Forms.CheckBox; $cbExtra.Text='Extras'; $cbExtra.Location=New-Object System.Drawing.Point(390,184); $cbExtra.Size=New-Object System.Drawing.Size(75,22); $grp.Controls.Add($cbExtra)
+$cbExit =New-Object System.Windows.Forms.CheckBox; $cbExit.Text='Exit'; $cbExit.Checked=$true; $cbExit.Location=New-Object System.Drawing.Point(465,184); $cbExit.Size=New-Object System.Drawing.Size(70,22); $grp.Controls.Add($cbExit)
+
+$lblMan=New-Object System.Windows.Forms.Label; $lblMan.Text='Manual file:'; $lblMan.Location=New-Object System.Drawing.Point(15,220); $lblMan.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblMan)
+$txtMan=New-Object System.Windows.Forms.TextBox; $txtMan.Location=New-Object System.Drawing.Point(150,218); $txtMan.Size=New-Object System.Drawing.Size(350,24); $txtMan.Enabled=$false; $grp.Controls.Add($txtMan)
+$btnMan=New-Object System.Windows.Forms.Button; $btnMan.Text='Browse...'; $btnMan.Location=New-Object System.Drawing.Point(510,217); $btnMan.Size=New-Object System.Drawing.Size(110,24); $btnMan.Enabled=$false; $grp.Controls.Add($btnMan)
+
+$lblEx=New-Object System.Windows.Forms.Label; $lblEx.Text='Extras folder:'; $lblEx.Location=New-Object System.Drawing.Point(15,254); $lblEx.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblEx)
+$txtEx=New-Object System.Windows.Forms.TextBox; $txtEx.Location=New-Object System.Drawing.Point(150,252); $txtEx.Size=New-Object System.Drawing.Size(350,24); $txtEx.Enabled=$false; $grp.Controls.Add($txtEx)
+$btnEx=New-Object System.Windows.Forms.Button; $btnEx.Text='Browse...'; $btnEx.Location=New-Object System.Drawing.Point(510,251); $btnEx.Size=New-Object System.Drawing.Size(110,24); $btnEx.Enabled=$false; $grp.Controls.Add($btnEx)
+
+$lblStyle=New-Object System.Windows.Forms.Label; $lblStyle.Text='Look:'; $lblStyle.Location=New-Object System.Drawing.Point(15,288); $lblStyle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblStyle)
+$chkDivider=New-Object System.Windows.Forms.CheckBox; $chkDivider.Text='Divider line'; $chkDivider.Location=New-Object System.Drawing.Point(150,286); $chkDivider.Size=New-Object System.Drawing.Size(100,22); $grp.Controls.Add($chkDivider)
+$chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Window border'; $chkWinBorder.Checked=$true; $chkWinBorder.Location=New-Object System.Drawing.Point(255,286); $chkWinBorder.Size=New-Object System.Drawing.Size(115,22); $grp.Controls.Add($chkWinBorder)
+$lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,288); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
+$cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,285); $cmbBtnStyle.Size=New-Object System.Drawing.Size(130,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
+
+$grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,640); $grpX.Size=New-Object System.Drawing.Size(645,132); $form.Controls.Add($grpX)
+$lstExtra=New-Object System.Windows.Forms.ListBox; $lstExtra.Location=New-Object System.Drawing.Point(15,22); $lstExtra.Size=New-Object System.Drawing.Size(480,100); $lstExtra.SelectionMode='MultiExtended'; $lstExtra.HorizontalScrollbar=$true; $grpX.Controls.Add($lstExtra)
+$btnXFile=New-Object System.Windows.Forms.Button; $btnXFile.Text='Add files...'; $btnXFile.Location=New-Object System.Drawing.Point(505,22); $btnXFile.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXFile)
+$btnXDir =New-Object System.Windows.Forms.Button; $btnXDir.Text='Add folder...'; $btnXDir.Location=New-Object System.Drawing.Point(505,52); $btnXDir.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDir)
+$btnXDel =New-Object System.Windows.Forms.Button; $btnXDel.Text='Remove'; $btnXDel.Location=New-Object System.Drawing.Point(505,82); $btnXDel.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDel)
+
+AddLabel '6)  Output folder (ISO + disc staging go here):' 15 786 520 | Out-Null
+$txtOut=AddText 15 808 520
+$btnOut=AddBtn 'Browse...' 545 808 110
+
+$btnBuild=New-Object System.Windows.Forms.Button; $btnBuild.Text='BUILD ISO'; $btnBuild.Location=New-Object System.Drawing.Point(15,842); $btnBuild.Size=New-Object System.Drawing.Size(150,30); $btnBuild.BackColor=[System.Drawing.Color]::FromArgb(0,150,160); $btnBuild.ForeColor=[System.Drawing.Color]::White; $form.Controls.Add($btnBuild)
+$txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLog.ScrollBars='Vertical'; $txtLog.ReadOnly=$true; $txtLog.Location=New-Object System.Drawing.Point(180,842); $txtLog.Size=New-Object System.Drawing.Size(480,90); $form.Controls.Add($txtLog)
+$log = { param($m) $txtLog.AppendText($m + "`r`n"); [System.Windows.Forms.Application]::DoEvents() }
+
+# ---- shared bits ----
+# Everything that will land on the disc, not just the installer - artbooks and
+# soundtracks can push a build past a disc tier. The media label and the build's
+# own capacity check both read this, so they cannot disagree about the size and
+# promise a disc the build then refuses.
+function Get-PayloadBytes {
+    $g = $state.Game
+    if (-not $g -or -not $g.Ok) { return @{ Installer=[double]0; Extra=[double]0; Total=[double]0 } }
+    $side = @()
+    $side += @($state.ExtraItems)
+    if ($cbMan.Checked   -and $state.ManualPath) { $side += $state.ManualPath }
+    if ($cbExtra.Checked -and $state.ExtrasPath) { $side += $state.ExtrasPath }
+    if ($chkMusic.Checked -and $state.MusicFile) { $side += $state.MusicFile }
+    $extra = [double](Get-ItemsSize $side)
+    return @{ Installer=[double]$g.TotalBytes; Extra=$extra; Total=([double]$g.TotalBytes + $extra) }
+}
+
+function Update-MediaLabel {
+    $g = $state.Game
+    if (-not $g -or -not $g.Ok) { return }
+    $p = Get-PayloadBytes
+    $m = Get-MediaRec $p.Total
+    $txt = $g.Msg
+    if ($p.Extra -gt 0) { $txt += " + $(Format-Size $p.Extra) extra" }
+    $lblGame.Text = "$txt   ->   Disc: $($m.Text)"
+    $lblGame.ForeColor = if($m.Fit){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
+    # A missing installer part outranks the media advice - it is the thing that
+    # makes the disc useless, so it takes the label and the colour.
+    if ($g.Warning) {
+        $lblGame.Text = $g.Warning
+        $lblGame.ForeColor = if($g.MissingParts.Count -gt 0){[System.Drawing.Color]::Firebrick}else{[System.Drawing.Color]::DarkOrange}
+    }
+}
+
+# The log box is for build progress. A click that cannot do its job needs an
+# answer the user cannot miss, so those get a dialog.
+function Show-Warn([string]$msg,[string]$title='DiscWright') {
+    [void][System.Windows.Forms.MessageBox]::Show($msg,$title,
+        [System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information)
+}
+
+function Show-Confirm([string]$msg,[string]$title='DiscWright') {
+    return ([System.Windows.Forms.MessageBox]::Show($msg,$title,
+        [System.Windows.Forms.MessageBoxButtons]::YesNo,
+        [System.Windows.Forms.MessageBoxIcon]::Warning) -eq [System.Windows.Forms.DialogResult]::Yes)
+}
+
+# A build that refuses to start is an error, and errors get a window - the log line
+# alone is easy to miss, which makes the BUILD button look like it did nothing.
+function Deny-Build([string]$logMsg,[string]$dlgMsg) { & $log "ERROR: $logMsg"; Show-Warn $dlgMsg }
+
+$tips = New-Object System.Windows.Forms.ToolTip
+
+# True when the output folder already holds a built disc or image.
+function Test-AlreadyBuilt([string]$outDir) {
+    if ([string]::IsNullOrWhiteSpace($outDir) -or -not (Test-Path $outDir)) { return $false }
+    if (Test-Path (Join-Path $outDir 'disc')) { return $true }
+    return (@(Get-ChildItem -LiteralPath $outDir -Filter '*.iso' -File -EA SilentlyContinue).Count -gt 0)
+}
+
+# Grey out the two inspect buttons when there is nothing for them to open, and
+# make the build button say what it will actually do.
+function Update-ActionButtons {
+    $t = $txtOut.Text.Trim()
+    $hasOut  = $t -and (Test-Path $t)
+    # Preview renders current settings, so it needs no build - only a menu and a background.
+    $canPreview = $chkMenu.Checked -and $state.BgPath -and (Test-Path $state.BgPath)
+    $btnOpenDisc.Enabled = [bool]$hasOut
+    $btnPreview.Enabled  = [bool]$canPreview
+    $tips.SetToolTip($btnOpenDisc, $(if($hasOut){'Open the disc staging folder in Explorer'}else{'Set an output folder first (step 6)'}))
+    $tips.SetToolTip($btnPreview,  $(if($canPreview){'Show the menu using the current settings - no rebuild needed'}else{'Turn the menu on and choose a background first (step 4)'}))
+    $tips.SetToolTip($btnOpenProj, 'Load a disc you already built, to edit and rebuild it')
+
+    if (Test-AlreadyBuilt $t) {
+        $btnBuild.Text = 'REBUILD ISO'
+        $tips.SetToolTip($btnBuild,'Replace the disc folder and ISO already in the output folder')
+    } else {
+        $btnBuild.Text = 'BUILD ISO'
+        $tips.SetToolTip($btnBuild,'Build the disc folder and ISO')
+    }
+
+    # Divider and panel side are painted into bg.png by New-Background, which is
+    # skipped when the background is used as-is - so they cannot do anything then.
+    $composites = $chkMenu.Checked -and (-not $chkBgAsIs.Checked)
+    $chkDivider.Enabled = $composites
+    $cmbSide.Enabled    = $composites
+    # Two different reasons these go grey - say which one actually applies, or the
+    # tooltip sends the user off to untick "Use as-is" when the menu is just off.
+    $asIsWhy = 'Baked into bg.png - to change it, pick the original artwork in step 4 and untick "Use as-is"'
+    $menuWhy = 'The autorun menu is switched off - tick it at the top of step 4'
+    $whyOff  = if (-not $chkMenu.Checked) { $menuWhy } else { $asIsWhy }
+    $tips.SetToolTip($chkDivider, $(if($composites){'Draw a line where the button panel meets the artwork'}else{$whyOff}))
+    $tips.SetToolTip($cmbSide,    $(if($composites){'Which side the button panel sits on'}else{$whyOff}))
+
+    # The title is painted into bg.png too, so it follows the same rule - and the
+    # text box only means anything once the title is switched on.
+    $chkTitle.Enabled = $composites
+    $lblTitle.Enabled = $composites
+    $txtTitle.Enabled = $composites -and $chkTitle.Checked
+    $tips.SetToolTip($chkTitle, $(if($composites){'Draw the title over the artwork. Off by default - most cover art already has the logo on it.'}else{$whyOff}))
+    $tips.SetToolTip($txtTitle, $(if(-not $composites){$whyOff}
+                                  elseif(-not $chkTitle.Checked){'Tick "Show title" first'}
+                                  else{'Leave blank to use the disc label from step 2'}))
+}
+
+# Renders the CURRENT settings into a temp folder so look changes can be checked
+# without a rebuild. Install/Manual/Extras are inert there - the game files are not
+# in the preview folder - but Play still works, since it finds the game via the registry.
+function New-PreviewMenu {
+    if (-not $chkMenu.Checked) { Show-Warn "The autorun menu is switched off in step 4, so there is nothing to preview."; return $null }
+    if (-not $state.BgPath -or -not (Test-Path $state.BgPath)) { Show-Warn "Choose a background image first (step 4)."; return $null }
+
+    $btns=@(); if($cbPlay.Checked){$btns+='Play'}; if($cbInst.Checked){$btns+='Install'}
+    if($cbMan.Checked){$btns+='Manual'}; if($cbExtra.Checked){$btns+='Extras'}; if($cbExit.Checked){$btns+='Exit'}
+    if ($btns.Count -eq 0) { Show-Warn "Tick at least one menu button first (step 4)."; return $null }
+
+    $prev = Join-Path ([IO.Path]::GetTempPath()) 'DiscWrightPreview'
+    if (Test-Path $prev) { Remove-Item $prev -Recurse -Force -EA SilentlyContinue }
+    New-Item -ItemType Directory -Force -Path "$prev\AUTORUN" | Out-Null
+
+    $title = $txtLabel.Text.Trim()
+    if (-not $title -and $state.Game -and $state.Game.Ok) { $title = $state.Game.GameName }
+    if (-not $title) { $title = 'Preview' }
+    # A custom title overrides the label; blank falls back to it.
+    $bgTitle = $txtTitle.Text.Trim(); if (-not $bgTitle) { $bgTitle = $title }
+
+    $bgOut = Join-Path $prev 'AUTORUN\bg.png'
+    if ($chkBgAsIs.Checked) { Copy-Item $state.BgPath $bgOut -Force }
+    else { New-Background $state.BgPath $bgTitle $bgOut ([string]$cmbSide.SelectedItem) ([bool]$chkDivider.Checked) ([bool]$chkTitle.Checked) }
+
+    $musicName=''
+    if ($chkMusic.Checked -and $state.MusicFile -and (Test-Path $state.MusicFile)) {
+        $musicName = 'music'+[IO.Path]::GetExtension($state.MusicFile)
+        Copy-Item $state.MusicFile "$prev\AUTORUN\$musicName" -Force
+    }
+
+    $setupName = if ($state.Game -and $state.Game.Ok) { $state.Game.SetupExe.Name } else { 'setup.exe' }
+    $matchName = if ($state.Game -and $state.Game.Ok) { $state.Game.GameName } else { $title }
+    # Stage the icon too, so the preview's taskbar icon matches the built disc.
+    $prevIco = Get-DiscIconName $title
+    if ($state.IconPath -and (Test-Path $state.IconPath) -and $state.IconIsIco) {
+        Copy-Item $state.IconPath (Join-Path $prev "AUTORUN\$prevIco") -Force -EA SilentlyContinue
+    } elseif ($state.IconPath -and (Test-Path $state.IconPath)) {
+        try { Convert-ToIco $state.IconPath (Join-Path $prev "AUTORUN\$prevIco") } catch {}
+    }
+    New-MenuHta @{ GameName=$title; MatchName=$matchName; SetupExe=$setupName; Buttons=$btns
+                   MusicFile=$musicName; ManualFile=''; PanelSide=[string]$cmbSide.SelectedItem; IconName=$prevIco
+                   WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem
+                   Preview=$true } "$prev\AUTORUN\menu.hta"
+    return "$prev\AUTORUN\menu.hta"
+}
+
+function Set-GameFolder([string]$path) {
+    $txtFolder.Text=$path
+    $g=Get-GameInfo $path; $state.Game=$g
+    if ($g.Ok) { Update-MediaLabel }
+    else { $lblGame.Text=$g.Msg; $lblGame.ForeColor=[System.Drawing.Color]::Firebrick }
+    return $g
+}
+
+function Add-ExtraItem([string]$path) {
+    if ([string]::IsNullOrWhiteSpace($path) -or -not (Test-Path $path)) { return }
+    $full = (Resolve-Path -LiteralPath $path).Path
+    $nm = [IO.Path]::GetFileName($full.TrimEnd('\'))
+    if (Test-ReservedDiscName $nm (Get-DiscIconName $txtLabel.Text.Trim())) { & $log "Cannot add '$nm' - that name is reserved for the disc's own files."; return }
+    foreach ($e in $lstExtra.Items) { if (Test-SamePath $e $full) { return } }
+    [void]$lstExtra.Items.Add($full)
+    $state.ExtraItems = @($lstExtra.Items)
+    Update-MediaLabel
+}
+
+function Set-IconFile([string]$path) {
+    $txtIcon.Text=$path; $state.IconPath=$path
+    $r=Test-IconInput $path; $state.IconIsIco=$r.IsIco
+    $lblIcon.Text=$r.Msg; $lblIcon.ForeColor= if($r.Ok){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::Firebrick}
+    # Load through a MemoryStream: Image.FromFile keeps the file open, which would
+    # block wiping the staging folder when the icon is picked from inside it.
+    if ($picIcon.Image) { $old=$picIcon.Image; $picIcon.Image=$null; $old.Dispose() }
+    try { $ms=New-Object System.IO.MemoryStream(,[System.IO.File]::ReadAllBytes($path)); $picIcon.Image=[System.Drawing.Image]::FromStream($ms) } catch { $picIcon.Image=$null }
+}
+
+# A background that is already exactly 760x480 is almost certainly one we composed
+# earlier - re-compositing would double the darkening and stamp the title twice.
+function Test-ComposedBg([string]$path) {
+    try { $i=[System.Drawing.Image]::FromFile($path); $ok=($i.Width -eq 760 -and $i.Height -eq 480); $i.Dispose(); return $ok } catch { return $false }
+}
+
+function Set-BgFile([string]$path) {
+    # Refuse an unusable image here rather than let it fail during the build. Silent
+    # during a project load - reopening an old disc whose artwork has since moved
+    # should not throw a dialog at the user before they have done anything.
+    $chk = Test-BgInput $path
+    if (-not $chk.Ok) {
+        if (-not $state.Loading) { Show-Warn ("This background cannot be used:`r`n`r`n$path`r`n`r`n$($chk.Msg)") }
+        $txtBg.Text=''; $state.BgPath=$null
+        Update-ActionButtons
+        return
+    }
+    $txtBg.Text=$path; $state.BgPath=$path
+    # Set BOTH ways: picking a fresh source must clear a previously-ticked as-is,
+    # or the divider and panel side stay greyed out with no way to reach them.
+    $chkBgAsIs.Checked = [bool](Test-ComposedBg $path)
+    Update-ActionButtons
+}
+
+function Open-Project([string]$folder) {
+    $txtLog.Clear()
+    $state.Loading = $true   # keep control handlers from popping dialogs mid-load
+    # accept either the output folder or the disc folder itself
+    $disc = $folder
+    $proj = Join-Path $folder $PROJECT_FILE
+    if (-not (Test-Path (Join-Path $disc 'autorun.inf'))) { $disc = Join-Path $folder 'disc' }
+    if (-not (Test-Path $proj) -and (Test-Path (Join-Path (Split-Path $folder -Parent) $PROJECT_FILE))) { $proj = Join-Path (Split-Path $folder -Parent) $PROJECT_FILE }
+
+    $p = $null
+    if (Test-Path $proj) { $p = Import-Project $proj }
+    if (-not $p -and (Test-Path (Join-Path $disc 'autorun.inf'))) { $p = Import-DiscFolder $disc }
+    if (-not $p) {
+        $state.Loading = $false
+        & $log "ERROR: no $PROJECT_FILE and no disc\autorun.inf under that folder."
+        Show-Warn "That folder does not look like a disc project.`r`n`r`nExpected either a $PROJECT_FILE, or a 'disc' folder containing autorun.inf, in:`r`n`r`n$folder"
+        return
+    }
+
+    & $log "Loaded from $($p.Origin)."
+
+    $src = $p.SourceFolder
+    if (-not $src -or -not (Test-Path $src)) {
+        & $log "  original GOG folder is gone - using the disc folder itself (rebuild in place)."
+        $src = $disc
+    }
+    $g = Set-GameFolder $src
+    if (-not $g.Ok) { & $log "  WARNING: $($g.Msg)" }
+
+    $txtLabel.Text = $p.Label
+    if ($p.IconPath -and (Test-Path $p.IconPath)) { Set-IconFile $p.IconPath } else { & $log "  icon missing - pick one again." }
+
+    $chkMenu.Checked = $p.Menu
+    if ($p.BgPath -and (Test-Path $p.BgPath)) { Set-BgFile $p.BgPath } else { $txtBg.Text=''; $state.BgPath=$null }
+    $chkBgAsIs.Checked = [bool]$p.BgAsIs
+    $cmbSide.SelectedItem = $(if($p.PanelSide -ieq 'Left'){'Left'}else{'Right'})
+    $chkDivider.Checked   = [bool]$p.Divider
+    $chkTitle.Checked     = [bool]$p.ShowTitle
+    $txtTitle.Text        = [string]$p.TitleText
+    $chkWinBorder.Checked = [bool]$p.WindowBorder
+    $cmbBtnStyle.SelectedItem = $(if($p.ButtonStyle -ieq 'Minimal'){'Minimal'}else{'Bordered'})
+
+    $hasMusic = ($p.MusicFile -and (Test-Path $p.MusicFile))
+    $chkMusic.Checked = $hasMusic
+    if ($hasMusic) { $txtMusic.Text=$p.MusicFile; $state.MusicFile=$p.MusicFile } else { $txtMusic.Text=''; $state.MusicFile=$null }
+
+    $b = @($p.Buttons)
+    $cbPlay.Checked  = ($b -contains 'Play')
+    $cbInst.Checked  = ($b -contains 'Install')
+    $cbMan.Checked   = ($b -contains 'Manual')
+    $cbExtra.Checked = ($b -contains 'Extras')
+    $cbExit.Checked  = ($b -contains 'Exit')
+
+    if ($p.ManualPath -and (Test-Path $p.ManualPath)) { $txtMan.Text=$p.ManualPath; $state.ManualPath=$p.ManualPath } else { $txtMan.Text=''; $state.ManualPath=$null }
+    if ($p.ExtrasPath -and (Test-Path $p.ExtrasPath)) { $txtEx.Text=$p.ExtrasPath; $state.ExtrasPath=$p.ExtrasPath } else { $txtEx.Text=''; $state.ExtrasPath=$null }
+
+    $lstExtra.Items.Clear(); $state.ExtraItems=@()
+    foreach ($it in @($p.ExtraItems)) {
+        if ($it -and (Test-Path $it)) { Add-ExtraItem $it }
+        elseif ($it) { & $log "  extra content missing, dropped: $it" }
+    }
+
+    $out = $p.OutDir; if (-not $out -or -not (Test-Path $out)) { $out = Split-Path $disc -Parent }
+    $txtOut.Text = $out
+
+    $state.Loading = $false
+    Update-ActionButtons
+
+    if ($chkMenu.Checked -and $state.BgPath -and $chkBgAsIs.Checked -and (Test-ComposedBg $state.BgPath)) {
+        & $log "NOTE: the background is the already-composed bg.png, so Divider and Buttons-side are greyed out."
+        & $log "      To change them, pick the ORIGINAL artwork in step 4 and untick 'Use as-is'."
+    }
+    & $log "Ready. Edit anything above, then BUILD ISO to rewrite the disc + image."
+    if (Test-SamePath $src $disc) { & $log "In-place mode: the game files already sit in the staging folder and will not be re-copied." }
+}
+
+# ---- events ----
+$btnOpenProj.Add_Click({
+    $d=New-Object System.Windows.Forms.FolderBrowserDialog
+    $d.Description='Pick the disc output folder (the one holding disc\ and the .iso)'
+    if ($d.ShowDialog() -eq 'OK') { Open-Project $d.SelectedPath }
+})
+$btnOpenDisc.Add_Click({
+    $t=$txtOut.Text.Trim()
+    if (-not $t) {
+        Show-Warn "No output folder is set yet.`r`n`r`nPick one in step 6, or use 'Open existing disc...' to load a disc you already built."
+        return
+    }
+    if (-not (Test-Path $t)) { Show-Warn "That output folder does not exist yet:`r`n`r`n$t"; return }
+    $d = Join-Path $t 'disc'
+    if (Test-Path $d) { Start-Process explorer.exe $d; return }
+    # Do not quietly open something else than what the button promises.
+    Show-Warn "Nothing has been built here yet - there is no 'disc' staging folder in:`r`n`r`n$t`r`n`r`nOpening the output folder instead."
+    Start-Process explorer.exe $t
+})
+$btnPreview.Add_Click({
+    $h = New-PreviewMenu
+    if (-not $h) { return }
+    & $log 'Preview built from the current settings (Install/Manual do nothing in preview).'
+    Start-Process mshta.exe "`"$h`""
+})
+$txtOut.Add_TextChanged({ Update-ActionButtons })
+$btnFolder.Add_Click({
+    $d=New-Object System.Windows.Forms.FolderBrowserDialog
+    if ($d.ShowDialog() -eq 'OK') {
+        $g = Set-GameFolder $d.SelectedPath
+        if ($g.Ok -and [string]::IsNullOrWhiteSpace($txtLabel.Text)) { $txtLabel.Text=$g.GameName }
+        if ($g.Ok -and [string]::IsNullOrWhiteSpace($txtOut.Text)) { $txtOut.Text=Join-Path ([Environment]::GetFolderPath('Desktop')) ((($g.GameName -replace '[^A-Za-z0-9_\- ]','_').Trim())+' Disc') }
+    }
+})
+$btnIcon.Add_Click({
+    $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Images|*.ico;*.png;*.jpg;*.jpeg;*.bmp'
+    if ($d.ShowDialog() -eq 'OK') { Set-IconFile $d.FileName }
+})
+$btnBg.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Images|*.png;*.jpg;*.jpeg;*.bmp'; if($d.ShowDialog() -eq 'OK'){ Set-BgFile $d.FileName } })
+$btnMusic.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Audio|*.mp3;*.wav;*.wma'; if($d.ShowDialog() -eq 'OK'){ $txtMusic.Text=$d.FileName; $state.MusicFile=$d.FileName } })
+# Manuals are usually PDF but plenty ship as text or HTML, and the menu just
+# shell-executes whatever it is - nothing in the pipeline needs it to be a PDF.
+$btnMan.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*'; if($d.ShowDialog() -eq 'OK'){ $txtMan.Text=$d.FileName; $state.ManualPath=$d.FileName; Update-MediaLabel } })
+$btnEx.Add_Click({ $d=New-Object System.Windows.Forms.FolderBrowserDialog; if($d.ShowDialog() -eq 'OK'){ $txtEx.Text=$d.SelectedPath; $state.ExtrasPath=$d.SelectedPath; Update-MediaLabel } })
+$btnOut.Add_Click({ $d=New-Object System.Windows.Forms.FolderBrowserDialog; if($d.ShowDialog() -eq 'OK'){ $txtOut.Text=$d.SelectedPath } })
+$btnXFile.Add_Click({
+    $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='All files|*.*'; $d.Multiselect=$true
+    $d.Title='Pick any files to put on the disc'
+    if($d.ShowDialog() -eq 'OK'){ foreach($fn in $d.FileNames){ Add-ExtraItem $fn } }
+})
+$btnXDir.Add_Click({
+    $d=New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='Pick a folder to put on the disc'
+    if($d.ShowDialog() -eq 'OK'){ Add-ExtraItem $d.SelectedPath }
+})
+$btnXDel.Add_Click({
+    foreach($i in @($lstExtra.SelectedIndices | Sort-Object -Descending)){ $lstExtra.Items.RemoveAt($i) }
+    $state.ExtraItems = @($lstExtra.Items); Update-MediaLabel
+})
+$chkMusic.Add_CheckedChanged({ $txtMusic.Enabled=$chkMusic.Checked; $btnMusic.Enabled=$chkMusic.Checked; Update-MediaLabel })
+$cbMan.Add_CheckedChanged({ $txtMan.Enabled=$cbMan.Checked; $btnMan.Enabled=$cbMan.Checked; Update-MediaLabel })
+$cbExtra.Add_CheckedChanged({ $txtEx.Enabled=$cbExtra.Checked; $btnEx.Enabled=$cbExtra.Checked; Update-MediaLabel })
+$chkBgAsIs.Add_CheckedChanged({
+    # Unticking this on a background we already composed would re-darken it and
+    # stamp the title a second time, while the old divider stays painted in.
+    if (-not $state.Loading -and -not $chkBgAsIs.Checked -and $state.BgPath -and (Test-ComposedBg $state.BgPath)) {
+        Show-Warn ("This background is already 760x480, so it is most likely one this app composed earlier." +
+                   "`r`n`r`nRecompositing it would darken it a second time, draw the title twice, and any divider line already painted into it would stay." +
+                   "`r`n`r`nPick the original artwork in step 4 instead, then the divider and panel side will work.")
+    }
+    Update-ActionButtons
+})
+$chkTitle.Add_CheckedChanged({
+    # Ticking it with an empty box: seed the disc label so there is something to
+    # see and edit, rather than an empty field the user has to guess at.
+    if ($chkTitle.Checked -and -not $txtTitle.Text.Trim()) { $txtTitle.Text = $txtLabel.Text.Trim() }
+    Update-ActionButtons
+})
+$chkMenu.Add_CheckedChanged({
+    foreach($c in @($lblBg,$txtBg,$btnBg,$chkBgAsIs,$lblSide,$cmbSide,$lblTitle,$chkTitle,$txtTitle,$chkMusic,$lblBtns,$cbPlay,$cbInst,$cbMan,$cbExtra,$cbExit,$lblStyle,$chkDivider,$chkWinBorder,$lblBtnStyle,$cmbBtnStyle)){ $c.Enabled=$chkMenu.Checked }
+    Update-ActionButtons   # re-applies the as-is rules on top
+})
+
+$btnBuild.Add_Click({
+    $txtLog.Clear()
+    if (-not $state.Game -or -not $state.Game.Ok) { Deny-Build 'no valid GOG game folder.' 'Pick a valid GOG game folder first (step 1).'; return }
+    if ([string]::IsNullOrWhiteSpace($txtLabel.Text)) { Deny-Build 'no disc label.' 'Enter a disc label (step 2). It is the name This PC shows for the disc.'; return }
+    if (-not $state.IconPath) { Deny-Build 'no disc icon.' 'Choose a disc icon (step 3).'; return }
+    if ([string]::IsNullOrWhiteSpace($txtOut.Text)) { Deny-Build 'no output folder.' 'Choose an output folder (step 6). The disc folder and the ISO are written there.'; return }
+    if ($chkMenu.Checked -and -not $state.BgPath) { Deny-Build 'menu is on but no background chosen.' 'The autorun menu is switched on, so it needs a background image (step 4).'; return }
+
+    # AutoRun has no Unicode mode, so a label Windows cannot encode reaches Explorer
+    # as question marks. Nothing the tool can do about that, but shipping a disc
+    # called "???????" without warning is not acceptable either - show exactly what
+    # the drive will say and let the user rename it first.
+    $lblPrev = Get-AutorunLabelPreview $txtLabel.Text.Trim()
+    if ($lblPrev.Lossy) {
+        if (-not (Show-Confirm ("Windows cannot show this disc label in full." +
+                                "`r`n`r`nYou typed : $($txtLabel.Text.Trim())" +
+                                "`r`n This PC will show : $($lblPrev.Text)" +
+                                "`r`n`r`nAutoRun reads the disc label in the $($lblPrev.Codepage) codepage and has no Unicode mode, " +
+                                "so characters outside it cannot be stored on the disc at all." +
+                                "`r`n`r`nUse the second spelling, or go back to step 2 and rename the disc." +
+                                "`r`n`r`nBuild anyway?"))) {
+            & $log 'Cancelled - disc label cannot be encoded.'; return
+        }
+        & $log "WARNING: label will appear as '$($lblPrev.Text)' in This PC."
+    }
+
+    # An unfinished download burns a disc that fails only at install time. Confirm
+    # rather than block outright: the part numbering is a convention, not a promise,
+    # so a false positive must not be able to stop a legitimate build.
+    if ($state.Game.MissingParts.Count -gt 0) {
+        $miss = ($state.Game.MissingParts | ForEach-Object { "$($state.Game.SetupExe.BaseName)-$_.bin" }) -join "`r`n"
+        if (-not (Show-Confirm ("This GOG download looks incomplete. These installer parts are missing:`r`n`r`n$miss" +
+                                "`r`n`r`nA disc built from it will look fine but fail when the installer runs, " +
+                                "and by then the disc is spent.`r`n`r`nRe-download the game from GOG first." +
+                                "`r`n`r`nBuild anyway?"))) {
+            & $log 'Cancelled - installer parts are missing.'; return
+        }
+        & $log 'WARNING: building with missing installer parts, at your request.'
+    }
+
+    $outDir = $txtOut.Text.Trim()
+    $pay    = Get-PayloadBytes
+
+    # The media label has always worked out that a payload is too big for any disc,
+    # but nothing acted on it - the build ran to completion and handed back an ISO
+    # that could never be burned.
+    $rec = Get-MediaRec $pay.Total
+    if (-not $rec.Fit) {
+        Deny-Build ("payload is {0:N1} GB - too big for any single disc." -f ($pay.Total/1GB)) (
+            ("This disc would be {0:N1} GB, which is bigger than any single disc DiscWright can write." -f ($pay.Total/1GB)) +
+            "`r`n`r`nThe largest supported medium is BD-R XL at 100 GB." +
+            "`r`n`r`nRemove some extra content in step 5, or split the game across several discs by hand.")
+        return
+    }
+
+    # Staging copies the payload, then the ISO is written beside it, so the output
+    # volume needs room for both. Installer files are hardlinked rather than copied
+    # when the source sits on the same NTFS volume, which costs nothing - so only
+    # count them when that shortcut is not available.
+    try {
+        $outRoot = [IO.Path]::GetPathRoot($outDir)
+        if ($outRoot) {
+            $di       = New-Object System.IO.DriveInfo($outRoot)
+            $free     = [double]$di.AvailableFreeSpace
+            $srcRoot  = [IO.Path]::GetPathRoot($state.Game.SetupExe.FullName)
+            $linkable = ($di.DriveFormat -ieq 'NTFS') -and ($srcRoot -ieq $outRoot)
+            # Assign the branch, do not inline it: "(if ...)" parses as a command
+            # invocation and only blows up at run time, which would hide here.
+            $stageCost = if ($linkable) { $pay.Extra } else { $pay.Total }
+            $needed    = ($stageCost + $pay.Total) * 1.02
+            if ($free -gt 0 -and $needed -gt $free) {
+                Deny-Build ("needs {0:N1} GB, only {1:N1} GB free on {2}" -f ($needed/1GB), ($free/1GB), $outRoot) (
+                    ("Not enough free space on {0}" -f $outRoot.TrimEnd('\')) +
+                    ("`r`n`r`nThis build needs about {0:N1} GB and there is {1:N1} GB free." -f ($needed/1GB), ($free/1GB)) +
+                    $(if ($linkable) { "`r`n`r`nThe installer files will be hardlinked rather than copied, so they are already left out of that figure." }
+                      else { "`r`n`r`nThe installer is on a different drive, so it has to be copied into the staging folder as well as written into the ISO." }) +
+                    "`r`n`r`nFree up space, or choose an output folder on another drive.")
+                return
+            }
+        }
+    } catch {
+        # A UNC or otherwise unmeasurable path is no reason to refuse the build.
+        & $log 'NOTE: could not check free space on the output volume - building anyway.'
+    }
+
+    # A rebuild replaces work that already exists - say exactly what goes.
+    if (Test-AlreadyBuilt $outDir) {
+        $stage   = Join-Path $outDir 'disc'
+        $inPlace = Test-SamePath $state.Game.Folder $stage
+        $msg = "Rebuild the disc in:`r`n$outDir`r`n`r`nThe existing ISO will be replaced."
+        if ((Test-Path $stage) -and -not $inPlace) {
+            $msg += "`r`n`r`nThe 'disc' folder will be rebuilt from scratch. Anything you added to it by hand that is not listed under Extra content will be lost."
+        } elseif ($inPlace) {
+            $msg += "`r`n`r`nThe game files already in the disc folder will be left untouched."
+        }
+        $msg += "`r`n`r`nContinue?"
+        if (-not (Show-Confirm $msg)) { & $log 'Cancelled - nothing was changed.'; return }
+    }
+
+    New-Item -ItemType Directory -Force -Path $txtOut.Text | Out-Null
+    $buttons=@(); if($cbPlay.Checked){$buttons+='Play'}; if($cbInst.Checked){$buttons+='Install'}; if($cbMan.Checked){$buttons+='Manual'}; if($cbExtra.Checked){$buttons+='Extras'}; if($cbExit.Checked){$buttons+='Exit'}
+    $s=@{ Game=$state.Game; Label=$txtLabel.Text.Trim(); IconPath=$state.IconPath; IconIsIco=$state.IconIsIco;
+         Menu=$chkMenu.Checked; BgPath=$state.BgPath; BgAsIs=$chkBgAsIs.Checked; PanelSide=[string]$cmbSide.SelectedItem;
+         Divider=$chkDivider.Checked; ShowTitle=$chkTitle.Checked; TitleText=$txtTitle.Text.Trim();
+         WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem;
+         MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null});
+         Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
+         ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim() }
+    $btnBuild.Enabled=$false
+    try { $iso=Invoke-Build $s $log; [System.Windows.Forms.MessageBox]::Show("Build complete!`n`n$iso","DiscWright") | Out-Null }
+    catch { & $log ('ERROR: '+$_.Exception.Message); Show-Warn ("The build failed:`r`n`r`n" + $_.Exception.Message) }
+    finally { $btnBuild.Enabled=$true; Update-ActionButtons }
+})
+
+# DiscWright.vbs starts this process with STARTUPINFO wShowWindow = SW_HIDE so no
+# console ever flashes. WinForms applies that state to the first top-level window,
+# which would leave the form invisible - so show it explicitly once it exists.
+Add-Type -Namespace GDA -Name Win -MemberDefinition @'
+[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+'@
+Update-ActionButtons   # start greyed out - nothing to open yet
+
+$form.Add_Shown({
+    [void][GDA.Win]::ShowWindow($form.Handle,5)      # SW_SHOW
+    [void][GDA.Win]::SetForegroundWindow($form.Handle)
+    $form.Activate()
+})
+
+[void]$form.ShowDialog()
+
+
+
