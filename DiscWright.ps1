@@ -143,7 +143,24 @@ function Get-GameInfo([string]$folder) {
     if (-not (Test-Path $folder)) { $info.Msg='Folder not found.'; return $info }
     $exes = @(Get-ChildItem $folder -Filter 'setup_*.exe' -File -ErrorAction SilentlyContinue |
               Sort-Object Length -Descending)
-    if ($exes.Count -eq 0) { $info.Msg='No GOG "setup_*.exe" found in this folder.'; return $info }
+    if ($exes.Count -eq 0) {
+        # Two folders in a project look alike and sit next to each other: the GOG
+        # download, and the output folder DiscWright writes to. The second holds a
+        # disc\ subfolder with the installer one level down, so picking it lands
+        # here - and the generic message sends people looking for a problem with
+        # their download instead of at which folder they picked. Name it instead.
+        $inner = Join-Path $folder 'disc'
+        $innerExe = @()
+        if (Test-Path $inner) {
+            $innerExe = @(Get-ChildItem $inner -Filter 'setup_*.exe' -File -ErrorAction SilentlyContinue)
+        }
+        if ($innerExe.Count -gt 0) {
+            $info.Msg = 'This looks like a disc DiscWright built, not a GOG download. Step 1 wants the folder you downloaded from GOG; this one is where the ISO gets written.'
+        } else {
+            $info.Msg = 'No GOG "setup_*.exe" found in this folder.'
+        }
+        return $info
+    }
     $exe = $exes[0]
 
     # Parts belong to ONE installer and are named "<installer>-1.bin", "-2.bin"...
@@ -1185,6 +1202,18 @@ function AddLabel($t,$x,$y,$w){ $l=New-Object System.Windows.Forms.Label; $l.Tex
 function AddText($x,$y,$w){ $t=New-Object System.Windows.Forms.TextBox; $t.Location=New-Object System.Drawing.Point($x,$y); $t.Size=New-Object System.Drawing.Size($w,24); $form.Controls.Add($t); return $t }
 function AddBtn($t,$x,$y,$w){ $b=New-Object System.Windows.Forms.Button; $b.Text=$t; $b.Location=New-Object System.Drawing.Point($x,$y); $b.Size=New-Object System.Drawing.Size($w,24); $form.Controls.Add($b); return $b }
 
+# A FolderBrowserDialog with no SelectedPath opens wherever Windows last left it,
+# process-wide. After a build that is the output folder, so Browse for the game
+# folder in step 1 reopened on the disc it had just written - and the two folders
+# are named alike enough that picking the wrong one looks like the app losing the
+# game rather than a misclick. Each Browse now starts where its own box points.
+function New-FolderDialog([string]$description,[string]$startAt) {
+    $d = New-Object System.Windows.Forms.FolderBrowserDialog
+    if ($description) { $d.Description = $description }
+    if ($startAt -and (Test-Path $startAt -PathType Container)) { $d.SelectedPath = $startAt }
+    return $d
+}
+
 # --- reopen / inspect row ---
 $btnOpenProj = AddBtn 'Open existing disc...' 15 8 210
 $btnOpenDisc = AddBtn 'Show disc folder' 235 8 200
@@ -1613,8 +1642,7 @@ function Open-Project([string]$folder) {
 
 # ---- events ----
 $btnOpenProj.Add_Click({
-    $d=New-Object System.Windows.Forms.FolderBrowserDialog
-    $d.Description='Pick the disc output folder (the one holding disc\ and the .iso)'
+    $d = New-FolderDialog 'Pick the disc output folder (the one holding disc\ and the .iso)' $txtOut.Text.Trim()
     if ($d.ShowDialog() -eq 'OK') { Open-Project $d.SelectedPath }
 })
 $btnOpenDisc.Add_Click({
@@ -1638,7 +1666,7 @@ $btnPreview.Add_Click({
 })
 $txtOut.Add_TextChanged({ Update-ActionButtons })
 $btnFolder.Add_Click({
-    $d=New-Object System.Windows.Forms.FolderBrowserDialog
+    $d = New-FolderDialog 'Pick the folder you downloaded from GOG (it holds setup_*.exe)' $txtFolder.Text.Trim()
     if ($d.ShowDialog() -eq 'OK') {
         $g = Set-GameFolder $d.SelectedPath
         if ($g.Ok -and [string]::IsNullOrWhiteSpace($txtLabel.Text)) { $txtLabel.Text=$g.GameName }
@@ -1654,15 +1682,15 @@ $btnMusic.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filt
 # Manuals are usually PDF but plenty ship as text or HTML, and the menu just
 # shell-executes whatever it is - nothing in the pipeline needs it to be a PDF.
 $btnMan.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*'; if($d.ShowDialog() -eq 'OK'){ $txtMan.Text=$d.FileName; $state.ManualPath=$d.FileName; Update-MediaLabel } })
-$btnEx.Add_Click({ $d=New-Object System.Windows.Forms.FolderBrowserDialog; if($d.ShowDialog() -eq 'OK'){ $txtEx.Text=$d.SelectedPath; $state.ExtrasPath=$d.SelectedPath; Update-MediaLabel } })
-$btnOut.Add_Click({ $d=New-Object System.Windows.Forms.FolderBrowserDialog; if($d.ShowDialog() -eq 'OK'){ $txtOut.Text=$d.SelectedPath } })
+$btnEx.Add_Click({ $d=New-FolderDialog 'Pick a folder of extras to put on the disc' $txtEx.Text.Trim(); if($d.ShowDialog() -eq 'OK'){ $txtEx.Text=$d.SelectedPath; $state.ExtrasPath=$d.SelectedPath; Update-MediaLabel } })
+$btnOut.Add_Click({ $d=New-FolderDialog 'Pick where the disc folder and the ISO get written' $txtOut.Text.Trim(); if($d.ShowDialog() -eq 'OK'){ $txtOut.Text=$d.SelectedPath } })
 $btnXFile.Add_Click({
     $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='All files|*.*'; $d.Multiselect=$true
     $d.Title='Pick any files to put on the disc'
     if($d.ShowDialog() -eq 'OK'){ foreach($fn in $d.FileNames){ Add-ExtraItem $fn } }
 })
 $btnXDir.Add_Click({
-    $d=New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='Pick a folder to put on the disc'
+    $d = New-FolderDialog 'Pick a folder to put on the disc' $txtFolder.Text.Trim()
     if($d.ShowDialog() -eq 'OK'){ Add-ExtraItem $d.SelectedPath }
 })
 $btnXDel.Add_Click({

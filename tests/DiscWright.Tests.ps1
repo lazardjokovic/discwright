@@ -449,6 +449,25 @@ Describe 'Get-GameInfo' -Tag 'Unit' {
         ((Get-GameInfo $script:Torn).MissingParts -join ',') | Should -Be '2,3'
     }
 
+    It 'recognises a built disc folder and says so' {
+        # The output folder sits next to the GOG download and is named alike, so it
+        # gets picked by mistake - and the generic "no installer here" sends people
+        # looking for a problem with their download rather than at which folder they
+        # chose. It has the installer one level down in disc\.
+        $built = Join-Path $script:Sandbox 'Some Game Disc'
+        New-Item -ItemType Directory -Force -Path (Join-Path $built 'disc') | Out-Null
+        $fs = [IO.File]::Create((Join-Path $built 'disc\setup_some_game_1.0_(1).exe')); $fs.SetLength(1MB); $fs.Close()
+        $info = Get-GameInfo $built
+        $info.Ok  | Should -BeFalse
+        $info.Msg | Should -Match 'disc DiscWright built'
+    }
+
+    It 'still gives the plain message for a folder with nothing in it' {
+        $bare = Join-Path $script:Sandbox 'just-an-empty-folder'
+        New-Item -ItemType Directory -Force -Path $bare | Out-Null
+        (Get-GameInfo $bare).Msg | Should -Match 'No GOG'
+    }
+
     It 'is not Ok for a folder that does not exist' {
         (Get-GameInfo (Join-Path $script:Sandbox 'no-such-folder')).Ok | Should -BeFalse
     }
