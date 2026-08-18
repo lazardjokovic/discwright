@@ -9,6 +9,8 @@ between minor versions.
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-08-18
+
 ### Added
 
 - `ROADMAP.md` — planned work, what is under consideration, and what is deliberately out
@@ -54,5 +56,6 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/lazardjokovic/discwright/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lazardjokovic/discwright/releases/tag/v0.1.0
