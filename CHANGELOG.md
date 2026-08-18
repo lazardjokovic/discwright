@@ -15,6 +15,15 @@ between minor versions.
   of scope.
 - `CHANGELOG.md` — this file.
 
+### Fixed
+
+- **Building a disc and then rebuilding it immediately failed**, with "the old disc
+  folder cannot be replaced — something is still using it" and a suggestion to close
+  Explorer or eject a mounted ISO. Neither was the cause: the ISO builder left its
+  COM objects alive, so DiscWright was still holding a handle on every file in its
+  own staging folder. Waiting a minute and trying again worked, which made it look
+  intermittent rather than reproducible.
+
 ## [0.1.0] — 2026-08-16
 
 First public release.
