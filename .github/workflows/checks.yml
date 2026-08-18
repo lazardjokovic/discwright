@@ -76,7 +76,8 @@ jobs:
       # Fails the build on Errors only. Warnings are printed but tolerated: the
       # default rule set has strong opinions about WinForms code that are not
       # worth rewriting a working app over, and a check that always fails is a
-      # check everybody learns to ignore.
+      # check everybody learns to ignore. Which rules run is in
+      # PSScriptAnalyzerSettings.psd1, with the reasoning for each exclusion.
       - name: PSScriptAnalyzer
         shell: powershell
         run: |
@@ -84,7 +85,10 @@ jobs:
               Set-PSRepository PSGallery -InstallationPolicy Trusted
               Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
           }
-          $results  = @(Invoke-ScriptAnalyzer -Path . -Recurse)
+          # Invoke-ScriptAnalyzer does find the settings file on its own when it
+          # sits in the analyzed path, but naming it means the result does not
+          # depend on where the job happens to be standing.
+          $results  = @(Invoke-ScriptAnalyzer -Path . -Recurse -Settings .\PSScriptAnalyzerSettings.psd1)
           $errors   = @($results | Where-Object { $_.Severity -eq 'Error' })
           $warnings = @($results | Where-Object { $_.Severity -eq 'Warning' })
 

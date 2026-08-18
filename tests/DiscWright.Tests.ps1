@@ -112,7 +112,10 @@ BeforeAll {
         return $null
     }
 
-    $script:LogSink = { param($m) }
+    # Invoke-Build reports progress through a callback. The tests do not care what
+    # it says, only that the build runs - discarding the message is the point, and
+    # consuming it keeps the analyzer from reading $m as an oversight.
+    $script:LogSink = { param($m) $null = $m }
 }
 
 AfterAll {
