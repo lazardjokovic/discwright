@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ['v*']
 
 # Read-only token: nothing here writes to the repo.
 permissions:
@@ -126,3 +127,33 @@ jobs:
               }
           }
           if ($failed) { exit 1 }
+
+  # A version constant maintained by hand drifts, because bumping it is a step
+  # that gets forgotten. This runs only when a tag is pushed and fails the tag if
+  # the app would report a version it is not.
+  version-matches-tag:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: App version must match the tag
+        shell: powershell
+        run: |
+          # GITHUB_REF_NAME rather than an expression, so the tag arrives as data
+          # instead of being pasted into the script before it runs.
+          $tag      = $env:GITHUB_REF_NAME
+          $expected = $tag -replace '^v',''
+          $m = [regex]::Match((Get-Content DiscWright.ps1 -Raw), '\$APP_VERSION\s*=\s*''([^'']+)''')
+          if (-not $m.Success) {
+              Write-Host "::error::no `$APP_VERSION assignment found in DiscWright.ps1"
+              exit 1
+          }
+          $actual = $m.Groups[1].Value
+          Write-Host "tag: $tag   expects: $expected   DiscWright.ps1 says: $actual"
+          if ($actual -ne $expected) {
+              Write-Host "::error::`$APP_VERSION is '$actual' but the tag is '$tag' - bump the constant before tagging"
+              exit 1
+          }
+          Write-Host "ok"

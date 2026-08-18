@@ -49,9 +49,15 @@ BeforeAll {
     }
 
     # Script-scope constants the functions read. Script scope, not local: the
-    # functions look $PROJECT_FILE up dynamically from whichever It block calls
-    # them, and a local here would not be on that chain.
+    # functions look these up dynamically from whichever It block calls them, and
+    # a local here would not be on that chain.
     $script:PROJECT_FILE = 'discproject.json'
+
+    # Read out of the app rather than hard-coded, so bumping the version does not
+    # mean editing the tests - and so a test can assert the two agree.
+    $script:AppVersionInSource =
+        [regex]::Match((Get-Content $appScript -Raw), '\$APP_VERSION\s*=\s*''([^'']+)''').Groups[1].Value
+    $script:APP_VERSION = $script:AppVersionInSource
 
     $script:Sandbox = Join-Path ([IO.Path]::GetTempPath()) ('dwpester_' + [Guid]::NewGuid().ToString('N').Substring(0,8))
     New-Item -ItemType Directory -Force -Path $script:Sandbox | Out-Null
@@ -199,6 +205,83 @@ Describe 'Test-ReservedDiscName' -Tag 'Unit' {
     }
 }
 
+Describe 'Format-Elapsed' -Tag 'Unit' {
+
+    # Casting a double to [int] ROUNDS in PowerShell rather than truncating, so
+    # [int]1.58 is 2 and 95 seconds first displayed as "02:35" - a clock reading a
+    # minute ahead of itself. These are the boundaries that catch it coming back.
+    It 'formats <Seconds> seconds as <Expected>' -ForEach @(
+        @{ Seconds = 0;    Expected = '00:00'    }
+        @{ Seconds = 9;    Expected = '00:09'    }
+        @{ Seconds = 59;   Expected = '00:59'    }
+        @{ Seconds = 95;   Expected = '01:35'    }   # rounds up to 02:35 if [int] is used
+        @{ Seconds = 3599; Expected = '59:59'    }
+        @{ Seconds = 3600; Expected = '01:00:00' }
+        @{ Seconds = 3725; Expected = '01:02:05' }
+        @{ Seconds = 5400; Expected = '01:30:00' }   # rounds up to 02:30:00 if [int] is used
+    ) {
+        Format-Elapsed ([TimeSpan]::FromSeconds($Seconds)) | Should -Be $Expected
+    }
+}
+
+Describe 'The ISO writer stays acceptable to Smart App Control' -Tag 'Unit' {
+
+    # Not reproducible in CI - a runner does not have SAC enforced - so this
+    # guards the shape instead of the behaviour. Measured on a machine with SAC
+    # enforced: an assembly combining unsafe pointers with a delegate invoked in
+    # the copy loop was refused every time, which would stop DiscWright writing
+    # ISOs at all on a clean Windows 11. Reintroducing either half of that is
+    # silent until someone with SAC on tries to build a disc.
+    BeforeAll {
+        # Comments stripped, or this matches the comment in the startup guard that
+        # explains why -CompilerParameters is no longer used and fails on its own
+        # documentation. Tokenising is the reliable way to tell code from prose.
+        $tok = $null
+        [void][System.Management.Automation.Language.Parser]::ParseFile($appScript, [ref]$tok, [ref]$null)
+        $script:AppCode = (@($tok | Where-Object { $_.Kind -ne 'Comment' } | ForEach-Object { $_.Text }) -join "`n")
+    }
+
+    # Assert on a boolean rather than the text: -Match against a 100 KB script
+    # prints the whole script on failure, which buries the actual result.
+    It 'does not compile with /unsafe' {
+        ($script:AppCode -match 'CompilerOptions') | Should -BeFalse
+    }
+
+    It 'calls Add-Type without -CompilerParameters' {
+        # This is what tied the app to Windows PowerShell 5.1, since PowerShell 6
+        # removed the parameter.
+        #
+        # Asked of the syntax tree rather than the text: the C# helper is a
+        # here-string, which the tokeniser hands back as one code token, so the
+        # comment inside it explaining this very history matched a text search.
+        $tree = [System.Management.Automation.Language.Parser]::ParseFile($appScript, [ref]$null, [ref]$null)
+        $addTypes = $tree.FindAll({ param($n)
+            $n -is [System.Management.Automation.Language.CommandAst] -and
+            $n.GetCommandName() -eq 'Add-Type' }, $true)
+        $addTypes.Count | Should -BeGreaterThan 0   # guard against the query silently finding nothing
+        $offenders = @($addTypes | Where-Object {
+            @($_.CommandElements | Where-Object {
+                $_ -is [System.Management.Automation.Language.CommandParameterAst] -and
+                $_.ParameterName -like 'CompilerParameters*' }).Count -gt 0 })
+        $offenders.Count | Should -Be 0
+    }
+
+    It 'declares no unsafe members' {
+        ($script:AppCode -match '\bpublic\s+unsafe\b') | Should -BeFalse
+    }
+
+    It 'still hands IStream.Read somewhere to put the byte count' {
+        # The safe replacement for the pointer. If these vanish, the read count is
+        # being taken some other way and the loop needs looking at again.
+        ($script:AppCode -match 'Marshal\.AllocHGlobal') | Should -BeTrue
+        ($script:AppCode -match 'Marshal\.ReadInt32')    | Should -BeTrue
+    }
+
+    It 'frees what it allocated' {
+        ($script:AppCode -match 'Marshal\.FreeHGlobal') | Should -BeTrue
+    }
+}
+
 Describe 'Get-GameInfo' -Tag 'Unit' {
 
     BeforeAll {
@@ -272,6 +355,16 @@ Describe 'Project file' -Tag 'Unit' {
 
         It 'still writes v1 GameName so the file opens in 0.1.x' {
             $script:PJson.GameName | Should -Be $script:PGames[0].GameName
+        }
+
+        It 'records which DiscWright wrote it' {
+            $script:PJson.AppVersion | Should -Be $script:AppVersionInSource
+        }
+
+        It 'keeps the app version separate from the schema version' {
+            # One field could not have said both: the schema went to 2 for the
+            # games list while the app was independently at 0.2.0.
+            $script:PJson.AppVersion | Should -Not -Be $script:PJson.Version
         }
     }
 
@@ -440,6 +533,67 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
         }
     }
 
+    Context 'progress reporting' {
+
+        BeforeAll {
+            # 40 MB so the writer loops enough times for the reporting interval to
+            # mean something; sparse files make it cost nothing.
+            $script:ProgGame = Get-GameInfo (New-FixtureGame -Slug 'progress_game' -ExeMb 20 -Parts 20)
+            $script:ProgOut  = Join-Path $script:Sandbox 'build-progress'
+            New-Item -ItemType Directory -Force -Path $script:ProgOut | Out-Null
+
+            $script:ProgCalls = New-Object System.Collections.ArrayList
+            $recorder = { param($done,$total) [void]$script:ProgCalls.Add(@{ Done=$done; Total=$total }) }
+            $script:ProgIso = Invoke-Build (New-BuildSettings -Games @($script:ProgGame) -Label 'Progress Test' -OutDir $script:ProgOut) $script:LogSink $recorder
+        }
+
+        It 'calls back while writing' {
+            $script:ProgCalls.Count | Should -BeGreaterThan 0
+        }
+
+        It 'calls back a sane number of times, not once and not per block' {
+            # The interval is derived from the image size to aim at ~200 reports,
+            # because every call crosses back into PowerShell and pumps the message
+            # queue. A fixed block count would fire a handful of times on a CD and
+            # tens of thousands on a BD-R XL.
+            $script:ProgCalls.Count | Should -BeGreaterOrEqual 5
+            $script:ProgCalls.Count | Should -BeLessOrEqual 400
+        }
+
+        It 'never goes backwards' {
+            $done = @($script:ProgCalls | ForEach-Object { $_.Done })
+            $backwards = $false
+            for ($i = 1; $i -lt $done.Count; $i++) { if ($done[$i] -lt $done[$i-1]) { $backwards = $true } }
+            $backwards | Should -BeFalse
+        }
+
+        It 'never reports more than the total' {
+            @($script:ProgCalls | Where-Object { $_.Done -gt $_.Total -or $_.Done -lt 0 }).Count | Should -Be 0
+        }
+
+        It 'reports the same total throughout' {
+            @($script:ProgCalls | ForEach-Object { $_.Total } | Sort-Object -Unique).Count | Should -Be 1
+        }
+
+        It 'finishes on exactly 100 percent' {
+            # Without the final call after the loop, the bar stops a fraction short
+            # and the window looks stuck at 99% while the COM release runs.
+            $last = $script:ProgCalls[$script:ProgCalls.Count - 1]
+            $last.Done | Should -Be $last.Total
+        }
+
+        It 'still produces a working ISO' {
+            Test-Path $script:ProgIso | Should -BeTrue
+        }
+
+        It 'builds fine with no callback at all' {
+            $out = Join-Path $script:Sandbox 'build-nocallback'
+            New-Item -ItemType Directory -Force -Path $out | Out-Null
+            { Invoke-Build (New-BuildSettings -Games @($script:ProgGame) -Label 'No Callback' -OutDir $out) $script:LogSink } |
+                Should -Not -Throw
+        }
+    }
+
     Context 'inside the finished ISO' -Skip:(-not $script:SevenZip) {
 
         BeforeAll {
@@ -487,6 +641,13 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
         It 'contains every installer file' {
             $expected = ($script:IsoGames | ForEach-Object { $_.Files.Count } | Measure-Object -Sum).Sum
             @($script:IsoFiles | Where-Object { $_ -match '^Games\\.*(setup_.*\.exe|\.bin)$' }).Count | Should -Be $expected
+        }
+
+        It 'passes an integrity check, not just a listing' {
+            # The writer copies block by block through unmanaged memory. Listing the
+            # entries only proves the directory survived; this reads the data back.
+            $t = & $script:SevenZip t $script:IsoPath 2>&1
+            @($t | Where-Object { $_ -match 'Everything is Ok' }).Count | Should -BeGreaterThan 0
         }
     }
 }

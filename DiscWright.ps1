@@ -15,9 +15,12 @@
 # Runs before Add-Type on purpose: the things it checks are what make Add-Type and
 # the window itself fail, and both failures look like "the app is just broken".
 #
-#   PS 5.1  New-Iso compiles the ISOFile helper with "Add-Type -CompilerParameters"
-#           and /unsafe. PowerShell 6 dropped -CompilerParameters entirely, so on 7
-#           the app runs fine right up until BUILD ISO and dies at the last step.
+#   PS 5.1  Historically because New-Iso compiled its helper with /unsafe, which
+#           needed "Add-Type -CompilerParameters" - dropped in PowerShell 6, so the
+#           app ran fine until BUILD ISO and died at the last step. That is no
+#           longer true: the helper compiles with a plain Add-Type now. The check
+#           stays because nothing has been tested on 7, not because it is known to
+#           fail. Somebody should try it and either lift this or write down why not.
 #   STA     WinForms needs a single-threaded apartment. powershell.exe -File is STA
 #           by default, but -MTA and several hosting paths are not, and there the
 #           dialogs and file pickers misbehave rather than fail outright.
@@ -53,6 +56,12 @@ Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $PROJECT_FILE = 'discproject.json'
+
+# Kept in step with the git tag by a CI check that runs when a tag is pushed, so
+# this cannot quietly drift a release behind. Shown in the title bar and the log,
+# and written into every project file - a bug report that comes with a project
+# file then says for itself which version built the disc.
+$APP_VERSION  = '0.2.0'
 
 # =================== SMALL HELPERS ===================
 
@@ -96,6 +105,16 @@ function Save-PngAtomic($bmp,[string]$outPng) {
 # Sub-gigabyte payloads read badly in GB - a CD-sized game becomes "0.39 GB", and a
 # few megabytes of extras rounds to "0.00 GB", which looks like nothing at all.
 # Switch units instead of printing a meaningless zero.
+# Minutes and seconds until it runs past an hour, which a 100 GB BD-R XL can.
+#
+# Floor, not [int]: casting a double to [int] in PowerShell ROUNDS rather than
+# truncating, so [int]1.58 is 2 and 95 seconds displayed as "02:35" - a clock that
+# reads a minute ahead of itself. A stopwatch counts up, it does not round.
+function Format-Elapsed([TimeSpan]$t) {
+    if ($t.TotalHours -ge 1) { return '{0:00}:{1:00}:{2:00}' -f [int][math]::Floor($t.TotalHours), $t.Minutes, $t.Seconds }
+    return '{0:00}:{1:00}' -f [int][math]::Floor($t.TotalMinutes), $t.Seconds
+}
+
 function Format-Size([double]$bytes) {
     if ($bytes -ge 1GB) { return ('{0:N2} GB' -f ($bytes/1GB)) }
     if ($bytes -ge 1MB) { return ('{0:N0} MB' -f ($bytes/1MB)) }
@@ -697,20 +716,57 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     Clear-ReadOnly $out; Set-Content -LiteralPath $out -Value $html -Encoding ASCII
 }
 
-function New-Iso([string]$stageDir,[string]$isoPath,[string]$volLabel) {
+function New-Iso([string]$stageDir,[string]$isoPath,[string]$volLabel,[scriptblock]$progress=$null) {
     if (-not ([System.Management.Automation.PSTypeName]'ISOFile').Type) {
         $code=@'
 public class ISOFile {
-  public unsafe static void Create(string Path, object Stream, int BlockSize, int TotalBlocks) {
-    int bytes=0; byte[] buf=new byte[BlockSize]; var ptr=(System.IntPtr)(&bytes);
+  // Progress is called every ReportEvery blocks with (blocksWritten, totalBlocks).
+  //
+  // It is not only there to draw a bar. The whole build runs on the interface
+  // thread, and this loop is the longest thing on it by far - without something
+  // pumping the message queue from inside it, Windows greys the window out and
+  // labels it "Not Responding" for the length of the write. On a full-size game
+  // that is minutes of looking exactly like a crash.
+  //
+  // IStream.Read wants somewhere to put the byte count. This used to take the
+  // address of a local with an unsafe pointer, which meant compiling with
+  // /unsafe. Four unmanaged bytes do the same job, and that matters twice over:
+  //
+  //   Smart App Control - enforced by default on a clean Windows 11 - blocks an
+  //   assembly that combines unsafe pointers with a delegate invoked inside the
+  //   copy loop. That is the shape of a shellcode loader, so the heuristic is
+  //   fair; measured here, the pointer-plus-callback build was refused every
+  //   time and this one is accepted every time. Without the change, adding
+  //   progress reporting would have stopped DiscWright writing ISOs at all on
+  //   any machine with SAC on.
+  //
+  //   And /unsafe needed Add-Type -CompilerParameters, which PowerShell 6
+  //   removed. Dropping it removes the one known reason this cannot run on
+  //   PowerShell 7 - untested there, but no longer ruled out by this.
+  public static void Create(string Path, object Stream, int BlockSize, int TotalBlocks,
+                            System.Action<int,int> Progress, int ReportEvery) {
+    byte[] buf=new byte[BlockSize];
+    System.IntPtr ptr=System.Runtime.InteropServices.Marshal.AllocHGlobal(4);
     System.IO.FileStream o=System.IO.File.OpenWrite(Path);
     System.Runtime.InteropServices.ComTypes.IStream i=Stream as System.Runtime.InteropServices.ComTypes.IStream;
-    if(o!=null){ while(TotalBlocks-->0){ i.Read(buf,BlockSize,ptr); o.Write(buf,0,bytes);} o.Flush(); o.Close(); }
+    try {
+      int total=TotalBlocks, done=0;
+      if(o!=null && i!=null){
+        while(TotalBlocks-->0){
+          i.Read(buf,BlockSize,ptr);
+          int bytes=System.Runtime.InteropServices.Marshal.ReadInt32(ptr);
+          o.Write(buf,0,bytes);
+          done++;
+          if(Progress!=null && ReportEvery>0 && done%ReportEvery==0) Progress(done,total);
+        }
+        o.Flush(); o.Close();
+        if(Progress!=null) Progress(total,total);
+      }
+    } finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(ptr); }
   }
 }
 '@
-        $cp=New-Object System.CodeDom.Compiler.CompilerParameters; $cp.CompilerOptions='/unsafe'
-        Add-Type -CompilerParameters $cp -TypeDefinition $code
+        Add-Type -TypeDefinition $code
     }
     # A mounted ISO cannot be overwritten, and "used by another process" on its own
     # does not tell the user that the drive they opened in This PC is the cause.
@@ -754,7 +810,15 @@ public class ISOFile {
         $rootItem.AddTree($stageDir,$false)
         $img=$fsi.CreateResultImage()
         $stream=$img.ImageStream
-        [ISOFile]::Create($isoPath,$stream,$img.BlockSize,$img.TotalBlocks)
+
+        # Report about 200 times over the whole write, whatever its size. A fixed
+        # block interval would fire a handful of times on a CD and tens of
+        # thousands on a BD-R XL, and every call crosses back into PowerShell and
+        # pumps the message queue, which is not free.
+        $every = [int][math]::Max(256, [math]::Floor($img.TotalBlocks / 200))
+        $cb = $null
+        if ($progress) { $cb = [Action[int,int]]$progress }
+        [ISOFile]::Create($isoPath,$stream,$img.BlockSize,$img.TotalBlocks,$cb,$every)
     }
     finally {
         foreach ($o in @($stream,$img,$rootItem,$fsi)) {
@@ -772,7 +836,12 @@ public class ISOFile {
 function Save-Project([hashtable]$s,[string]$outDir) {
     $games = @($s.Games)
     $o = [ordered]@{
+        # Version is the schema of this file. AppVersion is the DiscWright that
+        # wrote it - two different things, deliberately two different keys. This
+        # merge is why: the schema went to 2 for the games list while the app was
+        # independently at 0.2.0, and one field could not have said both.
         Version      = 2
+        AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
         # still written, pointing at the first game, so a project saved by this
@@ -882,7 +951,7 @@ function Import-DiscFolder([string]$discDir) {
 }
 
 # =================== BUILD ORCHESTRATION ===================
-function Invoke-Build([hashtable]$s, [scriptblock]$log) {
+function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$null) {
     $stage = Join-Path $s.OutDir 'disc'
     $tmpKeep = $null
 
@@ -1070,7 +1139,7 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log) {
 
     & $log "Building ISO (UDF, this can take ~30-60s for a full game)..."
     $iso = Join-Path $s.OutDir (($s.Label -replace '[^A-Za-z0-9_\- ]','_').Trim()+'.iso')
-    New-Iso $stage $iso $s.Label
+    New-Iso $stage $iso $s.Label $progress
     & $log ("DONE.  ISO: {0}  ({1:N2} GB)" -f $iso, ((Get-Item $iso).Length/1GB))
 
     Save-Project $s $s.OutDir
@@ -1093,7 +1162,9 @@ function Get-FirstGame {
 }
 
 $form=New-Object System.Windows.Forms.Form
-$form.Text='DiscWright'
+# The version belongs where it can be read off a screenshot without being asked
+# for, since that is how it arrives in a bug report.
+$form.Text="DiscWright $APP_VERSION"
 $form.Size=New-Object System.Drawing.Size(700,996)
 $form.StartPosition='CenterScreen'
 $form.Font=New-Object System.Drawing.Font('Segoe UI',9)
@@ -1174,7 +1245,33 @@ $btnOut=AddBtn 'Browse...' 545 808 110
 
 $btnBuild=New-Object System.Windows.Forms.Button; $btnBuild.Text='BUILD ISO'; $btnBuild.Location=New-Object System.Drawing.Point(15,842); $btnBuild.Size=New-Object System.Drawing.Size(150,30); $btnBuild.BackColor=[System.Drawing.Color]::FromArgb(0,150,160); $btnBuild.ForeColor=[System.Drawing.Color]::White; $form.Controls.Add($btnBuild)
 $txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLog.ScrollBars='Vertical'; $txtLog.ReadOnly=$true; $txtLog.Location=New-Object System.Drawing.Point(180,842); $txtLog.Size=New-Object System.Drawing.Size(480,90); $form.Controls.Add($txtLog)
-$log = { param($m) $txtLog.AppendText($m + "`r`n"); [System.Windows.Forms.Application]::DoEvents() }
+
+# Both sit in space the layout already had, under the BUILD button and beside the
+# log, so nothing else has to move. Hidden until a build starts - an idle window
+# looks exactly as it did before.
+$pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,880); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
+$lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,900); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
+
+$buildWatch = New-Object System.Diagnostics.Stopwatch
+
+$log = { param($m)
+    $txtLog.AppendText($m + "`r`n")
+    if ($buildWatch.IsRunning) { $lblElapsed.Text = 'Elapsed  ' + (Format-Elapsed $buildWatch.Elapsed) }
+    [System.Windows.Forms.Application]::DoEvents()
+}
+
+# Handed to Invoke-Build, which passes it down to the ISO writer. Called about 200
+# times over a write of any size. DoEvents is the load-bearing line: the build owns
+# the interface thread, and this is the only thing keeping the window painting
+# while the longest step runs.
+$buildProgress = { param($done,$total)
+    if ($total -gt 0) {
+        $v = [int](1000.0 * $done / $total); if ($v -gt 1000) { $v = 1000 }
+        $pbBuild.Value = $v
+        $lblElapsed.Text = 'ISO  {0}%   {1}' -f [int]($v/10), (Format-Elapsed $buildWatch.Elapsed)
+    }
+    [System.Windows.Forms.Application]::DoEvents()
+}
 
 # ---- shared bits ----
 # Everything that will land on the disc, not just the installer - artbooks and
@@ -1694,9 +1791,26 @@ $btnBuild.Add_Click({
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
          ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim() }
     $btnBuild.Enabled=$false
-    try { $iso=Invoke-Build $s $log; [System.Windows.Forms.MessageBox]::Show("Build complete!`n`n$iso","DiscWright") | Out-Null }
-    catch { & $log ('ERROR: '+$_.Exception.Message); Show-Warn ("The build failed:`r`n`r`n" + $_.Exception.Message) }
-    finally { $btnBuild.Enabled=$true; Update-ActionButtons }
+    $pbBuild.Value=0; $pbBuild.Visible=$true
+    $buildWatch.Restart()
+    $lblElapsed.Text='Starting...'
+    try {
+        $iso=Invoke-Build $s $log $buildProgress
+        $buildWatch.Stop()
+        $took = Format-Elapsed $buildWatch.Elapsed
+        $lblElapsed.Text = "Done in $took"
+        & $log "Total time: $took"
+        [System.Windows.Forms.MessageBox]::Show("Build complete in $took`n`n$iso","DiscWright") | Out-Null
+    }
+    catch {
+        $buildWatch.Stop(); $lblElapsed.Text='Failed'
+        & $log ('ERROR: '+$_.Exception.Message); Show-Warn ("The build failed:`r`n`r`n" + $_.Exception.Message)
+    }
+    finally {
+        if ($buildWatch.IsRunning) { $buildWatch.Stop() }
+        $pbBuild.Visible=$false
+        $btnBuild.Enabled=$true; Update-ActionButtons
+    }
 })
 
 # DiscWright.vbs starts this process with STARTUPINFO wShowWindow = SW_HIDE so no
@@ -1707,6 +1821,10 @@ Add-Type -Namespace GDA -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 '@
 Update-ActionButtons   # start greyed out - nothing to open yet
+
+# First line in the log box, so it is already in the screenshot when someone
+# posts one, and already in the copied text when someone pastes the log.
+& $log "DiscWright $APP_VERSION  -  Windows PowerShell $($PSVersionTable.PSVersion)"
 
 $form.Add_Shown({
     [void][GDA.Win]::ShowWindow($form.Handle,5)      # SW_SHOW
