@@ -9,6 +9,17 @@ between minor versions.
 
 ## [Unreleased]
 
+### Changed
+
+- **Each Browse button now opens where its own box points.** `FolderBrowserDialog`
+  remembers the last folder used anywhere in the app, so after a build the game-folder
+  Browse reopened on the disc it had just written. The two folders are named alike
+  enough that picking the wrong one looked like the app losing the game.
+- **Picking a built disc folder says so.** Choosing the output folder instead of the GOG
+  download used to give the generic "no `setup_*.exe` here", which sends you looking for
+  a problem with your download. If the folder holds a `disc\` with an installer in it,
+  DiscWright now says it is a disc it built and which folder step 1 actually wants.
+
 ## [0.2.0] — 2026-08-18
 
 ### Added

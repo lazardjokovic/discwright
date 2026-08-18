@@ -143,7 +143,24 @@ function Get-GameInfo([string]$folder) {
     if (-not (Test-Path $folder)) { $info.Msg='Folder not found.'; return $info }
     $exes = @(Get-ChildItem $folder -Filter 'setup_*.exe' -File -ErrorAction SilentlyContinue |
               Sort-Object Length -Descending)
-    if ($exes.Count -eq 0) { $info.Msg='No GOG "setup_*.exe" found in this folder.'; return $info }
+    if ($exes.Count -eq 0) {
+        # Two folders in a project look alike and sit next to each other: the GOG
+        # download, and the output folder DiscWright writes to. The second holds a
+        # disc\ subfolder with the installer one level down, so picking it lands
+        # here - and the generic message sends people looking for a problem with
+        # their download instead of at which folder they picked. Name it instead.
+        $inner = Join-Path $folder 'disc'
+        $innerExe = @()
+        if (Test-Path $inner) {
+            $innerExe = @(Get-ChildItem $inner -Filter 'setup_*.exe' -File -ErrorAction SilentlyContinue)
+        }
+        if ($innerExe.Count -gt 0) {
+            $info.Msg = 'This looks like a disc DiscWright built, not a GOG download. Step 1 wants the folder you downloaded from GOG; this one is where the ISO gets written.'
+        } else {
+            $info.Msg = 'No GOG "setup_*.exe" found in this folder.'
+        }
+        return $info
+    }
     $exe = $exes[0]
 
     # Parts belong to ONE installer and are named "<installer>-1.bin", "-2.bin"...
@@ -265,7 +282,19 @@ function Get-DiscIconName([string]$label) {
 # discs built before the icon was named after the game.
 function Test-ReservedDiscName([string]$name,[string]$iconName='disc.ico') {
     if ($name -like 'setup_*') { return $true }
-    return (@('autorun.inf','disc.ico',$iconName,'AUTORUN','Extras',$PROJECT_FILE) -contains $name)
+    return (@('autorun.inf','disc.ico',$iconName,'AUTORUN','Extras','Games',$PROJECT_FILE) -contains $name)
+}
+
+# Folder name for one game on a multi-game disc. Numbered, so the order in the
+# menu and the order in the disc's own listing agree when someone browses it by
+# hand. Folded to plain ASCII for the same reason the disc label is - a disc that
+# is legible in every file manager is worth more than an exact title.
+function Get-GameFolderName([int]$index,[string]$name) {
+    $n = (ConvertTo-AsciiFold ([string]$name)) -replace '[^A-Za-z0-9 _\-\.]',' '
+    $n = ($n -replace '\s+',' ').Trim(' ','.')
+    if ($n.Length -gt 48) { $n = $n.Substring(0,48).Trim() }
+    if ([string]::IsNullOrWhiteSpace($n)) { $n = 'Game' }
+    return ('{0:D2} - {1}' -f $index, $n)
 }
 
 function Test-IconInput([string]$path) {
@@ -822,15 +851,21 @@ public class ISOFile {
 # =================== PROJECT SAVE / REOPEN ===================
 
 function Save-Project([hashtable]$s,[string]$outDir) {
+    $games = @($s.Games)
     $o = [ordered]@{
         # Version is the schema of this file. AppVersion is the DiscWright that
-        # wrote it - two different things, deliberately two different keys, so a
-        # project file attached to a bug report says which build produced it.
-        Version      = 1
+        # wrote it - two different things, deliberately two different keys. This
+        # merge is why: the schema went to 2 for the games list while the app was
+        # independently at 0.2.0, and one field could not have said both.
+        Version      = 2
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
-        SourceFolder = $s.Game.Folder
-        GameName     = $s.Game.GameName
+        # Version 1 knew about exactly one game and stored it here. Both keys are
+        # still written, pointing at the first game, so a project saved by this
+        # build still opens in 0.1.x instead of failing with no explanation.
+        SourceFolder = $(if ($games.Count) { $games[0].Folder }    else { $null })
+        GameName     = $(if ($games.Count) { $games[0].GameName } else { $null })
+        Games        = @($games | ForEach-Object { [ordered]@{ Folder=$_.Folder; GameName=$_.GameName } })
         Label        = $s.Label
         IconPath     = $s.IconPath
         IconIsIco    = [bool]$s.IconIsIco
@@ -856,8 +891,17 @@ function Save-Project([hashtable]$s,[string]$outDir) {
 function Import-Project([string]$jsonPath) {
     try {
         $j = Get-Content -Raw -LiteralPath $jsonPath | ConvertFrom-Json
+        # v1 stored one game in SourceFolder; v2 stores a Games array. Read either
+        # and always hand back a list, so nothing downstream has to know which
+        # version it came from.
+        $folders = @()
+        if ($j.PSObject.Properties.Name -contains 'Games' -and $j.Games) {
+            $folders = @($j.Games | ForEach-Object { $_.Folder } | Where-Object { $_ })
+        }
+        if ($folders.Count -eq 0 -and $j.SourceFolder) { $folders = @($j.SourceFolder) }
         return @{
-            SourceFolder=$j.SourceFolder; Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
+            SourceFolder=$j.SourceFolder; GameFolders=$folders
+            Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
             Divider=[bool]$j.Divider; ShowTitle=[bool]$j.ShowTitle; TitleText=[string]$j.TitleText
@@ -879,7 +923,8 @@ function Import-DiscFolder([string]$discDir) {
     $icon  = 'disc.ico'; if ($text -match '(?im)^\s*icon\s*=\s*(.+?)\s*$') { $icon = $Matches[1] }
     $menu  = ($text -match '(?im)^\s*shellexecute\s*=')
 
-    $r = @{ SourceFolder=$discDir; Label=$label; IconPath=(Join-Path $discDir $icon); IconIsIco=$true
+    $r = @{ SourceFolder=$discDir; GameFolders=@($discDir)
+            Label=$label; IconPath=(Join-Path $discDir $icon); IconIsIco=$true
             Menu=$menu; BgPath=$null; BgAsIs=$true; PanelSide='Right'; MusicFile=$null
             Buttons=@(); ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
             Divider=$false; ShowTitle=$false; TitleText=''
@@ -927,9 +972,11 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     $stage = Join-Path $s.OutDir 'disc'
     $tmpKeep = $null
 
+    $games = @($s.Games)
     # Rebuilding a disc folder in place: the payload already lives in the stage,
-    # so do NOT wipe it.
-    $inPlace = (Test-SamePath $s.Game.Folder $stage)
+    # so do NOT wipe it. Only ever true for a single game - several games live in
+    # Games\ subfolders, so their source folder is never the stage itself.
+    $inPlace = ($games.Count -eq 1) -and (Test-SamePath $games[0].Folder $stage)
 
     if ($inPlace) {
         & $log "Rebuilding in place - installer files left untouched."
@@ -979,13 +1026,28 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         }
         New-Item -ItemType Directory -Force -Path $stage,"$stage\AUTORUN" | Out-Null
 
-        # installer files: hardlink if same volume, else copy
-        $sameVol = ([IO.Path]::GetPathRoot($s.Game.SetupExe.FullName) -eq [IO.Path]::GetPathRoot($stage))
-        foreach ($f in $s.Game.Files) {
-            $dest = Join-Path $stage $f.Name
-            if ($sameVol) { try { New-Item -ItemType HardLink -Path $dest -Target $f.FullName -EA Stop | Out-Null; & $log "  linked $($f.Name)" }
-                            catch { Copy-Item $f.FullName $dest; & $log "  copied $($f.Name)" } }
-            else { & $log "  copying $($f.Name) ..."; Copy-Item $f.FullName $dest }
+        # One game keeps the original layout - installer at the disc root, exactly
+        # as every disc built before this. Several games each get their own folder
+        # under Games\, because a flat root would be unreadable and the menu needs
+        # to be able to name one installer without ambiguity.
+        $stageRoot = [IO.Path]::GetPathRoot($stage)
+        for ($gi = 0; $gi -lt $games.Count; $gi++) {
+            $g = $games[$gi]
+            if ($games.Count -eq 1) { $destDir = $stage }
+            else {
+                $destDir = Join-Path $stage (Join-Path 'Games' (Get-GameFolderName ($gi+1) $g.GameName))
+                New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+                & $log "  $($g.GameName) -> $(Split-Path $destDir -Leaf)"
+            }
+            # Hardlinks are per-volume, so this is decided per game: two games on
+            # different drives can still have one linked and the other copied.
+            $sameVol = ([IO.Path]::GetPathRoot($g.SetupExe.FullName) -eq $stageRoot)
+            foreach ($f in $g.Files) {
+                $dest = Join-Path $destDir $f.Name
+                if ($sameVol) { try { New-Item -ItemType HardLink -Path $dest -Target $f.FullName -EA Stop | Out-Null; & $log "  linked $($f.Name)" }
+                                catch { Copy-Item $f.FullName $dest; & $log "  copied $($f.Name)" } }
+                else { & $log "  copying $($f.Name) ..."; Copy-Item $f.FullName $dest }
+            }
         }
     }
 
@@ -1056,7 +1118,14 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
             }
         }
         & $log "Generating autorun menu (menu.hta)..."
-        New-MenuHta @{ GameName=$s.Label; MatchName=$s.Game.GameName; SetupExe=$s.Game.SetupExe.Name; Buttons=$s.Buttons;
+        # The menu still drives one game - the chooser arrives with the UI that can
+        # actually create a multi-game disc. Until then it points at the first, via
+        # the same relative path the disc really has, since the HTA resolves SETUP
+        # with fso.BuildPath(root, SETUP) and copes with a subfolder either way.
+        $mg = $games[0]
+        $mgSetup = if ($games.Count -eq 1) { $mg.SetupExe.Name }
+                   else { Join-Path 'Games' (Join-Path (Get-GameFolderName 1 $mg.GameName) $mg.SetupExe.Name) }
+        New-MenuHta @{ GameName=$s.Label; MatchName=$mg.GameName; SetupExe=$mgSetup; Buttons=$s.Buttons;
                        MusicFile=$musicName; ManualFile=$manualName; PanelSide=$s.PanelSide; IconName=$icoName
                        WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle } (Join-Path $stage 'AUTORUN\menu.hta')
     }
@@ -1097,7 +1166,28 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 }
 
 # =================== UI ===================
-$state = @{ Game=$null; IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@() }
+$state = @{ Games=@(); IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@() }
+
+# One game per disc is still the common case, so the disc layout, the UI and the
+# menu are unchanged for it. Only sizing, the build's copy step and the menu need
+# to think in lists, and they go through these two.
+# The leading comma is load-bearing. PowerShell unrolls a single-element array on
+# return, so "return @(...)" with one game handed back the bare hashtable instead
+# of a list. Callers then read .Count on a hashtable - which is its number of KEYS,
+# nine - and the media line announced "9 games (0 bytes)" for one game. Get-FirstGame
+# was worse: $g[0] indexed the hashtable by the key 0, found nothing, and returned
+# null, so the preview menu lost the game entirely. Wrapping in an outer array means
+# the unroll gives back the inner one.
+function Get-Games { return ,@($state.Games | Where-Object { $_ -and $_.Ok }) }
+
+# Do NOT write @(Get-Games) here. Get-Games already hands back an array, and wrapping
+# it again gives a one-element array whose element is that array - so $g[0] came back
+# as every game at once. Plain assignment is what preserves it.
+function Get-FirstGame {
+    $g = Get-Games
+    if ($g.Count -gt 0) { return $g[0] }
+    return $null
+}
 
 $form=New-Object System.Windows.Forms.Form
 # The version belongs where it can be read off a screenshot without being asked
@@ -1111,6 +1201,18 @@ $form.AutoScroll=$true
 function AddLabel($t,$x,$y,$w){ $l=New-Object System.Windows.Forms.Label; $l.Text=$t; $l.Location=New-Object System.Drawing.Point($x,$y); $l.Size=New-Object System.Drawing.Size($w,20); $form.Controls.Add($l); return $l }
 function AddText($x,$y,$w){ $t=New-Object System.Windows.Forms.TextBox; $t.Location=New-Object System.Drawing.Point($x,$y); $t.Size=New-Object System.Drawing.Size($w,24); $form.Controls.Add($t); return $t }
 function AddBtn($t,$x,$y,$w){ $b=New-Object System.Windows.Forms.Button; $b.Text=$t; $b.Location=New-Object System.Drawing.Point($x,$y); $b.Size=New-Object System.Drawing.Size($w,24); $form.Controls.Add($b); return $b }
+
+# A FolderBrowserDialog with no SelectedPath opens wherever Windows last left it,
+# process-wide. After a build that is the output folder, so Browse for the game
+# folder in step 1 reopened on the disc it had just written - and the two folders
+# are named alike enough that picking the wrong one looks like the app losing the
+# game rather than a misclick. Each Browse now starts where its own box points.
+function New-FolderDialog([string]$description,[string]$startAt) {
+    $d = New-Object System.Windows.Forms.FolderBrowserDialog
+    if ($description) { $d.Description = $description }
+    if ($startAt -and (Test-Path $startAt -PathType Container)) { $d.SelectedPath = $startAt }
+    return $d
+}
 
 # --- reopen / inspect row ---
 $btnOpenProj = AddBtn 'Open existing disc...' 15 8 210
@@ -1217,31 +1319,48 @@ $buildProgress = { param($done,$total)
 # own capacity check both read this, so they cannot disagree about the size and
 # promise a disc the build then refuses.
 function Get-PayloadBytes {
-    $g = $state.Game
-    if (-not $g -or -not $g.Ok) { return @{ Installer=[double]0; Extra=[double]0; Total=[double]0 } }
+    $games = Get-Games
+    if ($games.Count -eq 0) { return @{ Installer=[double]0; Extra=[double]0; Total=[double]0 } }
+    # Summed by hand, not with Measure-Object. Get-GameInfo returns a hashtable, and
+    # Measure-Object -Property looks for a real PROPERTY - a hashtable key is not one,
+    # so it found nothing and reported a total of zero for every disc. $g.TotalBytes
+    # works because member access on a hashtable does read keys; Measure-Object does
+    # not go through that path.
+    $installer = [double]0
+    foreach ($g in $games) { $installer += [double]$g.TotalBytes }
     $side = @()
     $side += @($state.ExtraItems)
     if ($cbMan.Checked   -and $state.ManualPath) { $side += $state.ManualPath }
     if ($cbExtra.Checked -and $state.ExtrasPath) { $side += $state.ExtrasPath }
     if ($chkMusic.Checked -and $state.MusicFile) { $side += $state.MusicFile }
     $extra = [double](Get-ItemsSize $side)
-    return @{ Installer=[double]$g.TotalBytes; Extra=$extra; Total=([double]$g.TotalBytes + $extra) }
+    return @{ Installer=$installer; Extra=$extra; Total=($installer + $extra) }
 }
 
 function Update-MediaLabel {
-    $g = $state.Game
-    if (-not $g -or -not $g.Ok) { return }
+    $games = Get-Games
+    if ($games.Count -eq 0) { return }
+    $g = $games[0]
     $p = Get-PayloadBytes
     $m = Get-MediaRec $p.Total
-    $txt = $g.Msg
+    # One game keeps its own detection line. Several get a summary instead - the
+    # per-game detail would not fit, and the total is what decides the disc.
+    $txt = if ($games.Count -eq 1) { $g.Msg }
+           else { "$($games.Count) games ($(Format-Size $p.Installer))" }
     if ($p.Extra -gt 0) { $txt += " + $(Format-Size $p.Extra) extra" }
     $lblGame.Text = "$txt   ->   Disc: $($m.Text)"
     $lblGame.ForeColor = if($m.Fit){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
     # A missing installer part outranks the media advice - it is the thing that
     # makes the disc useless, so it takes the label and the colour.
-    if ($g.Warning) {
-        $lblGame.Text = $g.Warning
-        $lblGame.ForeColor = if($g.MissingParts.Count -gt 0){[System.Drawing.Color]::Firebrick}else{[System.Drawing.Color]::DarkOrange}
+    # With several games the label can only carry one warning, so take the first -
+    # but prefer a missing installer part over a "picked the largest installer"
+    # note, since only the first one makes the disc useless.
+    $warned = @($games | Where-Object { $_.MissingParts.Count -gt 0 })
+    if ($warned.Count -eq 0) { $warned = @($games | Where-Object { $_.Warning }) }
+    if ($warned.Count -gt 0) {
+        $w = $warned[0]
+        $lblGame.Text = if ($games.Count -eq 1) { $w.Warning } else { "$($w.GameName): $($w.Warning)" }
+        $lblGame.ForeColor = if($w.MissingParts.Count -gt 0){[System.Drawing.Color]::Firebrick}else{[System.Drawing.Color]::DarkOrange}
     }
 }
 
@@ -1332,7 +1451,8 @@ function New-PreviewMenu {
     New-Item -ItemType Directory -Force -Path "$prev\AUTORUN" | Out-Null
 
     $title = $txtLabel.Text.Trim()
-    if (-not $title -and $state.Game -and $state.Game.Ok) { $title = $state.Game.GameName }
+    $first = Get-FirstGame
+    if (-not $title -and $first) { $title = $first.GameName }
     if (-not $title) { $title = 'Preview' }
     # A custom title overrides the label; blank falls back to it.
     $bgTitle = $txtTitle.Text.Trim(); if (-not $bgTitle) { $bgTitle = $title }
@@ -1347,8 +1467,8 @@ function New-PreviewMenu {
         Copy-Item $state.MusicFile "$prev\AUTORUN\$musicName" -Force
     }
 
-    $setupName = if ($state.Game -and $state.Game.Ok) { $state.Game.SetupExe.Name } else { 'setup.exe' }
-    $matchName = if ($state.Game -and $state.Game.Ok) { $state.Game.GameName } else { $title }
+    $setupName = if ($first) { $first.SetupExe.Name } else { 'setup.exe' }
+    $matchName = if ($first) { $first.GameName } else { $title }
     # Stage the icon too, so the preview's taskbar icon matches the built disc.
     $prevIco = Get-DiscIconName $title
     if ($state.IconPath -and (Test-Path $state.IconPath) -and $state.IconIsIco) {
@@ -1363,12 +1483,34 @@ function New-PreviewMenu {
     return "$prev\AUTORUN\menu.hta"
 }
 
+function Set-GameFolders([string[]]$paths) {
+    $given = @(@($paths) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $found = @()
+    foreach ($p in $given) { $found += ,(Get-GameInfo $p) }
+    $state.Games = @($found)
+    # Get-GameInfo only fills Folder when it found an installer, so fall back to
+    # what was actually picked - blanking the box on a bad path hides the mistake.
+    $txtFolder.Text = $(if ($given.Count) { if ($found[0].Folder) { $found[0].Folder } else { $given[0] } } else { '' })
+    $bad = @($found | Where-Object { -not $_.Ok })
+    if ($found.Count -and $bad.Count -eq 0) { Update-MediaLabel }
+    elseif ($bad.Count) {
+        $lblGame.Text = $bad[0].Msg
+        $lblGame.ForeColor = [System.Drawing.Color]::Firebrick
+    }
+    # Comma for the same reason as Get-Games: one game would otherwise come back as
+    # a bare hashtable, and Set-GameFolder's $found[0] would hand its caller null.
+    return ,@($found)
+}
+
+# Callers that still deal in one folder - the Browse button, reopening a v1
+# project - go through here and get the single result back, as before.
 function Set-GameFolder([string]$path) {
-    $txtFolder.Text=$path
-    $g=Get-GameInfo $path; $state.Game=$g
-    if ($g.Ok) { Update-MediaLabel }
-    else { $lblGame.Text=$g.Msg; $lblGame.ForeColor=[System.Drawing.Color]::Firebrick }
-    return $g
+    # Not @(Set-GameFolders ...) - it already returns a list, and wrapping it again
+    # yields a one-element array holding that list, so $found[0] would be every
+    # game rather than the first. Same trap as Get-FirstGame.
+    $found = Set-GameFolders @($path)
+    if ($found.Count -gt 0) { return $found[0] }
+    return (Get-GameInfo $path)
 }
 
 function Add-ExtraItem([string]$path) {
@@ -1437,13 +1579,19 @@ function Open-Project([string]$folder) {
 
     & $log "Loaded from $($p.Origin)."
 
-    $src = $p.SourceFolder
-    if (-not $src -or -not (Test-Path $src)) {
+    # Import-Project has already folded v1's single SourceFolder and v2's Games
+    # array into one list, so only the list is read from here on.
+    $srcs = @(@($p.GameFolders) | Where-Object { $_ })
+    if ($srcs.Count -eq 0 -and $p.SourceFolder) { $srcs = @($p.SourceFolder) }
+    $gone = @($srcs | Where-Object { -not (Test-Path $_) })
+    if ($srcs.Count -eq 0 -or $gone.Count -eq $srcs.Count) {
         & $log "  original GOG folder is gone - using the disc folder itself (rebuild in place)."
-        $src = $disc
+        $srcs = @($disc)
+    } elseif ($gone.Count -gt 0) {
+        & $log "  $($gone.Count) of $($srcs.Count) game folders are gone - leaving those out."
+        $srcs = @($srcs | Where-Object { Test-Path $_ })
     }
-    $g = Set-GameFolder $src
-    if (-not $g.Ok) { & $log "  WARNING: $($g.Msg)" }
+    foreach ($g in (Set-GameFolders $srcs)) { if (-not $g.Ok) { & $log "  WARNING: $($g.Msg)" } }
 
     $txtLabel.Text = $p.Label
     if ($p.IconPath -and (Test-Path $p.IconPath)) { Set-IconFile $p.IconPath } else { & $log "  icon missing - pick one again." }
@@ -1494,8 +1642,7 @@ function Open-Project([string]$folder) {
 
 # ---- events ----
 $btnOpenProj.Add_Click({
-    $d=New-Object System.Windows.Forms.FolderBrowserDialog
-    $d.Description='Pick the disc output folder (the one holding disc\ and the .iso)'
+    $d = New-FolderDialog 'Pick the disc output folder (the one holding disc\ and the .iso)' $txtOut.Text.Trim()
     if ($d.ShowDialog() -eq 'OK') { Open-Project $d.SelectedPath }
 })
 $btnOpenDisc.Add_Click({
@@ -1519,7 +1666,7 @@ $btnPreview.Add_Click({
 })
 $txtOut.Add_TextChanged({ Update-ActionButtons })
 $btnFolder.Add_Click({
-    $d=New-Object System.Windows.Forms.FolderBrowserDialog
+    $d = New-FolderDialog 'Pick the folder you downloaded from GOG (it holds setup_*.exe)' $txtFolder.Text.Trim()
     if ($d.ShowDialog() -eq 'OK') {
         $g = Set-GameFolder $d.SelectedPath
         if ($g.Ok -and [string]::IsNullOrWhiteSpace($txtLabel.Text)) { $txtLabel.Text=$g.GameName }
@@ -1535,15 +1682,15 @@ $btnMusic.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filt
 # Manuals are usually PDF but plenty ship as text or HTML, and the menu just
 # shell-executes whatever it is - nothing in the pipeline needs it to be a PDF.
 $btnMan.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*'; if($d.ShowDialog() -eq 'OK'){ $txtMan.Text=$d.FileName; $state.ManualPath=$d.FileName; Update-MediaLabel } })
-$btnEx.Add_Click({ $d=New-Object System.Windows.Forms.FolderBrowserDialog; if($d.ShowDialog() -eq 'OK'){ $txtEx.Text=$d.SelectedPath; $state.ExtrasPath=$d.SelectedPath; Update-MediaLabel } })
-$btnOut.Add_Click({ $d=New-Object System.Windows.Forms.FolderBrowserDialog; if($d.ShowDialog() -eq 'OK'){ $txtOut.Text=$d.SelectedPath } })
+$btnEx.Add_Click({ $d=New-FolderDialog 'Pick a folder of extras to put on the disc' $txtEx.Text.Trim(); if($d.ShowDialog() -eq 'OK'){ $txtEx.Text=$d.SelectedPath; $state.ExtrasPath=$d.SelectedPath; Update-MediaLabel } })
+$btnOut.Add_Click({ $d=New-FolderDialog 'Pick where the disc folder and the ISO get written' $txtOut.Text.Trim(); if($d.ShowDialog() -eq 'OK'){ $txtOut.Text=$d.SelectedPath } })
 $btnXFile.Add_Click({
     $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='All files|*.*'; $d.Multiselect=$true
     $d.Title='Pick any files to put on the disc'
     if($d.ShowDialog() -eq 'OK'){ foreach($fn in $d.FileNames){ Add-ExtraItem $fn } }
 })
 $btnXDir.Add_Click({
-    $d=New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='Pick a folder to put on the disc'
+    $d = New-FolderDialog 'Pick a folder to put on the disc' $txtFolder.Text.Trim()
     if($d.ShowDialog() -eq 'OK'){ Add-ExtraItem $d.SelectedPath }
 })
 $btnXDel.Add_Click({
@@ -1576,7 +1723,7 @@ $chkMenu.Add_CheckedChanged({
 
 $btnBuild.Add_Click({
     $txtLog.Clear()
-    if (-not $state.Game -or -not $state.Game.Ok) { Deny-Build 'no valid GOG game folder.' 'Pick a valid GOG game folder first (step 1).'; return }
+    if ((Get-Games).Count -eq 0) { Deny-Build 'no valid GOG game folder.' 'Pick a valid GOG game folder first (step 1).'; return }
     if ([string]::IsNullOrWhiteSpace($txtLabel.Text)) { Deny-Build 'no disc label.' 'Enter a disc label (step 2). It is the name This PC shows for the disc.'; return }
     if (-not $state.IconPath) { Deny-Build 'no disc icon.' 'Choose a disc icon (step 3).'; return }
     if ([string]::IsNullOrWhiteSpace($txtOut.Text)) { Deny-Build 'no output folder.' 'Choose an output folder (step 6). The disc folder and the ISO are written there.'; return }
@@ -1603,8 +1750,14 @@ $btnBuild.Add_Click({
     # An unfinished download burns a disc that fails only at install time. Confirm
     # rather than block outright: the part numbering is a convention, not a promise,
     # so a false positive must not be able to stop a legitimate build.
-    if ($state.Game.MissingParts.Count -gt 0) {
-        $miss = ($state.Game.MissingParts | ForEach-Object { "$($state.Game.SetupExe.BaseName)-$_.bin" }) -join "`r`n"
+    $incomplete = @(Get-Games | Where-Object { $_.MissingParts.Count -gt 0 })
+    if ($incomplete.Count -gt 0) {
+        # $gm is captured before the inner loop: the nested ForEach-Object rebinds
+        # $_ to the part number, so the outer game would be unreachable otherwise.
+        $miss = ($incomplete | ForEach-Object {
+                    $gm = $_
+                    $gm.MissingParts | ForEach-Object { "$($gm.SetupExe.BaseName)-$_.bin" }
+                 }) -join "`r`n"
         if (-not (Show-Confirm ("This GOG download looks incomplete. These installer parts are missing:`r`n`r`n$miss" +
                                 "`r`n`r`nA disc built from it will look fine but fail when the installer runs, " +
                                 "and by then the disc is spent.`r`n`r`nRe-download the game from GOG first." +
@@ -1638,8 +1791,10 @@ $btnBuild.Add_Click({
         if ($outRoot) {
             $di       = New-Object System.IO.DriveInfo($outRoot)
             $free     = [double]$di.AvailableFreeSpace
-            $srcRoot  = [IO.Path]::GetPathRoot($state.Game.SetupExe.FullName)
-            $linkable = ($di.DriveFormat -ieq 'NTFS') -and ($srcRoot -ieq $outRoot)
+            # Hardlinking needs every installer on the same volume as the stage.
+            # With games spread across drives, some get copied, so budget for the lot.
+            $srcRoots = @(Get-Games | ForEach-Object { [IO.Path]::GetPathRoot($_.SetupExe.FullName) } | Sort-Object -Unique)
+            $linkable = ($di.DriveFormat -ieq 'NTFS') -and ($srcRoots.Count -eq 1) -and ($srcRoots[0] -ieq $outRoot)
             # Assign the branch, do not inline it: "(if ...)" parses as a command
             # invocation and only blows up at run time, which would hide here.
             $stageCost = if ($linkable) { $pay.Extra } else { $pay.Total }
@@ -1662,7 +1817,10 @@ $btnBuild.Add_Click({
     # A rebuild replaces work that already exists - say exactly what goes.
     if (Test-AlreadyBuilt $outDir) {
         $stage   = Join-Path $outDir 'disc'
-        $inPlace = Test-SamePath $state.Game.Folder $stage
+        # Rebuilding in place only applies to a single game whose folder IS the
+        # stage. Several games always live in Games\ subfolders, never at the root.
+        $bGames  = Get-Games
+        $inPlace = ($bGames.Count -eq 1) -and (Test-SamePath $bGames[0].Folder $stage)
         $msg = "Rebuild the disc in:`r`n$outDir`r`n`r`nThe existing ISO will be replaced."
         if ((Test-Path $stage) -and -not $inPlace) {
             $msg += "`r`n`r`nThe 'disc' folder will be rebuilt from scratch. Anything you added to it by hand that is not listed under Extra content will be lost."
@@ -1675,7 +1833,7 @@ $btnBuild.Add_Click({
 
     New-Item -ItemType Directory -Force -Path $txtOut.Text | Out-Null
     $buttons=@(); if($cbPlay.Checked){$buttons+='Play'}; if($cbInst.Checked){$buttons+='Install'}; if($cbMan.Checked){$buttons+='Manual'}; if($cbExtra.Checked){$buttons+='Extras'}; if($cbExit.Checked){$buttons+='Exit'}
-    $s=@{ Game=$state.Game; Label=$txtLabel.Text.Trim(); IconPath=$state.IconPath; IconIsIco=$state.IconIsIco;
+    $s=@{ Games=(Get-Games); Label=$txtLabel.Text.Trim(); IconPath=$state.IconPath; IconIsIco=$state.IconIsIco;
          Menu=$chkMenu.Checked; BgPath=$state.BgPath; BgAsIs=$chkBgAsIs.Checked; PanelSide=[string]$cmbSide.SelectedItem;
          Divider=$chkDivider.Checked; ShowTitle=$chkTitle.Checked; TitleText=$txtTitle.Text.Trim();
          WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem;

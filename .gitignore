@@ -9,3 +9,6 @@
 *.iso
 disc/
 discproject.json
+
+# Pester output
+pester-results.xml
