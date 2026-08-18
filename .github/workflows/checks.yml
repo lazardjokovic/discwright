@@ -1,0 +1,95 @@
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Read-only token: nothing here writes to the repo.
+permissions:
+  contents: read
+
+# A new push to the same branch makes the previous run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  powershell:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # `shell: powershell` is Windows PowerShell 5.1; `pwsh` would be 7.
+      # DiscWright requires 5.1, so 5.1 is the only parser whose verdict means
+      # anything here - 7 accepts syntax that 5.1 rejects.
+      - name: Parse every script under Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $failed = $false
+          foreach ($f in Get-ChildItem -Recurse -Filter *.ps1) {
+              $errors = $null
+              [void][System.Management.Automation.Language.Parser]::ParseFile(
+                  $f.FullName, [ref]$null, [ref]$errors)
+              if ($errors -and $errors.Count) {
+                  $failed = $true
+                  Write-Host "::error file=$($f.Name)::$($errors.Count) parse error(s)"
+                  foreach ($e in $errors) {
+                      Write-Host "    line $($e.Extent.StartLineNumber): $($e.Message)"
+                  }
+              } else {
+                  Write-Host "ok    $($f.Name)"
+              }
+          }
+          if ($failed) { exit 1 }
+
+      # Fails the build on Errors only. Warnings are printed but tolerated: the
+      # default rule set has strong opinions about WinForms code that are not
+      # worth rewriting a working app over, and a check that always fails is a
+      # check everybody learns to ignore.
+      - name: PSScriptAnalyzer
+        shell: powershell
+        run: |
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
+              Set-PSRepository PSGallery -InstallationPolicy Trusted
+              Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          }
+          $results  = @(Invoke-ScriptAnalyzer -Path . -Recurse)
+          $errors   = @($results | Where-Object { $_.Severity -eq 'Error' })
+          $warnings = @($results | Where-Object { $_.Severity -eq 'Warning' })
+
+          foreach ($w in $warnings) {
+              Write-Host "::warning file=$($w.ScriptName),line=$($w.Line)::$($w.RuleName): $($w.Message)"
+          }
+          foreach ($e in $errors) {
+              Write-Host "::error file=$($e.ScriptName),line=$($e.Line)::$($e.RuleName): $($e.Message)"
+          }
+
+          Write-Host ""
+          Write-Host "$($errors.Count) error(s), $($warnings.Count) warning(s)"
+          if ($errors.Count) { exit 1 }
+
+      # GitHub serves repository files without a BOM. Windows PowerShell 5.1
+      # decodes a BOM-less file as the system ANSI codepage rather than UTF-8, so
+      # one stray non-ASCII byte in a script silently mangles on any machine whose
+      # codepage is not the author's. Everything executable is ASCII today; this
+      # keeps it that way. Documentation is exempt - GitHub renders it as UTF-8.
+      - name: Executable files must stay pure ASCII
+        shell: powershell
+        run: |
+          $failed = $false
+          foreach ($f in Get-ChildItem -Recurse -Include *.ps1,*.vbs,*.cmd) {
+              $bytes = [IO.File]::ReadAllBytes($f.FullName)
+              $bad = @()
+              for ($i = 0; $i -lt $bytes.Length; $i++) {
+                  if ($bytes[$i] -gt 127) { $bad += $i }
+              }
+              if ($bad.Count) {
+                  $failed = $true
+                  Write-Host "::error file=$($f.Name)::$($bad.Count) non-ASCII byte(s), first at offset $($bad[0])"
+              } else {
+                  Write-Host "ok    $($f.Name)"
+              }
+          }
+          if ($failed) { exit 1 }
