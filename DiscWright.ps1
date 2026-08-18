@@ -711,26 +711,48 @@ public class ISOFile {
                    "Then build again.`r`n`r`nWindows said: $($_.Exception.Message)")
         }
     }
-    $fsi=New-Object -ComObject IMAPI2FS.MsftFileSystemImage
+    # Every one of these COM objects has to be released by hand. AddTree opens a
+    # handle on each staged file and CreateResultImage holds them until the image
+    # is released, so leaving it to the garbage collector means DiscWright is still
+    # locking its own disc folder when the build returns. Rebuilding then failed
+    # with "something is still using it", pointing the blame at Explorer or a
+    # mounted ISO when the process holding the files was DiscWright itself.
+    $fsi=$null; $rootItem=$null; $img=$null; $stream=$null
+    try {
+        $fsi=New-Object -ComObject IMAPI2FS.MsftFileSystemImage
 
-    # Size the virtual medium to the actual payload. The old fixed 12.5M blocks
-    # (~25 GB) silently capped builds well below the BD-R DL / XL sizes the UI
-    # recommends.
-    $payload = (Get-ChildItem -Recurse -File -Force $stageDir | Measure-Object Length -Sum).Sum
-    $blocks  = [long][math]::Ceiling(($payload * 1.05) / 2048) + 65536
-    if ($blocks -lt 12500000) { $blocks = 12500000 }
-    if ($blocks -gt 2147483000) { $blocks = 2147483000 }
-    $fsi.FreeMediaBlocks=[int]$blocks
+        # Size the virtual medium to the actual payload. The old fixed 12.5M blocks
+        # (~25 GB) silently capped builds well below the BD-R DL / XL sizes the UI
+        # recommends.
+        $payload = (Get-ChildItem -Recurse -File -Force $stageDir | Measure-Object Length -Sum).Sum
+        $blocks  = [long][math]::Ceiling(($payload * 1.05) / 2048) + 65536
+        if ($blocks -lt 12500000) { $blocks = 12500000 }
+        if ($blocks -gt 2147483000) { $blocks = 2147483000 }
+        $fsi.FreeMediaBlocks=[int]$blocks
 
-    # UDF only. GOG part filenames run past 64 chars, which Joliet cannot hold,
-    # and the .bin parts sit at the ISO9660 4 GiB ceiling.
-    $fsi.FileSystemsToCreate=4
-    try { $fsi.UDFRevision=0x250 } catch {}
-    $vn = ($volLabel -replace '[^A-Za-z0-9_]','_'); if($vn.Length -gt 16){$vn=$vn.Substring(0,16)}
-    $fsi.VolumeName=$vn
-    $fsi.Root.AddTree($stageDir,$false)
-    $img=$fsi.CreateResultImage()
-    [ISOFile]::Create($isoPath,$img.ImageStream,$img.BlockSize,$img.TotalBlocks)
+        # UDF only. GOG part filenames run past 64 chars, which Joliet cannot hold,
+        # and the .bin parts sit at the ISO9660 4 GiB ceiling.
+        $fsi.FileSystemsToCreate=4
+        try { $fsi.UDFRevision=0x250 } catch {}
+        $vn = ($volLabel -replace '[^A-Za-z0-9_]','_'); if($vn.Length -gt 16){$vn=$vn.Substring(0,16)}
+        $fsi.VolumeName=$vn
+        # Bind Root once. Reading it creates a fresh wrapper every time, and a
+        # wrapper nobody kept a reference to is a wrapper nobody can release.
+        $rootItem=$fsi.Root
+        $rootItem.AddTree($stageDir,$false)
+        $img=$fsi.CreateResultImage()
+        $stream=$img.ImageStream
+        [ISOFile]::Create($isoPath,$stream,$img.BlockSize,$img.TotalBlocks)
+    }
+    finally {
+        foreach ($o in @($stream,$img,$rootItem,$fsi)) {
+            if ($o) { try { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($o) } catch {} }
+        }
+        # Releasing drops our references; the handles close when the runtime runs
+        # the finalisers. Waiting for that here is what makes an immediate rebuild
+        # work instead of failing on a lock that clears a few seconds later.
+        [GC]::Collect(); [GC]::WaitForPendingFinalizers()
+    }
 }
 
 # =================== PROJECT SAVE / REOPEN ===================
