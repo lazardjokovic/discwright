@@ -109,6 +109,8 @@ Stated up front rather than discovered later.
 - **No multi-disc splitting.** Anything larger than a 100 GB BD-R XL is out of scope.
 - **Disc labels are limited to what Windows can encode.** AutoRun reads `autorun.inf` in the system ANSI codepage and has no Unicode mode at all, so accented Latin characters are fine but Cyrillic, Greek and CJK are not. DiscWright shows you exactly what This PC will display and asks before building one it cannot represent.
 
+Not all of these are permanent — multi-disc splitting in particular is on the [roadmap](ROADMAP.md). [Issues](../../issues) is the place to ask for something, and [CHANGELOG.md](CHANGELOG.md) records what has changed between releases.
+
 ## Media sizes
 
 | Payload | Disc |
