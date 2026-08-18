@@ -11,10 +11,31 @@ between minor versions.
 
 ### Added
 
+- **The build says what it is doing.** A progress bar and a running clock while the ISO
+  is written, the total time in the log and in the "build complete" dialog. The window
+  keeps repainting throughout — previously the whole build ran on the interface thread
+  with nothing pumping the message queue during the ISO write, so Windows greyed the
+  window out and labelled it "Not Responding" for minutes at a time on a full-size game.
+  It looked exactly like a crash.
 - **DiscWright now says which version it is.** The title bar reads `DiscWright 0.2.0`,
   the log box opens with the version and the PowerShell it is running under, and every
   `discproject.json` records the version that wrote it — so a project file attached to a
   bug report says for itself what built the disc.
+
+### Changed
+
+- **The ISO builder no longer compiles with `/unsafe`.** It used an unsafe pointer to
+  hand `IStream.Read` somewhere to put its byte count; four bytes of unmanaged memory do
+  the same job. This was not tidying: Smart App Control, which is enforced by default on
+  a clean Windows 11, refuses an assembly that combines unsafe pointers with a delegate
+  called inside the copy loop — that being the shape of a shellcode loader. Measured on a
+  machine with it enforced, the pointer build was blocked every time and this one is
+  accepted every time, so without the change the progress bar above would have stopped
+  DiscWright writing ISOs at all on those machines.
+
+  A side effect: `/unsafe` required `Add-Type -CompilerParameters`, which PowerShell 6
+  removed, and that was the one known reason DiscWright could not run on PowerShell 7.
+  It is still untested there and the startup check still refuses it.
 
 ## [0.1.1] — 2026-08-18
 

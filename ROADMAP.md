@@ -54,6 +54,10 @@ editor.
   let a disc look like its own era instead of looking like DiscWright.
 - **A presentation site.** Mainly to give people something plainer than a README to read
   before deciding to run an unsigned script.
+- **PowerShell 7.** The one known blocker is gone: the ISO builder no longer compiles
+  with `/unsafe`, so it no longer needs `Add-Type -CompilerParameters`. Whether anything
+  else stops it — WinForms, the COM interop, apartment state — has not been tested, and
+  the startup guard still refuses PowerShell 7 until somebody actually tries it.
 
 ## Not planned
 
@@ -65,9 +69,9 @@ Stated plainly because these come up.
   reason a tool like this can exist. DiscWright circumvents nothing and never will.
 - **Non-Windows support.** The interface is WinForms and the ISO builder is IMAPI2FS.
   Both are Windows-only and neither has a portable replacement worth the rewrite.
-- **PowerShell 7.** The ISO builder needs `Add-Type -CompilerParameters` with `/unsafe`,
-  which PowerShell 6 removed. Windows PowerShell 5.1 ships with Windows, so requiring it
-  costs nobody an installation.
+(**PowerShell 7** used to be listed here. It was ruled out because the ISO builder
+needed `Add-Type -CompilerParameters` with `/unsafe`, which PowerShell 6 removed. That
+dependency is gone, so the entry moved up to *Considering*.)
 
 ## How this list changes
 

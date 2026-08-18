@@ -24,7 +24,7 @@ Play knows whether the game is already installed and greys itself out until it i
 ## What you need
 
 - **Windows 10 or 11**
-- **Windows PowerShell 5.1** — the one that ships with Windows. Not PowerShell 7; the ISO builder uses a compiler option that PowerShell 6 removed. DiscWright checks on startup and tells you if you launch it the wrong way.
+- **Windows PowerShell 5.1** — the one that ships with Windows. DiscWright checks on startup and tells you if you launch it the wrong way. PowerShell 7 is refused: it may well work now that the ISO builder no longer needs a compiler option PowerShell 6 removed, but nobody has tried it, so the check stays until somebody does.
 - **A blank disc and something to burn it with.** DiscWright makes the ISO. Burning is deliberately out of scope — [ImgBurn](https://www.imgburn.com/), Nero, and Windows' own built-in burner all do it well, and there is no reason to write a worse one.
 
 No installation. No dependencies. It is a single PowerShell script.
