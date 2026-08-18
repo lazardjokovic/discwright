@@ -278,6 +278,66 @@ Describe 'Reading the game list out of UI state' -Tag 'Unit' {
     }
 }
 
+Describe 'Recovering from a bad folder choice' -Tag 'Unit' {
+
+    # Reported from the window: after picking a folder with no installer in it,
+    # going back to a good one left the message red and the build refusing, with
+    # the right path still in the box. A selection that fails must not be able to
+    # poison the next one.
+
+    BeforeAll {
+        $script:GoodFolder = New-FixtureGame -Slug 'recover_game' -ExeMb 9
+        $script:EmptyFolder = Join-Path $script:Sandbox 'no-installer-here'
+        New-Item -ItemType Directory -Force -Path $script:EmptyFolder | Out-Null
+
+        # Stand-ins for the controls Set-GameFolders and Update-MediaLabel write to.
+        $script:txtFolder = [pscustomobject]@{ Text = '' }
+        $script:lblGame   = [pscustomobject]@{ Text = ''; ForeColor = $null }
+        $script:cbMan     = [pscustomobject]@{ Checked = $false }
+        $script:cbExtra   = [pscustomobject]@{ Checked = $false }
+        $script:chkMusic  = [pscustomobject]@{ Checked = $false }
+        $script:state     = @{ Games=@(); ExtraItems=@(); ManualPath=$null; ExtrasPath=$null; MusicFile=$null }
+    }
+
+    It 'accepts a good folder' {
+        $g = Set-GameFolder $script:GoodFolder
+        $g.Ok | Should -BeTrue
+        (Get-Games).Count | Should -Be 1
+    }
+
+    It 'rejects a folder with no installer' {
+        $g = Set-GameFolder $script:EmptyFolder
+        $g.Ok | Should -BeFalse
+        (Get-Games).Count | Should -Be 0
+    }
+
+    It 'keeps the rejected path visible rather than blanking the box' {
+        $script:txtFolder.Text | Should -Be $script:EmptyFolder
+    }
+
+    It 'recovers when a good folder is picked again' {
+        $g = Set-GameFolder $script:GoodFolder
+        $g.Ok             | Should -BeTrue
+        (Get-Games).Count | Should -Be 1
+        Get-FirstGame     | Should -Not -BeNullOrEmpty
+    }
+
+    It 'clears the red message on recovery' {
+        $script:lblGame.ForeColor | Should -Not -Be ([System.Drawing.Color]::Firebrick)
+        $script:lblGame.Text      | Should -Match 'Detected:'
+    }
+
+    It 'lets the build run again' {
+        # The build handler refuses on (Get-Games).Count -eq 0.
+        (Get-Games).Count | Should -BeGreaterThan 0
+    }
+
+    It 'returns one game from Set-GameFolder, not a list' {
+        $g = Set-GameFolder $script:GoodFolder
+        $g -is [System.Collections.Hashtable] | Should -BeTrue
+    }
+}
+
 Describe 'Format-Elapsed' -Tag 'Unit' {
 
     # Casting a double to [int] ROUNDS in PowerShell rather than truncating, so

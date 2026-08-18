@@ -1476,7 +1476,10 @@ function Set-GameFolders([string[]]$paths) {
 # Callers that still deal in one folder - the Browse button, reopening a v1
 # project - go through here and get the single result back, as before.
 function Set-GameFolder([string]$path) {
-    $found = @(Set-GameFolders @($path))
+    # Not @(Set-GameFolders ...) - it already returns a list, and wrapping it again
+    # yields a one-element array holding that list, so $found[0] would be every
+    # game rather than the first. Same trap as Get-FirstGame.
+    $found = Set-GameFolders @($path)
     if ($found.Count -gt 0) { return $found[0] }
     return (Get-GameInfo $path)
 }
