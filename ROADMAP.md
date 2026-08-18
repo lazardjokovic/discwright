@@ -4,11 +4,26 @@ What is planned for DiscWright, what is being considered, and what is deliberate
 of scope. Ordered by intent rather than by date — this is a hobby project and nothing
 here carries a delivery promise.
 
-Most of what follows came from people replying to the
+Most of the **Later** list came from people replying to the
 [r/gog launch thread](https://www.reddit.com/r/gog/comments/1vrmyt0/made_a_free_tool_that_turns_gog_offline/).
 If what you want is missing, [open an issue](../../issues).
 
-## Planned — v0.2.0
+Version numbers are deliberately not attached to anything below. Releases get numbered
+for what they turn out to contain, not the other way around — pinning a number to a
+feature only creates pressure to cram things in to justify it.
+
+## Next
+
+**Say what is happening during a build.** Writing the ISO gives no feedback at all, and
+because the whole build runs on the interface thread the window goes grey and Windows
+paints it "Not Responding". On a full-size game that is minutes of looking like a crash.
+Wanted: a progress bar fed by the ISO writer itself, elapsed time, per-file progress
+during the copy, and a window that keeps repainting throughout.
+
+**Show which version is running.** In the title bar, in the log, and recorded into every
+project file, so a bug report says for itself what produced the disc.
+
+## Later
 
 **Several games on one disc.** A 25 GB BD-R holds a lot of older games. Put more than
 one installer on a disc and let the menu ask which to install. Needs a per-game section
@@ -18,8 +33,6 @@ already installed when there is more than one candidate.
 **"Install DLC" as its own menu button.** DLC that ships as a separate installer
 currently has to go in Extras, where it is just a file in a folder. It deserves a button
 next to Install.
-
-## Planned — later
 
 **Multi-disc splitting.** Listed today as a known limitation: anything larger than a
 single disc is out of scope. It was requested twice, independently, within hours of the

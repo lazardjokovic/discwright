@@ -9,6 +9,13 @@ between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- **DiscWright now says which version it is.** The title bar reads `DiscWright 0.2.0`,
+  the log box opens with the version and the PowerShell it is running under, and every
+  `discproject.json` records the version that wrote it — so a project file attached to a
+  bug report says for itself what built the disc.
+
 ## [0.1.1] — 2026-08-18
 
 ### Added

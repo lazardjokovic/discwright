@@ -54,6 +54,12 @@ Add-Type -AssemblyName System.Drawing
 
 $PROJECT_FILE = 'discproject.json'
 
+# Kept in step with the git tag by a CI check that runs when a tag is pushed, so
+# this cannot quietly drift a release behind. Shown in the title bar and the log,
+# and written into every project file - a bug report that comes with a project
+# file then says for itself which version built the disc.
+$APP_VERSION  = '0.2.0'
+
 # =================== SMALL HELPERS ===================
 
 function Test-SamePath([string]$a,[string]$b) {
@@ -759,7 +765,11 @@ public class ISOFile {
 
 function Save-Project([hashtable]$s,[string]$outDir) {
     $o = [ordered]@{
+        # Version is the schema of this file. AppVersion is the DiscWright that
+        # wrote it - two different things, deliberately two different keys, so a
+        # project file attached to a bug report says which build produced it.
         Version      = 1
+        AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         SourceFolder = $s.Game.Folder
         GameName     = $s.Game.GameName
@@ -1032,7 +1042,9 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log) {
 $state = @{ Game=$null; IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@() }
 
 $form=New-Object System.Windows.Forms.Form
-$form.Text='DiscWright'
+# The version belongs where it can be read off a screenshot without being asked
+# for, since that is how it arrives in a bug report.
+$form.Text="DiscWright $APP_VERSION"
 $form.Size=New-Object System.Drawing.Size(700,996)
 $form.StartPosition='CenterScreen'
 $form.Font=New-Object System.Drawing.Font('Segoe UI',9)
@@ -1600,6 +1612,10 @@ Add-Type -Namespace GDA -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 '@
 Update-ActionButtons   # start greyed out - nothing to open yet
+
+# First line in the log box, so it is already in the screenshot when someone
+# posts one, and already in the copied text when someone pastes the log.
+& $log "DiscWright $APP_VERSION  -  Windows PowerShell $($PSVersionTable.PSVersion)"
 
 $form.Add_Shown({
     [void][GDA.Win]::ShowWindow($form.Handle,5)      # SW_SHOW
