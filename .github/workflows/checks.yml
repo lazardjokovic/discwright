@@ -44,6 +44,35 @@ jobs:
           }
           if ($failed) { exit 1 }
 
+      # The ISO build tests skip themselves if the runner has no IMAPI2FS, and the
+      # ISO content tests skip if it has no 7-Zip, so the job still means something
+      # on a machine that cannot do either.
+      - name: Pester
+        shell: powershell
+        run: |
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version.Major -ge 5 })) {
+              Set-PSRepository PSGallery -InstallationPolicy Trusted
+              Install-Module Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0
+          }
+          Import-Module Pester -MinimumVersion 5.0 -Force
+          Write-Host "Pester $((Get-Module Pester).Version)"
+
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path             = 'tests'
+          $cfg.Run.Exit             = $true
+          $cfg.Output.Verbosity     = 'Detailed'
+          $cfg.TestResult.Enabled   = $true
+          $cfg.TestResult.OutputPath = 'pester-results.xml'
+          Invoke-Pester -Configuration $cfg
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pester-results
+          path: pester-results.xml
+          if-no-files-found: ignore
+
       # Fails the build on Errors only. Warnings are printed but tolerated: the
       # default rule set has strong opinions about WinForms code that are not
       # worth rewriting a working app over, and a check that always fails is a
