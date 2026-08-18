@@ -1154,10 +1154,21 @@ $state = @{ Games=@(); IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile
 # One game per disc is still the common case, so the disc layout, the UI and the
 # menu are unchanged for it. Only sizing, the build's copy step and the menu need
 # to think in lists, and they go through these two.
-function Get-Games { return @($state.Games | Where-Object { $_ -and $_.Ok }) }
+# The leading comma is load-bearing. PowerShell unrolls a single-element array on
+# return, so "return @(...)" with one game handed back the bare hashtable instead
+# of a list. Callers then read .Count on a hashtable - which is its number of KEYS,
+# nine - and the media line announced "9 games (0 bytes)" for one game. Get-FirstGame
+# was worse: $g[0] indexed the hashtable by the key 0, found nothing, and returned
+# null, so the preview menu lost the game entirely. Wrapping in an outer array means
+# the unroll gives back the inner one.
+function Get-Games { return ,@($state.Games | Where-Object { $_ -and $_.Ok }) }
+
+# Do NOT write @(Get-Games) here. Get-Games already hands back an array, and wrapping
+# it again gives a one-element array whose element is that array - so $g[0] came back
+# as every game at once. Plain assignment is what preserves it.
 function Get-FirstGame {
     $g = Get-Games
-    if ($g.Count) { return $g[0] }
+    if ($g.Count -gt 0) { return $g[0] }
     return $null
 }
 
@@ -1281,7 +1292,13 @@ $buildProgress = { param($done,$total)
 function Get-PayloadBytes {
     $games = Get-Games
     if ($games.Count -eq 0) { return @{ Installer=[double]0; Extra=[double]0; Total=[double]0 } }
-    $installer = [double](($games | Measure-Object TotalBytes -Sum).Sum)
+    # Summed by hand, not with Measure-Object. Get-GameInfo returns a hashtable, and
+    # Measure-Object -Property looks for a real PROPERTY - a hashtable key is not one,
+    # so it found nothing and reported a total of zero for every disc. $g.TotalBytes
+    # works because member access on a hashtable does read keys; Measure-Object does
+    # not go through that path.
+    $installer = [double]0
+    foreach ($g in $games) { $installer += [double]$g.TotalBytes }
     $side = @()
     $side += @($state.ExtraItems)
     if ($cbMan.Checked   -and $state.ManualPath) { $side += $state.ManualPath }
@@ -1451,14 +1468,16 @@ function Set-GameFolders([string[]]$paths) {
         $lblGame.Text = $bad[0].Msg
         $lblGame.ForeColor = [System.Drawing.Color]::Firebrick
     }
-    return $found
+    # Comma for the same reason as Get-Games: one game would otherwise come back as
+    # a bare hashtable, and Set-GameFolder's $found[0] would hand its caller null.
+    return ,@($found)
 }
 
 # Callers that still deal in one folder - the Browse button, reopening a v1
 # project - go through here and get the single result back, as before.
 function Set-GameFolder([string]$path) {
-    $found = Set-GameFolders @($path)
-    if ($found.Count) { return $found[0] }
+    $found = @(Set-GameFolders @($path))
+    if ($found.Count -gt 0) { return $found[0] }
     return (Get-GameInfo $path)
 }
 

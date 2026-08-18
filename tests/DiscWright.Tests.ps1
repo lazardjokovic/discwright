@@ -205,6 +205,79 @@ Describe 'Test-ReservedDiscName' -Tag 'Unit' {
     }
 }
 
+Describe 'Reading the game list out of UI state' -Tag 'Unit' {
+
+    # These three read $state, which only the running window populates - which is
+    # exactly why nothing here touched them, and exactly how the media line came to
+    # announce "9 games (0 bytes)" for one game. Two separate faults produced that:
+    #
+    #   PowerShell unrolls a single-element array on return, so Get-Games handed back
+    #   the bare hashtable. .Count on a Hashtable is its number of KEYS - Get-GameInfo
+    #   has nine - and Get-FirstGame's $g[0] indexed it by the key 0 and found nothing.
+    #
+    #   Measure-Object -Property looks for a real property, and a hashtable key is not
+    #   one, so the installer total was always zero.
+    #
+    # Counts of 1 are the interesting case: 0, 2 and 3 all behaved correctly while 1
+    # was broken.
+
+    BeforeAll {
+        $script:StateGames = @(
+            (Get-GameInfo (New-FixtureGame -Slug 'state_one'   -ExeMb 5)),
+            (Get-GameInfo (New-FixtureGame -Slug 'state_two'   -ExeMb 5)),
+            (Get-GameInfo (New-FixtureGame -Slug 'state_three' -ExeMb 5))
+        )
+        # Get-PayloadBytes reads these three controls to decide what extras to count.
+        $script:cbMan    = [pscustomobject]@{ Checked = $false }
+        $script:cbExtra  = [pscustomobject]@{ Checked = $false }
+        $script:chkMusic = [pscustomobject]@{ Checked = $false }
+
+        function Set-TestState([int]$n) {
+            $script:state = @{
+                Games      = @($script:StateGames | Select-Object -First $n)
+                ExtraItems = @(); ManualPath = $null; ExtrasPath = $null; MusicFile = $null
+            }
+        }
+    }
+
+    It 'Get-Games counts <N> game(s) correctly' -ForEach @(
+        @{ N = 0 }, @{ N = 1 }, @{ N = 2 }, @{ N = 3 }
+    ) {
+        Set-TestState $N
+        # (Get-Games).Count, not @(Get-Games).Count - the second wraps an array that
+        # is already an array and always reports 1. The first version of this test
+        # made exactly that mistake, three lines below a comment warning against it.
+        (Get-Games).Count | Should -Be $N
+    }
+
+    It 'Get-Games returns a list, never a bare hashtable' {
+        Set-TestState 1
+        (Get-Games) -is [System.Collections.Hashtable] | Should -BeFalse
+    }
+
+    It 'Get-FirstGame returns one game, not all of them' -ForEach @(
+        @{ N = 1 }, @{ N = 2 }, @{ N = 3 }
+    ) {
+        Set-TestState $N
+        $first = Get-FirstGame
+        $first        | Should -Not -BeNullOrEmpty
+        $first.GameName | Should -Not -BeOfType [array]
+        $first.GameName | Should -Be $script:StateGames[0].GameName
+    }
+
+    It 'Get-FirstGame is null when there are no games' {
+        Set-TestState 0
+        Get-FirstGame | Should -BeNullOrEmpty
+    }
+
+    It 'Get-PayloadBytes totals <N> game(s) as <Mb> MB' -ForEach @(
+        @{ N = 0; Mb = 0 }, @{ N = 1; Mb = 5 }, @{ N = 2; Mb = 10 }, @{ N = 3; Mb = 15 }
+    ) {
+        Set-TestState $N
+        [int]((Get-PayloadBytes).Installer / 1MB) | Should -Be $Mb
+    }
+}
+
 Describe 'Format-Elapsed' -Tag 'Unit' {
 
     # Casting a double to [int] ROUNDS in PowerShell rather than truncating, so
