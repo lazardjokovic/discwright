@@ -493,8 +493,13 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 2' {
-            $script:PJson.Version | Should -Be 2
+        It 'declares schema version 3' {
+            $script:PJson.Version | Should -Be 3
+        }
+
+        It 'records a Kind and a Parent for every entry' {
+            @($script:PJson.Games | Where-Object { $_.Kind -eq 'Game' }).Count | Should -Be 3
+            @($script:PJson.Games | Where-Object { $_.Parent -eq -1 }).Count   | Should -Be 3
         }
 
         It 'records every game' {
@@ -610,8 +615,17 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
         }
 
         It 'points the menu at a bare installer filename' {
+            # Asserted as a boolean, not -Match: a failed -Match against a 30 KB
+            # menu prints the whole menu into the test output.
             $hta = Get-Content -Raw (Join-Path $script:OneStage 'AUTORUN\menu.hta')
-            $hta | Should -Match ('var SETUP="' + [regex]::Escape($script:One.SetupExe.Name) + '"')
+            $wanted = 's:"' + $script:One.SetupExe.Name + '"'
+            $hta.Contains($wanted) | Should -BeTrue
+        }
+
+        It 'opens straight on the game, with no chooser for one game' {
+            $hta = Get-Content -Raw (Join-Path $script:OneStage 'AUTORUN\menu.hta')
+            # One entry in GAMES is what makes cur start at 0 rather than -1.
+            ([regex]::Matches($hta,'\{n:"')).Count | Should -Be 1
         }
 
         It 'names the icon after the disc, not disc.ico' {
@@ -670,9 +684,20 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
             @(Get-ChildItem (Join-Path $script:ManyStage 'Games') -Recurse -File).Count | Should -Be $expected
         }
 
-        It 'points the menu into the first game folder' {
+        It 'points the menu into the game folders that were actually written' {
+            # The staging copy and the menu work the on-disc path out separately,
+            # so this checks they agree - a disagreement burns a disc whose
+            # Install button is greyed out with nothing on screen explaining why.
             $hta = Get-Content -Raw (Join-Path $script:ManyStage 'AUTORUN\menu.hta')
-            $hta | Should -Match 'var SETUP="Games\\\\01 - '
+            foreach ($m in [regex]::Matches($hta,'s:"([^"]+)"')) {
+                $rel = $m.Groups[1].Value -replace '\\\\','\'
+                Test-Path (Join-Path $script:ManyStage $rel) | Should -BeTrue -Because "the menu points at $rel"
+            }
+        }
+
+        It 'gives the menu one entry per game' {
+            $hta = Get-Content -Raw (Join-Path $script:ManyStage 'AUTORUN\menu.hta')
+            ([regex]::Matches($hta,'\{n:"')).Count | Should -Be 3
         }
 
         It 'saves a project naming all three games' {
@@ -801,5 +826,165 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
             $t = & $script:SevenZip t $script:IsoPath 2>&1
             @($t | Where-Object { $_ -match 'Everything is Ok' }).Count | Should -BeGreaterThan 0
         }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Multi-game chooser and add-ons
+# ---------------------------------------------------------------------------
+
+Describe 'Where an entry lands on the disc' {
+
+    BeforeAll {
+        $script:LayoutOne = @( (Get-GameInfo (New-FixtureGame -Slug 'lay_one')) )
+        $script:LayoutMany = @(
+            (Get-GameInfo (New-FixtureGame -Slug 'lay_a'))
+            (Get-GameInfo (New-FixtureGame -Slug 'lay_b'))
+            (Get-GameInfo (New-FixtureGame -Slug 'lay_c'))
+        )
+    }
+
+    It 'puts a lone installer at the disc root' {
+        Get-DiscEntryFolder $script:LayoutOne 0 | Should -Be ''
+        Get-DiscEntrySetup  $script:LayoutOne 0 | Should -Be $script:LayoutOne[0].SetupExe.Name
+    }
+
+    It 'numbers every entry once there is more than one' {
+        (Get-DiscEntryFolder $script:LayoutMany 0) | Should -BeLike 'Games\01 - *'
+        (Get-DiscEntryFolder $script:LayoutMany 1) | Should -BeLike 'Games\02 - *'
+        (Get-DiscEntryFolder $script:LayoutMany 2) | Should -BeLike 'Games\03 - *'
+    }
+
+    It 'builds the setup path from that same folder' {
+        $rel = Get-DiscEntrySetup $script:LayoutMany 1
+        $rel | Should -Be (Join-Path (Get-DiscEntryFolder $script:LayoutMany 1) $script:LayoutMany[1].SetupExe.Name)
+    }
+}
+
+Describe 'Sorting entries into games and their add-ons' {
+
+    BeforeAll {
+        # One helper rather than three fixtures: these tests care about Kind and
+        # ParentIndex, not about what is in the folder.
+        function New-Entry {
+            param([string]$Name, [string]$Kind = 'Game', [int]$Parent = -1)
+            return @{ Ok=$true; GameName=$Name; Kind=$Kind; ParentIndex=$Parent
+                      SetupExe=@{ Name = "setup_$($Name -replace '\W','').exe" } }
+        }
+    }
+
+    It 'leaves a list of plain games alone' {
+        $m = Get-MenuGames @( (New-Entry 'One'), (New-Entry 'Two') )
+        $m.Count | Should -Be 2
+        @($m | Where-Object { $_.AddOns.Count -gt 0 }).Count | Should -Be 0
+    }
+
+    It 'hangs an add-on off its parent instead of listing it as a game' {
+        $m = Get-MenuGames @( (New-Entry 'Deus Ex'), (New-Entry 'GMDX' 'AddOn' 0) )
+        $m.Count | Should -Be 1
+        $m[0].Name | Should -Be 'Deus Ex'
+        $m[0].AddOns.Count | Should -Be 1
+        $m[0].AddOns[0].Name | Should -Be 'GMDX'
+    }
+
+    It 'attaches an add-on to the right game when there are several' {
+        $m = Get-MenuGames @(
+            (New-Entry 'First'), (New-Entry 'Second'), (New-Entry 'Patch' 'AddOn' 1) )
+        $m.Count | Should -Be 2
+        $m[0].AddOns.Count | Should -Be 0
+        $m[1].AddOns.Count | Should -Be 1
+    }
+
+    It 'gives an add-on a menu entry of its own rather than dropping it when the parent is nonsense' {
+        # Losing an installer silently is the one outcome worth ruling out: the
+        # disc is burned before anybody finds out it is missing.
+        foreach ($bad in @(-1, 5, 99)) {
+            $m = Get-MenuGames @( (New-Entry 'Game'), (New-Entry 'Orphan' 'AddOn' $bad) )
+            $m.Count | Should -Be 2 -Because "parent $bad points at nothing"
+        }
+    }
+
+    It 'does not let an add-on parent itself' {
+        $m = Get-MenuGames @( (New-Entry 'Game'), (New-Entry 'Self' 'AddOn' 1) )
+        $m.Count | Should -Be 2
+    }
+
+    It 'does not let an add-on hang off another add-on' {
+        $m = Get-MenuGames @(
+            (New-Entry 'Game'), (New-Entry 'Mod' 'AddOn' 0), (New-Entry 'ModPatch' 'AddOn' 1) )
+        # Mod belongs to Game; ModPatch cannot belong to Mod, so it stands alone.
+        $m.Count | Should -Be 2
+        $m[0].AddOns.Count | Should -Be 1
+    }
+
+    It 'never loses an installer, whatever the parents say' {
+        $entries = @(
+            (New-Entry 'A'), (New-Entry 'B' 'AddOn' 0), (New-Entry 'C' 'AddOn' 7)
+            (New-Entry 'D'), (New-Entry 'E' 'AddOn' 3), (New-Entry 'F' 'AddOn' 1) )
+        $m = Get-MenuGames $entries
+        $total = $m.Count + (($m | ForEach-Object { $_.AddOns.Count }) | Measure-Object -Sum).Sum
+        $total | Should -Be $entries.Count
+    }
+}
+
+Describe 'Building a disc that has an add-on on it' {
+
+    BeforeAll {
+        $script:AoGame  = Get-GameInfo (New-FixtureGame -Slug 'ao_base' -Parts 1)
+        $script:AoMod   = Get-GameInfo (New-FixtureGame -Slug 'ao_mod')
+        $script:AoMod.Kind = 'AddOn'
+        $script:AoMod.ParentIndex = 0
+
+        $script:AoOut = Join-Path $script:Sandbox 'out-addon'
+        New-Item -ItemType Directory -Force -Path $script:AoOut | Out-Null
+        $null = Invoke-Build (New-BuildSettings -Games @($script:AoGame, $script:AoMod) `
+                    -Label 'AddOn Disc' -OutDir $script:AoOut) $script:LogSink
+        $script:AoStage = Join-Path $script:AoOut 'disc'
+        $script:AoHta   = Get-Content -Raw (Join-Path $script:AoStage 'AUTORUN\menu.hta')
+    }
+
+    It 'stages both installers under Games' {
+        @(Get-ChildItem (Join-Path $script:AoStage 'Games') -Directory).Count | Should -Be 2
+    }
+
+    It 'copies the add-on installer too' {
+        $rel = Get-DiscEntrySetup @($script:AoGame, $script:AoMod) 1
+        Test-Path (Join-Path $script:AoStage $rel) | Should -BeTrue
+    }
+
+    It 'shows one game in the menu, not two' {
+        # The add-on must not turn up in the chooser as if it were a game.
+        ([regex]::Matches($script:AoHta,'\{n:"')).Count | Should -Be 2   # game + its add-on
+        ([regex]::Matches($script:AoHta,',a:\[\{n:"')).Count | Should -Be 1
+    }
+
+    It 'points every path in the menu at a file that is really there' {
+        foreach ($m in [regex]::Matches($script:AoHta,'s:"([^"]+)"')) {
+            $rel = $m.Groups[1].Value -replace '\\\\','\'
+            Test-Path (Join-Path $script:AoStage $rel) | Should -BeTrue -Because "the menu points at $rel"
+        }
+    }
+
+    It 'remembers the add-on in the project file' {
+        $back = Import-Project (Join-Path $script:AoOut 'discproject.json')
+        $back.GameEntries.Count | Should -Be 2
+        $back.GameEntries[1].Kind | Should -Be 'AddOn'
+        $back.GameEntries[1].ParentIndex | Should -Be 0
+    }
+
+    It 'reads a version 2 project back as all games' {
+        # 0.2.0 wrote no Kind and no Parent. Those files must not come back with
+        # an entry silently marked as an add-on of something.
+        $v2 = Join-Path $script:Sandbox 'proj-v2-compat'
+        New-Item -ItemType Directory -Force -Path $v2 | Out-Null
+        @{ Version=2; SourceFolder=$script:AoGame.Folder; GameName='Base'; Label='Base'
+           Games=@(@{ Folder=$script:AoGame.Folder; GameName='Base' }
+                   @{ Folder=$script:AoMod.Folder;  GameName='Mod'  })
+           IconPath=$script:Art; IconIsIco=$false; Menu=$true; BgPath=$script:Bg
+           BgAsIs=$false; PanelSide='Right'; Buttons=@('Install','Exit'); OutDir=$v2 } |
+            ConvertTo-Json -Depth 4 | Set-Content (Join-Path $v2 'discproject.json') -Encoding UTF8
+        $back = Import-Project (Join-Path $v2 'discproject.json')
+        $back.GameEntries.Count | Should -Be 2
+        @($back.GameEntries | Where-Object { $_.Kind -ne 'Game' }).Count | Should -Be 0
     }
 }

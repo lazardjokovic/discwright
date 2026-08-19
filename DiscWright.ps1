@@ -138,8 +138,13 @@ function ConvertTo-JsString([string]$s) {
 # =================== BUILD PIPELINE ===================
 
 function Get-GameInfo([string]$folder) {
+    # Kind and ParentIndex describe an entry's place on the disc rather than
+    # anything read out of the folder, so they start as "a game of its own" and
+    # the interface changes them afterwards. ParentIndex is an index into the
+    # disc's own list of entries, -1 meaning none - names are not stable enough
+    # to point with, since two GOG folders can yield the same ProductName.
     $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; Msg=''; TotalBytes=0; Folder=$null
-               Warning=''; MissingParts=@() }
+               Warning=''; MissingParts=@(); Kind='Game'; ParentIndex=-1 }
     if (-not (Test-Path $folder)) { $info.Msg='Folder not found.'; return $info }
     $exes = @(Get-ChildItem $folder -Filter 'setup_*.exe' -File -ErrorAction SilentlyContinue |
               Sort-Object Length -Descending)
@@ -295,6 +300,58 @@ function Get-GameFolderName([int]$index,[string]$name) {
     if ($n.Length -gt 48) { $n = $n.Substring(0,48).Trim() }
     if ([string]::IsNullOrWhiteSpace($n)) { $n = 'Game' }
     return ('{0:D2} - {1}' -f $index, $n)
+}
+
+# Where an entry's installer sits on the finished disc, relative to the disc root.
+# Empty string means the disc root itself.
+#
+# The staging copy and the menu both need this and they MUST agree. They used to
+# work it out separately, a few hundred lines apart, from the same rule written
+# twice - and the failure mode is silent: the files land in one place, the menu
+# points at another, and the disc burns with an Install button greyed out for a
+# reason nothing on screen explains. One function now, called by both.
+#
+# A disc with a single entry keeps the original flat layout, installer at the
+# root, exactly as every disc built before multi-game existed. Two or more and
+# every entry moves into Games\, add-ons included: their .bin parts are named
+# after their own installer, but a flat root full of a dozen setup files is
+# unreadable, and the numbering is what makes the disc browsable by hand.
+function Get-DiscEntryFolder([array]$entries,[int]$index) {
+    if ($entries.Count -le 1) { return '' }
+    return (Join-Path 'Games' (Get-GameFolderName ($index+1) $entries[$index].GameName))
+}
+
+function Get-DiscEntrySetup([array]$entries,[int]$index) {
+    $rel = Get-DiscEntryFolder $entries $index
+    $name = $entries[$index].SetupExe.Name
+    if ([string]::IsNullOrEmpty($rel)) { return $name }
+    return (Join-Path $rel $name)
+}
+
+# The menu's view of the disc: games in order, each carrying the add-ons that
+# point at it. An add-on whose parent is missing, or which points at another
+# add-on, is promoted to a game of its own rather than dropped - a disc that
+# shows an unexpected entry is recoverable, one that silently omits an installer
+# the user paid for and burned is not.
+function Get-MenuGames([array]$entries) {
+    $out = @()
+    for ($i = 0; $i -lt $entries.Count; $i++) {
+        $e = $entries[$i]
+        $p = [int]$e.ParentIndex
+        $isAddOn = ($e.Kind -eq 'AddOn') -and $p -ge 0 -and $p -lt $entries.Count -and
+                   $p -ne $i -and $entries[$p].Kind -ne 'AddOn'
+        if ($isAddOn) { continue }
+        $addOns = @()
+        for ($j = 0; $j -lt $entries.Count; $j++) {
+            $a = $entries[$j]
+            if ($j -eq $i -or $a.Kind -ne 'AddOn') { continue }
+            if ([int]$a.ParentIndex -ne $i) { continue }
+            $addOns += @{ Name=$a.GameName; Setup=(Get-DiscEntrySetup $entries $j) }
+        }
+        $out += @{ Name=$e.GameName; MatchName=$e.GameName
+                   Setup=(Get-DiscEntrySetup $entries $i); AddOns=@($addOns) }
+    }
+    return ,@($out)
 }
 
 function Test-IconInput([string]$path) {
@@ -472,24 +529,37 @@ function New-AutorunInf([string]$label,[string]$iconName,[bool]$menu,[string]$ou
 }
 
 function New-MenuHta([hashtable]$cfg,[string]$out) {
-    # cfg: GameName, MatchName, SetupExe, Buttons(ordered array), MusicFile, ManualFile, PanelSide
-    # Labels stay short on purpose: the game name is already on the artwork and in
-    # the window title, and a long one wrapped past the fixed 46px button height,
-    # which also threw off the panel's vertical centering below.
-    $btnDefs = [ordered]@{
-        Play    = @{ cls='play';    label='Play';                   fn='doPlay' }
-        Install = @{ cls='install'; label='Install';                fn='doInstall' }
-        Manual  = @{ cls='';        label='Game Manual';            fn='doManual' }
-        Extras  = @{ cls='';        label='Extras';                 fn='doExtras' }
-        Exit    = @{ cls='exit';    label='Exit';                   fn='doExit' }
-    }
-    $btns=@($cfg.Buttons)
-    $n=$btns.Count
-    $bh=46; $gap=12; $block=$n*$bh+($n-1)*$gap; $top=[int]((480-$block)/2); if($top -lt 20){$top=20}
+    # cfg: GameName (the disc's label), Games (array), Buttons (ordered array),
+    #      MusicFile, ManualFile, PanelSide, IconName, WindowBorder, ButtonStyle
+    #
+    # Each entry of Games is @{ Name; MatchName; Setup; AddOns=@(@{Name;Setup}) },
+    # built by Get-MenuGames. Setup paths are relative to the disc root.
+    #
+    # The panel used to be baked here as fixed HTML, one button per ticked option.
+    # It cannot be any more: the button list now depends on which screen the menu
+    # is showing, and that is only known while it runs. So the panel is rendered
+    # from data by the menu itself, and what this function emits is the data.
     $panelLeft = if($cfg.PanelSide -ieq 'Left'){20}else{490}
-    $btnHtml = ($btns | ForEach-Object {
-        $d=$btnDefs[$_]; "      <a id=`"btn_$_`" class=`"btn $($d.cls)`" onclick=`"$($d.fn)()`">$($d.label -replace ' ','&nbsp;')</a>"
-    }) -join "`r`n"
+
+    $menuGames = @($cfg.Games)
+    # A caller that still speaks the old single-game contract keeps working, so
+    # Preview and anything else calling this directly did not all have to change
+    # in the same commit.
+    if ($menuGames.Count -eq 0 -and $cfg.SetupExe) {
+        $mn = if ($cfg.MatchName) { $cfg.MatchName } else { $cfg.GameName }
+        $menuGames = @(@{ Name=$cfg.GameName; MatchName=$mn; Setup=$cfg.SetupExe; AddOns=@() })
+    }
+
+    $gamesJs = '[' + (($menuGames | ForEach-Object {
+        $addJs = '[' + (($_.AddOns | ForEach-Object {
+            '{n:"' + (ConvertTo-JsString $_.Name) + '",s:"' + (ConvertTo-JsString $_.Setup) + '"}'
+        }) -join ',') + ']'
+        $mn = if ($_.MatchName) { $_.MatchName } else { $_.Name }
+        '{n:"' + (ConvertTo-JsString $_.Name) + '",m:"' + (ConvertTo-JsString $mn) +
+        '",s:"' + (ConvertTo-JsString $_.Setup) + '",a:' + $addJs + '}'
+    }) -join ',') + ']'
+
+    $btnsJs = '[' + ((@($cfg.Buttons) | ForEach-Object { '"' + (ConvertTo-JsString $_) + '"' }) -join ',') + ']'
     # <bgsound> no longer plays MP3 in current MSHTML - it silently does nothing.
     # The menu renders in quirks mode (no doctype), so switching to a standards
     # document mode for <audio> would break the button box model. Use the Windows
@@ -507,9 +577,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
 <style>
   html,body{margin:0;padding:0;width:760px;height:480px;overflow:hidden;background:#04080a;font-family:'Bahnschrift','Segoe UI',Arial,sans-serif;}
   #stage{position:absolute;left:0;top:0;width:760px;height:480px;background:#04080a url('bg.png') no-repeat 0 0;%%STAGEBORDER%%}
-  .panel{position:absolute;left:%%PANELLEFT%%px;top:%%TOP%%px;width:250px;}
+  .panel{position:absolute;left:%%PANELLEFT%%px;top:20px;width:250px;}
+  /* Game names are user data and some are long. nowrap+hidden keeps one that got
+     past the length clip from growing the 46px button and throwing the panel's
+     vertical centering out. */
   .btn{display:block;width:250px;height:46px;margin:0 0 12px 0;line-height:46px;color:#e6ebef;text-decoration:none;
     font-size:15px;font-weight:600;letter-spacing:2px;text-transform:uppercase;cursor:pointer;background:#0a1519;
+    white-space:nowrap;overflow:hidden;
     %%BTNBORDER%%padding-left:16px;}
   .btn:hover{background:#12242b;border-color:#00bec8;color:#fff;}
   .btn.play{border-left-color:#35c46a;} .btn.play:hover{border-color:#66e090;}
@@ -528,8 +602,14 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var fso=new ActiveXObject("Scripting.FileSystemObject");
   var shell=new ActiveXObject("Shell.Application");
   var root="";
-  var GAME="%%GAME%%"; var GAMEMATCH="%%GAMEMATCH%%"; var SETUP="%%SETUP%%"; var MANUAL="%%MANUAL%%"; var MUSIC="%%MUSIC%%";
+  var GAMES=%%GAMES%%;       // [{n:name, m:registry match, s:setup path, a:[{n,s}] }]
+  var BTNS=%%BTNS%%;         // which of Play/Install/Manual/Extras/Exit the disc was built with
+  var MANUAL="%%MANUAL%%"; var MUSIC="%%MUSIC%%";
   var PREVIEW=%%PREVIEW%%;   // true only for the app's Preview - see refreshButtons
+  // Which screen is showing: -1 is the game chooser, otherwise an index into GAMES.
+  // A disc holding one game has nothing to choose, so it opens on that game and
+  // never shows a Back button.
+  var cur = (GAMES.length==1) ? 0 : -1;
   var player=null, musicOn=false;
   // Where this .hta actually lives. document.URL is always an absolute file: URL,
   // unlike app.commandLine - AutoRun can launch the menu with a path relative to the
@@ -562,8 +642,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       window.resizeTo(ow,oh); window.moveTo(Math.max(0,(screen.availWidth-ow)/2),Math.max(0,(screen.availHeight-oh)/2));
     }catch(e){}
     root=fso.GetParentFolderName(fso.GetParentFolderName(htaPath()));
-    setupHover(); document.onmousedown=startDrag; document.onmousemove=doDrag; document.onmouseup=endDrag;
-    refreshButtons();
+    document.onmousedown=startDrag; document.onmousemove=doDrag; document.onmouseup=endDrag;
+    show();   // renders the panel, which calls setupHover and refreshButtons itself
     initMusic();
   }
   function initMusic(){
@@ -620,22 +700,83 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     else  { e.style.color="#5d6c72"; e.style.cursor="default"; e.style.borderLeftColor="#39464a"; }
   }
   function off(id){ var e=document.getElementById(id); return (e && e.btnOff); }
+  function has(b){ for(var i=0;i<BTNS.length;i++){ if(BTNS[i]==b) return true; } return false; }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  // 250px of 15px uppercase with 2px letter-spacing runs out at about twenty
+  // characters. Clipping here rather than letting CSS do it keeps the ellipsis
+  // visible instead of shearing a letter in half; the full name is on the tooltip.
+  function clip(s){ s=String(s); return (s.length>20) ? s.substring(0,19)+"..." : s; }
+  function btnHtml(id,cls,label,fn,tip){
+    return '<a id="'+id+'" class="btn '+cls+'" onclick="'+fn+'" title="'+esc(tip||"")+'">'+
+           esc(clip(label)).replace(/ /g,"&nbsp;")+'</a>';
+  }
+  // The panel is centred on however many buttons this screen happens to have, so
+  // a three-game chooser and a six-button game screen both sit in the middle.
+  function setPanel(h){
+    var p=document.getElementById("pan");
+    p.innerHTML=h;
+    var n=p.getElementsByTagName("A").length;
+    var block=n*46+(n-1)*12, t=Math.floor((480-block)/2);
+    if(t<20) t=20;
+    p.style.top=t+"px";
+    setupHover();
+    refreshButtons();
+  }
+  function renderChooser(){
+    var h="";
+    for(var i=0;i<GAMES.length;i++){ h+=btnHtml("btn_game_"+i,"play",GAMES[i].n,"pick("+i+")",GAMES[i].n); }
+    if(has("Exit")) h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
+    setPanel(h);
+  }
+  function renderGame(){
+    var g=GAMES[cur], h="";
+    if(has("Play"))    h+=btnHtml("btn_Play","play","Play","doPlay()","");
+    if(has("Install")){
+      h+=btnHtml("btn_Install","install","Install","doInstall()","Install "+g.n);
+      // Add-ons sit directly under Install in the same colour, because that is
+      // what they are - another installer, for this game.
+      for(var i=0;i<g.a.length;i++){
+        h+=btnHtml("btn_addon_"+i,"install",g.a[i].n,"doAddOn("+i+")","Install "+g.a[i].n);
+      }
+    }
+    if(has("Manual"))  h+=btnHtml("btn_Manual","","Game Manual","doManual()","");
+    if(has("Extras"))  h+=btnHtml("btn_Extras","","Extras","doExtras()","");
+    if(GAMES.length>1) h+=btnHtml("btn_Back","","Back","goBack()","Back to the game list");
+    if(has("Exit"))    h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
+    setPanel(h);
+  }
+  function show(){ if(cur<0) renderChooser(); else renderGame(); }
+  function pick(i){ cur=i; show(); }
+  function goBack(){ cur=-1; show(); }
   function refreshButtons(){
     if(!root) return;
     // In preview the game files are not beside the menu, so the existence checks
     // would grey out buttons that will be fine on the real disc. Show them live.
-    setEnabled("btn_Install", (PREVIEW || (SETUP!="" && fso.FileExists(fso.BuildPath(root,SETUP)))),
+    if(cur<0){
+      for(var i=0;i<GAMES.length;i++){
+        setEnabled("btn_game_"+i, (PREVIEW || fso.FileExists(fso.BuildPath(root,GAMES[i].s))),
+                   "This game's installer is not on the disc.");
+      }
+      return;
+    }
+    var g=GAMES[cur];
+    setEnabled("btn_Install", (PREVIEW || (g.s!="" && fso.FileExists(fso.BuildPath(root,g.s)))),
                "The installer is not next to this menu.");
+    for(var j=0;j<g.a.length;j++){
+      setEnabled("btn_addon_"+j, (PREVIEW || fso.FileExists(fso.BuildPath(root,g.a[j].s))),
+                 "This add-on's installer is not on the disc.");
+    }
     setEnabled("btn_Manual", (PREVIEW || (MANUAL!="" && fso.FileExists(fso.BuildPath(root,"Extras\\"+MANUAL)))),
                "The manual is not on this disc.");
     setEnabled("btn_Extras", (PREVIEW || fso.FolderExists(fso.BuildPath(root,"Extras"))),
                "There is no Extras folder on this disc.");
     // Play is registry-based, so it tells the truth even in preview.
-    setEnabled("btn_Play", (findGame()!=null),
-               GAME+" is not installed yet - use Install first.");
+    setEnabled("btn_Play", (findGame(g.m)!=null),
+               g.n+" is not installed yet - use Install first.");
     if(PREVIEW){
       var ids=["btn_Install","btn_Manual","btn_Extras"];
-      for(var i=0;i<ids.length;i++){ var e=document.getElementById(ids[i]);
+      for(var k=0;k<g.a.length;k++){ ids[ids.length]="btn_addon_"+k; }
+      for(var m=0;m<ids.length;m++){ var e=document.getElementById(ids[m]);
         if(e) e.title="Preview only - this works on the built disc"; }
     }
   }
@@ -658,7 +799,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     }, 60);
   }
   function doInstall(){ if(off("btn_Install")) return; if(PREVIEW){ previewStop("Install"); return; }
-    launchWithStatus("btn_Install","Starting the installer...<br>Reading from disc can take a minute.",SETUP,false); }
+    launchWithStatus("btn_Install","Starting the installer...<br>Reading from disc can take a minute.",GAMES[cur].s,false); }
+  function doAddOn(i){ var id="btn_addon_"+i; if(off(id)) return;
+    var a=GAMES[cur].a[i];
+    if(PREVIEW){ previewStop(a.n); return; }
+    launchWithStatus(id,"Starting "+esc(a.n)+"...<br>Reading from disc can take a minute.",a.s,false); }
   function doManual(){ if(off("btn_Manual")) return; if(PREVIEW){ previewStop("Game Manual"); return; }
     launchWithStatus("btn_Manual","Opening the manual...","Extras\\"+MANUAL,false); }
   function doExtras(){ if(off("btn_Extras")) return; if(PREVIEW){ previewStop("Extras"); return; } openItem("Extras",true); }
@@ -668,22 +813,26 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // GOG's registry gameName drops or changes punctuation ("The Witcher Enhanced Edition
   // Director's Cut" vs "The Witcher - Enhanced Edition"), so compare on letters+digits only.
   function norm(s){ return String(s).toLowerCase().replace(/[^a-z0-9]+/g,""); }
-  function nameHit(nm){ var a=norm(nm), b=norm(GAMEMATCH);
+  function nameHit(nm,match){ var a=norm(nm), b=norm(match);
     if(!a||!b) return false;
     if(a.indexOf(b)>=0) return true;
     if(a.length>=6 && b.indexOf(a)>=0) return true;   // registry name shorter than ours
     return false; }
-  function findGame(){ try{ var HKLM=0x80000002; var svc=GetObject("winmgmts:\\\\.\\root\\default"); var reg=svc.Get("StdRegProv");
+  // Takes the name to match rather than reading a global: on a multi-game disc
+  // each game asks this about itself, and Play has to light up for the ones that
+  // are installed while staying grey for the ones that are not.
+  function findGame(match){ try{ var HKLM=0x80000002; var svc=GetObject("winmgmts:\\\\.\\root\\default"); var reg=svc.Get("StdRegProv");
     var bases=["SOFTWARE\\WOW6432Node\\GOG.com\\Games","SOFTWARE\\GOG.com\\Games"];
     for(var b=0;b<bases.length;b++){ var mi=reg.Methods_.Item("EnumKey").InParameters.SpawnInstance_(); mi.hDefKey=HKLM; mi.sSubKeyName=bases[b];
       var mo=reg.ExecMethod_("EnumKey",mi); if(mo.ReturnValue!=0||mo.sNames==null)continue; var ids=new VBArray(mo.sNames).toArray();
       for(var k=0;k<ids.length;k++){ var sub=bases[b]+"\\"+ids[k]; var nm=regGet(reg,HKLM,sub,"gameName");
-        if(nm && nameHit(nm)){ var exe=regGet(reg,HKLM,sub,"exe");
+        if(nm && nameHit(nm,match)){ var exe=regGet(reg,HKLM,sub,"exe");
           if(exe && fso.FileExists(exe))return exe; var p=regGet(reg,HKLM,sub,"path"), ef=regGet(reg,HKLM,sub,"exeFile");
           if(p&&ef&&fso.FileExists(fso.BuildPath(p,ef)))return fso.BuildPath(p,ef); } } } }catch(e){} return null; }
   function doPlay(){ if(off("btn_Play")) return;
-    var exe=findGame(); if(exe){ try{ shell.ShellExecute(exe,"",fso.GetParentFolderName(exe),"open",1); window.close(); }catch(e){alert(e.message);} }
-    else { alert(GAME+" isn't installed yet.\n\nUse INSTALL first, then PLAY."); } }
+    var g=GAMES[cur];
+    var exe=findGame(g.m); if(exe){ try{ shell.ShellExecute(exe,"",fso.GetParentFolderName(exe),"open",1); window.close(); }catch(e){alert(e.message);} }
+    else { alert(g.n+" isn't installed yet.\n\nUse INSTALL first, then PLAY."); } }
   // Re-check when the menu regains focus, so Play lights up after the installer finishes.
   window.onfocus = refreshButtons;
   document.onkeydown=function(){ if(window.event.keyCode==27) window.close(); };
@@ -694,14 +843,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     <div id="x" onclick="doExit()">X</div>
     <div id="mute" title="Music on / off">&#9835;</div>
     <div id="status"></div>
-    <div class="panel">
-%%BUTTONS%%
-    </div>
+    <div class="panel" id="pan"></div>
   </div>
 </body>
 </html>
 '@
-    $matchName = $cfg.MatchName; if ([string]::IsNullOrWhiteSpace($matchName)) { $matchName = $cfg.GameName }
     # Quirks-mode box model: width includes padding+border, so dropping the 1px
     # outline does not change the button footprint.
     $stageBorder = if ($cfg.WindowBorder) { 'border:1px solid #00a6b0;' } else { 'border:0;' }
@@ -722,13 +868,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
                  Replace('%%STAGEBORDER%%',$stageBorder).
                  Replace('%%BTNBORDER%%',$btnBorder).
                  Replace('%%TITLE%%',(ConvertTo-HtmlText $cfg.GameName)).
-                 Replace('%%TOP%%',"$top").
                  Replace('%%PANELLEFT%%',"$panelLeft").
-                 Replace('%%GAME%%',(ConvertTo-JsString $cfg.GameName)).
-                 Replace('%%GAMEMATCH%%',(ConvertTo-JsString $matchName)).
-                 Replace('%%SETUP%%',(ConvertTo-JsString $cfg.SetupExe)).
+                 Replace('%%GAMES%%',$gamesJs).
+                 Replace('%%BTNS%%',$btnsJs).
                  Replace('%%MANUAL%%',(ConvertTo-JsString $cfg.ManualFile)).
-                 Replace('%%BUTTONS%%',$btnHtml).
                  Replace('%%MUSIC%%',$musicJs)
     Clear-ReadOnly $out; Set-Content -LiteralPath $out -Value $html -Encoding ASCII
 }
@@ -857,7 +1000,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # wrote it - two different things, deliberately two different keys. This
         # merge is why: the schema went to 2 for the games list while the app was
         # independently at 0.2.0, and one field could not have said both.
-        Version      = 2
+        Version      = 3
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -865,7 +1008,15 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # build still opens in 0.1.x instead of failing with no explanation.
         SourceFolder = $(if ($games.Count) { $games[0].Folder }    else { $null })
         GameName     = $(if ($games.Count) { $games[0].GameName } else { $null })
-        Games        = @($games | ForEach-Object { [ordered]@{ Folder=$_.Folder; GameName=$_.GameName } })
+        # Version 3 adds Kind and Parent. Parent is an index into this same array
+        # rather than a name, because two GOG folders can report the same
+        # ProductName and a name would then bind an add-on to the wrong game.
+        # A version 2 file has neither key, and reads back as all-games-no-add-ons,
+        # which is exactly what a version 2 disc was.
+        Games        = @($games | ForEach-Object {
+                            [ordered]@{ Folder=$_.Folder; GameName=$_.GameName
+                                        Kind=$(if($_.Kind -eq 'AddOn'){'AddOn'}else{'Game'})
+                                        Parent=[int]$_.ParentIndex } })
         Label        = $s.Label
         IconPath     = $s.IconPath
         IconIsIco    = [bool]$s.IconIsIco
@@ -891,16 +1042,26 @@ function Save-Project([hashtable]$s,[string]$outDir) {
 function Import-Project([string]$jsonPath) {
     try {
         $j = Get-Content -Raw -LiteralPath $jsonPath | ConvertFrom-Json
-        # v1 stored one game in SourceFolder; v2 stores a Games array. Read either
-        # and always hand back a list, so nothing downstream has to know which
-        # version it came from.
-        $folders = @()
+        # v1 stored one game in SourceFolder; v2 added a Games array; v3 gave each
+        # entry a Kind and a Parent. Read any of them and always hand back the same
+        # list of entries, so nothing downstream has to know which version it came
+        # from. An older file simply yields entries that are all plain games.
+        $entries = @()
         if ($j.PSObject.Properties.Name -contains 'Games' -and $j.Games) {
-            $folders = @($j.Games | ForEach-Object { $_.Folder } | Where-Object { $_ })
+            foreach ($g in @($j.Games)) {
+                if (-not $g -or -not $g.Folder) { continue }
+                $kind = 'Game'; $parent = -1
+                if ($g.PSObject.Properties.Name -contains 'Kind' -and $g.Kind -eq 'AddOn') { $kind = 'AddOn' }
+                if ($g.PSObject.Properties.Name -contains 'Parent') { $parent = [int]$g.Parent }
+                $entries += ,@{ Folder=[string]$g.Folder; Kind=$kind; ParentIndex=$parent }
+            }
         }
-        if ($folders.Count -eq 0 -and $j.SourceFolder) { $folders = @($j.SourceFolder) }
+        if ($entries.Count -eq 0 -and $j.SourceFolder) {
+            $entries = @(@{ Folder=[string]$j.SourceFolder; Kind='Game'; ParentIndex=-1 })
+        }
+        $folders = @($entries | ForEach-Object { $_.Folder })
         return @{
-            SourceFolder=$j.SourceFolder; GameFolders=$folders
+            SourceFolder=$j.SourceFolder; GameFolders=$folders; GameEntries=@($entries)
             Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
@@ -923,7 +1084,11 @@ function Import-DiscFolder([string]$discDir) {
     $icon  = 'disc.ico'; if ($text -match '(?im)^\s*icon\s*=\s*(.+?)\s*$') { $icon = $Matches[1] }
     $menu  = ($text -match '(?im)^\s*shellexecute\s*=')
 
+    # A disc folder carries no record of which installer was an add-on, so
+    # everything comes back as a plain game. Only reached when the disc has no
+    # project file beside it, which every build since 0.1.0 writes.
     $r = @{ SourceFolder=$discDir; GameFolders=@($discDir)
+            GameEntries=@(@{ Folder=$discDir; Kind='Game'; ParentIndex=-1 })
             Label=$label; IconPath=(Join-Path $discDir $icon); IconIsIco=$true
             Menu=$menu; BgPath=$null; BgAsIs=$true; PanelSide='Right'; MusicFile=$null
             Buttons=@(); ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
@@ -937,10 +1102,23 @@ function Import-DiscFolder([string]$discDir) {
     $hta = Join-Path $discDir 'AUTORUN\menu.hta'
     if ($menu -and (Test-Path $hta)) {
         $h = Get-Content -Raw -LiteralPath $hta
-        $map = @{ doPlay='Play'; doInstall='Install'; doManual='Manual'; doExtras='Extras'; doExit='Exit' }
+        # Menus now carry their button list as data (var BTNS=[...]) because the
+        # panel is rendered while the menu runs, so there are no <a> tags in the
+        # file to scrape. Discs built before that still have them, and this is the
+        # path for a disc with no project file beside it - which is exactly the old
+        # disc that needs the old reader. Try the data first, fall back to scraping.
+        $known = @('Play','Install','Manual','Extras','Exit')
         $found = @()
-        foreach ($m in [regex]::Matches($h,'class="btn[^"]*"\s+onclick="(do\w+)\(\)"')) {
-            $k=$m.Groups[1].Value; if ($map.ContainsKey($k) -and ($found -notcontains $map[$k])) { $found += $map[$k] }
+        if ($h -match 'var BTNS=\[([^\]]*)\]') {
+            foreach ($m in [regex]::Matches($Matches[1],'"([^"]+)"')) {
+                $k = $m.Groups[1].Value
+                if ($known -contains $k -and $found -notcontains $k) { $found += $k }
+            }
+        } else {
+            $map = @{ doPlay='Play'; doInstall='Install'; doManual='Manual'; doExtras='Extras'; doExit='Exit' }
+            foreach ($m in [regex]::Matches($h,'class="btn[^"]*"\s+onclick="(do\w+)\(\)"')) {
+                $k=$m.Groups[1].Value; if ($map.ContainsKey($k) -and ($found -notcontains $map[$k])) { $found += $map[$k] }
+            }
         }
         $r.Buttons = $found
         if ($h -match '\.panel\{position:absolute;left:(\d+)px') { $r.PanelSide = if([int]$Matches[1] -lt 300){'Left'}else{'Right'} }
@@ -1026,18 +1204,18 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         }
         New-Item -ItemType Directory -Force -Path $stage,"$stage\AUTORUN" | Out-Null
 
-        # One game keeps the original layout - installer at the disc root, exactly
-        # as every disc built before this. Several games each get their own folder
-        # under Games\, because a flat root would be unreadable and the menu needs
-        # to be able to name one installer without ambiguity.
+        # Where each entry goes is Get-DiscEntryFolder's decision, not this loop's -
+        # the menu asks the same function the same question later.
         $stageRoot = [IO.Path]::GetPathRoot($stage)
         for ($gi = 0; $gi -lt $games.Count; $gi++) {
             $g = $games[$gi]
-            if ($games.Count -eq 1) { $destDir = $stage }
+            $rel = Get-DiscEntryFolder $games $gi
+            if ([string]::IsNullOrEmpty($rel)) { $destDir = $stage }
             else {
-                $destDir = Join-Path $stage (Join-Path 'Games' (Get-GameFolderName ($gi+1) $g.GameName))
+                $destDir = Join-Path $stage $rel
                 New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-                & $log "  $($g.GameName) -> $(Split-Path $destDir -Leaf)"
+                $what = if ($g.Kind -eq 'AddOn') { 'add-on' } else { 'game' }
+                & $log "  $what : $($g.GameName) -> $(Split-Path $destDir -Leaf)"
             }
             # Hardlinks are per-volume, so this is decided per game: two games on
             # different drives can still have one linked and the other copied.
@@ -1118,14 +1296,12 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
             }
         }
         & $log "Generating autorun menu (menu.hta)..."
-        # The menu still drives one game - the chooser arrives with the UI that can
-        # actually create a multi-game disc. Until then it points at the first, via
-        # the same relative path the disc really has, since the HTA resolves SETUP
-        # with fso.BuildPath(root, SETUP) and copes with a subfolder either way.
-        $mg = $games[0]
-        $mgSetup = if ($games.Count -eq 1) { $mg.SetupExe.Name }
-                   else { Join-Path 'Games' (Join-Path (Get-GameFolderName 1 $mg.GameName) $mg.SetupExe.Name) }
-        New-MenuHta @{ GameName=$s.Label; MatchName=$mg.GameName; SetupExe=$mgSetup; Buttons=$s.Buttons;
+        $menuGames = Get-MenuGames $games
+        if ($menuGames.Count -gt 1) { & $log "  chooser: $($menuGames.Count) games" }
+        foreach ($mgm in $menuGames) {
+            if ($mgm.AddOns.Count) { & $log "  $($mgm.Name): $($mgm.AddOns.Count) add-on installer(s)" }
+        }
+        New-MenuHta @{ GameName=$s.Label; Games=$menuGames; Buttons=$s.Buttons;
                        MusicFile=$musicName; ManualFile=$manualName; PanelSide=$s.PanelSide; IconName=$icoName
                        WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle } (Join-Path $stage 'AUTORUN\menu.hta')
     }
@@ -1467,8 +1643,14 @@ function New-PreviewMenu {
         Copy-Item $state.MusicFile "$prev\AUTORUN\$musicName" -Force
     }
 
-    $setupName = if ($first) { $first.SetupExe.Name } else { 'setup.exe' }
-    $matchName = if ($first) { $first.GameName } else { $title }
+    # The preview shows the chooser and the add-on buttons exactly as the disc
+    # will, which is the point of previewing before a build that takes minutes.
+    # With nothing picked yet there is still a menu to look at, so invent one
+    # entry rather than render an empty panel.
+    $prevGames = Get-MenuGames (Get-Games)
+    if ($prevGames.Count -eq 0) {
+        $prevGames = @(@{ Name=$title; MatchName=$title; Setup='setup.exe'; AddOns=@() })
+    }
     # Stage the icon too, so the preview's taskbar icon matches the built disc.
     $prevIco = Get-DiscIconName $title
     if ($state.IconPath -and (Test-Path $state.IconPath) -and $state.IconIsIco) {
@@ -1476,7 +1658,7 @@ function New-PreviewMenu {
     } elseif ($state.IconPath -and (Test-Path $state.IconPath)) {
         try { Convert-ToIco $state.IconPath (Join-Path $prev "AUTORUN\$prevIco") } catch {}
     }
-    New-MenuHta @{ GameName=$title; MatchName=$matchName; SetupExe=$setupName; Buttons=$btns
+    New-MenuHta @{ GameName=$title; Games=$prevGames; Buttons=$btns
                    MusicFile=$musicName; ManualFile=''; PanelSide=[string]$cmbSide.SelectedItem; IconName=$prevIco
                    WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem
                    Preview=$true } "$prev\AUTORUN\menu.hta"
