@@ -1398,7 +1398,15 @@ $form=New-Object System.Windows.Forms.Form
 # The version belongs where it can be read off a screenshot without being asked
 # for, since that is how it arrives in a bug report.
 $form.Text="DiscWright $APP_VERSION"
-$form.Size=New-Object System.Drawing.Size(700,1054)
+# 1054 is what the controls need. Opening at that height regardless is how a
+# window ends up with its Build button under the taskbar: 1080p leaves 1032
+# usable, and a 768px laptop far less. Open at whatever fits and let AutoScroll
+# cover the difference - the alternative is a window that cannot be used at all
+# on the screen it opened on.
+$formWanted = 1054
+$formUsable = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height
+$form.Size=New-Object System.Drawing.Size(700,([Math]::Min($formWanted,$formUsable)))
+$form.MinimumSize=New-Object System.Drawing.Size(700,420)
 $form.StartPosition='CenterScreen'
 $form.Font=New-Object System.Drawing.Font('Segoe UI',9)
 $form.AutoScroll=$true
