@@ -1,4 +1,4 @@
-# Pester tests for DiscWright.
+﻿# Pester tests for DiscWright.
 #
 #   Invoke-Pester tests
 #   Invoke-Pester tests -ExcludeTagFilter Build     # skip the slow ISO builds
@@ -1116,3 +1116,89 @@ Describe 'Removing an entry renumbers the parents' {
         @($out).Count | Should -Be 0
     }
 }
+
+# ---------------------------------------------------------------------------
+# Real GOG installers
+#
+# Everything above builds its fixtures from sparse files with no version
+# resource, so the name always comes from the filename fallback. These run
+# against actual downloads when the machine has them and skip when it does not,
+# which is every CI runner. They read metadata only - nothing is executed.
+# ---------------------------------------------------------------------------
+
+BeforeDiscovery {
+    # DISCWRIGHT_GOG_DIR first, so this can be pointed at wherever the downloads
+    # actually live - and so the no-installers path can be exercised on a machine
+    # that does have them.
+    $script:GogDir = @(
+        $env:DISCWRIGHT_GOG_DIR
+        'C:\Program Files (x86)\GOG Galaxy\Games\Offline Installers'
+        "$env:USERPROFILE\Downloads\GOG"
+        'C:\GOG Offline Installers'
+    ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+    $script:GogFolders = @()
+    if ($script:GogDir) {
+        $script:GogFolders = @(Get-ChildItem $script:GogDir -Directory -EA SilentlyContinue |
+            Where-Object { @(Get-ChildItem $_.FullName -Filter 'setup_*.exe' -File -EA SilentlyContinue).Count } |
+            ForEach-Object { $_.FullName })
+    }
+
+    # -ForEach @() does not produce an empty Describe, it fails the whole FILE at
+    # discovery - so on a runner with no GOG downloads every test in this file
+    # would be reported as an error rather than a skip. Never hand it an empty
+    # list: one placeholder case, skipped, says "not run here" instead.
+    $script:GogCases = if ($script:GogFolders.Count) { $script:GogFolders }
+                       else { @('(no GOG downloads on this machine)') }
+}
+
+Describe 'Reading a real GOG download' -Tag 'Real' -Skip:($script:GogFolders.Count -eq 0) {
+
+    It 'detects <_>' -ForEach $script:GogCases {
+        $info = Get-GameInfo $_
+        $info.Ok | Should -BeTrue -Because "$_ holds a setup_*.exe"
+        $info.GameName | Should -Not -BeNullOrEmpty
+        $info.TotalBytes | Should -BeGreaterThan 0
+    }
+
+    It 'trims the padding Inno leaves on ProductName in <_>' -ForEach $script:GogCases {
+        # Inno pads version strings with trailing spaces. Untrimmed they leak
+        # into the disc folder name ("Alan Wake                    Disc").
+        $info = Get-GameInfo $_
+        $info.GameName | Should -Be $info.GameName.Trim()
+        $info.GameName | Should -Not -Match '\s{2,}'
+    }
+
+    It 'produces a usable disc folder name for <_>' -ForEach $script:GogCases {
+        $n = Get-GameFolderName 1 (Get-GameInfo $_).GameName
+        $n | Should -Not -Match '[\\/:*?"<>|]'
+        $n | Should -Not -Match '\.$'
+        $n.Length | Should -BeLessOrEqual 53
+    }
+
+    It 'claims every .bin part of <_> and nothing else' -ForEach $script:GogCases {
+        # A real folder holds goodies (.zip) and often patch_*.exe alongside the
+        # installer. Only the installer's own numbered parts belong on the disc.
+        $info = Get-GameInfo $_
+        $stem = [IO.Path]::GetFileNameWithoutExtension($info.SetupExe.Name) + '-'
+        $onDisk = @(Get-ChildItem $_ -Filter '*.bin' -File -EA SilentlyContinue |
+                    Where-Object { $_.Name.StartsWith($stem,[StringComparison]::OrdinalIgnoreCase) })
+        $info.Files.Count | Should -Be ($onDisk.Count + 1)
+        @($info.Files | Where-Object { $_.Extension -eq '.zip' }).Count | Should -Be 0
+    }
+
+    It 'does not mistake a patch_*.exe for the installer in <_>' -ForEach $script:GogCases {
+        # GOG ships incremental updates as patch_<game>_<from>_to_<to>.exe, and
+        # some are larger than the setup stub they sit next to - so "largest exe
+        # wins" would pick the patch if the filter ever loosened.
+        (Get-GameInfo $_).SetupExe.Name | Should -BeLike 'setup_*'
+    }
+
+    It 'recommends media that actually holds <_>' -ForEach $script:GogCases {
+        $info = Get-GameInfo $_
+        $rec = Get-MediaRec $info.TotalBytes
+        $rec.Text | Should -Not -BeNullOrEmpty
+        $rec.Fit  | Should -BeTrue -Because 'BD-R XL is the largest and everything should fit something'
+    }
+}
+
