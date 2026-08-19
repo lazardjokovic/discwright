@@ -16,11 +16,21 @@ between minor versions.
   chooser; picking one leads to its own Play / Install / Manual / Extras menu, with Back
   to return. A disc with one game behaves exactly as before, chooser and Back button
   included: it has nothing to choose, so it shows neither.
-- **Add-ons get their own button next to Install.** An entry can be marked as an add-on
-  — DLC, an expansion, a mod that ships as its own installer — and told which game it
-  belongs to. It then appears as an extra Install button on that game's screen instead
-  of in the chooser, which is where a piece of DLC does not belong. Until now the only
-  place for a second installer was Extras, where it was a file in a folder.
+- **Add-ons get their own button next to Install.** DLC, an expansion, a GOG patch or a
+  mod that ships as its own installer can be added and told which game it belongs to. It
+  then appears as an extra Install button on that game's screen instead of in the
+  chooser, which is where a piece of DLC does not belong. Until now the only place for a
+  second installer was Extras, where it was a file in a folder.
+
+  An add-on is picked as a **file**, not a folder, and may be **any `.exe`** — the
+  `setup_*.exe` rule exists to recognise a GOG game folder, and applying it to add-ons
+  excluded the two things people actually have. GOG ships patches as `patch_*.exe`, and a
+  mod installer is named whatever its author chose. Several can be added at once.
+
+  Add-ons are named from their filename rather than from the installer's version
+  information, because every GOG patch reports the ProductName of the game it patches —
+  all four Hollow Knight patches call themselves "Hollow Knight", which would have put
+  four identical buttons on the disc. The name can be edited, and the edit is saved.
 
   These two are one feature. A DLC and a second game are both another installer that
   needs its own entry in the menu; the only difference is where the entry is shown.

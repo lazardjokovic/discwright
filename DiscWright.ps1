@@ -167,7 +167,19 @@ function Get-GameInfo([string]$folder) {
         return $info
     }
     $exe = $exes[0]
+    Set-InstallerFacts $info $exe
+    if ($info.MissingParts.Count -eq 0 -and $exes.Count -gt 1) {
+        # Several installers in one folder is normal (base game plus DLC). Say which
+        # one was picked, so a wrong guess is visible before the disc is burned.
+        $info.Warning = "$($exes.Count) installers in this folder - using the largest, $($exe.Name)."
+    }
+    return $info
+}
 
+# Everything true of an installer once one has been chosen: its parts, whether the
+# download finished, its name and its size. Shared, because an add-on is described
+# exactly the same way - the only difference is how the .exe was picked.
+function Set-InstallerFacts([hashtable]$info,[System.IO.FileInfo]$exe) {
     # Parts belong to ONE installer and are named "<installer>-1.bin", "-2.bin"...
     # Taking every setup_*.bin in the folder swept in the parts of a DLC or of a
     # second game stored alongside, and wrote them to the disc as if they belonged
@@ -175,7 +187,7 @@ function Get-GameInfo([string]$folder) {
     # plain strings, never wildcards, because GOG names are full of brackets and
     # dots that -like and -match would read as syntax.
     $stem = $exe.BaseName + '-'
-    $bins = @(Get-ChildItem $folder -Filter '*.bin' -File -ErrorAction SilentlyContinue |
+    $bins = @(Get-ChildItem $exe.DirectoryName -Filter '*.bin' -File -ErrorAction SilentlyContinue |
               Where-Object { $_.Name.StartsWith($stem,[StringComparison]::OrdinalIgnoreCase) } |
               Sort-Object Name)
 
@@ -193,22 +205,61 @@ function Get-GameInfo([string]$folder) {
     if ($info.MissingParts.Count -gt 0) {
         $info.Warning = 'INCOMPLETE: installer part(s) ' + (($info.MissingParts | ForEach-Object { "-$_" }) -join ', ') +
                         ' are missing - the download looks unfinished.'
-    } elseif ($exes.Count -gt 1) {
-        # Several installers in one folder is normal (base game plus DLC). Say which
-        # one was picked, so a wrong guess is visible before the disc is burned.
-        $info.Warning = "$($exes.Count) installers in this folder - using the largest, $($exe.Name)."
     }
 
-    $name = $exe.VersionInfo.ProductName
-    if ([string]::IsNullOrWhiteSpace($name)) { $name = ($exe.BaseName -replace '^setup_','' -replace '_',' ' -replace '\s*\d.*$','') }
-    # Inno pads VersionInfo strings with trailing spaces - trim or they leak into
-    # folder names ("...Edition                    Disc").
-    $name = $name.Trim()
+    if ($info.Kind -eq 'AddOn') {
+        $name = Get-AddOnName $exe.Name
+    } else {
+        $name = $exe.VersionInfo.ProductName
+        if ([string]::IsNullOrWhiteSpace($name)) { $name = ($exe.BaseName -replace '^setup_','' -replace '_',' ' -replace '\s*\d.*$','') }
+        # Inno pads VersionInfo strings with trailing spaces - trim or they leak into
+        # folder names ("...Edition                    Disc").
+        $name = $name.Trim()
+    }
     $info.Ok=$true; $info.SetupExe=$exe; $info.Files=@($exe)+@($bins); $info.GameName=$name
     $info.Folder = $exe.DirectoryName
     $info.TotalBytes = ($info.Files | Measure-Object Length -Sum).Sum
     $plural = if ($info.Files.Count -eq 1) { 'file' } else { 'files' }
     $info.Msg = "Detected: $name  ($($info.Files.Count) $plural, $(Format-Size $info.TotalBytes))"
+}
+
+# An add-on is named from its filename, never from the installer's ProductName.
+# Every GOG patch reports the ProductName of the game it patches - all four
+# Hollow Knight patches call themselves "Hollow Knight" - so a disc built that way
+# would show four identical buttons and no way to tell which was which. The
+# filename is the only thing that distinguishes them.
+function Get-AddOnName([string]$fileName) {
+    $raw = [IO.Path]::GetFileNameWithoutExtension($fileName)
+    $n = $raw
+    # patch_<game>_<from>_to_<to>: the version being moved TO is what tells two
+    # patches apart, and it belongs at the front where the button will not clip it.
+    if     ($n -match '^patch_.+_to_(.+)$') { $n = 'Update ' + $Matches[1] }
+    elseif ($n -match '^setup_(.+)$')       { $n = $Matches[1] }
+    $n = (($n -replace '_',' ') -replace '\s+',' ').Trim()
+    # A filename that is nothing but underscores leaves an empty label, and a
+    # button with no text is a button nobody can identify. Fall back rather than
+    # produce one.
+    if ([string]::IsNullOrWhiteSpace($n)) { $n = $raw.Trim() }
+    if ([string]::IsNullOrWhiteSpace($n)) { $n = 'Add-on' }
+    return $n
+}
+
+# An add-on is picked as a single file rather than a folder: a patch or a DLC
+# usually sits in the same folder as the game it belongs to, so pointing at the
+# folder would just find the game again. Any .exe is accepted here - the
+# setup_*.exe rule exists to identify a GOG game folder, and an add-on's identity
+# comes from the list it is added to, not from its filename. That is what lets a
+# mod or an overhaul, which is never named setup_*, go on the disc at all.
+function Get-AddOnInfo([string]$exePath) {
+    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; Msg=''; TotalBytes=0; Folder=$null
+               Warning=''; MissingParts=@(); Kind='AddOn'; ParentIndex=-1 }
+    if (-not (Test-Path $exePath -PathType Leaf)) { $info.Msg='File not found.'; return $info }
+    $exe = Get-Item -LiteralPath $exePath
+    if ($exe.Extension -ne '.exe') {
+        $info.Msg = "An add-on has to be an installer (.exe). '$($exe.Name)' is not one - loose files belong in step 5, Extra content."
+        return $info
+    }
+    Set-InstallerFacts $info $exe
     return $info
 }
 
@@ -744,9 +795,22 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   function setPanel(h){
     var p=document.getElementById("pan");
     p.innerHTML=h;
-    var n=p.getElementsByTagName("A").length;
-    var block=n*46+(n-1)*12, t=Math.floor((480-block)/2);
-    if(t<20) t=20;
+    var a=p.getElementsByTagName("A"), n=a.length;
+    // 46px buttons with 12px between them fill a 480px window at eight, and a
+    // game with four add-ons already needs eight. Rather than let the ninth draw
+    // off the bottom edge where nothing can reach it, the buttons shrink to fit.
+    var bh=46, gap=12, avail=440;
+    if(n*bh+(n-1)*gap > avail){
+      gap = 8;
+      bh = Math.floor((avail-(n-1)*gap)/n);
+      if(bh > 46) bh = 46;
+      if(bh < 22) bh = 22;
+      for(var i=0;i<n;i++){
+        a[i].style.height=bh+"px"; a[i].style.lineHeight=bh+"px"; a[i].style.marginBottom=gap+"px";
+      }
+    }
+    var block=n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
+    if(t<10) t=10;
     p.style.top=t+"px";
     setupHover();
     refreshButtons();
@@ -1042,8 +1106,14 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # ProductName and a name would then bind an add-on to the wrong game.
         # A version 2 file has neither key, and reads back as all-games-no-add-ons,
         # which is exactly what a version 2 disc was.
+        # Setup is the full path to the chosen installer, not just its folder. An
+        # add-on shares a folder with the game it belongs to - a patch sits beside
+        # the setup it patches - so re-detecting from the folder alone would find
+        # the game again and quietly turn the add-on into a second copy of it.
+        # GameName is stored because it can be edited, and the edit has to survive.
         Games        = @($games | ForEach-Object {
                             [ordered]@{ Folder=$_.Folder; GameName=$_.GameName
+                                        Setup=$(if($_.SetupExe){$_.SetupExe.FullName}else{$null})
                                         Kind=$(if($_.Kind -eq 'AddOn'){'AddOn'}else{'Game'})
                                         Parent=[int]$_.ParentIndex } })
         Label        = $s.Label
@@ -1079,14 +1149,17 @@ function Import-Project([string]$jsonPath) {
         if ($j.PSObject.Properties.Name -contains 'Games' -and $j.Games) {
             foreach ($g in @($j.Games)) {
                 if (-not $g -or -not $g.Folder) { continue }
-                $kind = 'Game'; $parent = -1
+                $kind = 'Game'; $parent = -1; $setup = $null; $nm = $null
                 if ($g.PSObject.Properties.Name -contains 'Kind' -and $g.Kind -eq 'AddOn') { $kind = 'AddOn' }
                 if ($g.PSObject.Properties.Name -contains 'Parent') { $parent = [int]$g.Parent }
-                $entries += ,@{ Folder=[string]$g.Folder; Kind=$kind; ParentIndex=$parent }
+                if ($g.PSObject.Properties.Name -contains 'Setup')  { $setup = [string]$g.Setup }
+                if ($g.PSObject.Properties.Name -contains 'GameName') { $nm = [string]$g.GameName }
+                $entries += ,@{ Folder=[string]$g.Folder; Kind=$kind; ParentIndex=$parent; Setup=$setup; Name=$nm }
             }
         }
         if ($entries.Count -eq 0 -and $j.SourceFolder) {
-            $entries = @(@{ Folder=[string]$j.SourceFolder; Kind='Game'; ParentIndex=-1 })
+            $entries = @(@{ Folder=[string]$j.SourceFolder; Kind='Game'; ParentIndex=-1
+                            Setup=$null; Name=[string]$j.GameName })
         }
         $folders = @($entries | ForEach-Object { $_.Folder })
         return @{
@@ -1403,7 +1476,7 @@ $form.Text="DiscWright $APP_VERSION"
 # usable, and a 768px laptop far less. Open at whatever fits and let AutoScroll
 # cover the difference - the alternative is a window that cannot be used at all
 # on the screen it opened on.
-$formWanted = 1054
+$formWanted = 1080
 $formUsable = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height
 $form.Size=New-Object System.Drawing.Size(700,([Math]::Min($formWanted,$formUsable)))
 $form.MinimumSize=New-Object System.Drawing.Size(700,420)
@@ -1436,10 +1509,10 @@ $btnPreview  = AddBtn 'Preview menu' 445 8 210
 # can carry several games and their add-ons, and the one thing the old box could
 # not show is the thing that matters most here: which entry belongs to which.
 # Everything below moved down 58px to make room.
-AddLabel '1)  Installers on this disc (each folder holds a setup_*.exe):' 15 46 520 | Out-Null
+AddLabel '1)  Installers on this disc (a game is a GOG folder; an add-on is one file):' 15 46 520 | Out-Null
 $lvGames=New-Object System.Windows.Forms.ListView
 $lvGames.Location=New-Object System.Drawing.Point(15,68)
-$lvGames.Size=New-Object System.Drawing.Size(520,80)
+$lvGames.Size=New-Object System.Drawing.Size(520,108)
 $lvGames.View='Details'; $lvGames.FullRowSelect=$true; $lvGames.MultiSelect=$false
 $lvGames.HideSelection=$false; $lvGames.HeaderStyle='Nonclickable'; $lvGames.ShowItemToolTips=$true
 [void]$lvGames.Columns.Add('#',28)
@@ -1447,21 +1520,22 @@ $lvGames.HideSelection=$false; $lvGames.HeaderStyle='Nonclickable'; $lvGames.Sho
 [void]$lvGames.Columns.Add('Type',70)
 [void]$lvGames.Columns.Add('Belongs to',180)
 $form.Controls.Add($lvGames)
-$btnFolder  =AddBtn 'Add...'    545 68  110
-$btnGameEdit=AddBtn 'Change...' 545 96  110
-$btnGameDel =AddBtn 'Remove'    545 124 110
-$lblGame=AddLabel '' 15 154 640; $lblGame.ForeColor=[System.Drawing.Color]::DimGray
+$btnFolder  =AddBtn 'Add game...' 545 68  110
+$btnAddOn   =AddBtn 'Add-on...'   545 96  110
+$btnGameEdit=AddBtn 'Change...'   545 124 110
+$btnGameDel =AddBtn 'Remove'      545 152 110
+$lblGame=AddLabel '' 15 180 640; $lblGame.ForeColor=[System.Drawing.Color]::DimGray
 
-AddLabel '2)  Disc label (shown in This PC):' 15 184 520 | Out-Null
-$txtLabel=AddText 15 206 300
+AddLabel '2)  Disc label (shown in This PC):' 15 210 520 | Out-Null
+$txtLabel=AddText 15 232 300
 
-AddLabel '3)  Disc icon (.ico, or .png/.jpg to auto-convert):' 15 242 520 | Out-Null
-$txtIcon=AddText 15 264 520
-$btnIcon=AddBtn 'Browse...' 545 264 110
-$lblIcon=AddLabel '' 15 292 500; $lblIcon.ForeColor=[System.Drawing.Color]::DimGray
-$picIcon=New-Object System.Windows.Forms.PictureBox; $picIcon.Location=New-Object System.Drawing.Point(560,288); $picIcon.Size=New-Object System.Drawing.Size(64,64); $picIcon.SizeMode='Zoom'; $picIcon.BorderStyle='FixedSingle'; $form.Controls.Add($picIcon)
+AddLabel '3)  Disc icon (.ico, or .png/.jpg to auto-convert):' 15 268 520 | Out-Null
+$txtIcon=AddText 15 290 520
+$btnIcon=AddBtn 'Browse...' 545 290 110
+$lblIcon=AddLabel '' 15 318 500; $lblIcon.ForeColor=[System.Drawing.Color]::DimGray
+$picIcon=New-Object System.Windows.Forms.PictureBox; $picIcon.Location=New-Object System.Drawing.Point(560,314); $picIcon.Size=New-Object System.Drawing.Size(64,64); $picIcon.SizeMode='Zoom'; $picIcon.BorderStyle='FixedSingle'; $form.Controls.Add($picIcon)
 
-$grp=New-Object System.Windows.Forms.GroupBox; $grp.Text='4)  Autorun menu'; $grp.Location=New-Object System.Drawing.Point(15,362); $grp.Size=New-Object System.Drawing.Size(645,326); $form.Controls.Add($grp)
+$grp=New-Object System.Windows.Forms.GroupBox; $grp.Text='4)  Autorun menu'; $grp.Location=New-Object System.Drawing.Point(15,388); $grp.Size=New-Object System.Drawing.Size(645,326); $form.Controls.Add($grp)
 $chkMenu=New-Object System.Windows.Forms.CheckBox; $chkMenu.Text='Run splash menu when disc is inserted'; $chkMenu.Location=New-Object System.Drawing.Point(15,24); $chkMenu.Size=New-Object System.Drawing.Size(400,22); $chkMenu.Checked=$true; $grp.Controls.Add($chkMenu)
 
 $lblBg=New-Object System.Windows.Forms.Label; $lblBg.Text='Background image:'; $lblBg.Location=New-Object System.Drawing.Point(15,56); $lblBg.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblBg)
@@ -1501,24 +1575,24 @@ $chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Wind
 $lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,288); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
 $cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,285); $cmbBtnStyle.Size=New-Object System.Drawing.Size(130,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
 
-$grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,698); $grpX.Size=New-Object System.Drawing.Size(645,132); $form.Controls.Add($grpX)
+$grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,724); $grpX.Size=New-Object System.Drawing.Size(645,132); $form.Controls.Add($grpX)
 $lstExtra=New-Object System.Windows.Forms.ListBox; $lstExtra.Location=New-Object System.Drawing.Point(15,22); $lstExtra.Size=New-Object System.Drawing.Size(480,100); $lstExtra.SelectionMode='MultiExtended'; $lstExtra.HorizontalScrollbar=$true; $grpX.Controls.Add($lstExtra)
 $btnXFile=New-Object System.Windows.Forms.Button; $btnXFile.Text='Add files...'; $btnXFile.Location=New-Object System.Drawing.Point(505,22); $btnXFile.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXFile)
 $btnXDir =New-Object System.Windows.Forms.Button; $btnXDir.Text='Add folder...'; $btnXDir.Location=New-Object System.Drawing.Point(505,52); $btnXDir.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDir)
 $btnXDel =New-Object System.Windows.Forms.Button; $btnXDel.Text='Remove'; $btnXDel.Location=New-Object System.Drawing.Point(505,82); $btnXDel.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDel)
 
-AddLabel '6)  Output folder (ISO + disc staging go here):' 15 844 520 | Out-Null
-$txtOut=AddText 15 866 520
-$btnOut=AddBtn 'Browse...' 545 866 110
+AddLabel '6)  Output folder (ISO + disc staging go here):' 15 870 520 | Out-Null
+$txtOut=AddText 15 892 520
+$btnOut=AddBtn 'Browse...' 545 892 110
 
-$btnBuild=New-Object System.Windows.Forms.Button; $btnBuild.Text='BUILD ISO'; $btnBuild.Location=New-Object System.Drawing.Point(15,900); $btnBuild.Size=New-Object System.Drawing.Size(150,30); $btnBuild.BackColor=[System.Drawing.Color]::FromArgb(0,150,160); $btnBuild.ForeColor=[System.Drawing.Color]::White; $form.Controls.Add($btnBuild)
-$txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLog.ScrollBars='Vertical'; $txtLog.ReadOnly=$true; $txtLog.Location=New-Object System.Drawing.Point(180,900); $txtLog.Size=New-Object System.Drawing.Size(480,90); $form.Controls.Add($txtLog)
+$btnBuild=New-Object System.Windows.Forms.Button; $btnBuild.Text='BUILD ISO'; $btnBuild.Location=New-Object System.Drawing.Point(15,926); $btnBuild.Size=New-Object System.Drawing.Size(150,30); $btnBuild.BackColor=[System.Drawing.Color]::FromArgb(0,150,160); $btnBuild.ForeColor=[System.Drawing.Color]::White; $form.Controls.Add($btnBuild)
+$txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLog.ScrollBars='Vertical'; $txtLog.ReadOnly=$true; $txtLog.Location=New-Object System.Drawing.Point(180,926); $txtLog.Size=New-Object System.Drawing.Size(480,90); $form.Controls.Add($txtLog)
 
 # Both sit in space the layout already had, under the BUILD button and beside the
 # log, so nothing else has to move. Hidden until a build starts - an idle window
 # looks exactly as it did before.
-$pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,938); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
-$lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,958); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
+$pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,964); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
+$lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,984); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
 
 $buildWatch = New-Object System.Diagnostics.Stopwatch
 
@@ -1723,8 +1797,17 @@ function Set-GameEntries([array]$entries) {
     $found = @()
     foreach ($e in @($entries)) {
         if (-not $e -or [string]::IsNullOrWhiteSpace($e.Folder)) { continue }
-        $g = Get-GameInfo $e.Folder
+        # An add-on is identified by its installer, not its folder - the folder is
+        # usually the parent game's. Fall back to the folder for anything written
+        # before Setup was recorded.
+        if ($e.Kind -eq 'AddOn' -and $e.Setup -and (Test-Path $e.Setup -PathType Leaf)) {
+            $g = Get-AddOnInfo $e.Setup
+        } else {
+            $g = Get-GameInfo $e.Folder
+        }
         if ($e.Kind -eq 'AddOn') { $g.Kind = 'AddOn'; $g.ParentIndex = [int]$e.ParentIndex }
+        # A name the user edited is theirs, not something to re-derive on open.
+        if (-not [string]::IsNullOrWhiteSpace($e.Name)) { $g.GameName = [string]$e.Name }
         $found += ,$g
     }
     $state.Games = @($found)
@@ -1770,8 +1853,11 @@ function Add-GameFolder([string]$path) {
         $lblGame.ForeColor = [System.Drawing.Color]::Firebrick
         return $null
     }
+    # Compared on the installer, not the folder. A patch added as an add-on lives
+    # in the same folder as the game it patches, so a folder comparison would
+    # refuse to re-add the game after it had been removed from the list.
     foreach ($e in @($state.Games)) {
-        if ($e.Folder -and (Test-SamePath $e.Folder $g.Folder)) {
+        if ($e.SetupExe -and (Test-SamePath $e.SetupExe.FullName $g.SetupExe.FullName)) {
             $lblGame.Text = "$($g.GameName) is already on this disc."
             $lblGame.ForeColor = [System.Drawing.Color]::DarkOrange
             return $null
@@ -1781,6 +1867,79 @@ function Add-GameFolder([string]$path) {
     Update-GameList
     Update-MediaLabel
     return $g
+}
+
+# Add-on installers, one or several at a time. Picked as files rather than a
+# folder because a patch or a DLC usually sits in the same folder as the game it
+# belongs to - pointing at the folder would just find the game again.
+function Add-AddOnFiles([string[]]$paths,[int]$parentIndex) {
+    $added = 0; $refused = @()
+    foreach ($p in @($paths)) {
+        $a = Get-AddOnInfo $p
+        if (-not $a.Ok) { $refused += $a.Msg; continue }
+        $dup = $false
+        foreach ($e in @($state.Games)) {
+            if ($e.SetupExe -and (Test-SamePath $e.SetupExe.FullName $a.SetupExe.FullName)) { $dup = $true; break }
+        }
+        if ($dup) { $refused += "$($a.SetupExe.Name) is already on this disc."; continue }
+        $a.ParentIndex = $parentIndex
+        $state.Games = @(@($state.Games) + $a)
+        $added++
+    }
+    Update-GameList
+    Update-MediaLabel
+    if ($refused.Count) {
+        $lblGame.Text = $(if ($refused.Count -eq 1) { $refused[0] } else { "$($refused.Count) files were not added - $($refused[0])" })
+        $lblGame.ForeColor = [System.Drawing.Color]::DarkOrange
+    }
+    return $added
+}
+
+# Which game an add-on belongs to. Not asked when the answer cannot vary: with a
+# single game on the disc there is nothing to choose.
+function Show-ParentPickerDialog([string]$what) {
+    $games = @($state.Games)
+    $candidates = @()
+    for ($i = 0; $i -lt $games.Count; $i++) {
+        if ($games[$i].Kind -eq 'AddOn') { continue }
+        $candidates += ,@{ Index=$i; Name=$games[$i].GameName }
+    }
+    if ($candidates.Count -eq 0) { return -1 }
+    if ($candidates.Count -eq 1) { return [int]$candidates[0].Index }
+
+    $dlg=New-Object System.Windows.Forms.Form
+    $dlg.Text='Which game?'; $dlg.Font=$form.Font
+    $dlg.FormBorderStyle='FixedDialog'; $dlg.MaximizeBox=$false; $dlg.MinimizeBox=$false
+    $dlg.StartPosition='CenterParent'; $dlg.ShowInTaskbar=$false
+    $dlg.ClientSize=New-Object System.Drawing.Size(420,132)
+
+    $l=New-Object System.Windows.Forms.Label
+    $l.Text="Which game does $what belong to?"
+    $l.Location=New-Object System.Drawing.Point(15,15); $l.Size=New-Object System.Drawing.Size(390,36)
+    $dlg.Controls.Add($l)
+
+    $cmb=New-Object System.Windows.Forms.ComboBox
+    $cmb.DropDownStyle='DropDownList'
+    $cmb.Location=New-Object System.Drawing.Point(15,58); $cmb.Size=New-Object System.Drawing.Size(390,24)
+    foreach ($c in $candidates) { [void]$cmb.Items.Add($c.Name) }
+    $dlg.Controls.Add($cmb)
+
+    $ok=New-Object System.Windows.Forms.Button; $ok.Text='OK'; $ok.Enabled=$false
+    $ok.Location=New-Object System.Drawing.Point(235,96); $ok.Size=New-Object System.Drawing.Size(80,26)
+    $ok.DialogResult='OK'; $dlg.Controls.Add($ok)
+    $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'
+    $cancel.Location=New-Object System.Drawing.Point(325,96); $cancel.Size=New-Object System.Drawing.Size(80,26)
+    $cancel.DialogResult='Cancel'; $dlg.Controls.Add($cancel)
+    $dlg.AcceptButton=$ok; $dlg.CancelButton=$cancel
+    $cmb.Add_SelectedIndexChanged({ $ok.Enabled = ($cmb.SelectedIndex -ge 0) }.GetNewClosure())
+
+    $r = $dlg.ShowDialog($form)
+    $picked = -1
+    if ($r -eq [System.Windows.Forms.DialogResult]::OK -and $cmb.SelectedIndex -ge 0) {
+        $picked = [int]$candidates[$cmb.SelectedIndex].Index
+    }
+    $dlg.Dispose()
+    return $picked
 }
 
 # Redraw the list from $state.Games. Called after anything that changes it, so
@@ -1820,6 +1979,9 @@ function Update-GameButtons {
     # Change... offers "make this an add-on of ___", which needs something to be
     # an add-on of. With one entry on the disc there is no such thing.
     $btnGameEdit.Enabled = $sel -and (@($state.Games).Count -gt 1)
+    # An add-on has to belong to a game, so there is nothing to add one to until
+    # a game is on the disc.
+    $btnAddOn.Enabled    = (@($state.Games | Where-Object { $_ -and $_.Kind -ne 'AddOn' }).Count -gt 0)
 }
 
 # Asks whether an entry is a game or an add-on, and of what. A window rather
@@ -1842,39 +2004,51 @@ function Show-EntryKindDialog([int]$index) {
     $dlg.Text='Entry on the disc'; $dlg.Font=$form.Font
     $dlg.FormBorderStyle='FixedDialog'; $dlg.MaximizeBox=$false; $dlg.MinimizeBox=$false
     $dlg.StartPosition='CenterParent'; $dlg.ShowInTaskbar=$false
-    $dlg.ClientSize=New-Object System.Drawing.Size(400,182)
+    $dlg.ClientSize=New-Object System.Drawing.Size(400,222)
 
     $l=New-Object System.Windows.Forms.Label
-    $l.Text="How should `"$($me.GameName)`" appear on the disc?"
+    $l.Text='How should this installer appear on the disc?'
     $l.Location=New-Object System.Drawing.Point(15,15); $l.Size=New-Object System.Drawing.Size(370,20)
     $dlg.Controls.Add($l)
 
+    # Editable, because the derived name is a guess. A GOG patch reports the
+    # ProductName of the game it patches, so its name comes from the filename and
+    # reads like a filename. This is also the name of its folder on the disc.
+    $lblName=New-Object System.Windows.Forms.Label
+    $lblName.Text='Name on the menu:'
+    $lblName.Location=New-Object System.Drawing.Point(20,48); $lblName.Size=New-Object System.Drawing.Size(115,20)
+    $dlg.Controls.Add($lblName)
+    $txtName=New-Object System.Windows.Forms.TextBox
+    $txtName.Location=New-Object System.Drawing.Point(140,46); $txtName.Size=New-Object System.Drawing.Size(240,24)
+    $txtName.Text=[string]$me.GameName
+    $dlg.Controls.Add($txtName)
+
     $rbGame=New-Object System.Windows.Forms.RadioButton
     $rbGame.Text='A game of its own'
-    $rbGame.Location=New-Object System.Drawing.Point(20,45); $rbGame.Size=New-Object System.Drawing.Size(360,22)
+    $rbGame.Location=New-Object System.Drawing.Point(20,85); $rbGame.Size=New-Object System.Drawing.Size(360,22)
     $dlg.Controls.Add($rbGame)
 
     $rbAdd=New-Object System.Windows.Forms.RadioButton
-    $rbAdd.Text='An add-on (DLC, expansion, mod) for:'
-    $rbAdd.Location=New-Object System.Drawing.Point(20,73); $rbAdd.Size=New-Object System.Drawing.Size(360,22)
+    $rbAdd.Text='An add-on (DLC, expansion, patch, mod) for:'
+    $rbAdd.Location=New-Object System.Drawing.Point(20,113); $rbAdd.Size=New-Object System.Drawing.Size(360,22)
     $dlg.Controls.Add($rbAdd)
 
     $cmb=New-Object System.Windows.Forms.ComboBox
     $cmb.DropDownStyle='DropDownList'
-    $cmb.Location=New-Object System.Drawing.Point(40,99); $cmb.Size=New-Object System.Drawing.Size(340,24)
+    $cmb.Location=New-Object System.Drawing.Point(40,139); $cmb.Size=New-Object System.Drawing.Size(340,24)
     foreach ($c in $candidates) { [void]$cmb.Items.Add($c.Name) }
     $dlg.Controls.Add($cmb)
 
     $note=New-Object System.Windows.Forms.Label
     $note.ForeColor=[System.Drawing.Color]::DimGray
-    $note.Location=New-Object System.Drawing.Point(20,128); $note.Size=New-Object System.Drawing.Size(360,20)
+    $note.Location=New-Object System.Drawing.Point(20,168); $note.Size=New-Object System.Drawing.Size(360,20)
     $dlg.Controls.Add($note)
 
     $ok=New-Object System.Windows.Forms.Button; $ok.Text='OK'
-    $ok.Location=New-Object System.Drawing.Point(215,150); $ok.Size=New-Object System.Drawing.Size(80,26)
+    $ok.Location=New-Object System.Drawing.Point(215,190); $ok.Size=New-Object System.Drawing.Size(80,26)
     $ok.DialogResult='OK'; $dlg.Controls.Add($ok)
     $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'
-    $cancel.Location=New-Object System.Drawing.Point(300,150); $cancel.Size=New-Object System.Drawing.Size(80,26)
+    $cancel.Location=New-Object System.Drawing.Point(300,190); $cancel.Size=New-Object System.Drawing.Size(80,26)
     $cancel.DialogResult='Cancel'; $dlg.Controls.Add($cancel)
     $dlg.AcceptButton=$ok; $dlg.CancelButton=$cancel
 
@@ -1883,10 +2057,11 @@ function Show-EntryKindDialog([int]$index) {
     # nothing, which Get-MenuGames would then quietly promote back to a game.
     $sync = {
         $cmb.Enabled = $rbAdd.Checked
-        $ok.Enabled  = (-not $rbAdd.Checked) -or ($cmb.SelectedIndex -ge 0)
+        $ok.Enabled  = ((-not $rbAdd.Checked) -or ($cmb.SelectedIndex -ge 0)) -and
+                       (-not [string]::IsNullOrWhiteSpace($txtName.Text))
     }.GetNewClosure()
     $rbGame.Add_CheckedChanged($sync); $rbAdd.Add_CheckedChanged($sync)
-    $cmb.Add_SelectedIndexChanged($sync)
+    $cmb.Add_SelectedIndexChanged($sync); $txtName.Add_TextChanged($sync)
 
     if ($candidates.Count -eq 0) {
         $rbAdd.Enabled = $false
@@ -1908,6 +2083,8 @@ function Show-EntryKindDialog([int]$index) {
         } else {
             $me.Kind = 'Game'; $me.ParentIndex = -1
         }
+        $n = $txtName.Text.Trim()
+        if ($n) { $me.GameName = $n }
         $changed = $true
     }
     $dlg.Dispose()
@@ -2092,6 +2269,28 @@ $btnFolder.Add_Click({
         }
         Update-ActionButtons
     }
+})
+$btnAddOn.Add_Click({
+    $d = New-Object System.Windows.Forms.OpenFileDialog
+    $d.Title = 'Pick one or more add-on installers - DLC, an expansion, a patch, a mod'
+    # Any .exe, not just setup_*.exe. GOG patches are named patch_*, and a mod
+    # installer is named whatever its author chose - refusing those is what kept
+    # the two things people actually own off the disc.
+    $d.Filter = 'Installers (*.exe)|*.exe|All files|*.*'
+    $d.Multiselect = $true
+    $first = Get-FirstGame
+    if ($first -and $first.Folder -and (Test-Path $first.Folder)) { $d.InitialDirectory = $first.Folder }
+    if ($d.ShowDialog() -eq 'OK') {
+        $names = @($d.FileNames | ForEach-Object { [IO.Path]::GetFileName($_) })
+        $what = if ($names.Count -eq 1) { "`"$($names[0])`"" } else { "these $($names.Count) installers" }
+        $parent = Show-ParentPickerDialog $what
+        if ($parent -ge 0) {
+            $n = Add-AddOnFiles @($d.FileNames) $parent
+            if ($n) { & $log "Added $n add-on installer(s) to $($state.Games[$parent].GameName)." }
+            Update-ActionButtons
+        }
+    }
+    $d.Dispose()
 })
 $btnGameDel.Add_Click({
     if (-not $lvGames.SelectedIndices.Count) { return }

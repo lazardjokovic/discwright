@@ -1,4 +1,4 @@
-﻿# Pester tests for DiscWright.
+# Pester tests for DiscWright.
 #
 #   Invoke-Pester tests
 #   Invoke-Pester tests -ExcludeTagFilter Build     # skip the slow ISO builds
@@ -298,6 +298,7 @@ Describe 'Recovering from a bad folder choice' -Tag 'Unit' {
         $script:lvGames.View = 'Details'
         foreach ($c in @('#','Name','Type','Belongs to')) { [void]$script:lvGames.Columns.Add($c,80) }
         $script:btnGameDel  = New-Object System.Windows.Forms.Button
+        $script:btnAddOn    = New-Object System.Windows.Forms.Button
         $script:btnGameEdit = New-Object System.Windows.Forms.Button
 
         # Stand-ins for the plain labels Set-GameEntries and Update-MediaLabel write to.
@@ -1014,6 +1015,7 @@ Describe 'Adding and removing entries in the list' {
         $script:lvGames.View = 'Details'
         foreach ($c in @('#','Name','Type','Belongs to')) { [void]$script:lvGames.Columns.Add($c,80) }
         $script:btnGameDel  = New-Object System.Windows.Forms.Button
+        $script:btnAddOn    = New-Object System.Windows.Forms.Button
         $script:btnGameEdit = New-Object System.Windows.Forms.Button
         $script:lblGame  = [pscustomobject]@{ Text=''; ForeColor=$null }
         $script:cbMan    = [pscustomobject]@{ Checked=$false }
@@ -1202,3 +1204,167 @@ Describe 'Reading a real GOG download' -Tag 'Real' -Skip:($script:GogFolders.Cou
     }
 }
 
+
+
+Describe 'Naming an add-on' -Tag 'Unit' {
+
+    It 'puts the version a GOG patch moves TO at the front' {
+        # Two patches for the same game differ only in their versions, and the
+        # menu button clips at about twenty characters - so the part that tells
+        # them apart has to come first or every patch reads the same.
+        Get-AddOnName 'patch_hollow_knight_1.5.12459_(88294)_to_1.5.12618_(89712).exe' |
+            Should -Be 'Update 1.5.12618 (89712)'
+    }
+
+    It 'gives two patches of one game different names' {
+        $a = Get-AddOnName 'patch_hollow_knight_1.5.12459_(88294)_to_1.5.12618_(89712).exe'
+        $b = Get-AddOnName 'patch_hollow_knight_1.5.12618_(89712)_to_1.5.12620_(89718).exe'
+        $a | Should -Not -Be $b
+        $a.Substring(0,18) | Should -Not -Be $b.Substring(0,18)
+    }
+
+    It 'reads a plain installer name as words' {
+        Get-AddOnName 'gmdx_v10_overhaul.exe' | Should -Be 'gmdx v10 overhaul'
+    }
+
+    It 'never comes back empty' {
+        foreach ($n in @('x.exe','patch_.exe','setup_.exe','_.exe')) {
+            Get-AddOnName $n | Should -Not -BeNullOrEmpty -Because "'$n' still needs a label"
+        }
+    }
+}
+
+Describe 'Accepting an add-on installer' {
+
+    BeforeAll {
+        $script:AoDir = Join-Path $script:Sandbox 'addon-src'
+        New-Item -ItemType Directory -Force -Path $script:AoDir | Out-Null
+        foreach ($n in @('setup_base_1.0.exe','patch_base_1.0_to_1.1.exe','GMDX_v10.exe')) {
+            $fs=[IO.File]::Create((Join-Path $script:AoDir $n)); $fs.SetLength(2MB); $fs.Close()
+        }
+        # A part belonging to the mod, to prove parts are collected for add-ons too.
+        $fs=[IO.File]::Create((Join-Path $script:AoDir 'GMDX_v10-1.bin')); $fs.SetLength(1MB); $fs.Close()
+        $fs=[IO.File]::Create((Join-Path $script:AoDir 'readme.txt')); $fs.SetLength(10); $fs.Close()
+    }
+
+    It 'accepts an installer that is not named setup_*' {
+        # This is the whole point of relaxing the filter: a mod is never named
+        # setup_*, and neither is a GOG patch.
+        $a = Get-AddOnInfo (Join-Path $script:AoDir 'GMDX_v10.exe')
+        $a.Ok   | Should -BeTrue
+        $a.Kind | Should -Be 'AddOn'
+    }
+
+    It 'accepts a GOG patch' {
+        (Get-AddOnInfo (Join-Path $script:AoDir 'patch_base_1.0_to_1.1.exe')).Ok | Should -BeTrue
+    }
+
+    It 'collects an add-on''s own .bin parts' {
+        $a = Get-AddOnInfo (Join-Path $script:AoDir 'GMDX_v10.exe')
+        $a.Files.Count | Should -Be 2
+    }
+
+    It 'does not take the base game''s files with it' {
+        $a = Get-AddOnInfo (Join-Path $script:AoDir 'patch_base_1.0_to_1.1.exe')
+        $a.Files.Count | Should -Be 1
+        @($a.Files | Where-Object { $_.Name -like 'setup_*' }).Count | Should -Be 0
+    }
+
+    It 'refuses something that is not an installer' {
+        $a = Get-AddOnInfo (Join-Path $script:AoDir 'readme.txt')
+        $a.Ok  | Should -BeFalse
+        $a.Msg | Should -Match 'Extra content'
+    }
+
+    It 'refuses a file that is not there' {
+        (Get-AddOnInfo (Join-Path $script:AoDir 'nope.exe')).Ok | Should -BeFalse
+    }
+}
+
+Describe 'An add-on survives being saved and reopened' {
+
+    BeforeAll {
+        $script:RtDir = Join-Path $script:Sandbox 'roundtrip'
+        New-Item -ItemType Directory -Force -Path $script:RtDir | Out-Null
+        foreach ($n in @('setup_rt_1.0.exe','patch_rt_1.0_to_1.1.exe')) {
+            $fs=[IO.File]::Create((Join-Path $script:RtDir $n)); $fs.SetLength(2MB); $fs.Close()
+        }
+        $script:RtGame = Get-GameInfo $script:RtDir
+        $script:RtAdd  = Get-AddOnInfo (Join-Path $script:RtDir 'patch_rt_1.0_to_1.1.exe')
+        $script:RtAdd.ParentIndex = 0
+        $script:RtAdd.GameName = 'Renamed By Hand'
+
+        $script:RtOut = Join-Path $script:Sandbox 'roundtrip-out'
+        New-Item -ItemType Directory -Force -Path $script:RtOut | Out-Null
+        Save-Project (New-BuildSettings -Games @($script:RtGame,$script:RtAdd) -Label 'RT' -OutDir $script:RtOut) $script:RtOut
+        $script:RtBack = Import-Project (Join-Path $script:RtOut 'discproject.json')
+    }
+
+    It 'records the exact installer, not just the folder' {
+        # The add-on shares its folder with the game. Re-detecting from the folder
+        # would find the game's setup_*.exe and put the game on the disc twice.
+        $script:RtBack.GameEntries[1].Setup | Should -BeLike '*patch_rt_1.0_to_1.1.exe'
+    }
+
+    It 'keeps a name that was edited by hand' {
+        $script:RtBack.GameEntries[1].Name | Should -Be 'Renamed By Hand'
+    }
+
+    It 'still knows it is an add-on and whose' {
+        $script:RtBack.GameEntries[1].Kind | Should -Be 'AddOn'
+        $script:RtBack.GameEntries[1].ParentIndex | Should -Be 0
+    }
+}
+
+Describe 'A real game with its real patches' -Tag 'Real' -Skip:($script:GogFolders.Count -eq 0) {
+
+    BeforeAll {
+        # Worked out again here, not read from BeforeDiscovery: the two phases have
+        # separate state, so $script:GogFolders is empty by the time this runs.
+        # Same trap the SevenZip lookup at the top of this file already documents.
+        $dir = @(
+            $env:DISCWRIGHT_GOG_DIR
+            'C:\Program Files (x86)\GOG Galaxy\Games\Offline Installers'
+            "$env:USERPROFILE\Downloads\GOG"
+            'C:\GOG Offline Installers'
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:HkDir = $null
+        if ($dir) {
+            $script:HkDir = @(Get-ChildItem $dir -Directory -EA SilentlyContinue |
+                Where-Object { $_.Name -like '*hollow_knight*' } |
+                ForEach-Object { $_.FullName }) | Select-Object -First 1
+        }
+    }
+
+    It 'finds the game and its patches side by side' -Skip:(-not (@($script:GogFolders | Where-Object { $_ -like '*hollow_knight*' }).Count)) {
+        $game = Get-GameInfo $script:HkDir
+        $game.GameName | Should -Be 'Hollow Knight'
+
+        $patches = @(Get-ChildItem $script:HkDir -Filter 'patch_*.exe' -File)
+        $patches.Count | Should -BeGreaterThan 0
+
+        $entries = @($game)
+        foreach ($p in $patches) {
+            $a = Get-AddOnInfo $p.FullName
+            $a.Ok | Should -BeTrue
+            $a.ParentIndex = 0
+            $entries += $a
+        }
+
+        # One game in the menu, every patch hanging off it, and no chooser.
+        $menu = Get-MenuGames $entries
+        $menu.Count | Should -Be 1
+        $menu[0].Name | Should -Be 'Hollow Knight'
+        $menu[0].AddOns.Count | Should -Be $patches.Count
+
+        # Every patch reports ProductName "Hollow Knight", so if the names came
+        # from version info the menu would show identical buttons.
+        $names = @($menu[0].AddOns | ForEach-Object { $_.Name })
+        @($names | Sort-Object -Unique).Count | Should -Be $patches.Count
+        $names | ForEach-Object { $_ | Should -Not -Be 'Hollow Knight' }
+
+        # And every installer gets its own folder on the disc.
+        $folders = @(0..($entries.Count-1) | ForEach-Object { Get-DiscEntryFolder $entries $_ })
+        @($folders | Sort-Object -Unique).Count | Should -Be $entries.Count
+    }
+}
