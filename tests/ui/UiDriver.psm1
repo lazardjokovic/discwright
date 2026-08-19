@@ -86,7 +86,17 @@ function Start-DiscWright {
     # like a fresh one until half the suite has failed on state it never set.
     $win = Wait-WinForProcess -ProcessId $proc.Id -TimeoutSec $TimeoutSec
     if (-not $win) { try { $proc.Kill() } catch {}; throw 'the DiscWright window never appeared' }
-    Set-WindowFocus $win; Start-Sleep -Milliseconds 600; Set-WindowFocus $win
+    Set-DrivenWindow $win
+    try {
+        $null = Set-WindowFocus $win
+        Start-Sleep -Milliseconds 600
+        $null = Set-WindowFocus $win
+    } catch {
+        # No foreground means no way to drive it, and the half-started app would
+        # otherwise be left on the user's screen doing nothing.
+        try { $proc.Kill() } catch {}
+        throw
+    }
     return [pscustomobject]@{ Process = $proc; Window = $win }
 }
 
@@ -141,19 +151,83 @@ function Find-Ctl {
 }
 
 function Set-WindowFocus {
-    param($Win)
-    [void][DwInput]::SetForegroundWindow((New-Object IntPtr($Win.Current.NativeWindowHandle)))
-    Start-Sleep -Milliseconds 300
+    <#
+    .SYNOPSIS
+        Bring the window to the front, and prove that it worked.
+
+    .DESCRIPTION
+        Windows refuses SetForegroundWindow from a process that does not already
+        own the foreground. It reports the refusal in its return value and
+        otherwise does nothing at all.
+
+        Ignoring that is dangerous rather than merely flaky. Every click this
+        module makes is a click at a screen COORDINATE: if the window did not
+        come forward, those clicks land on whatever is in front of it - the
+        browser, an editor, somebody's actual work - and the keystrokes go there
+        too. The suite then sits through hundreds of lookups that can never
+        succeed while the app stands untouched, which is exactly what it looks
+        like from the outside.
+
+        So this refuses to continue instead. A test that cannot drive the window
+        must stop, not type into someone else's.
+    #>
+    param($Win, [switch]$Optional)
+    $h = New-Object IntPtr($Win.Current.NativeWindowHandle)
+    for ($try = 0; $try -lt 3; $try++) {
+        [void][DwInput]::SetForegroundWindow($h)
+        Start-Sleep -Milliseconds 300
+        if ([DwInput]::GetForegroundWindow() -eq $h) { return $true }
+    }
+    if ($Optional) { return $false }
+    throw ("DiscWright could not be brought to the front, so its window cannot be driven. " +
+           "Windows only grants that to a process that already owns the foreground. " +
+           "Something else has it - most likely you are using the machine. " +
+           "Every click from here would land on whatever window IS in front, so this stops instead. " +
+           "Run the window tests again when the desktop is free.")
 }
 
 function Invoke-Ctl {
-    <#  .SYNOPSIS Click a control at the centre of its rectangle. #>
-    param($Ctl, [int]$SettleMs = 400)
+    <#
+    .SYNOPSIS Click a control at the centre of its rectangle.
+
+    .DESCRIPTION
+        Checks that the click will land inside the application before making it.
+        A click is a screen coordinate and nothing more: if the app is no longer
+        the foreground window - because somebody touched the machine mid-run -
+        the coordinate now belongs to whatever is in front, and the click goes
+        into their window instead. Stopping is the only safe response.
+    #>
+    param($Ctl, [int]$SettleMs = 400, [switch]$NoFocusCheck)
     if (-not $Ctl) { throw 'Invoke-Ctl was given nothing to click' }
     $r = $Ctl.Current.BoundingRectangle
     if ($r.Width -le 0 -or $r.Height -le 0) { throw "'$($Ctl.Current.Name)' has no clickable area" }
+    if (-not $NoFocusCheck -and -not (Test-DrivingOurWindow)) {
+        throw ("The foreground window is no longer the one being tested, so clicking '" +
+               $Ctl.Current.Name + "' would land in whatever is in front of it. Stopped. " +
+               "The window tests need the desktop to themselves.")
+    }
     [DwInput]::ClickAt([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
     Start-Sleep -Milliseconds $SettleMs
+}
+
+function Set-DrivenWindow {
+    <#  .SYNOPSIS Remember which window this run is allowed to type into. #>
+    param($Win)
+    $script:DrivenHandle = [IntPtr]$Win.Current.NativeWindowHandle
+}
+
+function Test-DrivingOurWindow {
+    <#  .SYNOPSIS Is the window under test still the one receiving input? #>
+    if (-not $script:DrivenHandle) { return $true }   # nothing claimed yet
+    $fg = [DwInput]::GetForegroundWindow()
+    if ($fg -eq $script:DrivenHandle) { return $true }
+    # A dialog the app itself opened is a different window and perfectly fine to
+    # drive; it belongs to the same process.
+    try {
+        $el = [System.Windows.Automation.AutomationElement]::FromHandle($fg)
+        $own = [System.Windows.Automation.AutomationElement]::FromHandle($script:DrivenHandle)
+        return ($el.Current.ProcessId -eq $own.Current.ProcessId)
+    } catch { return $false }
 }
 
 function Invoke-CtlNamed {
@@ -183,12 +257,25 @@ function Set-CtlText {
     <#  .SYNOPSIS Click a box and replace its contents by typing. #>
     param($Ctl, [string]$Text)
     Invoke-Ctl -Ctl $Ctl -SettleMs 250
-    [System.Windows.Forms.SendKeys]::SendWait('^a' + (ConvertTo-SendKeys $Text))
-    Start-Sleep -Milliseconds 350
+    Send-Keys ('^a' + (ConvertTo-SendKeys $Text)) 350
 }
 
 function Send-Keys {
+    <#
+    .SYNOPSIS Type into the window under test.
+
+    .DESCRIPTION
+        SendKeys goes to whatever holds the foreground, not to any control this
+        module chose. If the application has lost it, the text is typed into
+        somebody else's window - a browser, an editor - which is a good deal
+        worse than a failing test. So the foreground is checked first.
+    #>
     param([string]$Keys, [int]$SettleMs = 300)
+    if (-not (Test-DrivingOurWindow)) {
+        throw ("The foreground window is no longer the one being tested, so these keystrokes " +
+               "would be typed into whatever is in front of it. Stopped. " +
+               "The window tests need the desktop to themselves.")
+    }
     [System.Windows.Forms.SendKeys]::SendWait($Keys)
     Start-Sleep -Milliseconds $SettleMs
 }
@@ -329,4 +416,4 @@ function Save-WindowShot {
 Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow,
-    Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys
+    Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow

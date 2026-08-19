@@ -1536,7 +1536,7 @@ $form.Text="DiscWright $APP_VERSION"
 # usable, and a 768px laptop far less. Open at whatever fits and let AutoScroll
 # cover the difference - the alternative is a window that cannot be used at all
 # on the screen it opened on.
-$formWanted = 1080
+$formWanted = 992
 $formUsable = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height
 $form.Size=New-Object System.Drawing.Size(700,([Math]::Min($formWanted,$formUsable)))
 $form.MinimumSize=New-Object System.Drawing.Size(700,420)
@@ -1593,66 +1593,66 @@ AddLabel '3)  Disc icon (.ico, or .png/.jpg to auto-convert):' 15 268 520 | Out-
 $txtIcon=AddText 15 290 520
 $btnIcon=AddBtn 'Browse...' 545 290 110
 $lblIcon=AddLabel '' 15 318 500; $lblIcon.ForeColor=[System.Drawing.Color]::DimGray
-$picIcon=New-Object System.Windows.Forms.PictureBox; $picIcon.Location=New-Object System.Drawing.Point(560,314); $picIcon.Size=New-Object System.Drawing.Size(64,64); $picIcon.SizeMode='Zoom'; $picIcon.BorderStyle='FixedSingle'; $form.Controls.Add($picIcon)
+$picIcon=New-Object System.Windows.Forms.PictureBox; $picIcon.Location=New-Object System.Drawing.Point(560,290); $picIcon.Size=New-Object System.Drawing.Size(44,44); $picIcon.SizeMode='Zoom'; $picIcon.BorderStyle='FixedSingle'; $form.Controls.Add($picIcon)
 
-$grp=New-Object System.Windows.Forms.GroupBox; $grp.Text='4)  Autorun menu'; $grp.Location=New-Object System.Drawing.Point(15,388); $grp.Size=New-Object System.Drawing.Size(645,326); $form.Controls.Add($grp)
+$grp=New-Object System.Windows.Forms.GroupBox; $grp.Text='4)  Autorun menu'; $grp.Location=New-Object System.Drawing.Point(15,372); $grp.Size=New-Object System.Drawing.Size(645,286); $form.Controls.Add($grp)
 $chkMenu=New-Object System.Windows.Forms.CheckBox; $chkMenu.Text='Run splash menu when disc is inserted'; $chkMenu.Location=New-Object System.Drawing.Point(15,24); $chkMenu.Size=New-Object System.Drawing.Size(400,22); $chkMenu.Checked=$true; $grp.Controls.Add($chkMenu)
 
-$lblBg=New-Object System.Windows.Forms.Label; $lblBg.Text='Background image:'; $lblBg.Location=New-Object System.Drawing.Point(15,56); $lblBg.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblBg)
-$txtBg=New-Object System.Windows.Forms.TextBox; $txtBg.Location=New-Object System.Drawing.Point(150,54); $txtBg.Size=New-Object System.Drawing.Size(350,24); $grp.Controls.Add($txtBg)
-$btnBg=New-Object System.Windows.Forms.Button; $btnBg.Text='Browse...'; $btnBg.Location=New-Object System.Drawing.Point(510,53); $btnBg.Size=New-Object System.Drawing.Size(110,24); $grp.Controls.Add($btnBg)
+$lblBg=New-Object System.Windows.Forms.Label; $lblBg.Text='Background image:'; $lblBg.Location=New-Object System.Drawing.Point(15,54); $lblBg.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblBg)
+$txtBg=New-Object System.Windows.Forms.TextBox; $txtBg.Location=New-Object System.Drawing.Point(150,52); $txtBg.Size=New-Object System.Drawing.Size(350,24); $grp.Controls.Add($txtBg)
+$btnBg=New-Object System.Windows.Forms.Button; $btnBg.Text='Browse...'; $btnBg.Location=New-Object System.Drawing.Point(510,51); $btnBg.Size=New-Object System.Drawing.Size(110,24); $grp.Controls.Add($btnBg)
 
-$chkBgAsIs=New-Object System.Windows.Forms.CheckBox; $chkBgAsIs.Text='Use as-is (already 760x480, no overlay)'; $chkBgAsIs.Location=New-Object System.Drawing.Point(150,84); $chkBgAsIs.Size=New-Object System.Drawing.Size(250,22); $grp.Controls.Add($chkBgAsIs)
-$lblSide=New-Object System.Windows.Forms.Label; $lblSide.Text='Buttons:'; $lblSide.Location=New-Object System.Drawing.Point(410,86); $lblSide.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblSide)
-$cmbSide=New-Object System.Windows.Forms.ComboBox; $cmbSide.DropDownStyle='DropDownList'; $cmbSide.Location=New-Object System.Drawing.Point(468,83); $cmbSide.Size=New-Object System.Drawing.Size(100,24); [void]$cmbSide.Items.AddRange(@('Right','Left')); $cmbSide.SelectedIndex=0; $grp.Controls.Add($cmbSide)
+$chkBgAsIs=New-Object System.Windows.Forms.CheckBox; $chkBgAsIs.Text='Use as-is (already 760x480, no overlay)'; $chkBgAsIs.Location=New-Object System.Drawing.Point(150,80); $chkBgAsIs.Size=New-Object System.Drawing.Size(250,22); $grp.Controls.Add($chkBgAsIs)
+$lblSide=New-Object System.Windows.Forms.Label; $lblSide.Text='Buttons:'; $lblSide.Location=New-Object System.Drawing.Point(410,82); $lblSide.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblSide)
+$cmbSide=New-Object System.Windows.Forms.ComboBox; $cmbSide.DropDownStyle='DropDownList'; $cmbSide.Location=New-Object System.Drawing.Point(468,79); $cmbSide.Size=New-Object System.Drawing.Size(100,24); [void]$cmbSide.Items.AddRange(@('Right','Left')); $cmbSide.SelectedIndex=0; $grp.Controls.Add($cmbSide)
 
-$lblTitle=New-Object System.Windows.Forms.Label; $lblTitle.Text='Title on artwork:'; $lblTitle.Location=New-Object System.Drawing.Point(15,114); $lblTitle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblTitle)
-$chkTitle=New-Object System.Windows.Forms.CheckBox; $chkTitle.Text='Show title'; $chkTitle.Location=New-Object System.Drawing.Point(150,112); $chkTitle.Size=New-Object System.Drawing.Size(145,22); $grp.Controls.Add($chkTitle)
-$txtTitle=New-Object System.Windows.Forms.TextBox; $txtTitle.Location=New-Object System.Drawing.Point(300,110); $txtTitle.Size=New-Object System.Drawing.Size(320,24); $txtTitle.Enabled=$false; $grp.Controls.Add($txtTitle)
+$lblTitle=New-Object System.Windows.Forms.Label; $lblTitle.Text='Title on artwork:'; $lblTitle.Location=New-Object System.Drawing.Point(15,110); $lblTitle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblTitle)
+$chkTitle=New-Object System.Windows.Forms.CheckBox; $chkTitle.Text='Show title'; $chkTitle.Location=New-Object System.Drawing.Point(150,108); $chkTitle.Size=New-Object System.Drawing.Size(145,22); $grp.Controls.Add($chkTitle)
+$txtTitle=New-Object System.Windows.Forms.TextBox; $txtTitle.Location=New-Object System.Drawing.Point(300,106); $txtTitle.Size=New-Object System.Drawing.Size(320,24); $txtTitle.Enabled=$false; $grp.Controls.Add($txtTitle)
 
-$chkMusic=New-Object System.Windows.Forms.CheckBox; $chkMusic.Text='Background music'; $chkMusic.Location=New-Object System.Drawing.Point(15,152); $chkMusic.Size=New-Object System.Drawing.Size(130,22); $grp.Controls.Add($chkMusic)
-$txtMusic=New-Object System.Windows.Forms.TextBox; $txtMusic.Location=New-Object System.Drawing.Point(150,150); $txtMusic.Size=New-Object System.Drawing.Size(350,24); $txtMusic.Enabled=$false; $grp.Controls.Add($txtMusic)
-$btnMusic=New-Object System.Windows.Forms.Button; $btnMusic.Text='Browse...'; $btnMusic.Location=New-Object System.Drawing.Point(510,149); $btnMusic.Size=New-Object System.Drawing.Size(110,24); $btnMusic.Enabled=$false; $grp.Controls.Add($btnMusic)
+$chkMusic=New-Object System.Windows.Forms.CheckBox; $chkMusic.Text='Background music'; $chkMusic.Location=New-Object System.Drawing.Point(15,136); $chkMusic.Size=New-Object System.Drawing.Size(130,22); $grp.Controls.Add($chkMusic)
+$txtMusic=New-Object System.Windows.Forms.TextBox; $txtMusic.Location=New-Object System.Drawing.Point(150,134); $txtMusic.Size=New-Object System.Drawing.Size(350,24); $txtMusic.Enabled=$false; $grp.Controls.Add($txtMusic)
+$btnMusic=New-Object System.Windows.Forms.Button; $btnMusic.Text='Browse...'; $btnMusic.Location=New-Object System.Drawing.Point(510,133); $btnMusic.Size=New-Object System.Drawing.Size(110,24); $btnMusic.Enabled=$false; $grp.Controls.Add($btnMusic)
 
-$lblBtns=New-Object System.Windows.Forms.Label; $lblBtns.Text='Menu buttons:'; $lblBtns.Location=New-Object System.Drawing.Point(15,186); $lblBtns.Size=New-Object System.Drawing.Size(120,20); $grp.Controls.Add($lblBtns)
-$cbPlay =New-Object System.Windows.Forms.CheckBox; $cbPlay.Text='Play'; $cbPlay.Checked=$true; $cbPlay.Location=New-Object System.Drawing.Point(150,184); $cbPlay.Size=New-Object System.Drawing.Size(70,22); $grp.Controls.Add($cbPlay)
-$cbInst =New-Object System.Windows.Forms.CheckBox; $cbInst.Text='Install'; $cbInst.Checked=$true; $cbInst.Location=New-Object System.Drawing.Point(225,184); $cbInst.Size=New-Object System.Drawing.Size(75,22); $grp.Controls.Add($cbInst)
-$cbMan  =New-Object System.Windows.Forms.CheckBox; $cbMan.Text='Manual'; $cbMan.Location=New-Object System.Drawing.Point(305,184); $cbMan.Size=New-Object System.Drawing.Size(80,22); $grp.Controls.Add($cbMan)
-$cbExtra=New-Object System.Windows.Forms.CheckBox; $cbExtra.Text='Extras'; $cbExtra.Location=New-Object System.Drawing.Point(390,184); $cbExtra.Size=New-Object System.Drawing.Size(75,22); $grp.Controls.Add($cbExtra)
-$cbExit =New-Object System.Windows.Forms.CheckBox; $cbExit.Text='Exit'; $cbExit.Checked=$true; $cbExit.Location=New-Object System.Drawing.Point(465,184); $cbExit.Size=New-Object System.Drawing.Size(70,22); $grp.Controls.Add($cbExit)
+$lblBtns=New-Object System.Windows.Forms.Label; $lblBtns.Text='Menu buttons:'; $lblBtns.Location=New-Object System.Drawing.Point(15,164); $lblBtns.Size=New-Object System.Drawing.Size(120,20); $grp.Controls.Add($lblBtns)
+$cbPlay =New-Object System.Windows.Forms.CheckBox; $cbPlay.Text='Play'; $cbPlay.Checked=$true; $cbPlay.Location=New-Object System.Drawing.Point(150,162); $cbPlay.Size=New-Object System.Drawing.Size(70,22); $grp.Controls.Add($cbPlay)
+$cbInst =New-Object System.Windows.Forms.CheckBox; $cbInst.Text='Install'; $cbInst.Checked=$true; $cbInst.Location=New-Object System.Drawing.Point(225,162); $cbInst.Size=New-Object System.Drawing.Size(75,22); $grp.Controls.Add($cbInst)
+$cbMan  =New-Object System.Windows.Forms.CheckBox; $cbMan.Text='Manual'; $cbMan.Location=New-Object System.Drawing.Point(305,162); $cbMan.Size=New-Object System.Drawing.Size(80,22); $grp.Controls.Add($cbMan)
+$cbExtra=New-Object System.Windows.Forms.CheckBox; $cbExtra.Text='Extras'; $cbExtra.Location=New-Object System.Drawing.Point(390,162); $cbExtra.Size=New-Object System.Drawing.Size(75,22); $grp.Controls.Add($cbExtra)
+$cbExit =New-Object System.Windows.Forms.CheckBox; $cbExit.Text='Exit'; $cbExit.Checked=$true; $cbExit.Location=New-Object System.Drawing.Point(465,162); $cbExit.Size=New-Object System.Drawing.Size(70,22); $grp.Controls.Add($cbExit)
 
-$lblMan=New-Object System.Windows.Forms.Label; $lblMan.Text='Manual file:'; $lblMan.Location=New-Object System.Drawing.Point(15,220); $lblMan.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblMan)
-$txtMan=New-Object System.Windows.Forms.TextBox; $txtMan.Location=New-Object System.Drawing.Point(150,218); $txtMan.Size=New-Object System.Drawing.Size(350,24); $txtMan.Enabled=$false; $grp.Controls.Add($txtMan)
-$btnMan=New-Object System.Windows.Forms.Button; $btnMan.Text='Browse...'; $btnMan.Location=New-Object System.Drawing.Point(510,217); $btnMan.Size=New-Object System.Drawing.Size(110,24); $btnMan.Enabled=$false; $grp.Controls.Add($btnMan)
+$lblMan=New-Object System.Windows.Forms.Label; $lblMan.Text='Manual file:'; $lblMan.Location=New-Object System.Drawing.Point(15,192); $lblMan.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblMan)
+$txtMan=New-Object System.Windows.Forms.TextBox; $txtMan.Location=New-Object System.Drawing.Point(150,190); $txtMan.Size=New-Object System.Drawing.Size(350,24); $txtMan.Enabled=$false; $grp.Controls.Add($txtMan)
+$btnMan=New-Object System.Windows.Forms.Button; $btnMan.Text='Browse...'; $btnMan.Location=New-Object System.Drawing.Point(510,189); $btnMan.Size=New-Object System.Drawing.Size(110,24); $btnMan.Enabled=$false; $grp.Controls.Add($btnMan)
 
-$lblEx=New-Object System.Windows.Forms.Label; $lblEx.Text='Extras folder:'; $lblEx.Location=New-Object System.Drawing.Point(15,254); $lblEx.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblEx)
-$txtEx=New-Object System.Windows.Forms.TextBox; $txtEx.Location=New-Object System.Drawing.Point(150,252); $txtEx.Size=New-Object System.Drawing.Size(350,24); $txtEx.Enabled=$false; $grp.Controls.Add($txtEx)
-$btnEx=New-Object System.Windows.Forms.Button; $btnEx.Text='Browse...'; $btnEx.Location=New-Object System.Drawing.Point(510,251); $btnEx.Size=New-Object System.Drawing.Size(110,24); $btnEx.Enabled=$false; $grp.Controls.Add($btnEx)
+$lblEx=New-Object System.Windows.Forms.Label; $lblEx.Text='Extras folder:'; $lblEx.Location=New-Object System.Drawing.Point(15,220); $lblEx.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblEx)
+$txtEx=New-Object System.Windows.Forms.TextBox; $txtEx.Location=New-Object System.Drawing.Point(150,218); $txtEx.Size=New-Object System.Drawing.Size(350,24); $txtEx.Enabled=$false; $grp.Controls.Add($txtEx)
+$btnEx=New-Object System.Windows.Forms.Button; $btnEx.Text='Browse...'; $btnEx.Location=New-Object System.Drawing.Point(510,217); $btnEx.Size=New-Object System.Drawing.Size(110,24); $btnEx.Enabled=$false; $grp.Controls.Add($btnEx)
 
-$lblStyle=New-Object System.Windows.Forms.Label; $lblStyle.Text='Look:'; $lblStyle.Location=New-Object System.Drawing.Point(15,288); $lblStyle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblStyle)
-$chkDivider=New-Object System.Windows.Forms.CheckBox; $chkDivider.Text='Divider line'; $chkDivider.Location=New-Object System.Drawing.Point(150,286); $chkDivider.Size=New-Object System.Drawing.Size(100,22); $grp.Controls.Add($chkDivider)
-$chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Window border'; $chkWinBorder.Checked=$true; $chkWinBorder.Location=New-Object System.Drawing.Point(255,286); $chkWinBorder.Size=New-Object System.Drawing.Size(115,22); $grp.Controls.Add($chkWinBorder)
-$lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,288); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
-$cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,285); $cmbBtnStyle.Size=New-Object System.Drawing.Size(130,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
+$lblStyle=New-Object System.Windows.Forms.Label; $lblStyle.Text='Look:'; $lblStyle.Location=New-Object System.Drawing.Point(15,250); $lblStyle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblStyle)
+$chkDivider=New-Object System.Windows.Forms.CheckBox; $chkDivider.Text='Divider line'; $chkDivider.Location=New-Object System.Drawing.Point(150,248); $chkDivider.Size=New-Object System.Drawing.Size(100,22); $grp.Controls.Add($chkDivider)
+$chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Window border'; $chkWinBorder.Checked=$true; $chkWinBorder.Location=New-Object System.Drawing.Point(255,248); $chkWinBorder.Size=New-Object System.Drawing.Size(115,22); $grp.Controls.Add($chkWinBorder)
+$lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,250); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
+$cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,247); $cmbBtnStyle.Size=New-Object System.Drawing.Size(130,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
 
-$grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,724); $grpX.Size=New-Object System.Drawing.Size(645,132); $form.Controls.Add($grpX)
+$grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,668); $grpX.Size=New-Object System.Drawing.Size(645,118); $form.Controls.Add($grpX)
 $lstExtra=New-Object System.Windows.Forms.ListBox; $lstExtra.Location=New-Object System.Drawing.Point(15,22); $lstExtra.Size=New-Object System.Drawing.Size(480,100); $lstExtra.SelectionMode='MultiExtended'; $lstExtra.HorizontalScrollbar=$true; $grpX.Controls.Add($lstExtra)
 $btnXFile=New-Object System.Windows.Forms.Button; $btnXFile.Text='Add files...'; $btnXFile.Location=New-Object System.Drawing.Point(505,22); $btnXFile.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXFile)
 $btnXDir =New-Object System.Windows.Forms.Button; $btnXDir.Text='Add folder...'; $btnXDir.Location=New-Object System.Drawing.Point(505,52); $btnXDir.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDir)
 $btnXDel =New-Object System.Windows.Forms.Button; $btnXDel.Text='Remove'; $btnXDel.Location=New-Object System.Drawing.Point(505,82); $btnXDel.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDel)
 
-AddLabel '6)  Output folder (ISO + disc staging go here):' 15 870 520 | Out-Null
-$txtOut=AddText 15 892 520
-$btnOut=AddBtn 'Browse...' 545 892 110
+AddLabel '6)  Output folder (ISO + disc staging go here):' 15 800 520 | Out-Null
+$txtOut=AddText 15 822 520
+$btnOut=AddBtn 'Browse...' 545 822 110
 
-$btnBuild=New-Object System.Windows.Forms.Button; $btnBuild.Text='BUILD ISO'; $btnBuild.Location=New-Object System.Drawing.Point(15,926); $btnBuild.Size=New-Object System.Drawing.Size(150,30); $btnBuild.BackColor=[System.Drawing.Color]::FromArgb(0,150,160); $btnBuild.ForeColor=[System.Drawing.Color]::White; $form.Controls.Add($btnBuild)
-$txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLog.ScrollBars='Vertical'; $txtLog.ReadOnly=$true; $txtLog.Location=New-Object System.Drawing.Point(180,926); $txtLog.Size=New-Object System.Drawing.Size(480,90); $form.Controls.Add($txtLog)
+$btnBuild=New-Object System.Windows.Forms.Button; $btnBuild.Text='BUILD ISO'; $btnBuild.Location=New-Object System.Drawing.Point(15,856); $btnBuild.Size=New-Object System.Drawing.Size(150,30); $btnBuild.BackColor=[System.Drawing.Color]::FromArgb(0,150,160); $btnBuild.ForeColor=[System.Drawing.Color]::White; $form.Controls.Add($btnBuild)
+$txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLog.ScrollBars='Vertical'; $txtLog.ReadOnly=$true; $txtLog.Location=New-Object System.Drawing.Point(180,856); $txtLog.Size=New-Object System.Drawing.Size(480,78); $form.Controls.Add($txtLog)
 
 # Both sit in space the layout already had, under the BUILD button and beside the
 # log, so nothing else has to move. Hidden until a build starts - an idle window
 # looks exactly as it did before.
-$pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,964); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
-$lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,984); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
+$pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,894); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
+$lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
 
 $buildWatch = New-Object System.Diagnostics.Stopwatch
 

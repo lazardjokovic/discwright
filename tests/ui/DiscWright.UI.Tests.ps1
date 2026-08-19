@@ -124,6 +124,44 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         $r.Height | Should -BeLessOrEqual $usable
     }
 
+    It 'has no two controls sitting on top of each other' {
+        # The form is laid out in absolute pixels, so tightening one row can put
+        # a control through its neighbour and nothing complains - a preview box
+        # was moved onto its own Browse button exactly that way. Rectangles are
+        # what UI Automation reports accurately, so they are what gets checked.
+        $kids = $script:Win.FindAll([System.Windows.Automation.TreeScope]::Children,
+                                    [System.Windows.Automation.Condition]::TrueCondition)
+        $boxes = @()
+        for ($i = 0; $i -lt $kids.Count; $i++) {
+            try {
+                $c = $kids.Item($i); $r = $c.Current.BoundingRectangle
+                if ($r.Width -gt 0 -and $r.Height -gt 0) {
+                    $boxes += [pscustomobject]@{ Name = $c.Current.Name; R = $r }
+                }
+            } catch {}
+        }
+        $boxes.Count | Should -BeGreaterThan 10 -Because 'the window should have plenty of controls'
+
+        $clashes = @()
+        for ($i = 0; $i -lt $boxes.Count; $i++) {
+            for ($j = $i + 1; $j -lt $boxes.Count; $j++) {
+                $a = $boxes[$i].R; $b = $boxes[$j].R
+                # A group box legitimately contains other things; only siblings
+                # that merely collide are a fault, so containment is allowed.
+                $overlapW = [Math]::Min($a.Right, $b.Right) - [Math]::Max($a.Left, $b.Left)
+                $overlapH = [Math]::Min($a.Bottom, $b.Bottom) - [Math]::Max($a.Top, $b.Top)
+                if ($overlapW -le 2 -or $overlapH -le 2) { continue }
+                $aInB = ($a.Left -ge $b.Left - 1 -and $a.Right -le $b.Right + 1 -and
+                         $a.Top -ge $b.Top - 1 -and $a.Bottom -le $b.Bottom + 1)
+                $bInA = ($b.Left -ge $a.Left - 1 -and $b.Right -le $a.Right + 1 -and
+                         $b.Top -ge $a.Top - 1 -and $b.Bottom -le $a.Bottom + 1)
+                if ($aInB -or $bInA) { continue }
+                $clashes += "'$($boxes[$i].Name)' and '$($boxes[$j].Name)' overlap by ${overlapW}x${overlapH}px"
+            }
+        }
+        $clashes.Count | Should -Be 0 -Because ($clashes -join '; ')
+    }
+
     It 'leaves <_> greyed until there is something for it to act on' -ForEach @(
         'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu'
     ) {
