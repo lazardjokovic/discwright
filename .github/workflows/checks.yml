@@ -60,6 +60,15 @@ jobs:
 
           $cfg = New-PesterConfiguration
           $cfg.Run.Path             = 'tests'
+          # tests/ui drives the real window: it launches the app, moves the
+          # pointer and needs a desktop that behaves like a person's. A hosted
+          # runner has a virtual screen, so the suite's own "is there a desktop"
+          # guard says yes and the tests then fail on a display nothing can
+          # really use. Excluded by path AND by tag, because Run.Path is
+          # recursive and would otherwise pick up the file again the moment
+          # anything is renamed.
+          $cfg.Run.ExcludePath      = @((Join-Path $PWD 'tests\ui'))
+          $cfg.Filter.ExcludeTag    = @('UI')
           $cfg.Run.Exit             = $true
           $cfg.Output.Verbosity     = 'Detailed'
           $cfg.TestResult.Enabled   = $true
@@ -127,6 +136,48 @@ jobs:
               }
           }
           if ($failed) { exit 1 }
+
+  # The window tests, which drive the real interface. Advisory on purpose:
+  # continue-on-error means a failure here is reported and does not block a
+  # merge. A hosted runner's desktop is 1024x768 with no one sitting at it, and
+  # the window wants 1032px of height, so controls can land off-screen and a
+  # synthesized click hits nothing. Until this job has been seen to pass
+  # repeatedly it is evidence, not a gate - a check that fails for reasons of its
+  # own is a check people learn to ignore, and then it protects nothing.
+  #
+  # Run them locally, where they are trustworthy:  Invoke-Pester tests/ui
+  window:
+    runs-on: windows-latest
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pester (window tests)
+        shell: powershell
+        run: |
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version.Major -ge 5 })) {
+              Set-PSRepository PSGallery -InstallationPolicy Trusted
+              Install-Module Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0
+          }
+          Import-Module Pester -MinimumVersion 5.0 -Force
+          Add-Type -AssemblyName System.Windows.Forms
+          $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+          Write-Host "runner desktop: $($b.Width)x$($b.Height)"
+
+          $cfg = New-PesterConfiguration
+          $cfg.Run.Path         = 'tests/ui'
+          $cfg.Run.Exit         = $true
+          $cfg.Output.Verbosity = 'Detailed'
+          Invoke-Pester -Configuration $cfg
+
+      - name: What the window looked like when it failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: window-shots
+          path: tests/ui/shots
+          if-no-files-found: ignore
 
   # A version constant maintained by hand drifts, because bumping it is a step
   # that gets forgotten. This runs only when a tag is pushed and fails the tag if
