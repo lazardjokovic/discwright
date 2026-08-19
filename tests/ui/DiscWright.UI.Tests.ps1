@@ -356,3 +356,65 @@ Describe 'Removing an entry' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         (Get-StatusText $script:Win) | Should -Not -Match 'add-on'
     }
 }
+
+Describe 'What the build refuses, and whether it says why' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # BUILD ISO stays clickable and checks its requirements when pressed, so
+    # every one of these refusals is a dialog a real user will meet. A refusal
+    # that does not say which step is missing is a refusal that gets reported as
+    # "it does not work".
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'refuses an empty disc, and names step 1' {
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $msg = Read-MessageBox -Win $script:Win
+        $msg | Should -Match 'step 1'
+        $msg | Should -Match 'GOG'
+    }
+
+    It 'renames the build button once there is a disc to overwrite' {
+        # BUILD ISO becomes REBUILD ISO, which is the only warning before an
+        # existing disc folder is wiped and written again.
+        Test-CtlEnabled $script:Win 'BUILD ISO' | Should -Not -BeNullOrEmpty
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:ProjOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        Test-CtlEnabled $script:Win 'REBUILD ISO' | Should -BeTrue
+    }
+
+    It 'refuses a disc with no label, and names step 2' {
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '2)  Disc label*') -Text ''
+        Send-Keys '{BACKSPACE}'
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $msg = Read-MessageBox -Win $script:Win
+        $msg | Should -Match 'step 2'
+    }
+
+    It 'explains what the label is for, not just that it is missing' {
+        # The wording is the whole value of the dialog: it has to tell somebody
+        # who has never seen the app what to type.
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $msg = Read-MessageBox -Win $script:Win
+        $msg | Should -Match 'This PC'
+    }
+
+    It 'refuses a disc with no output folder, and names step 6' {
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '2)  Disc label*') -Text 'Something'
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text ''
+        Send-Keys '{BACKSPACE}'
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $msg = Read-MessageBox -Win $script:Win
+        $msg | Should -Match 'step 6'
+    }
+
+    It 'leaves the disc untouched after a refusal' {
+        # A refused build must not have half-written anything.
+        Get-EntryCount $script:Win | Should -Be 2
+    }
+}

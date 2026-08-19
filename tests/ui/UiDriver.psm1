@@ -265,6 +265,34 @@ function Complete-FileDialog {
     return $true
 }
 
+function Read-MessageBox {
+    <#
+    .SYNOPSIS
+        Read the text out of a message box the app has put up, and dismiss it.
+
+    .DESCRIPTION
+        Returns the wording, so a test can assert that the refusal explains
+        itself rather than merely that something appeared. Dismisses it either
+        way - a message box left standing is modal, and every later click in the
+        same test would land on nothing.
+    #>
+    param($Win, [string]$TitleLike = 'DiscWright', [string]$Button = 'OK', [int]$TimeoutSec = 8)
+    $dlg = Find-Ctl -Root $Win -NameLike $TitleLike -TimeoutSec $TimeoutSec
+    if (-not $dlg) { return $null }
+    $text = ''
+    $all = $dlg.FindAll($script:UiScope::Descendants, $script:UiAny)
+    for ($i = 0; $i -lt $all.Count; $i++) {
+        try {
+            $n = $all.Item($i).Current.Name
+            # The longest child that is not a button is the message itself.
+            if ($n -and $n -notin @('OK','Cancel','Yes','No') -and $n.Length -gt $text.Length) { $text = $n }
+        } catch {}
+    }
+    $btn = Find-Ctl -Root $dlg -NameLike $Button -TimeoutSec 4
+    if ($btn) { Invoke-Ctl -Ctl $btn -SettleMs 600 }
+    return $text
+}
+
 function Save-WindowShot {
     param($Win, [string]$Path)
     if (-not $Path) { return }
@@ -280,4 +308,4 @@ function Save-WindowShot {
 Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow,
-    Complete-FolderDialog, Complete-FileDialog, Save-WindowShot, ConvertTo-SendKeys
+    Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys
