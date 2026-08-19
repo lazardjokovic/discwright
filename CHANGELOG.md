@@ -35,9 +35,20 @@ between minor versions.
   These two are one feature. A DLC and a second game are both another installer that
   needs its own entry in the menu; the only difference is where the entry is shown.
 
-- Project files record which entries are add-ons and what they belong to (schema
-  version 3). Files written by 0.1.x and 0.2.0 still open, and read back as all games
-  with no add-ons, which is what those discs were.
+- **A game's manual and extras belong to that game.** Each entry can have its own
+  manual and its own folder of extras, chosen in the same dialog that says whether it is
+  a game or an add-on. On the disc they sit beside that game's installer, and its menu
+  screen points at them.
+
+  Before this there was one manual for the whole disc, and its button appeared on every
+  game's screen — so on a two-game disc, one of them opened the other game's manual.
+  A disc-wide manual and Extras folder still work and are still there; an entry with
+  none of its own falls back to them, which is exactly how a single-game disc behaves.
+
+- Project files record which entries are add-ons, what they belong to, and each entry's
+  own manual and extras (schema version 4). Files written by 0.1.x and 0.2.0 still open,
+  and read back as all games with no add-ons and nothing of their own, which is what
+  those discs were.
 
 ### Changed
 

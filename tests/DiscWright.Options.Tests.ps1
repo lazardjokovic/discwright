@@ -309,3 +309,101 @@ Describe 'Rebuilding over a disc that is already there' -Tag 'Build' -Skip:(-not
         Test-Path (Join-Path $d.Stage 'OptionDisc.ico') | Should -BeTrue
     }
 }
+
+Describe 'A manual and extras belonging to one game, not to the disc' -Tag 'Build' -Skip:(-not $script:CanBuild) {
+
+    # On a disc with two games there is no such thing as "the manual". Before
+    # this, there was: one manual for the whole disc, and its button appeared on
+    # every game's screen - so on a two-game disc one of them opened the other
+    # game's manual.
+
+    BeforeAll {
+        $b = $script:Box
+        foreach ($n in 'first','second') {
+            $d = Join-Path $b "multi\$n"
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            $fs = [IO.File]::Create((Join-Path $d "setup_${n}_1.0.exe")); $fs.SetLength(2MB); $fs.Close()
+        }
+        $script:ManOne = Join-Path $b 'first_manual.pdf'
+        Set-Content -LiteralPath $script:ManOne -Value 'one' -Encoding ASCII
+        $script:ManTwo = Join-Path $b 'second_manual.pdf'
+        Set-Content -LiteralPath $script:ManTwo -Value 'two' -Encoding ASCII
+        $script:ExtOne = Join-Path $b 'first_extras'
+        New-Item -ItemType Directory -Force -Path $script:ExtOne | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:ExtOne 'artbook.txt') -Value 'a' -Encoding ASCII
+        $script:ExtTwo = Join-Path $b 'second_extras'
+        New-Item -ItemType Directory -Force -Path $script:ExtTwo | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:ExtTwo 'soundtrack.txt') -Value 's' -Encoding ASCII
+
+        $g1 = Get-GameInfo (Join-Path $b 'multi\first')
+        $g1.ManualPath = $script:ManOne; $g1.ExtrasPath = $script:ExtOne
+        $g2 = Get-GameInfo (Join-Path $b 'multi\second')
+        $g2.ManualPath = $script:ManTwo; $g2.ExtrasPath = $script:ExtTwo
+
+        $script:Two = New-TestDisc @{
+            Games   = @($g1, $g2)
+            Buttons = @('Play','Install','Manual','Extras','Exit')
+        }
+    }
+
+    It 'gives each game its own Extras folder, beside its installer' {
+        Test-Path (Join-Path $script:Two.Stage 'Games\01 - first\Extras\artbook.txt')     | Should -BeTrue
+        Test-Path (Join-Path $script:Two.Stage 'Games\02 - second\Extras\soundtrack.txt') | Should -BeTrue
+    }
+
+    It 'puts each manual with the game it belongs to' {
+        Test-Path (Join-Path $script:Two.Stage 'Games\01 - first\Extras\first_manual.pdf')   | Should -BeTrue
+        Test-Path (Join-Path $script:Two.Stage 'Games\02 - second\Extras\second_manual.pdf') | Should -BeTrue
+    }
+
+    It 'does not mix one game''s extras into the other''s' {
+        Test-Path (Join-Path $script:Two.Stage 'Games\01 - first\Extras\soundtrack.txt') | Should -BeFalse
+        Test-Path (Join-Path $script:Two.Stage 'Games\02 - second\Extras\artbook.txt')   | Should -BeFalse
+    }
+
+    It 'tells the menu a different manual for each game' {
+        $paths = @([regex]::Matches($script:Two.Menu, 'man:"([^"]*)"') | ForEach-Object { $_.Groups[1].Value })
+        @($paths | Where-Object { $_ }).Count | Should -Be 2
+        ($paths[0]) | Should -Not -Be ($paths[1])
+    }
+
+    It 'points every menu path at something that is really there' {
+        foreach ($m in [regex]::Matches($script:Two.Menu, '(man|ext|s):"([^"]+)"')) {
+            $rel = $m.Groups[2].Value -replace '\\\\','\'
+            Test-Path (Join-Path $script:Two.Stage $rel) | Should -BeTrue -Because "the menu points at $rel"
+        }
+    }
+
+    It 'falls back to the disc-wide manual for a game that has none of its own' {
+        # An entry with nothing of its own leaves man empty, and the menu then
+        # uses the disc's - which is how every disc built before this behaved.
+        $g1 = Get-GameInfo (Join-Path $script:Box 'multi\first')
+        $g2 = Get-GameInfo (Join-Path $script:Box 'multi\second')
+        $g1.ManualPath = $script:ManOne
+        $d = New-TestDisc @{ Games=@($g1,$g2); ManualPath=$script:Manual
+                             Buttons=@('Play','Install','Manual','Exit') }
+        $paths = @([regex]::Matches($d.Menu, 'man:"([^"]*)"') | ForEach-Object { $_.Groups[1].Value })
+        $paths[0] | Should -Not -BeNullOrEmpty
+        $paths[1] | Should -BeNullOrEmpty
+        $d.Menu.Contains('var MANUAL="handbook.pdf"') | Should -BeTrue
+    }
+
+    It 'keeps a single-game disc flat, exactly as before' {
+        # One entry still puts its manual in Extras\ at the root, so a disc built
+        # by an older DiscWright and rebuilt by this one does not move.
+        $g = Get-GameInfo (Join-Path $script:Box 'multi\first')
+        $g.ManualPath = $script:ManOne; $g.ExtrasPath = $script:ExtOne
+        $d = New-TestDisc @{ Games=@($g); Buttons=@('Play','Install','Manual','Extras','Exit') }
+        Test-Path (Join-Path $d.Stage 'Extras\first_manual.pdf') | Should -BeTrue
+        Test-Path (Join-Path $d.Stage 'Extras\artbook.txt')      | Should -BeTrue
+        Test-Path (Join-Path $d.Stage 'Games')                   | Should -BeFalse
+    }
+
+    It 'remembers each game''s manual and extras in the project file' {
+        $back = Import-Project (Join-Path $script:Two.Out 'discproject.json')
+        $back.GameEntries[0].Manual | Should -Be $script:ManOne
+        $back.GameEntries[1].Manual | Should -Be $script:ManTwo
+        $back.GameEntries[0].Extras | Should -Be $script:ExtOne
+        $back.GameEntries[1].Extras | Should -Be $script:ExtTwo
+    }
+}

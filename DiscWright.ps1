@@ -143,8 +143,13 @@ function Get-GameInfo([string]$folder) {
     # the interface changes them afterwards. ParentIndex is an index into the
     # disc's own list of entries, -1 meaning none - names are not stable enough
     # to point with, since two GOG folders can yield the same ProductName.
+    # ManualPath and ExtrasPath are this entry's OWN. A disc can also carry a
+    # manual and an Extras folder for the whole disc; an entry that has none of
+    # its own falls back to those, which is what keeps a single-game disc, and
+    # every project written before this, behaving exactly as it did.
     $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; Msg=''; TotalBytes=0; Folder=$null
-               Warning=''; MissingParts=@(); Kind='Game'; ParentIndex=-1 }
+               Warning=''; MissingParts=@(); Kind='Game'; ParentIndex=-1
+               ManualPath=$null; ExtrasPath=$null }
     if (-not (Test-Path $folder)) { $info.Msg='Folder not found.'; return $info }
     $exes = @(Get-ChildItem $folder -Filter 'setup_*.exe' -File -ErrorAction SilentlyContinue |
               Sort-Object Length -Descending)
@@ -379,6 +384,16 @@ function Get-DiscEntrySetup([array]$entries,[int]$index) {
     return (Join-Path $rel $name)
 }
 
+# Where an entry's own manual and extras live on the disc. Beside its installer,
+# so a game and everything belonging to it sit together and can be found by hand
+# without the menu. A disc holding one entry keeps the flat Extras\ at the root,
+# which is where every disc built before this put them.
+function Get-DiscEntryExtras([array]$entries,[int]$index) {
+    $rel = Get-DiscEntryFolder $entries $index
+    if ([string]::IsNullOrEmpty($rel)) { return 'Extras' }
+    return (Join-Path $rel 'Extras')
+}
+
 # The menu's view of the disc: games in order, each carrying the add-ons that
 # point at it. An add-on whose parent is missing, or which points at another
 # add-on, is promoted to a game of its own rather than dropped - a disc that
@@ -399,8 +414,17 @@ function Get-MenuGames([array]$entries) {
             if ([int]$a.ParentIndex -ne $i) { continue }
             $addOns += @{ Name=$a.GameName; Setup=(Get-DiscEntrySetup $entries $j) }
         }
+        # An entry's own manual and extras, as paths on the finished disc. Empty
+        # means it has none of its own and the menu should fall back to the
+        # disc-wide ones.
+        $man = ''; $ext = ''
+        if ($e.ManualPath -or $e.ExtrasPath) {
+            $ext = Get-DiscEntryExtras $entries $i
+            if ($e.ManualPath) { $man = Join-Path $ext ([IO.Path]::GetFileName([string]$e.ManualPath)) }
+        }
         $out += @{ Name=$e.GameName; MatchName=$e.GameName
-                   Setup=(Get-DiscEntrySetup $entries $i); AddOns=@($addOns) }
+                   Setup=(Get-DiscEntrySetup $entries $i); AddOns=@($addOns)
+                   Manual=$man; Extras=$ext }
     }
     return ,@($out)
 }
@@ -636,7 +660,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         }) -join ',') + ']'
         $mn = if ($_.MatchName) { $_.MatchName } else { $_.Name }
         '{n:"' + (ConvertTo-JsString $_.Name) + '",m:"' + (ConvertTo-JsString $mn) +
-        '",s:"' + (ConvertTo-JsString $_.Setup) + '",a:' + $addJs + '}'
+        '",s:"' + (ConvertTo-JsString $_.Setup) +
+        '",man:"' + (ConvertTo-JsString ([string]$_.Manual)) +
+        '",ext:"' + (ConvertTo-JsString ([string]$_.Extras)) + '",a:' + $addJs + '}'
     }) -join ',') + ']'
 
     $btnsJs = '[' + ((@($cfg.Buttons) | ForEach-Object { '"' + (ConvertTo-JsString $_) + '"' }) -join ',') + ']'
@@ -682,7 +708,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var fso=new ActiveXObject("Scripting.FileSystemObject");
   var shell=new ActiveXObject("Shell.Application");
   var root="";
-  var GAMES=%%GAMES%%;       // [{n:name, m:registry match, s:setup path, a:[{n,s}] }]
+  var GAMES=%%GAMES%%;       // [{n:name, m:registry match, s:setup, man:manual, ext:extras, a:[{n,s}]}]
   var BTNS=%%BTNS%%;         // which of Play/Install/Manual/Extras/Exit the disc was built with
   var MANUAL="%%MANUAL%%"; var MUSIC="%%MUSIC%%";
   var PREVIEW=%%PREVIEW%%;   // true only for the app's Preview - see refreshButtons
@@ -781,6 +807,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   }
   function off(id){ var e=document.getElementById(id); return (e && e.btnOff); }
   function has(b){ for(var i=0;i<BTNS.length;i++){ if(BTNS[i]==b) return true; } return false; }
+  // A game's own manual and extras if it has them, otherwise the disc's. The
+  // fallback is what keeps a one-game disc, and every disc built before games
+  // could have their own, behaving exactly as it did.
+  function manualOf(g){ if(g.man) return g.man; return MANUAL ? ("Extras\\"+MANUAL) : ""; }
+  function extrasOf(g){ if(g.ext) return g.ext; return "Extras"; }
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   // 250px of 15px uppercase with 2px letter-spacing runs out at about twenty
   // characters. Clipping here rather than letting CSS do it keeps the ellipsis
@@ -859,10 +890,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       setEnabled("btn_addon_"+j, (PREVIEW || fso.FileExists(fso.BuildPath(root,g.a[j].s))),
                  "This add-on's installer is not on the disc.");
     }
-    setEnabled("btn_Manual", (PREVIEW || (MANUAL!="" && fso.FileExists(fso.BuildPath(root,"Extras\\"+MANUAL)))),
-               "The manual is not on this disc.");
-    setEnabled("btn_Extras", (PREVIEW || fso.FolderExists(fso.BuildPath(root,"Extras"))),
-               "There is no Extras folder on this disc.");
+    var gman = manualOf(g), gext = extrasOf(g);
+    setEnabled("btn_Manual", (PREVIEW || (gman!="" && fso.FileExists(fso.BuildPath(root,gman)))),
+               "There is no manual for " + g.n + " on this disc.");
+    setEnabled("btn_Extras", (PREVIEW || fso.FolderExists(fso.BuildPath(root,gext))),
+               "There is nothing extra for " + g.n + " on this disc.");
     // Play is registry-based, so it tells the truth even in preview.
     setEnabled("btn_Play", (findGame(g.m)!=null),
                g.n+" is not installed yet - use Install first.");
@@ -898,8 +930,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(PREVIEW){ previewStop(a.n); return; }
     launchWithStatus(id,"Starting "+esc(a.n)+"...<br>Reading from disc can take a minute.",a.s,false); }
   function doManual(){ if(off("btn_Manual")) return; if(PREVIEW){ previewStop("Game Manual"); return; }
-    launchWithStatus("btn_Manual","Opening the manual...","Extras\\"+MANUAL,false); }
-  function doExtras(){ if(off("btn_Extras")) return; if(PREVIEW){ previewStop("Extras"); return; } openItem("Extras",true); }
+    launchWithStatus("btn_Manual","Opening the manual...",manualOf(GAMES[cur]),false); }
+  function doExtras(){ if(off("btn_Extras")) return; if(PREVIEW){ previewStop("Extras"); return; }
+    openItem(extrasOf(GAMES[cur]),true); }
   function doExit(){ window.close(); }
   function regGet(reg,h,sub,val){ try{ var i=reg.Methods_.Item("GetStringValue").InParameters.SpawnInstance_();
     i.hDefKey=h;i.sSubKeyName=sub;i.sValueName=val; var o=reg.ExecMethod_("GetStringValue",i); if(o.ReturnValue==0)return o.sValue; }catch(e){} return null; }
@@ -1093,7 +1126,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # wrote it - two different things, deliberately two different keys. This
         # merge is why: the schema went to 2 for the games list while the app was
         # independently at 0.2.0, and one field could not have said both.
-        Version      = 3
+        Version      = 4
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -1115,7 +1148,8 @@ function Save-Project([hashtable]$s,[string]$outDir) {
                             [ordered]@{ Folder=$_.Folder; GameName=$_.GameName
                                         Setup=$(if($_.SetupExe){$_.SetupExe.FullName}else{$null})
                                         Kind=$(if($_.Kind -eq 'AddOn'){'AddOn'}else{'Game'})
-                                        Parent=[int]$_.ParentIndex } })
+                                        Parent=[int]$_.ParentIndex
+                                        Manual=$_.ManualPath; Extras=$_.ExtrasPath } })
         Label        = $s.Label
         IconPath     = $s.IconPath
         IconIsIco    = [bool]$s.IconIsIco
@@ -1149,12 +1183,18 @@ function Import-Project([string]$jsonPath) {
         if ($j.PSObject.Properties.Name -contains 'Games' -and $j.Games) {
             foreach ($g in @($j.Games)) {
                 if (-not $g -or -not $g.Folder) { continue }
-                $kind = 'Game'; $parent = -1; $setup = $null; $nm = $null
+                $kind = 'Game'; $parent = -1; $setup = $null; $nm = $null; $man = $null; $ext = $null
                 if ($g.PSObject.Properties.Name -contains 'Kind' -and $g.Kind -eq 'AddOn') { $kind = 'AddOn' }
                 if ($g.PSObject.Properties.Name -contains 'Parent') { $parent = [int]$g.Parent }
                 if ($g.PSObject.Properties.Name -contains 'Setup')  { $setup = [string]$g.Setup }
                 if ($g.PSObject.Properties.Name -contains 'GameName') { $nm = [string]$g.GameName }
-                $entries += ,@{ Folder=[string]$g.Folder; Kind=$kind; ParentIndex=$parent; Setup=$setup; Name=$nm }
+                # Version 4. Absent in anything older, which reads back as an entry
+                # with none of its own - and the menu then falls back to the
+                # disc-wide manual and Extras, exactly as those discs behaved.
+                if ($g.PSObject.Properties.Name -contains 'Manual') { $man = [string]$g.Manual }
+                if ($g.PSObject.Properties.Name -contains 'Extras') { $ext = [string]$g.Extras }
+                $entries += ,@{ Folder=[string]$g.Folder; Kind=$kind; ParentIndex=$parent; Setup=$setup; Name=$nm
+                                Manual=$man; Extras=$ext }
             }
         }
         if ($entries.Count -eq 0 -and $j.SourceFolder) {
@@ -1327,6 +1367,26 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
                 if ($sameVol) { try { New-Item -ItemType HardLink -Path $dest -Target $f.FullName -EA Stop | Out-Null; & $log "  linked $($f.Name)" }
                                 catch { Copy-Item $f.FullName $dest; & $log "  copied $($f.Name)" } }
                 else { & $log "  copying $($f.Name) ..."; Copy-Item $f.FullName $dest }
+            }
+
+            # This entry's own manual and extras, beside its installer, so a game
+            # and everything belonging to it sit together on the disc. Without
+            # this the Manual button on every game's screen opened whichever
+            # manual the disc happened to carry - on a two-game disc, the wrong
+            # one for one of them.
+            if ($g.ManualPath -or $g.ExtrasPath) {
+                $gx = Join-Path $stage (Get-DiscEntryExtras $games $gi)
+                New-Item -ItemType Directory -Force -Path $gx | Out-Null
+                if ($g.ExtrasPath -and (Test-Path $g.ExtrasPath)) {
+                    Copy-Item "$($g.ExtrasPath)\*" $gx -Recurse -Force -EA SilentlyContinue
+                    Clear-ReadOnly $gx
+                    & $log "    extras for $($g.GameName)"
+                }
+                if ($g.ManualPath -and (Test-Path $g.ManualPath)) {
+                    $md = Join-Path $gx ([IO.Path]::GetFileName($g.ManualPath))
+                    Clear-ReadOnly $md; Copy-Item -LiteralPath $g.ManualPath -Destination $md -Force; Clear-ReadOnly $md
+                    & $log "    manual for $($g.GameName): $([IO.Path]::GetFileName($g.ManualPath))"
+                }
             }
         }
     }
@@ -1819,6 +1879,11 @@ function Set-GameEntries([array]$entries) {
         if ($e.Kind -eq 'AddOn') { $g.Kind = 'AddOn'; $g.ParentIndex = [int]$e.ParentIndex }
         # A name the user edited is theirs, not something to re-derive on open.
         if (-not [string]::IsNullOrWhiteSpace($e.Name)) { $g.GameName = [string]$e.Name }
+        # Only carried forward if the file is still where it was. A manual that
+        # has been moved or deleted since the disc was built must not silently
+        # become a menu button pointing at nothing.
+        if ($e.Manual -and (Test-Path $e.Manual)) { $g.ManualPath = [string]$e.Manual }
+        if ($e.Extras -and (Test-Path $e.Extras)) { $g.ExtrasPath = [string]$e.Extras }
         $found += ,$g
     }
     $state.Games = @($found)
@@ -2015,11 +2080,11 @@ function Show-EntryKindDialog([int]$index) {
     $dlg.Text='Entry on the disc'; $dlg.Font=$form.Font
     $dlg.FormBorderStyle='FixedDialog'; $dlg.MaximizeBox=$false; $dlg.MinimizeBox=$false
     $dlg.StartPosition='CenterParent'; $dlg.ShowInTaskbar=$false
-    $dlg.ClientSize=New-Object System.Drawing.Size(400,222)
+    $dlg.ClientSize=New-Object System.Drawing.Size(480,292)
 
     $l=New-Object System.Windows.Forms.Label
     $l.Text='How should this installer appear on the disc?'
-    $l.Location=New-Object System.Drawing.Point(15,15); $l.Size=New-Object System.Drawing.Size(370,20)
+    $l.Location=New-Object System.Drawing.Point(15,15); $l.Size=New-Object System.Drawing.Size(450,20)
     $dlg.Controls.Add($l)
 
     # Editable, because the derived name is a guess. A GOG patch reports the
@@ -2030,36 +2095,76 @@ function Show-EntryKindDialog([int]$index) {
     $lblName.Location=New-Object System.Drawing.Point(20,48); $lblName.Size=New-Object System.Drawing.Size(115,20)
     $dlg.Controls.Add($lblName)
     $txtName=New-Object System.Windows.Forms.TextBox
-    $txtName.Location=New-Object System.Drawing.Point(140,46); $txtName.Size=New-Object System.Drawing.Size(240,24)
+    $txtName.Location=New-Object System.Drawing.Point(140,46); $txtName.Size=New-Object System.Drawing.Size(320,24)
     $txtName.Text=[string]$me.GameName
     $dlg.Controls.Add($txtName)
 
     $rbGame=New-Object System.Windows.Forms.RadioButton
     $rbGame.Text='A game of its own'
-    $rbGame.Location=New-Object System.Drawing.Point(20,85); $rbGame.Size=New-Object System.Drawing.Size(360,22)
+    $rbGame.Location=New-Object System.Drawing.Point(20,85); $rbGame.Size=New-Object System.Drawing.Size(440,22)
     $dlg.Controls.Add($rbGame)
 
     $rbAdd=New-Object System.Windows.Forms.RadioButton
     $rbAdd.Text='An add-on (DLC, expansion, patch, mod) for:'
-    $rbAdd.Location=New-Object System.Drawing.Point(20,113); $rbAdd.Size=New-Object System.Drawing.Size(360,22)
+    $rbAdd.Location=New-Object System.Drawing.Point(20,113); $rbAdd.Size=New-Object System.Drawing.Size(440,22)
     $dlg.Controls.Add($rbAdd)
 
     $cmb=New-Object System.Windows.Forms.ComboBox
     $cmb.DropDownStyle='DropDownList'
-    $cmb.Location=New-Object System.Drawing.Point(40,139); $cmb.Size=New-Object System.Drawing.Size(340,24)
+    $cmb.Location=New-Object System.Drawing.Point(40,139); $cmb.Size=New-Object System.Drawing.Size(420,24)
     foreach ($c in $candidates) { [void]$cmb.Items.Add($c.Name) }
     $dlg.Controls.Add($cmb)
 
+    # This entry's own manual and extras. Blank means it has none, and the menu
+    # falls back to the disc-wide ones from step 4 - which is what every disc
+    # built before this did for every game on it.
+    $lblMan=New-Object System.Windows.Forms.Label
+    $lblMan.Text='Its own manual:'
+    $lblMan.Location=New-Object System.Drawing.Point(20,175); $lblMan.Size=New-Object System.Drawing.Size(115,20)
+    $dlg.Controls.Add($lblMan)
+    $txtMan=New-Object System.Windows.Forms.TextBox
+    $txtMan.Location=New-Object System.Drawing.Point(140,173); $txtMan.Size=New-Object System.Drawing.Size(200,24)
+    $txtMan.Text=[string]$me.ManualPath
+    $dlg.Controls.Add($txtMan)
+    $btnMan=New-Object System.Windows.Forms.Button; $btnMan.Text='Browse...'
+    $btnMan.Location=New-Object System.Drawing.Point(348,172); $btnMan.Size=New-Object System.Drawing.Size(100,24)
+    $dlg.Controls.Add($btnMan)
+
+    $lblExt=New-Object System.Windows.Forms.Label
+    $lblExt.Text='Its own extras:'
+    $lblExt.Location=New-Object System.Drawing.Point(20,205); $lblExt.Size=New-Object System.Drawing.Size(115,20)
+    $dlg.Controls.Add($lblExt)
+    $txtExt=New-Object System.Windows.Forms.TextBox
+    $txtExt.Location=New-Object System.Drawing.Point(140,203); $txtExt.Size=New-Object System.Drawing.Size(200,24)
+    $txtExt.Text=[string]$me.ExtrasPath
+    $dlg.Controls.Add($txtExt)
+    $btnExt=New-Object System.Windows.Forms.Button; $btnExt.Text='Browse...'
+    $btnExt.Location=New-Object System.Drawing.Point(348,202); $btnExt.Size=New-Object System.Drawing.Size(100,24)
+    $dlg.Controls.Add($btnExt)
+
+    $btnMan.Add_Click({
+        $d=New-Object System.Windows.Forms.OpenFileDialog
+        $d.Filter='Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*'
+        $d.Title="Pick the manual for this game"
+        if ($txtMan.Text -and (Test-Path $txtMan.Text)) { $d.FileName = $txtMan.Text }
+        if ($d.ShowDialog() -eq 'OK') { $txtMan.Text = $d.FileName }
+        $d.Dispose()
+    }.GetNewClosure())
+    $btnExt.Add_Click({
+        $d=New-FolderDialog 'Pick a folder of extras for this game' $txtExt.Text.Trim()
+        if ($d.ShowDialog() -eq 'OK') { $txtExt.Text = $d.SelectedPath }
+    }.GetNewClosure())
+
     $note=New-Object System.Windows.Forms.Label
     $note.ForeColor=[System.Drawing.Color]::DimGray
-    $note.Location=New-Object System.Drawing.Point(20,168); $note.Size=New-Object System.Drawing.Size(360,20)
+    $note.Location=New-Object System.Drawing.Point(20,233); $note.Size=New-Object System.Drawing.Size(440,20)
     $dlg.Controls.Add($note)
 
     $ok=New-Object System.Windows.Forms.Button; $ok.Text='OK'
-    $ok.Location=New-Object System.Drawing.Point(215,190); $ok.Size=New-Object System.Drawing.Size(80,26)
+    $ok.Location=New-Object System.Drawing.Point(295,258); $ok.Size=New-Object System.Drawing.Size(80,26)
     $ok.DialogResult='OK'; $dlg.Controls.Add($ok)
     $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'
-    $cancel.Location=New-Object System.Drawing.Point(300,190); $cancel.Size=New-Object System.Drawing.Size(80,26)
+    $cancel.Location=New-Object System.Drawing.Point(385,258); $cancel.Size=New-Object System.Drawing.Size(80,26)
     $cancel.DialogResult='Cancel'; $dlg.Controls.Add($cancel)
     $dlg.AcceptButton=$ok; $dlg.CancelButton=$cancel
 
@@ -2096,6 +2201,13 @@ function Show-EntryKindDialog([int]$index) {
         }
         $n = $txtName.Text.Trim()
         if ($n) { $me.GameName = $n }
+        # Emptying a box clears it, which is how an entry goes back to using the
+        # disc-wide manual or extras. A path that no longer exists is refused
+        # rather than stored, so a build cannot be set up to point at nothing.
+        $mp = $txtMan.Text.Trim()
+        $me.ManualPath = $(if ($mp -and (Test-Path $mp -PathType Leaf)) { $mp } else { $null })
+        $xp = $txtExt.Text.Trim()
+        $me.ExtrasPath = $(if ($xp -and (Test-Path $xp -PathType Container)) { $xp } else { $null })
         $changed = $true
     }
     $dlg.Dispose()

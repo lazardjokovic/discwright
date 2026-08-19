@@ -80,16 +80,37 @@ function Start-DiscWright {
     # and swallows every click aimed at it.
     $proc = Start-Process powershell.exe -WindowStyle Hidden -PassThru -ArgumentList @(
         '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', $AppPath)
-    $win = Wait-Win -TitleLike 'DiscWright*' -TimeoutSec $TimeoutSec
+    # Matched on the process id, not on the title. Waiting for any window called
+    # DiscWright* means driving whichever one is found first, and a copy orphaned
+    # by an earlier test - one that already has a project loaded - looks exactly
+    # like a fresh one until half the suite has failed on state it never set.
+    $win = Wait-WinForProcess -ProcessId $proc.Id -TimeoutSec $TimeoutSec
     if (-not $win) { try { $proc.Kill() } catch {}; throw 'the DiscWright window never appeared' }
     Set-WindowFocus $win; Start-Sleep -Milliseconds 600; Set-WindowFocus $win
     return [pscustomobject]@{ Process = $proc; Window = $win }
+}
+
+function Wait-WinForProcess {
+    param([int]$ProcessId, [int]$TimeoutSec = 60)
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        foreach ($k in $script:UiEl::RootElement.FindAll($script:UiScope::Children, $script:UiAny)) {
+            try {
+                if ($k.Current.ProcessId -eq $ProcessId -and $k.Current.Name -like 'DiscWright*') { return $k }
+            } catch {}
+        }
+        Start-Sleep -Milliseconds 300
+    }
+    return $null
 }
 
 function Stop-DiscWright {
     param($App)
     if (-not $App) { return }
     try { $App.Process.Kill() } catch {}
+    # Waited for, not slept past. A window that is still closing is still findable,
+    # and the next test would attach to a corpse.
+    try { $null = $App.Process.WaitForExit(5000) } catch {}
     Start-Sleep -Milliseconds 300
 }
 
@@ -305,7 +326,7 @@ function Save-WindowShot {
     $bmp.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
 }
 
-Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win,
+Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow,
     Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys

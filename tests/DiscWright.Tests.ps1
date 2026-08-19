@@ -511,8 +511,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 3' {
-            $script:PJson.Version | Should -Be 3
+        It 'declares schema version 4' {
+            $script:PJson.Version | Should -Be 4
         }
 
         It 'records a Kind and a Parent for every entry' {
