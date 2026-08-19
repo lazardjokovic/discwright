@@ -222,6 +222,96 @@ Describe 'Adding add-ons through the file dialog' -Tag 'UI' -Skip:(-not $script:
     }
 }
 
+Describe 'Turning an entry into an add-on through the Change dialog' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        # Two plain games, so one of them can be made an add-on of the other.
+        $script:TwoOut = Join-Path $script:Sandbox 'two-games'
+        New-Item -ItemType Directory -Force -Path $script:TwoOut | Out-Null
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:ProjOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        # The project holds a game and an add-on; add the second game's installer
+        # as another entry so there is a second parent to choose between.
+        Invoke-CtlNamed $script:Win 'Add-on*' | Out-Null
+        Complete-FileDialog -Win $script:Win -TitleLike 'Pick one or more add-on*' `
+            -Files @((Join-Path $script:GameB 'setup_second_game_2.0.exe')) | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'opens on the entry that is selected' {
+        Select-ListRow -Win $script:Win -Index 2
+        Invoke-CtlNamed $script:Win 'Change*' | Out-Null
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 8
+        $dlg | Should -Not -BeNullOrEmpty
+        Save-WindowShot $script:Win (Join-Path $script:ShotDir 'change-dialog.png')
+    }
+
+    It 'greys the parent list the moment "a game of its own" is chosen' {
+        # Tested as behaviour rather than as a starting state, because the
+        # starting state depends on what was selected: the dialog opens with the
+        # parent list live for an entry that is already an add-on, and dead for
+        # one that is not. What must always hold is that choosing "a game of its
+        # own" kills it - an add-on of nothing is not something this dialog is
+        # allowed to produce.
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        $dlg | Should -Not -BeNullOrEmpty
+
+        # The parent list is found by position, not by name. A combo box reports
+        # its SELECTED ITEM as its accessible name - "alpha", not "" - so there
+        # is no fixed string to look for. It is the wide control on the row
+        # directly under the "an add-on" radio.
+        function Get-ParentList($d) {
+            $rb = (Find-Ctl $d 'An add-on*' 5).Current.BoundingRectangle
+            $all = $d.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+                              [System.Windows.Automation.Condition]::TrueCondition)
+            for ($i = 0; $i -lt $all.Count; $i++) {
+                try {
+                    $r = $all.Item($i).Current.BoundingRectangle
+                    if ($r.Width -gt 300 -and $r.Height -lt 30 -and
+                        $r.Y -gt ($rb.Y + $rb.Height - 6) -and
+                        $r.Y -lt ($rb.Y + $rb.Height + 20)) { return $all.Item($i) }
+                } catch {}
+            }
+            return $null
+        }
+        Set-Alias Get-UnnamedCombo Get-ParentList
+
+        # This entry arrived as an add-on, so the list starts live.
+        (Get-UnnamedCombo $dlg).Current.IsEnabled | Should -BeTrue
+
+        Invoke-Ctl -Ctl (Find-Ctl $dlg 'A game of its own' 5) -SettleMs 500
+        (Get-UnnamedCombo $dlg).Current.IsEnabled | Should -BeFalse
+
+        Invoke-Ctl -Ctl (Find-Ctl $dlg 'An add-on*' 5) -SettleMs 500
+        (Get-UnnamedCombo $dlg).Current.IsEnabled | Should -BeTrue
+    }
+
+    It 'renames the entry and closes' {
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        # The name box sits directly after its label in the dialog's child order.
+        $kids = $dlg.FindAll([System.Windows.Automation.TreeScope]::Children,
+                             [System.Windows.Automation.Condition]::TrueCondition)
+        $box = $null
+        for ($i = 0; $i -lt $kids.Count; $i++) {
+            try { if ($kids.Item($i).Current.Name -like 'Name on the menu*') { $box = $kids.Item($i + 1); break } } catch {}
+        }
+        $box | Should -Not -BeNullOrEmpty
+        Set-CtlText -Ctl $box -Text 'Renamed By Test'
+        Invoke-Ctl -Ctl (Find-Ctl $dlg 'OK' 5) -SettleMs 1200
+        (Find-Ctl $script:Win 'Entry on the disc' 2) | Should -BeNullOrEmpty -Because 'OK closes it'
+    }
+
+    It 'leaves the disc with the same number of entries' {
+        # Renaming is not adding or removing.
+        Get-EntryCount $script:Win | Should -Be 3
+    }
+}
+
 Describe 'Removing an entry' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     BeforeAll {
