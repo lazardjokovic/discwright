@@ -9,6 +9,26 @@ between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- **A disc can hold more than one game, and the menu asks which.** Step 1 is a list
+  now rather than a single folder box. With two or more games the disc menu opens on a
+  chooser; picking one leads to its own Play / Install / Manual / Extras menu, with Back
+  to return. A disc with one game behaves exactly as before, chooser and Back button
+  included: it has nothing to choose, so it shows neither.
+- **Add-ons get their own button next to Install.** An entry can be marked as an add-on
+  — DLC, an expansion, a mod that ships as its own installer — and told which game it
+  belongs to. It then appears as an extra Install button on that game's screen instead
+  of in the chooser, which is where a piece of DLC does not belong. Until now the only
+  place for a second installer was Extras, where it was a file in a folder.
+
+  These two are one feature. A DLC and a second game are both another installer that
+  needs its own entry in the menu; the only difference is where the entry is shown.
+
+- Project files record which entries are add-ons and what they belong to (schema
+  version 3). Files written by 0.1.x and 0.2.0 still open, and read back as all games
+  with no add-ons, which is what those discs were.
+
 ### Changed
 
 - **Each Browse button now opens where its own box points.** `FolderBrowserDialog`

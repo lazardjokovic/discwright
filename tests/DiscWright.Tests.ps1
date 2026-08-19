@@ -290,8 +290,17 @@ Describe 'Recovering from a bad folder choice' -Tag 'Unit' {
         $script:EmptyFolder = Join-Path $script:Sandbox 'no-installer-here'
         New-Item -ItemType Directory -Force -Path $script:EmptyFolder | Out-Null
 
-        # Stand-ins for the controls Set-GameFolders and Update-MediaLabel write to.
-        $script:txtFolder = [pscustomobject]@{ Text = '' }
+        # The list and its buttons are real controls, not stand-ins. A ListView
+        # constructs fine with no window behind it, and using the real one means
+        # Update-GameList is exercised rather than a mock of it.
+        Add-Type -AssemblyName System.Windows.Forms
+        $script:lvGames = New-Object System.Windows.Forms.ListView
+        $script:lvGames.View = 'Details'
+        foreach ($c in @('#','Name','Type','Belongs to')) { [void]$script:lvGames.Columns.Add($c,80) }
+        $script:btnGameDel  = New-Object System.Windows.Forms.Button
+        $script:btnGameEdit = New-Object System.Windows.Forms.Button
+
+        # Stand-ins for the plain labels Set-GameEntries and Update-MediaLabel write to.
         $script:lblGame   = [pscustomobject]@{ Text = ''; ForeColor = $null }
         $script:cbMan     = [pscustomobject]@{ Checked = $false }
         $script:cbExtra   = [pscustomobject]@{ Checked = $false }
@@ -311,8 +320,16 @@ Describe 'Recovering from a bad folder choice' -Tag 'Unit' {
         (Get-Games).Count | Should -Be 0
     }
 
-    It 'keeps the rejected path visible rather than blanking the box' {
-        $script:txtFolder.Text | Should -Be $script:EmptyFolder
+    It 'says why the folder was rejected' {
+        # There is no path box any more, so the reason has to be on the label.
+        $script:lblGame.Text | Should -Match 'setup_\*\.exe'
+    }
+
+    It 'still lists the rejected entry, marked, rather than dropping it silently' {
+        # Opening a project whose folder has gone empty must show that it went
+        # empty. Vanishing from the list looks like the app losing the game.
+        $script:lvGames.Items.Count | Should -Be 1
+        $script:lvGames.Items[0].SubItems[1].Text | Should -Be '(no installer found)'
     }
 
     It 'recovers when a good folder is picked again' {
@@ -986,5 +1003,116 @@ Describe 'Building a disc that has an add-on on it' {
         $back = Import-Project (Join-Path $v2 'discproject.json')
         $back.GameEntries.Count | Should -Be 2
         @($back.GameEntries | Where-Object { $_.Kind -ne 'Game' }).Count | Should -Be 0
+    }
+}
+
+Describe 'Adding and removing entries in the list' {
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Windows.Forms
+        $script:lvGames = New-Object System.Windows.Forms.ListView
+        $script:lvGames.View = 'Details'
+        foreach ($c in @('#','Name','Type','Belongs to')) { [void]$script:lvGames.Columns.Add($c,80) }
+        $script:btnGameDel  = New-Object System.Windows.Forms.Button
+        $script:btnGameEdit = New-Object System.Windows.Forms.Button
+        $script:lblGame  = [pscustomobject]@{ Text=''; ForeColor=$null }
+        $script:cbMan    = [pscustomobject]@{ Checked=$false }
+        $script:cbExtra  = [pscustomobject]@{ Checked=$false }
+        $script:chkMusic = [pscustomobject]@{ Checked=$false }
+        $script:state    = @{ Games=@(); ExtraItems=@(); ManualPath=$null; ExtrasPath=$null; MusicFile=$null }
+
+        $script:AddA = New-FixtureGame -Slug 'add_a'
+        $script:AddB = New-FixtureGame -Slug 'add_b'
+        $script:AddEmpty = Join-Path $script:Sandbox 'add-empty'
+        New-Item -ItemType Directory -Force -Path $script:AddEmpty | Out-Null
+    }
+
+    It 'adds a folder rather than replacing what is already there' {
+        $null = Add-GameFolder $script:AddA
+        $null = Add-GameFolder $script:AddB
+        @($script:state.Games).Count | Should -Be 2
+        $script:lvGames.Items.Count  | Should -Be 2
+    }
+
+    It 'refuses the same folder twice' {
+        $g = Add-GameFolder $script:AddA
+        $g | Should -BeNullOrEmpty
+        @($script:state.Games).Count | Should -Be 2
+        $script:lblGame.Text | Should -Match 'already on this disc'
+    }
+
+    It 'refuses a folder with no installer, and does not add a row for it' {
+        $g = Add-GameFolder $script:AddEmpty
+        $g | Should -BeNullOrEmpty
+        @($script:state.Games).Count | Should -Be 2
+    }
+
+    It 'numbers the rows from one' {
+        $script:lvGames.Items[0].Text | Should -Be '1'
+        $script:lvGames.Items[1].Text | Should -Be '2'
+    }
+
+    It 'greys Change... until there is something to be an add-on of' {
+        # The standing rule: an option that cannot be used is not left clickable.
+        $script:lvGames.Items.Clear()
+        $script:state.Games = @()
+        Update-GameList
+        $script:btnGameDel.Enabled  | Should -BeFalse
+        $script:btnGameEdit.Enabled | Should -BeFalse
+    }
+}
+
+Describe 'Removing an entry renumbers the parents' {
+
+    BeforeAll {
+        function New-Ent {
+            param([string]$Name, [string]$Kind = 'Game', [int]$Parent = -1)
+            return @{ Ok=$true; GameName=$Name; Kind=$Kind; ParentIndex=$Parent
+                      SetupExe=@{ Name="setup_$Name.exe" } }
+        }
+    }
+
+    It 'shifts a parent that pointed past the removed entry' {
+        # A: 0, B: 1, C: 2, and an add-on of C. Remove B and C becomes 1, so the
+        # add-on has to follow it - otherwise it silently attaches to A.
+        $e = @( (New-Ent 'A'), (New-Ent 'B'), (New-Ent 'C'), (New-Ent 'Mod' 'AddOn' 2) )
+        $out = Remove-GameEntry $e 1
+        $out.Count | Should -Be 3
+        $out[2].Kind | Should -Be 'AddOn'
+        $out[$out[2].ParentIndex].GameName | Should -Be 'C'
+    }
+
+    It 'leaves a parent below the removed entry alone' {
+        $e = @( (New-Ent 'A'), (New-Ent 'Mod' 'AddOn' 0), (New-Ent 'C') )
+        $out = Remove-GameEntry $e 2
+        $out[1].ParentIndex | Should -Be 0
+    }
+
+    It 'turns an orphaned add-on back into a game rather than deleting it' {
+        $e = @( (New-Ent 'A'), (New-Ent 'Mod' 'AddOn' 0) )
+        $out = Remove-GameEntry $e 0
+        $out.Count | Should -Be 1
+        $out[0].GameName | Should -Be 'Mod'
+        $out[0].Kind | Should -Be 'Game'
+        $out[0].ParentIndex | Should -Be -1
+    }
+
+    It 'ignores an index that is not in the list' {
+        $e = @( (New-Ent 'A'), (New-Ent 'B') )
+        (Remove-GameEntry $e -1).Count | Should -Be 2
+        (Remove-GameEntry $e 9).Count  | Should -Be 2
+    }
+
+    It 'still hands back an array when one entry is left' {
+        # Returning a bare hashtable here is the unrolling trap that produced
+        # "9 games (0 bytes)" - a hashtable's .Count is its number of keys.
+        $out = Remove-GameEntry @( (New-Ent 'A'), (New-Ent 'B') ) 0
+        $out -is [array] | Should -BeTrue
+        $out.Count | Should -Be 1
+    }
+
+    It 'survives a removal that leaves nothing' {
+        $out = Remove-GameEntry @( (New-Ent 'Only') ) 0
+        @($out).Count | Should -Be 0
     }
 }
