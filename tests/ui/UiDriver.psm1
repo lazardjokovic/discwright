@@ -281,17 +281,49 @@ function Send-Keys {
 }
 
 function Get-BoxAfter {
-    <#  .SYNOPSIS
-        The text box belonging to a numbered step. They carry no accessible name,
-        so each is identified by sitting directly after its label in the window's
-        child order.
+    <#
+    .SYNOPSIS
+        The text box belonging to a numbered step.
+
+    .DESCRIPTION
+        Found by where it sits, not by what position it holds in the enumeration.
+
+        It used to take the next child after the label, which is only right while
+        UI Automation happens to enumerate in creation order - and that ordering
+        is not creation order, it follows the layout. Moving the controls to make
+        the window shorter reshuffled it, so this started handing back the Browse
+        BUTTON instead of the box. Set-CtlText then clicked Browse, a folder
+        dialog opened, and every test after that waited on an application sitting
+        behind a modal dialog: from the outside, an app that starts and then does
+        nothing at all.
+
+        A step's box is the unnamed control on the row directly below the label,
+        starting at the same left edge. Buttons carry names, so the empty name is
+        what separates the box from the Browse beside it, and the geometry is
+        what separates this step's box from the next step's.
     #>
     param($Win, [string]$LabelLike)
     $kids = $Win.FindAll($script:UiScope::Children, $script:UiAny)
+    $label = $null
     for ($i = 0; $i -lt $kids.Count; $i++) {
-        try { if ($kids.Item($i).Current.Name -like $LabelLike) { return $kids.Item($i + 1) } } catch {}
+        try { if ($kids.Item($i).Current.Name -like $LabelLike) { $label = $kids.Item($i); break } } catch {}
     }
-    return $null
+    if (-not $label) { return $null }
+    $lr = $label.Current.BoundingRectangle
+
+    $best = $null; $bestTop = [double]::MaxValue
+    for ($i = 0; $i -lt $kids.Count; $i++) {
+        try {
+            $c = $kids.Item($i)
+            if (-not [string]::IsNullOrEmpty($c.Current.Name)) { continue }   # buttons are named
+            $r = $c.Current.BoundingRectangle
+            if ($r.Width -lt 60 -or $r.Height -lt 10) { continue }
+            if ([Math]::Abs($r.Left - $lr.Left) -gt 8) { continue }           # same left edge
+            if ($r.Top -lt $lr.Top + 8 -or $r.Top -gt $lr.Top + 60) { continue }  # the row below
+            if ($r.Top -lt $bestTop) { $best = $c; $bestTop = $r.Top }
+        } catch {}
+    }
+    return $best
 }
 
 function Get-StatusText {
