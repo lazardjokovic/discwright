@@ -137,48 +137,23 @@ jobs:
           }
           if ($failed) { exit 1 }
 
-  # The window tests, which drive the real interface. Advisory on purpose:
-  # continue-on-error means a failure here is reported and does not block a
-  # merge. A hosted runner's desktop is 1024x768 with no one sitting at it, and
-  # the window wants 1032px of height, so controls can land off-screen and a
-  # synthesized click hits nothing. Until this job has been seen to pass
-  # repeatedly it is evidence, not a gate - a check that fails for reasons of its
-  # own is a check people learn to ignore, and then it protects nothing.
+  # There is deliberately no job here for tests/ui.
   #
-  # Run them locally, where they are trustworthy:  Invoke-Pester tests/ui
-  window:
-    runs-on: windows-latest
-    continue-on-error: true
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Pester (window tests)
-        shell: powershell
-        run: |
-          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version.Major -ge 5 })) {
-              Set-PSRepository PSGallery -InstallationPolicy Trusted
-              Install-Module Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0
-          }
-          Import-Module Pester -MinimumVersion 5.0 -Force
-          Add-Type -AssemblyName System.Windows.Forms
-          $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
-          Write-Host "runner desktop: $($b.Width)x$($b.Height)"
-
-          $cfg = New-PesterConfiguration
-          $cfg.Run.Path         = 'tests/ui'
-          $cfg.Run.Exit         = $true
-          $cfg.Output.Verbosity = 'Detailed'
-          Invoke-Pester -Configuration $cfg
-
-      - name: What the window looked like when it failed
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: window-shots
-          path: tests/ui/shots
-          if-no-files-found: ignore
-
+  # Those tests drive the real window, and a hosted runner's desktop is 1024x768
+  # with nobody sitting at it. The window needs 1032px of height, so it opens
+  # scrolled, controls sit off-screen, and a synthesized click lands on nothing.
+  # Measured: every window test that only READS state passes there, and every one
+  # that has to CLICK something below the fold fails.
+  #
+  # Running it anyway behind continue-on-error was worse than not running it. The
+  # check still reported red, and a red check that everyone is told to ignore
+  # teaches people to ignore red checks.
+  #
+  # They run locally, where the desktop is real and they are trustworthy:
+  #
+  #     .\tests\Invoke-Tests.ps1          both suites
+  #     Invoke-Pester tests/ui            the window alone
+  #
   # A version constant maintained by hand drifts, because bumping it is a step
   # that gets forgotten. This runs only when a tag is pushed and fails the tag if
   # the app would report a version it is not.
