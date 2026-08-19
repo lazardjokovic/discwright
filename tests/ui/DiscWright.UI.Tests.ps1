@@ -24,6 +24,14 @@
     them as skipped rather than failing.
 #>
 
+# Same reason as UiDriver.psm1: the empty catches here guard reads of UI
+# Automation elements that the app destroys and rebuilds while they are being
+# walked. Skipping one that has just gone is the intent, and there is nothing to
+# log. Suppressed for this file only, so the rule keeps applying to the app.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingEmptyCatchBlock', '',
+    Justification = 'Reads of UI Automation elements the app destroyed mid-walk. Skipping the vanished element is correct and there is nothing to log.')]
+param()
+
 BeforeDiscovery {
     Import-Module (Join-Path $PSScriptRoot 'UiDriver.psm1') -Force
     $script:HaveDesktop = Test-UiAvailable
