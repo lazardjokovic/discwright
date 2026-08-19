@@ -1368,3 +1368,89 @@ Describe 'A real game with its real patches' -Tag 'Real' -Skip:($script:GogFolde
         @($folders | Sort-Object -Unique).Count | Should -Be $entries.Count
     }
 }
+
+Describe 'The comma-return convention is not undone at the call sites' -Tag 'Unit' {
+
+    # Several functions return ,@(...) so that a one-element result survives
+    # PowerShell unrolling it on the way out. Wrapping such a call in @() again
+    # rebuilds the very thing the comma prevents: a one-element array holding the
+    # real array. It reads as harmless defensive code, which is why it keeps
+    # happening - it shipped in Get-FirstGame, in Set-GameFolder, and again in the
+    # Remove button, where deleting one of five entries left a single row whose
+    # name was all four survivors run together.
+    #
+    # Testing the functions cannot catch it, because the fault is in the caller.
+    # This reads the source instead.
+
+    BeforeAll {
+        $script:CommaReturners = @(
+            'Get-Games', 'Get-MenuGames', 'Remove-GameEntry',
+            'Set-GameEntries', 'Set-GameFolders', 'Set-GameFolder'
+        )
+        $appFile = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
+        $tree = [System.Management.Automation.Language.Parser]::ParseFile($appFile, [ref]$null, [ref]$null)
+
+        # Only a BARE call counts: @(Get-Games) rebuilds the wrapper, but
+        # @(Get-Games | Where-Object {...}) does not, because the pipeline has
+        # already unrolled the result and the @() is what puts it back. So the
+        # array expression must hold exactly one statement, that statement must be
+        # a pipeline of exactly one element, and that element must be the call.
+        $script:Wrapped = @()
+        foreach ($arr in $tree.FindAll({ param($n)
+                $n -is [System.Management.Automation.Language.ArrayExpressionAst] }, $true)) {
+            $stmts = $arr.SubExpression.Statements
+            if ($stmts.Count -ne 1) { continue }
+            $pipe = $stmts[0]
+            if ($pipe -isnot [System.Management.Automation.Language.PipelineAst]) { continue }
+            if ($pipe.PipelineElements.Count -ne 1) { continue }
+            $el = $pipe.PipelineElements[0]
+            if ($el -isnot [System.Management.Automation.Language.CommandAst]) { continue }
+            $name = $el.GetCommandName()
+            if ($name -and $script:CommaReturners -contains $name) {
+                $script:Wrapped += [pscustomobject]@{
+                    Command = $name
+                    Line    = $arr.Extent.StartLineNumber
+                    Text    = $arr.Extent.Text
+                }
+            }
+        }
+    }
+
+    It 'wraps no comma-returning call in @()' {
+        $detail = ($script:Wrapped | ForEach-Object { "line $($_.Line): $($_.Text)" }) -join '; '
+        $script:Wrapped.Count | Should -Be 0 -Because "these rebuild the unrolling the comma exists to prevent -> $detail"
+    }
+}
+
+Describe 'Removing an entry the way the button does it' -Tag 'Unit' {
+
+    BeforeAll {
+        function New-E {
+            param([string]$Name, [string]$Kind = 'Game', [int]$Parent = -1)
+            return @{ Ok=$true; GameName=$Name; Kind=$Kind; ParentIndex=$Parent
+                      SetupExe=@{ Name="setup_$Name.exe" } }
+        }
+        # One game and four add-ons: the real Hollow Knight disc.
+        $script:Five = @(
+            (New-E 'Hollow Knight'),
+            (New-E 'Update A' 'AddOn' 0), (New-E 'Update B' 'AddOn' 0),
+            (New-E 'Update C' 'AddOn' 0), (New-E 'Update D' 'AddOn' 0)
+        )
+    }
+
+    It 'hands back four separate entries, not one entry holding four' {
+        # Assigned exactly as the Remove handler assigns it.
+        $after = Remove-GameEntry $script:Five 0
+        $after.Count | Should -Be 4
+        foreach ($e in $after) {
+            $e | Should -BeOfType [hashtable] -Because 'each element is one entry, not a nested list'
+            $e.GameName | Should -Not -Match ' Update '
+        }
+    }
+
+    It 'promotes all four orphans rather than one' {
+        $after = Remove-GameEntry $script:Five 0
+        @($after | Where-Object { $_.Kind -eq 'Game' }).Count | Should -Be 4
+        @($after | Where-Object { $_.ParentIndex -ne -1 }).Count | Should -Be 0
+    }
+}

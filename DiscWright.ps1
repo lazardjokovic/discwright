@@ -1645,10 +1645,21 @@ function Update-MediaLabel {
     $g = $games[0]
     $p = Get-PayloadBytes
     $m = Get-MediaRec $p.Total
-    # One game keeps its own detection line. Several get a summary instead - the
-    # per-game detail would not fit, and the total is what decides the disc.
+    # One entry keeps its own detection line. Several get a summary instead - the
+    # per-entry detail would not fit, and the total is what decides the disc.
+    #
+    # Games and add-ons are counted separately. Calling the lot "5 games" when
+    # four of them are patches for the fifth describes a disc that is not the one
+    # about to be built, and the count is the only place the difference shows
+    # before the menu is generated.
+    $nAdd  = @($games | Where-Object { $_.Kind -eq 'AddOn' }).Count
+    $nGame = $games.Count - $nAdd
     $txt = if ($games.Count -eq 1) { $g.Msg }
-           else { "$($games.Count) games ($(Format-Size $p.Installer))" }
+           else {
+               $part = "$nGame game$(if($nGame -ne 1){'s'})"
+               if ($nAdd -gt 0) { $part += " + $nAdd add-on$(if($nAdd -ne 1){'s'})" }
+               "$part ($(Format-Size $p.Installer))"
+           }
     if ($p.Extra -gt 0) { $txt += " + $(Format-Size $p.Extra) extra" }
     $lblGame.Text = "$txt   ->   Disc: $($m.Text)"
     $lblGame.ForeColor = if($m.Fit){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
@@ -2175,7 +2186,8 @@ function Open-Project([string]$folder) {
         # one place that knows to renumber, so it does the dropping. Backwards,
         # because each removal shifts the indices still to be checked.
         for ($i = $entries.Count - 1; $i -ge 0; $i--) {
-            if (-not (Test-Path $entries[$i].Folder)) { $entries = @(Remove-GameEntry $entries $i) }
+            # No @() - see the note on the Remove button's handler.
+            if (-not (Test-Path $entries[$i].Folder)) { $entries = Remove-GameEntry $entries $i }
         }
     }
     foreach ($g in (Set-GameEntries $entries)) { if (-not $g.Ok) { & $log "  WARNING: $($g.Msg)" } }
@@ -2294,7 +2306,11 @@ $btnAddOn.Add_Click({
 })
 $btnGameDel.Add_Click({
     if (-not $lvGames.SelectedIndices.Count) { return }
-    $state.Games = @(Remove-GameEntry @($state.Games) $lvGames.SelectedIndices[0])
+    # NOT @(Remove-GameEntry ...). It already returns a list, and wrapping it
+    # again gives a one-element array holding that list - so removing one of five
+    # entries left a single row whose name was all four remaining names run
+    # together. Same trap as Get-Games and Get-FirstGame.
+    $state.Games = Remove-GameEntry @($state.Games) $lvGames.SelectedIndices[0]
     Update-GameList; Update-MediaLabel; Update-ActionButtons
 })
 $btnGameEdit.Add_Click({
