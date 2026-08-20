@@ -60,6 +60,15 @@ jobs:
 
           $cfg = New-PesterConfiguration
           $cfg.Run.Path             = 'tests'
+          # tests/ui drives the real window: it launches the app, moves the
+          # pointer and needs a desktop that behaves like a person's. A hosted
+          # runner has a virtual screen, so the suite's own "is there a desktop"
+          # guard says yes and the tests then fail on a display nothing can
+          # really use. Excluded by path AND by tag, because Run.Path is
+          # recursive and would otherwise pick up the file again the moment
+          # anything is renamed.
+          $cfg.Run.ExcludePath      = @((Join-Path $PWD 'tests\ui'))
+          $cfg.Filter.ExcludeTag    = @('UI')
           $cfg.Run.Exit             = $true
           $cfg.Output.Verbosity     = 'Detailed'
           $cfg.TestResult.Enabled   = $true
@@ -128,6 +137,23 @@ jobs:
           }
           if ($failed) { exit 1 }
 
+  # There is deliberately no job here for tests/ui.
+  #
+  # Those tests drive the real window, and a hosted runner's desktop is 1024x768
+  # with nobody sitting at it. The window needs 1032px of height, so it opens
+  # scrolled, controls sit off-screen, and a synthesized click lands on nothing.
+  # Measured: every window test that only READS state passes there, and every one
+  # that has to CLICK something below the fold fails.
+  #
+  # Running it anyway behind continue-on-error was worse than not running it. The
+  # check still reported red, and a red check that everyone is told to ignore
+  # teaches people to ignore red checks.
+  #
+  # They run locally, where the desktop is real and they are trustworthy:
+  #
+  #     .\tests\Invoke-Tests.ps1          both suites
+  #     Invoke-Pester tests/ui            the window alone
+  #
   # A version constant maintained by hand drifts, because bumping it is a step
   # that gets forgotten. This runs only when a tag is pushed and fails the tag if
   # the app would report a version it is not.

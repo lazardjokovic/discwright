@@ -290,8 +290,18 @@ Describe 'Recovering from a bad folder choice' -Tag 'Unit' {
         $script:EmptyFolder = Join-Path $script:Sandbox 'no-installer-here'
         New-Item -ItemType Directory -Force -Path $script:EmptyFolder | Out-Null
 
-        # Stand-ins for the controls Set-GameFolders and Update-MediaLabel write to.
-        $script:txtFolder = [pscustomobject]@{ Text = '' }
+        # The list and its buttons are real controls, not stand-ins. A ListView
+        # constructs fine with no window behind it, and using the real one means
+        # Update-GameList is exercised rather than a mock of it.
+        Add-Type -AssemblyName System.Windows.Forms
+        $script:lvGames = New-Object System.Windows.Forms.ListView
+        $script:lvGames.View = 'Details'
+        foreach ($c in @('#','Name','Type','Belongs to')) { [void]$script:lvGames.Columns.Add($c,80) }
+        $script:btnGameDel  = New-Object System.Windows.Forms.Button
+        $script:btnAddOn    = New-Object System.Windows.Forms.Button
+        $script:btnGameEdit = New-Object System.Windows.Forms.Button
+
+        # Stand-ins for the plain labels Set-GameEntries and Update-MediaLabel write to.
         $script:lblGame   = [pscustomobject]@{ Text = ''; ForeColor = $null }
         $script:cbMan     = [pscustomobject]@{ Checked = $false }
         $script:cbExtra   = [pscustomobject]@{ Checked = $false }
@@ -311,8 +321,16 @@ Describe 'Recovering from a bad folder choice' -Tag 'Unit' {
         (Get-Games).Count | Should -Be 0
     }
 
-    It 'keeps the rejected path visible rather than blanking the box' {
-        $script:txtFolder.Text | Should -Be $script:EmptyFolder
+    It 'says why the folder was rejected' {
+        # There is no path box any more, so the reason has to be on the label.
+        $script:lblGame.Text | Should -Match 'setup_\*\.exe'
+    }
+
+    It 'still lists the rejected entry, marked, rather than dropping it silently' {
+        # Opening a project whose folder has gone empty must show that it went
+        # empty. Vanishing from the list looks like the app losing the game.
+        $script:lvGames.Items.Count | Should -Be 1
+        $script:lvGames.Items[0].SubItems[1].Text | Should -Be '(no installer found)'
     }
 
     It 'recovers when a good folder is picked again' {
@@ -493,8 +511,13 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 2' {
-            $script:PJson.Version | Should -Be 2
+        It 'declares schema version 4' {
+            $script:PJson.Version | Should -Be 4
+        }
+
+        It 'records a Kind and a Parent for every entry' {
+            @($script:PJson.Games | Where-Object { $_.Kind -eq 'Game' }).Count | Should -Be 3
+            @($script:PJson.Games | Where-Object { $_.Parent -eq -1 }).Count   | Should -Be 3
         }
 
         It 'records every game' {
@@ -610,8 +633,17 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
         }
 
         It 'points the menu at a bare installer filename' {
+            # Asserted as a boolean, not -Match: a failed -Match against a 30 KB
+            # menu prints the whole menu into the test output.
             $hta = Get-Content -Raw (Join-Path $script:OneStage 'AUTORUN\menu.hta')
-            $hta | Should -Match ('var SETUP="' + [regex]::Escape($script:One.SetupExe.Name) + '"')
+            $wanted = 's:"' + $script:One.SetupExe.Name + '"'
+            $hta.Contains($wanted) | Should -BeTrue
+        }
+
+        It 'opens straight on the game, with no chooser for one game' {
+            $hta = Get-Content -Raw (Join-Path $script:OneStage 'AUTORUN\menu.hta')
+            # One entry in GAMES is what makes cur start at 0 rather than -1.
+            ([regex]::Matches($hta,'\{n:"')).Count | Should -Be 1
         }
 
         It 'names the icon after the disc, not disc.ico' {
@@ -670,9 +702,20 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
             @(Get-ChildItem (Join-Path $script:ManyStage 'Games') -Recurse -File).Count | Should -Be $expected
         }
 
-        It 'points the menu into the first game folder' {
+        It 'points the menu into the game folders that were actually written' {
+            # The staging copy and the menu work the on-disc path out separately,
+            # so this checks they agree - a disagreement burns a disc whose
+            # Install button is greyed out with nothing on screen explaining why.
             $hta = Get-Content -Raw (Join-Path $script:ManyStage 'AUTORUN\menu.hta')
-            $hta | Should -Match 'var SETUP="Games\\\\01 - '
+            foreach ($m in [regex]::Matches($hta,'s:"([^"]+)"')) {
+                $rel = $m.Groups[1].Value -replace '\\\\','\'
+                Test-Path (Join-Path $script:ManyStage $rel) | Should -BeTrue -Because "the menu points at $rel"
+            }
+        }
+
+        It 'gives the menu one entry per game' {
+            $hta = Get-Content -Raw (Join-Path $script:ManyStage 'AUTORUN\menu.hta')
+            ([regex]::Matches($hta,'\{n:"')).Count | Should -Be 3
         }
 
         It 'saves a project naming all three games' {
@@ -801,5 +844,613 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
             $t = & $script:SevenZip t $script:IsoPath 2>&1
             @($t | Where-Object { $_ -match 'Everything is Ok' }).Count | Should -BeGreaterThan 0
         }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Multi-game chooser and add-ons
+# ---------------------------------------------------------------------------
+
+Describe 'Where an entry lands on the disc' {
+
+    BeforeAll {
+        $script:LayoutOne = @( (Get-GameInfo (New-FixtureGame -Slug 'lay_one')) )
+        $script:LayoutMany = @(
+            (Get-GameInfo (New-FixtureGame -Slug 'lay_a'))
+            (Get-GameInfo (New-FixtureGame -Slug 'lay_b'))
+            (Get-GameInfo (New-FixtureGame -Slug 'lay_c'))
+        )
+    }
+
+    It 'puts a lone installer at the disc root' {
+        Get-DiscEntryFolder $script:LayoutOne 0 | Should -Be ''
+        Get-DiscEntrySetup  $script:LayoutOne 0 | Should -Be $script:LayoutOne[0].SetupExe.Name
+    }
+
+    It 'numbers every entry once there is more than one' {
+        (Get-DiscEntryFolder $script:LayoutMany 0) | Should -BeLike 'Games\01 - *'
+        (Get-DiscEntryFolder $script:LayoutMany 1) | Should -BeLike 'Games\02 - *'
+        (Get-DiscEntryFolder $script:LayoutMany 2) | Should -BeLike 'Games\03 - *'
+    }
+
+    It 'builds the setup path from that same folder' {
+        $rel = Get-DiscEntrySetup $script:LayoutMany 1
+        $rel | Should -Be (Join-Path (Get-DiscEntryFolder $script:LayoutMany 1) $script:LayoutMany[1].SetupExe.Name)
+    }
+}
+
+Describe 'Sorting entries into games and their add-ons' {
+
+    BeforeAll {
+        # One helper rather than three fixtures: these tests care about Kind and
+        # ParentIndex, not about what is in the folder.
+        function New-Entry {
+            param([string]$Name, [string]$Kind = 'Game', [int]$Parent = -1)
+            return @{ Ok=$true; GameName=$Name; Kind=$Kind; ParentIndex=$Parent
+                      SetupExe=@{ Name = "setup_$($Name -replace '\W','').exe" } }
+        }
+    }
+
+    It 'leaves a list of plain games alone' {
+        $m = Get-MenuGames @( (New-Entry 'One'), (New-Entry 'Two') )
+        $m.Count | Should -Be 2
+        @($m | Where-Object { $_.AddOns.Count -gt 0 }).Count | Should -Be 0
+    }
+
+    It 'hangs an add-on off its parent instead of listing it as a game' {
+        $m = Get-MenuGames @( (New-Entry 'Deus Ex'), (New-Entry 'GMDX' 'AddOn' 0) )
+        $m.Count | Should -Be 1
+        $m[0].Name | Should -Be 'Deus Ex'
+        $m[0].AddOns.Count | Should -Be 1
+        $m[0].AddOns[0].Name | Should -Be 'GMDX'
+    }
+
+    It 'attaches an add-on to the right game when there are several' {
+        $m = Get-MenuGames @(
+            (New-Entry 'First'), (New-Entry 'Second'), (New-Entry 'Patch' 'AddOn' 1) )
+        $m.Count | Should -Be 2
+        $m[0].AddOns.Count | Should -Be 0
+        $m[1].AddOns.Count | Should -Be 1
+    }
+
+    It 'gives an add-on a menu entry of its own rather than dropping it when the parent is nonsense' {
+        # Losing an installer silently is the one outcome worth ruling out: the
+        # disc is burned before anybody finds out it is missing.
+        foreach ($bad in @(-1, 5, 99)) {
+            $m = Get-MenuGames @( (New-Entry 'Game'), (New-Entry 'Orphan' 'AddOn' $bad) )
+            $m.Count | Should -Be 2 -Because "parent $bad points at nothing"
+        }
+    }
+
+    It 'does not let an add-on parent itself' {
+        $m = Get-MenuGames @( (New-Entry 'Game'), (New-Entry 'Self' 'AddOn' 1) )
+        $m.Count | Should -Be 2
+    }
+
+    It 'does not let an add-on hang off another add-on' {
+        $m = Get-MenuGames @(
+            (New-Entry 'Game'), (New-Entry 'Mod' 'AddOn' 0), (New-Entry 'ModPatch' 'AddOn' 1) )
+        # Mod belongs to Game; ModPatch cannot belong to Mod, so it stands alone.
+        $m.Count | Should -Be 2
+        $m[0].AddOns.Count | Should -Be 1
+    }
+
+    It 'never loses an installer, whatever the parents say' {
+        $entries = @(
+            (New-Entry 'A'), (New-Entry 'B' 'AddOn' 0), (New-Entry 'C' 'AddOn' 7)
+            (New-Entry 'D'), (New-Entry 'E' 'AddOn' 3), (New-Entry 'F' 'AddOn' 1) )
+        $m = Get-MenuGames $entries
+        $total = $m.Count + (($m | ForEach-Object { $_.AddOns.Count }) | Measure-Object -Sum).Sum
+        $total | Should -Be $entries.Count
+    }
+}
+
+Describe 'Building a disc that has an add-on on it' {
+
+    BeforeAll {
+        $script:AoGame  = Get-GameInfo (New-FixtureGame -Slug 'ao_base' -Parts 1)
+        $script:AoMod   = Get-GameInfo (New-FixtureGame -Slug 'ao_mod')
+        $script:AoMod.Kind = 'AddOn'
+        $script:AoMod.ParentIndex = 0
+
+        $script:AoOut = Join-Path $script:Sandbox 'out-addon'
+        New-Item -ItemType Directory -Force -Path $script:AoOut | Out-Null
+        $null = Invoke-Build (New-BuildSettings -Games @($script:AoGame, $script:AoMod) `
+                    -Label 'AddOn Disc' -OutDir $script:AoOut) $script:LogSink
+        $script:AoStage = Join-Path $script:AoOut 'disc'
+        $script:AoHta   = Get-Content -Raw (Join-Path $script:AoStage 'AUTORUN\menu.hta')
+    }
+
+    It 'stages both installers under Games' {
+        @(Get-ChildItem (Join-Path $script:AoStage 'Games') -Directory).Count | Should -Be 2
+    }
+
+    It 'copies the add-on installer too' {
+        $rel = Get-DiscEntrySetup @($script:AoGame, $script:AoMod) 1
+        Test-Path (Join-Path $script:AoStage $rel) | Should -BeTrue
+    }
+
+    It 'shows one game in the menu, not two' {
+        # The add-on must not turn up in the chooser as if it were a game.
+        ([regex]::Matches($script:AoHta,'\{n:"')).Count | Should -Be 2   # game + its add-on
+        ([regex]::Matches($script:AoHta,',a:\[\{n:"')).Count | Should -Be 1
+    }
+
+    It 'points every path in the menu at a file that is really there' {
+        foreach ($m in [regex]::Matches($script:AoHta,'s:"([^"]+)"')) {
+            $rel = $m.Groups[1].Value -replace '\\\\','\'
+            Test-Path (Join-Path $script:AoStage $rel) | Should -BeTrue -Because "the menu points at $rel"
+        }
+    }
+
+    It 'remembers the add-on in the project file' {
+        $back = Import-Project (Join-Path $script:AoOut 'discproject.json')
+        $back.GameEntries.Count | Should -Be 2
+        $back.GameEntries[1].Kind | Should -Be 'AddOn'
+        $back.GameEntries[1].ParentIndex | Should -Be 0
+    }
+
+    It 'reads a version 2 project back as all games' {
+        # 0.2.0 wrote no Kind and no Parent. Those files must not come back with
+        # an entry silently marked as an add-on of something.
+        $v2 = Join-Path $script:Sandbox 'proj-v2-compat'
+        New-Item -ItemType Directory -Force -Path $v2 | Out-Null
+        @{ Version=2; SourceFolder=$script:AoGame.Folder; GameName='Base'; Label='Base'
+           Games=@(@{ Folder=$script:AoGame.Folder; GameName='Base' }
+                   @{ Folder=$script:AoMod.Folder;  GameName='Mod'  })
+           IconPath=$script:Art; IconIsIco=$false; Menu=$true; BgPath=$script:Bg
+           BgAsIs=$false; PanelSide='Right'; Buttons=@('Install','Exit'); OutDir=$v2 } |
+            ConvertTo-Json -Depth 4 | Set-Content (Join-Path $v2 'discproject.json') -Encoding UTF8
+        $back = Import-Project (Join-Path $v2 'discproject.json')
+        $back.GameEntries.Count | Should -Be 2
+        @($back.GameEntries | Where-Object { $_.Kind -ne 'Game' }).Count | Should -Be 0
+    }
+}
+
+Describe 'Adding and removing entries in the list' {
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Windows.Forms
+        $script:lvGames = New-Object System.Windows.Forms.ListView
+        $script:lvGames.View = 'Details'
+        foreach ($c in @('#','Name','Type','Belongs to')) { [void]$script:lvGames.Columns.Add($c,80) }
+        $script:btnGameDel  = New-Object System.Windows.Forms.Button
+        $script:btnAddOn    = New-Object System.Windows.Forms.Button
+        $script:btnGameEdit = New-Object System.Windows.Forms.Button
+        $script:lblGame  = [pscustomobject]@{ Text=''; ForeColor=$null }
+        $script:cbMan    = [pscustomobject]@{ Checked=$false }
+        $script:cbExtra  = [pscustomobject]@{ Checked=$false }
+        $script:chkMusic = [pscustomobject]@{ Checked=$false }
+        $script:state    = @{ Games=@(); ExtraItems=@(); ManualPath=$null; ExtrasPath=$null; MusicFile=$null }
+
+        $script:AddA = New-FixtureGame -Slug 'add_a'
+        $script:AddB = New-FixtureGame -Slug 'add_b'
+        $script:AddEmpty = Join-Path $script:Sandbox 'add-empty'
+        New-Item -ItemType Directory -Force -Path $script:AddEmpty | Out-Null
+    }
+
+    It 'adds a folder rather than replacing what is already there' {
+        $null = Add-GameFolder $script:AddA
+        $null = Add-GameFolder $script:AddB
+        @($script:state.Games).Count | Should -Be 2
+        $script:lvGames.Items.Count  | Should -Be 2
+    }
+
+    It 'refuses the same folder twice' {
+        $g = Add-GameFolder $script:AddA
+        $g | Should -BeNullOrEmpty
+        @($script:state.Games).Count | Should -Be 2
+        $script:lblGame.Text | Should -Match 'already on this disc'
+    }
+
+    It 'refuses a folder with no installer, and does not add a row for it' {
+        $g = Add-GameFolder $script:AddEmpty
+        $g | Should -BeNullOrEmpty
+        @($script:state.Games).Count | Should -Be 2
+    }
+
+    It 'numbers the rows from one' {
+        $script:lvGames.Items[0].Text | Should -Be '1'
+        $script:lvGames.Items[1].Text | Should -Be '2'
+    }
+
+    It 'greys Change... until there is something to be an add-on of' {
+        # The standing rule: an option that cannot be used is not left clickable.
+        $script:lvGames.Items.Clear()
+        $script:state.Games = @()
+        Update-GameList
+        $script:btnGameDel.Enabled  | Should -BeFalse
+        $script:btnGameEdit.Enabled | Should -BeFalse
+    }
+}
+
+Describe 'Removing an entry renumbers the parents' {
+
+    BeforeAll {
+        function New-Ent {
+            param([string]$Name, [string]$Kind = 'Game', [int]$Parent = -1)
+            return @{ Ok=$true; GameName=$Name; Kind=$Kind; ParentIndex=$Parent
+                      SetupExe=@{ Name="setup_$Name.exe" } }
+        }
+    }
+
+    It 'shifts a parent that pointed past the removed entry' {
+        # A: 0, B: 1, C: 2, and an add-on of C. Remove B and C becomes 1, so the
+        # add-on has to follow it - otherwise it silently attaches to A.
+        $e = @( (New-Ent 'A'), (New-Ent 'B'), (New-Ent 'C'), (New-Ent 'Mod' 'AddOn' 2) )
+        $out = Remove-GameEntry $e 1
+        $out.Count | Should -Be 3
+        $out[2].Kind | Should -Be 'AddOn'
+        $out[$out[2].ParentIndex].GameName | Should -Be 'C'
+    }
+
+    It 'leaves a parent below the removed entry alone' {
+        $e = @( (New-Ent 'A'), (New-Ent 'Mod' 'AddOn' 0), (New-Ent 'C') )
+        $out = Remove-GameEntry $e 2
+        $out[1].ParentIndex | Should -Be 0
+    }
+
+    It 'turns an orphaned add-on back into a game rather than deleting it' {
+        $e = @( (New-Ent 'A'), (New-Ent 'Mod' 'AddOn' 0) )
+        $out = Remove-GameEntry $e 0
+        $out.Count | Should -Be 1
+        $out[0].GameName | Should -Be 'Mod'
+        $out[0].Kind | Should -Be 'Game'
+        $out[0].ParentIndex | Should -Be -1
+    }
+
+    It 'ignores an index that is not in the list' {
+        $e = @( (New-Ent 'A'), (New-Ent 'B') )
+        (Remove-GameEntry $e -1).Count | Should -Be 2
+        (Remove-GameEntry $e 9).Count  | Should -Be 2
+    }
+
+    It 'still hands back an array when one entry is left' {
+        # Returning a bare hashtable here is the unrolling trap that produced
+        # "9 games (0 bytes)" - a hashtable's .Count is its number of keys.
+        $out = Remove-GameEntry @( (New-Ent 'A'), (New-Ent 'B') ) 0
+        $out -is [array] | Should -BeTrue
+        $out.Count | Should -Be 1
+    }
+
+    It 'survives a removal that leaves nothing' {
+        $out = Remove-GameEntry @( (New-Ent 'Only') ) 0
+        @($out).Count | Should -Be 0
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Real GOG installers
+#
+# Everything above builds its fixtures from sparse files with no version
+# resource, so the name always comes from the filename fallback. These run
+# against actual downloads when the machine has them and skip when it does not,
+# which is every CI runner. They read metadata only - nothing is executed.
+# ---------------------------------------------------------------------------
+
+BeforeDiscovery {
+    # DISCWRIGHT_GOG_DIR first, so this can be pointed at wherever the downloads
+    # actually live - and so the no-installers path can be exercised on a machine
+    # that does have them.
+    $script:GogDir = @(
+        $env:DISCWRIGHT_GOG_DIR
+        'C:\Program Files (x86)\GOG Galaxy\Games\Offline Installers'
+        "$env:USERPROFILE\Downloads\GOG"
+        'C:\GOG Offline Installers'
+    ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+    $script:GogFolders = @()
+    if ($script:GogDir) {
+        $script:GogFolders = @(Get-ChildItem $script:GogDir -Directory -EA SilentlyContinue |
+            Where-Object { @(Get-ChildItem $_.FullName -Filter 'setup_*.exe' -File -EA SilentlyContinue).Count } |
+            ForEach-Object { $_.FullName })
+    }
+
+    # -ForEach @() does not produce an empty Describe, it fails the whole FILE at
+    # discovery - so on a runner with no GOG downloads every test in this file
+    # would be reported as an error rather than a skip. Never hand it an empty
+    # list: one placeholder case, skipped, says "not run here" instead.
+    $script:GogCases = if ($script:GogFolders.Count) { $script:GogFolders }
+                       else { @('(no GOG downloads on this machine)') }
+}
+
+Describe 'Reading a real GOG download' -Tag 'Real' -Skip:($script:GogFolders.Count -eq 0) {
+
+    It 'detects <_>' -ForEach $script:GogCases {
+        $info = Get-GameInfo $_
+        $info.Ok | Should -BeTrue -Because "$_ holds a setup_*.exe"
+        $info.GameName | Should -Not -BeNullOrEmpty
+        $info.TotalBytes | Should -BeGreaterThan 0
+    }
+
+    It 'trims the padding Inno leaves on ProductName in <_>' -ForEach $script:GogCases {
+        # Inno pads version strings with trailing spaces. Untrimmed they leak
+        # into the disc folder name ("Alan Wake                    Disc").
+        $info = Get-GameInfo $_
+        $info.GameName | Should -Be $info.GameName.Trim()
+        $info.GameName | Should -Not -Match '\s{2,}'
+    }
+
+    It 'produces a usable disc folder name for <_>' -ForEach $script:GogCases {
+        $n = Get-GameFolderName 1 (Get-GameInfo $_).GameName
+        $n | Should -Not -Match '[\\/:*?"<>|]'
+        $n | Should -Not -Match '\.$'
+        $n.Length | Should -BeLessOrEqual 53
+    }
+
+    It 'claims every .bin part of <_> and nothing else' -ForEach $script:GogCases {
+        # A real folder holds goodies (.zip) and often patch_*.exe alongside the
+        # installer. Only the installer's own numbered parts belong on the disc.
+        $info = Get-GameInfo $_
+        $stem = [IO.Path]::GetFileNameWithoutExtension($info.SetupExe.Name) + '-'
+        $onDisk = @(Get-ChildItem $_ -Filter '*.bin' -File -EA SilentlyContinue |
+                    Where-Object { $_.Name.StartsWith($stem,[StringComparison]::OrdinalIgnoreCase) })
+        $info.Files.Count | Should -Be ($onDisk.Count + 1)
+        @($info.Files | Where-Object { $_.Extension -eq '.zip' }).Count | Should -Be 0
+    }
+
+    It 'does not mistake a patch_*.exe for the installer in <_>' -ForEach $script:GogCases {
+        # GOG ships incremental updates as patch_<game>_<from>_to_<to>.exe, and
+        # some are larger than the setup stub they sit next to - so "largest exe
+        # wins" would pick the patch if the filter ever loosened.
+        (Get-GameInfo $_).SetupExe.Name | Should -BeLike 'setup_*'
+    }
+
+    It 'recommends media that actually holds <_>' -ForEach $script:GogCases {
+        $info = Get-GameInfo $_
+        $rec = Get-MediaRec $info.TotalBytes
+        $rec.Text | Should -Not -BeNullOrEmpty
+        $rec.Fit  | Should -BeTrue -Because 'BD-R XL is the largest and everything should fit something'
+    }
+}
+
+
+
+Describe 'Naming an add-on' -Tag 'Unit' {
+
+    It 'puts the version a GOG patch moves TO at the front' {
+        # Two patches for the same game differ only in their versions, and the
+        # menu button clips at about twenty characters - so the part that tells
+        # them apart has to come first or every patch reads the same.
+        Get-AddOnName 'patch_hollow_knight_1.5.12459_(88294)_to_1.5.12618_(89712).exe' |
+            Should -Be 'Update 1.5.12618 (89712)'
+    }
+
+    It 'gives two patches of one game different names' {
+        $a = Get-AddOnName 'patch_hollow_knight_1.5.12459_(88294)_to_1.5.12618_(89712).exe'
+        $b = Get-AddOnName 'patch_hollow_knight_1.5.12618_(89712)_to_1.5.12620_(89718).exe'
+        $a | Should -Not -Be $b
+        $a.Substring(0,18) | Should -Not -Be $b.Substring(0,18)
+    }
+
+    It 'reads a plain installer name as words' {
+        Get-AddOnName 'gmdx_v10_overhaul.exe' | Should -Be 'gmdx v10 overhaul'
+    }
+
+    It 'never comes back empty' {
+        foreach ($n in @('x.exe','patch_.exe','setup_.exe','_.exe')) {
+            Get-AddOnName $n | Should -Not -BeNullOrEmpty -Because "'$n' still needs a label"
+        }
+    }
+}
+
+Describe 'Accepting an add-on installer' {
+
+    BeforeAll {
+        $script:AoDir = Join-Path $script:Sandbox 'addon-src'
+        New-Item -ItemType Directory -Force -Path $script:AoDir | Out-Null
+        foreach ($n in @('setup_base_1.0.exe','patch_base_1.0_to_1.1.exe','GMDX_v10.exe')) {
+            $fs=[IO.File]::Create((Join-Path $script:AoDir $n)); $fs.SetLength(2MB); $fs.Close()
+        }
+        # A part belonging to the mod, to prove parts are collected for add-ons too.
+        $fs=[IO.File]::Create((Join-Path $script:AoDir 'GMDX_v10-1.bin')); $fs.SetLength(1MB); $fs.Close()
+        $fs=[IO.File]::Create((Join-Path $script:AoDir 'readme.txt')); $fs.SetLength(10); $fs.Close()
+    }
+
+    It 'accepts an installer that is not named setup_*' {
+        # This is the whole point of relaxing the filter: a mod is never named
+        # setup_*, and neither is a GOG patch.
+        $a = Get-AddOnInfo (Join-Path $script:AoDir 'GMDX_v10.exe')
+        $a.Ok   | Should -BeTrue
+        $a.Kind | Should -Be 'AddOn'
+    }
+
+    It 'accepts a GOG patch' {
+        (Get-AddOnInfo (Join-Path $script:AoDir 'patch_base_1.0_to_1.1.exe')).Ok | Should -BeTrue
+    }
+
+    It 'collects an add-on''s own .bin parts' {
+        $a = Get-AddOnInfo (Join-Path $script:AoDir 'GMDX_v10.exe')
+        $a.Files.Count | Should -Be 2
+    }
+
+    It 'does not take the base game''s files with it' {
+        $a = Get-AddOnInfo (Join-Path $script:AoDir 'patch_base_1.0_to_1.1.exe')
+        $a.Files.Count | Should -Be 1
+        @($a.Files | Where-Object { $_.Name -like 'setup_*' }).Count | Should -Be 0
+    }
+
+    It 'refuses something that is not an installer' {
+        $a = Get-AddOnInfo (Join-Path $script:AoDir 'readme.txt')
+        $a.Ok  | Should -BeFalse
+        $a.Msg | Should -Match 'Extra content'
+    }
+
+    It 'refuses a file that is not there' {
+        (Get-AddOnInfo (Join-Path $script:AoDir 'nope.exe')).Ok | Should -BeFalse
+    }
+}
+
+Describe 'An add-on survives being saved and reopened' {
+
+    BeforeAll {
+        $script:RtDir = Join-Path $script:Sandbox 'roundtrip'
+        New-Item -ItemType Directory -Force -Path $script:RtDir | Out-Null
+        foreach ($n in @('setup_rt_1.0.exe','patch_rt_1.0_to_1.1.exe')) {
+            $fs=[IO.File]::Create((Join-Path $script:RtDir $n)); $fs.SetLength(2MB); $fs.Close()
+        }
+        $script:RtGame = Get-GameInfo $script:RtDir
+        $script:RtAdd  = Get-AddOnInfo (Join-Path $script:RtDir 'patch_rt_1.0_to_1.1.exe')
+        $script:RtAdd.ParentIndex = 0
+        $script:RtAdd.GameName = 'Renamed By Hand'
+
+        $script:RtOut = Join-Path $script:Sandbox 'roundtrip-out'
+        New-Item -ItemType Directory -Force -Path $script:RtOut | Out-Null
+        Save-Project (New-BuildSettings -Games @($script:RtGame,$script:RtAdd) -Label 'RT' -OutDir $script:RtOut) $script:RtOut
+        $script:RtBack = Import-Project (Join-Path $script:RtOut 'discproject.json')
+    }
+
+    It 'records the exact installer, not just the folder' {
+        # The add-on shares its folder with the game. Re-detecting from the folder
+        # would find the game's setup_*.exe and put the game on the disc twice.
+        $script:RtBack.GameEntries[1].Setup | Should -BeLike '*patch_rt_1.0_to_1.1.exe'
+    }
+
+    It 'keeps a name that was edited by hand' {
+        $script:RtBack.GameEntries[1].Name | Should -Be 'Renamed By Hand'
+    }
+
+    It 'still knows it is an add-on and whose' {
+        $script:RtBack.GameEntries[1].Kind | Should -Be 'AddOn'
+        $script:RtBack.GameEntries[1].ParentIndex | Should -Be 0
+    }
+}
+
+Describe 'A real game with its real patches' -Tag 'Real' -Skip:($script:GogFolders.Count -eq 0) {
+
+    BeforeAll {
+        # Worked out again here, not read from BeforeDiscovery: the two phases have
+        # separate state, so $script:GogFolders is empty by the time this runs.
+        # Same trap the SevenZip lookup at the top of this file already documents.
+        $dir = @(
+            $env:DISCWRIGHT_GOG_DIR
+            'C:\Program Files (x86)\GOG Galaxy\Games\Offline Installers'
+            "$env:USERPROFILE\Downloads\GOG"
+            'C:\GOG Offline Installers'
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:HkDir = $null
+        if ($dir) {
+            $script:HkDir = @(Get-ChildItem $dir -Directory -EA SilentlyContinue |
+                Where-Object { $_.Name -like '*hollow_knight*' } |
+                ForEach-Object { $_.FullName }) | Select-Object -First 1
+        }
+    }
+
+    It 'finds the game and its patches side by side' -Skip:(-not (@($script:GogFolders | Where-Object { $_ -like '*hollow_knight*' }).Count)) {
+        $game = Get-GameInfo $script:HkDir
+        $game.GameName | Should -Be 'Hollow Knight'
+
+        $patches = @(Get-ChildItem $script:HkDir -Filter 'patch_*.exe' -File)
+        $patches.Count | Should -BeGreaterThan 0
+
+        $entries = @($game)
+        foreach ($p in $patches) {
+            $a = Get-AddOnInfo $p.FullName
+            $a.Ok | Should -BeTrue
+            $a.ParentIndex = 0
+            $entries += $a
+        }
+
+        # One game in the menu, every patch hanging off it, and no chooser.
+        $menu = Get-MenuGames $entries
+        $menu.Count | Should -Be 1
+        $menu[0].Name | Should -Be 'Hollow Knight'
+        $menu[0].AddOns.Count | Should -Be $patches.Count
+
+        # Every patch reports ProductName "Hollow Knight", so if the names came
+        # from version info the menu would show identical buttons.
+        $names = @($menu[0].AddOns | ForEach-Object { $_.Name })
+        @($names | Sort-Object -Unique).Count | Should -Be $patches.Count
+        $names | ForEach-Object { $_ | Should -Not -Be 'Hollow Knight' }
+
+        # And every installer gets its own folder on the disc.
+        $folders = @(0..($entries.Count-1) | ForEach-Object { Get-DiscEntryFolder $entries $_ })
+        @($folders | Sort-Object -Unique).Count | Should -Be $entries.Count
+    }
+}
+
+Describe 'The comma-return convention is not undone at the call sites' -Tag 'Unit' {
+
+    # Several functions return ,@(...) so that a one-element result survives
+    # PowerShell unrolling it on the way out. Wrapping such a call in @() again
+    # rebuilds the very thing the comma prevents: a one-element array holding the
+    # real array. It reads as harmless defensive code, which is why it keeps
+    # happening - it shipped in Get-FirstGame, in Set-GameFolder, and again in the
+    # Remove button, where deleting one of five entries left a single row whose
+    # name was all four survivors run together.
+    #
+    # Testing the functions cannot catch it, because the fault is in the caller.
+    # This reads the source instead.
+
+    BeforeAll {
+        $script:CommaReturners = @(
+            'Get-Games', 'Get-MenuGames', 'Remove-GameEntry',
+            'Set-GameEntries', 'Set-GameFolders', 'Set-GameFolder'
+        )
+        $appFile = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
+        $tree = [System.Management.Automation.Language.Parser]::ParseFile($appFile, [ref]$null, [ref]$null)
+
+        # Only a BARE call counts: @(Get-Games) rebuilds the wrapper, but
+        # @(Get-Games | Where-Object {...}) does not, because the pipeline has
+        # already unrolled the result and the @() is what puts it back. So the
+        # array expression must hold exactly one statement, that statement must be
+        # a pipeline of exactly one element, and that element must be the call.
+        $script:Wrapped = @()
+        foreach ($arr in $tree.FindAll({ param($n)
+                $n -is [System.Management.Automation.Language.ArrayExpressionAst] }, $true)) {
+            $stmts = $arr.SubExpression.Statements
+            if ($stmts.Count -ne 1) { continue }
+            $pipe = $stmts[0]
+            if ($pipe -isnot [System.Management.Automation.Language.PipelineAst]) { continue }
+            if ($pipe.PipelineElements.Count -ne 1) { continue }
+            $el = $pipe.PipelineElements[0]
+            if ($el -isnot [System.Management.Automation.Language.CommandAst]) { continue }
+            $name = $el.GetCommandName()
+            if ($name -and $script:CommaReturners -contains $name) {
+                $script:Wrapped += [pscustomobject]@{
+                    Command = $name
+                    Line    = $arr.Extent.StartLineNumber
+                    Text    = $arr.Extent.Text
+                }
+            }
+        }
+    }
+
+    It 'wraps no comma-returning call in @()' {
+        $detail = ($script:Wrapped | ForEach-Object { "line $($_.Line): $($_.Text)" }) -join '; '
+        $script:Wrapped.Count | Should -Be 0 -Because "these rebuild the unrolling the comma exists to prevent -> $detail"
+    }
+}
+
+Describe 'Removing an entry the way the button does it' -Tag 'Unit' {
+
+    BeforeAll {
+        function New-E {
+            param([string]$Name, [string]$Kind = 'Game', [int]$Parent = -1)
+            return @{ Ok=$true; GameName=$Name; Kind=$Kind; ParentIndex=$Parent
+                      SetupExe=@{ Name="setup_$Name.exe" } }
+        }
+        # One game and four add-ons: the real Hollow Knight disc.
+        $script:Five = @(
+            (New-E 'Hollow Knight'),
+            (New-E 'Update A' 'AddOn' 0), (New-E 'Update B' 'AddOn' 0),
+            (New-E 'Update C' 'AddOn' 0), (New-E 'Update D' 'AddOn' 0)
+        )
+    }
+
+    It 'hands back four separate entries, not one entry holding four' {
+        # Assigned exactly as the Remove handler assigns it.
+        $after = Remove-GameEntry $script:Five 0
+        $after.Count | Should -Be 4
+        foreach ($e in $after) {
+            $e | Should -BeOfType [hashtable] -Because 'each element is one entry, not a nested list'
+            $e.GameName | Should -Not -Match ' Update '
+        }
+    }
+
+    It 'promotes all four orphans rather than one' {
+        $after = Remove-GameEntry $script:Five 0
+        @($after | Where-Object { $_.Kind -eq 'Game' }).Count | Should -Be 4
+        @($after | Where-Object { $_.ParentIndex -ne -1 }).Count | Should -Be 0
     }
 }

@@ -12,3 +12,4 @@ discproject.json
 
 # Pester output
 pester-results.xml
+tests/ui/shots/

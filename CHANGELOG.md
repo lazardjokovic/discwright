@@ -9,6 +9,47 @@ between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- **A disc can hold more than one game, and the menu asks which.** Step 1 is a list
+  now rather than a single folder box. With two or more games the disc menu opens on a
+  chooser; picking one leads to its own Play / Install / Manual / Extras menu, with Back
+  to return. A disc with one game behaves exactly as before, chooser and Back button
+  included: it has nothing to choose, so it shows neither.
+- **Add-ons get their own button next to Install.** DLC, an expansion, a GOG patch or a
+  mod that ships as its own installer can be added and told which game it belongs to. It
+  then appears as an extra Install button on that game's screen instead of in the
+  chooser, which is where a piece of DLC does not belong. Until now the only place for a
+  second installer was Extras, where it was a file in a folder.
+
+  An add-on is picked as a **file**, not a folder, and may be **any `.exe`** — the
+  `setup_*.exe` rule exists to recognise a GOG game folder, and applying it to add-ons
+  excluded the two things people actually have. GOG ships patches as `patch_*.exe`, and a
+  mod installer is named whatever its author chose. Several can be added at once.
+
+  Add-ons are named from their filename rather than from the installer's version
+  information, because every GOG patch reports the ProductName of the game it patches —
+  all four Hollow Knight patches call themselves "Hollow Knight", which would have put
+  four identical buttons on the disc. The name can be edited, and the edit is saved.
+
+  These two are one feature. A DLC and a second game are both another installer that
+  needs its own entry in the menu; the only difference is where the entry is shown.
+
+- **A game's manual and extras belong to that game.** Each entry can have its own
+  manual and its own folder of extras, chosen in the same dialog that says whether it is
+  a game or an add-on. On the disc they sit beside that game's installer, and its menu
+  screen points at them.
+
+  Before this there was one manual for the whole disc, and its button appeared on every
+  game's screen — so on a two-game disc, one of them opened the other game's manual.
+  A disc-wide manual and Extras folder still work and are still there; an entry with
+  none of its own falls back to them, which is exactly how a single-game disc behaves.
+
+- Project files record which entries are add-ons, what they belong to, and each entry's
+  own manual and extras (schema version 4). Files written by 0.1.x and 0.2.0 still open,
+  and read back as all games with no add-ons and nothing of their own, which is what
+  those discs were.
+
 ### Changed
 
 - **Each Browse button now opens where its own box points.** `FolderBrowserDialog`
