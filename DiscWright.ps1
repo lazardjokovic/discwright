@@ -61,7 +61,7 @@ $PROJECT_FILE = 'discproject.json'
 # this cannot quietly drift a release behind. Shown in the title bar and the log,
 # and written into every project file - a bug report that comes with a project
 # file then says for itself which version built the disc.
-$APP_VERSION  = '0.2.0'
+$APP_VERSION  = '0.3.0'
 
 # =================== SMALL HELPERS ===================
 

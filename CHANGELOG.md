@@ -9,6 +9,8 @@ between minor versions.
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-08-20
+
 ### Added
 
 - **A disc can hold more than one game, and the menu asks which.** Step 1 is a list
@@ -138,7 +140,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/lazardjokovic/discwright/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lazardjokovic/discwright/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/lazardjokovic/discwright/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lazardjokovic/discwright/releases/tag/v0.1.0
