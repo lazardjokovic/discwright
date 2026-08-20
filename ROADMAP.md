@@ -15,30 +15,24 @@ feature only creates pressure to cram things in to justify it.
 
 ## Next
 
-**More than one installer on a disc.** This arrived as two separate requests that turn out
-to be one feature. Several games on a single disc — a 25 GB BD-R holds a lot of older
-games, and somebody asked for the Resident Evil trilogy on one. And DLC, expansions or a
-mod that ships as its own installer, which today has to go in Extras where it is just a
-file in a folder, and which deserves a button next to Install instead.
+**Multi-disc splitting.** The largest thing still outstanding, and the one most likely to
+be asked for next: anything bigger than a single disc is a known limitation today. It was
+requested twice, independently, within hours of the first release. Needs a splitting
+strategy, a volume label convention, and a menu that can ask for disc 2 — which is,
+admittedly, most of what made the original experience feel like the original experience.
 
-Both are the same thing underneath: this disc holds more than one installer, and each gets
-its own entry in the menu. The only difference is whether the entry is labelled a game or
-an add-on.
+## Delivered
 
-Half of it is already built. A disc can stage any number of installers into numbered
-`NN - Name` folders, and the project file records them. What is missing is the interface
-for adding them and a menu that presents the choice — plus a rethink of how Play decides a
-game is already installed when there is more than one candidate.
+**More than one installer on a disc** — shipped in 0.3.0, and it was the most-asked-for
+thing on this page. Several games on one disc with a chooser in the menu; DLC, expansions,
+patches and mods as their own Install button on the game they belong to; and each game's
+manual and extras filed with that game rather than with the disc.
 
-Three people asked for some form of this, more than for anything else on this page.
+The one thing it does not cover is a mod or an installer from somewhere other than GOG
+being the *game* on a disc. Add-ons accept any `.exe`, but detecting a game still means
+finding a `setup_*.exe` — see *Installers that are not from GOG* under Considering.
 
 ## Later
-
-**Multi-disc splitting.** Listed today as a known limitation: anything larger than a
-single disc is out of scope. It was requested twice, independently, within hours of the
-first release, so it moves onto the list. Needs a splitting strategy, a volume label
-convention, and a menu that can ask for disc 2 — which is, admittedly, most of what made
-the original experience feel like the original experience.
 
 **Artwork without the detour through an image editor.** Two requests that meet in the
 middle. One: fetch the game's icon and cover art automatically rather than making you hunt
