@@ -4,8 +4,9 @@ What is planned for DiscWright, what is being considered, and what is deliberate
 of scope. Ordered by intent rather than by date — this is a hobby project and nothing
 here carries a delivery promise.
 
-Most of the **Later** list came from people replying to the
+Most of what is below came from people replying to the
 [r/gog launch thread](https://www.reddit.com/r/gog/comments/1vrmyt0/made_a_free_tool_that_turns_gog_offline/).
+Where something was asked for more than once, it says so — that is what moves an item up.
 If what you want is missing, [open an issue](../../issues).
 
 Version numbers are deliberately not attached to anything below. Releases get numbered
@@ -14,25 +15,24 @@ feature only creates pressure to cram things in to justify it.
 
 ## Next
 
-**Say what is happening during a build.** Writing the ISO gives no feedback at all, and
-because the whole build runs on the interface thread the window goes grey and Windows
-paints it "Not Responding". On a full-size game that is minutes of looking like a crash.
-Wanted: a progress bar fed by the ISO writer itself, elapsed time, per-file progress
-during the copy, and a window that keeps repainting throughout.
+**More than one installer on a disc.** This arrived as two separate requests that turn out
+to be one feature. Several games on a single disc — a 25 GB BD-R holds a lot of older
+games, and somebody asked for the Resident Evil trilogy on one. And DLC, expansions or a
+mod that ships as its own installer, which today has to go in Extras where it is just a
+file in a folder, and which deserves a button next to Install instead.
 
-**Show which version is running.** In the title bar, in the log, and recorded into every
-project file, so a bug report says for itself what produced the disc.
+Both are the same thing underneath: this disc holds more than one installer, and each gets
+its own entry in the menu. The only difference is whether the entry is labelled a game or
+an add-on.
+
+Half of it is already built. A disc can stage any number of installers into numbered
+`NN - Name` folders, and the project file records them. What is missing is the interface
+for adding them and a menu that presents the choice — plus a rethink of how Play decides a
+game is already installed when there is more than one candidate.
+
+Three people asked for some form of this, more than for anything else on this page.
 
 ## Later
-
-**Several games on one disc.** A 25 GB BD-R holds a lot of older games. Put more than
-one installer on a disc and let the menu ask which to install. Needs a per-game section
-in the project file, a chooser in the menu, and a rethink of how Play decides a game is
-already installed when there is more than one candidate.
-
-**"Install DLC" as its own menu button.** DLC that ships as a separate installer
-currently has to go in Extras, where it is just a file in a folder. It deserves a button
-next to Install.
 
 **Multi-disc splitting.** Listed today as a known limitation: anything larger than a
 single disc is out of scope. It was requested twice, independently, within hours of the
@@ -40,14 +40,30 @@ first release, so it moves onto the list. Needs a splitting strategy, a volume l
 convention, and a menu that can ask for disc 2 — which is, admittedly, most of what made
 the original experience feel like the original experience.
 
-**Case and disc-face artwork.** `extras/DiscLabel.ps1` already renders a printable
-120 mm disc face at 300 dpi and sits parked in the repo. The request is to go further:
-build front and back case inserts from store artwork — cover on the front, screenshots
-on the back — so the printed result matches the disc without a detour through an image
-editor.
+**Artwork without the detour through an image editor.** Two requests that meet in the
+middle. One: fetch the game's icon and cover art automatically rather than making you hunt
+for a PNG. Two: build printable case inserts as well as the disc face — cover on the
+front, screenshots on the back — so the printed result matches the disc.
+`extras/DiscLabel.ps1` already renders a printable 120 mm disc face at 300 dpi and sits
+parked in the repo, so the printing half is partly done.
+
+The open question is where the artwork comes from. Scraping a store page adds a dependency
+that breaks whenever the site is redesigned, on a tool whose whole point is that it runs
+offline with nothing installed. A folder of images you point it at, or artwork lifted out
+of the installer itself, may be the better trade.
 
 ## Considering
 
+- **Installers that are not from GOG.** Detection looks for `setup_*.exe`, which is GOG's
+  naming, and Play locates an installed copy through registry keys GOG's installers write.
+  Someone asked about other DRM-free sources. Relaxing the filename filter is a small
+  change; deciding what DiscWright claims to support is not, and the honest position today
+  is that only GOG downloads have been tested.
+- **Linux.** Asked for twice. This is a rewrite rather than a port — the interface is
+  WinForms and the ISO builder is IMAPI2FS, both Windows-only — and the disc it produces
+  is an autorun menu for Windows, which is the half Linux has least use for. What would
+  carry over is the disc layout and a menu that is not an HTA. Intent only; nothing here
+  is promised.
 - **More than one music track.** One per disc is currently deliberate. A short playlist
   might justify the complexity. A music player will not.
 - **Menu themes.** The menu is one layout with configurable artwork. Named presets would
@@ -67,11 +83,13 @@ Stated plainly because these come up.
   into Windows all do the rest well, and there is no reason to write a worse one.
 - **Anything that removes DRM.** GOG installers are DRM-free by design — that is the only
   reason a tool like this can exist. DiscWright circumvents nothing and never will.
-- **Non-Windows support.** The interface is WinForms and the ISO builder is IMAPI2FS.
-  Both are Windows-only and neither has a portable replacement worth the rewrite.
-(**PowerShell 7** used to be listed here. It was ruled out because the ISO builder
-needed `Add-Type -CompilerParameters` with `/unsafe`, which PowerShell 6 removed. That
-dependency is gone, so the entry moved up to *Considering*.)
+
+(Two entries used to sit here. **PowerShell 7** was ruled out because the ISO builder
+needed `Add-Type -CompilerParameters` with `/unsafe`, which PowerShell 6 removed; that
+dependency is gone, so it moved up to *Considering*. **Non-Windows support** was ruled out
+on the grounds that WinForms and IMAPI2FS have no portable replacement — still true, but
+it was asked for twice and the cost is a rewrite rather than an impossibility, so it moved
+up to *Considering* as well.)
 
 ## How this list changes
 
