@@ -9,6 +9,13 @@ between minor versions.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The disc icon preview was drawn on top of its own Browse button.** Step 3's
+  44px preview square and the 24px Browse button were placed in the same column on
+  the same row, so whichever Windows painted last covered the other. The preview now
+  sits on the row below the button.
+
 ## [0.3.0] — 2026-08-20
 
 ### Added

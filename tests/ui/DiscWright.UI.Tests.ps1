@@ -135,6 +135,12 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         for ($i = 0; $i -lt $kids.Count; $i++) {
             try {
                 $c = $kids.Item($i); $r = $c.Current.BoundingRectangle
+                # A tooltip is a floating window that appears over whatever the
+                # pointer is resting on, and covering things is its entire job.
+                # It shows up as a child in the automation tree all the same, so
+                # if the mouse happens to be over BUILD ISO when this runs it
+                # reports a collision with the log box that is not a fault.
+                if ($c.Current.ClassName -match 'tooltips_class') { continue }
                 if ($r.Width -gt 0 -and $r.Height -gt 0) {
                     $boxes += [pscustomobject]@{ Name = $c.Current.Name; R = $r }
                 }

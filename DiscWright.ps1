@@ -1593,7 +1593,11 @@ AddLabel '3)  Disc icon (.ico, or .png/.jpg to auto-convert):' 15 268 520 | Out-
 $txtIcon=AddText 15 290 520
 $btnIcon=AddBtn 'Browse...' 545 290 110
 $lblIcon=AddLabel '' 15 318 500; $lblIcon.ForeColor=[System.Drawing.Color]::DimGray
-$picIcon=New-Object System.Windows.Forms.PictureBox; $picIcon.Location=New-Object System.Drawing.Point(560,290); $picIcon.Size=New-Object System.Drawing.Size(44,44); $picIcon.SizeMode='Zoom'; $picIcon.BorderStyle='FixedSingle'; $form.Controls.Add($picIcon)
+# Below the Browse button, not beside it: at y=290 this 44px-tall preview sat on
+# top of a 24px-tall button in the same 110px column, and whichever Windows drew
+# last won. Nothing lines up on this row at x=560, and 318+44 clears the step 4
+# group box at y=372.
+$picIcon=New-Object System.Windows.Forms.PictureBox; $picIcon.Location=New-Object System.Drawing.Point(560,318); $picIcon.Size=New-Object System.Drawing.Size(44,44); $picIcon.SizeMode='Zoom'; $picIcon.BorderStyle='FixedSingle'; $form.Controls.Add($picIcon)
 
 $grp=New-Object System.Windows.Forms.GroupBox; $grp.Text='4)  Autorun menu'; $grp.Location=New-Object System.Drawing.Point(15,372); $grp.Size=New-Object System.Drawing.Size(645,286); $form.Controls.Add($grp)
 $chkMenu=New-Object System.Windows.Forms.CheckBox; $chkMenu.Text='Run splash menu when disc is inserted'; $chkMenu.Location=New-Object System.Drawing.Point(15,24); $chkMenu.Size=New-Object System.Drawing.Size(400,22); $chkMenu.Checked=$true; $grp.Controls.Add($chkMenu)

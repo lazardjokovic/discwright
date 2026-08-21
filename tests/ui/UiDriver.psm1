@@ -297,10 +297,23 @@ function Get-BoxAfter {
         behind a modal dialog: from the outside, an app that starts and then does
         nothing at all.
 
-        A step's box is the unnamed control on the row directly below the label,
-        starting at the same left edge. Buttons carry names, so the empty name is
-        what separates the box from the Browse beside it, and the geometry is
-        what separates this step's box from the next step's.
+        A step's input is the control on the row directly below the label,
+        starting at the same left edge - a text box for most steps, the installer
+        ListView for step 1.
+
+        Which control that is gets decided by ClassName, which the WinForms
+        accessibility bridge fills in accurately even though it exposes every
+        control as a pattern-less Pane: boxes are WindowsForms10.EDIT, the list
+        is .SysListView32, buttons are .BUTTON, labels are .STATIC and the icon
+        preview is .Window.8.
+
+        That distinction used to be made by looking for an EMPTY name, on the
+        reasoning that buttons are named and boxes are not - which is true only
+        while the box is empty. A WinForms text box reports its CONTENTS as its
+        accessible name, so the moment a project was loaded and the boxes had
+        text in them, every one of them was skipped as though it were a button
+        and this returned nothing. That looked like the app failing to open a
+        disc; it was the harness failing to find the box.
     #>
     param($Win, [string]$LabelLike)
     $kids = $Win.FindAll($script:UiScope::Children, $script:UiAny)
@@ -315,7 +328,8 @@ function Get-BoxAfter {
     for ($i = 0; $i -lt $kids.Count; $i++) {
         try {
             $c = $kids.Item($i)
-            if (-not [string]::IsNullOrEmpty($c.Current.Name)) { continue }   # buttons are named
+            # Something you can type in or pick from, not a button, label or picture.
+            if ($c.Current.ClassName -notmatch '\.(EDIT|SysListView32|COMBOBOX)\.') { continue }
             $r = $c.Current.BoundingRectangle
             if ($r.Width -lt 60 -or $r.Height -lt 10) { continue }
             if ([Math]::Abs($r.Left - $lr.Left) -gt 8) { continue }           # same left edge

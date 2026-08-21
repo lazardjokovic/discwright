@@ -44,10 +44,33 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 
-if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version.Major -ge 5 })) {
-    throw 'Pester 5 or later is needed. Install-Module Pester -Force -SkipPublisherCheck -Scope CurrentUser'
+# Pester 5, deliberately, and not merely "5 or later".
+#
+# Under Pester 6.1.0 every file in this suite hangs in BeforeAll and launches a
+# DiscWright window while doing it - including a file that only calls
+# Parser::ParseFile on DiscWright.ps1 and dot-sources nothing at all. The same
+# code runs in well under a second in a plain script. Measured on this suite:
+# 6.1.0 never finishes, 5.9.1 finishes in 18 seconds with everything passing.
+#
+# Picking the highest 5.x rather than one exact build, so this does not need
+# editing for every patch release. If only 6.x is installed, say what to do
+# rather than importing it and hanging.
+$pester5 = Get-Module -ListAvailable Pester |
+    Where-Object { $_.Version.Major -eq 5 } |
+    Sort-Object Version -Descending |
+    Select-Object -First 1
+
+if (-not $pester5) {
+    throw @'
+Pester 5.x is needed and was not found.
+
+    Install-Module Pester -RequiredVersion 5.9.1 -Force -SkipPublisherCheck -Scope CurrentUser
+
+Pester 6 can stay installed alongside it; this runner asks for 5.x by version.
+'@
 }
-Import-Module Pester -MinimumVersion 5.0 -Force
+Import-Module Pester -RequiredVersion $pester5.Version -Force
+Write-Host "Pester $((Get-Module Pester).Version)" -ForegroundColor DarkGray
 
 $unit = $null
 $ui   = $null
