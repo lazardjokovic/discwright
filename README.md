@@ -21,6 +21,8 @@ Insert the disc and you get:
 
 Play knows whether the game is already installed and greys itself out until it is. Install runs the GOG installer straight off the disc. Extras opens whatever you put there — manuals, soundtracks, wallpapers, the making-of video.
 
+**A disc can hold more than one game.** With two or more, the menu opens on a chooser and picking one leads to its own screen, with Back to return. DLC, an expansion, a GOG patch or a mod goes on the game it belongs to, where it becomes an extra Install button on that game's screen rather than another entry in the chooser. A one-game disc shows neither the chooser nor Back — it has nothing to choose.
+
 ## What you need
 
 - **Windows 10 or 11**
@@ -52,13 +54,15 @@ The launchers run the script with `-ExecutionPolicy Bypass`, the flag Windows re
 
 ## Making a disc
 
-![The whole build in one pass: pick the GOG folder, add artwork and extras, hit BUILD ISO, preview the menu](docs/demo.gif)
+![The whole build in one pass: add the game, add artwork and extras, hit BUILD ISO, preview the menu](docs/demo.gif)
 
-1. **Pick the GOG folder** — the one holding `setup_*.exe` and any `.bin` parts. DiscWright reads the game's name out of the installer and tells you which disc size it needs.
+1. **Add the games** — each one a GOG folder holding `setup_*.exe` and any `.bin` parts. DiscWright reads the game's name out of the installer and tells you which disc size the lot of them needs. Add as many as fit.
+
+   **Add-ons** — DLC, expansions, GOG patches, mods — are added the same way, except you pick the **installer file** rather than a folder, and it can be **any `.exe`**: the `setup_*.exe` rule is how a GOG *game* folder is recognised, and GOG ships patches as `patch_*.exe` while a mod installer is named whatever its author chose. You say which game each one belongs to. Names come from the filename and can be edited, because every GOG patch reports the game's own name as its product name — all four Hollow Knight patches call themselves "Hollow Knight".
 2. **Set the disc label** — what This PC will call the drive.
 3. **Choose an icon** — a `.ico`, or any PNG/JPG and it builds a proper multi-size icon for you.
 4. **Set up the menu** — background artwork, which side the buttons sit on, which buttons you want, optional music, optional title text over the artwork.
-5. **Add extra content** — a manual, an Extras folder, or any loose files and folders to drop at the disc root.
+5. **Add extra content** — a manual, an Extras folder, or any loose files and folders to drop at the disc root. Each game can also have a manual and an Extras folder **of its own**, set when you add it; a game with none of its own falls back to the disc-wide ones.
 6. **Pick an output folder** and hit BUILD ISO.
 
 **Preview menu** renders the menu with your current settings without building anything, so you can nudge the layout without waiting on a rebuild.
@@ -75,6 +79,8 @@ GOG's own store pages, [SteamGridDB](https://www.steamgriddb.com/), and the wall
 
 ## What ends up on the disc
 
+One game, and the installer sits at the root:
+
 ```
 E:\
 ├─ autorun.inf              drive icon, drive label, menu launcher
@@ -87,6 +93,28 @@ E:\
 │   └─ HollowKnight.ico
 └─ Extras\                  manual, bonus content, whatever you added
 ```
+
+Two or more, and every entry moves into a numbered folder of its own:
+
+```
+E:\
+├─ autorun.inf
+├─ MetroidvaniaNight.ico
+├─ AUTORUN\                 as above
+├─ Games\
+│   ├─ 01 - Hollow Knight\
+│   │   ├─ setup_hollow_knight_....exe
+│   │   └─ Extras\          this game's own manual and bonus content
+│   ├─ 02 - Ori and the Blind Forest\
+│   │   └─ setup_ori_....exe
+│   └─ 03 - Hollow Knight 1.5 patch\
+│       └─ patch_hollow_knight_....exe
+└─ Extras\                  the disc-wide ones, for games with none of their own
+```
+
+An add-on gets its own numbered folder like anything else — its `.bin` parts are named after its own installer, and a flat root holding a dozen setup files is unreadable. Where it belongs is a question for the *menu*, not for the disc layout: entry 03 above appears as a second Install button on Hollow Knight's screen and not in the chooser.
+
+The numbering is what makes the disc browsable by hand: it puts the folders in the same order as the menu. Names are folded to plain ASCII for the same reason the disc label is — a disc that is legible in every file manager is worth more than an exact title.
 
 The icon is named after the disc rather than a fixed `disc.ico` for a specific reason: Explorer caches icons **by file path**, so `E:\disc.ico` is the same cache key for every disc that ever passes through that drive letter. Swap discs and Explorer will happily redraw the previous game's icon. Naming it after the disc gives each one its own key.
 
@@ -105,7 +133,7 @@ Stated up front rather than discovered later.
 - **`mshta.exe` must be available.** The menu is an HTA. It ships with Windows 11, but a lot of hardened and enterprise environments disable it. The disc icon and label still work; only the menu is affected.
 - **AutoPlay has to be allowed.** If you have previously told Windows to "Take no action" for this drive, the menu will not launch on insert. Double-clicking the drive still opens it.
 - **Paths longer than 260 characters** will fail during the copy. PowerShell 5.1 limitation.
-- **One music track and one manual** per disc, by design.
+- **One music track** per disc, by design. Manuals are per game.
 - **No multi-disc splitting.** Anything larger than a 100 GB BD-R XL is out of scope.
 - **Disc labels are limited to what Windows can encode.** AutoRun reads `autorun.inf` in the system ANSI codepage and has no Unicode mode at all, so accented Latin characters are fine but Cyrillic, Greek and CJK are not. DiscWright shows you exactly what This PC will display and asks before building one it cannot represent.
 
