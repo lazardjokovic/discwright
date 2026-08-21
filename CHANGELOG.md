@@ -9,12 +9,22 @@ between minor versions.
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-08-21
+
 ### Fixed
 
 - **The disc icon preview was drawn on top of its own Browse button.** Step 3's
   44px preview square and the 24px Browse button were placed in the same column on
   the same row, so whichever Windows painted last covered the other. The preview now
   sits on the row below the button.
+
+  The window test suite checks that no two controls overlap and would have caught
+  this immediately. It could not run: `tests\Invoke-Tests.ps1` asked for "Pester 5 or
+  later" and got Pester 6.1.0, under which every file in the suite hangs before
+  running anything — while opening a DiscWright window, so it looked like the
+  application freezing on startup rather than the tests failing to start. The runner
+  now asks for Pester 5.x specifically, and the suite reported the overlap on the
+  first run afterwards.
 
 ## [0.3.0] — 2026-08-20
 
@@ -147,7 +157,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/lazardjokovic/discwright/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/lazardjokovic/discwright/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lazardjokovic/discwright/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/lazardjokovic/discwright/compare/v0.1.0...v0.1.1
