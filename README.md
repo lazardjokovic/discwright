@@ -67,6 +67,8 @@ The launchers run the script with `-ExecutionPolicy Bypass`, the flag Windows re
 
 Every build writes a `discproject.json` next to the ISO. **Open existing disc...** loads it back so you can change one thing and rebuild, months later.
 
+**New disc** clears the form and starts over without restarting the app — useful when you are making several discs in one sitting. It asks first, and it keeps the output folder, since that is the one field you would otherwise retype every time.
+
 ### Where to get artwork
 
 The disc icon wants something square-ish and at least 256px. The menu background wants something around 760×480 or larger — it gets cropped to fill.
