@@ -470,10 +470,13 @@ Describe 'Removing an entry' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         # label, so the previous disc's summary stayed under an empty list - still
         # green, still naming a size and a disc type that nothing on the form
         # accounted for any more. New disc always cleared it; Remove never did.
-        (Get-StatusText $script:Win) | Should -Not -BeNullOrEmpty -Because 'one entry is still on the disc'
-        Select-ListRow -Win $script:Win -Index 0
-        Invoke-CtlNamed $script:Win 'Remove' | Out-Null
-        Start-Sleep -Seconds 1
+        #
+        # Removes until the list is empty rather than assuming a count. The tests
+        # above it in this block leave a different number behind than a filtered
+        # run does, and a test that only passes in sequence is a test that lies
+        # the first time somebody runs it on its own.
+        (Get-StatusText $script:Win) | Should -Not -BeNullOrEmpty -Because 'entries are still on the disc'
+        Clear-AllEntries -Win $script:Win
         Get-EntryCount $script:Win | Should -Be 0
         Get-StatusText $script:Win | Should -BeNullOrEmpty
     }
@@ -511,11 +514,7 @@ Describe 'The label DiscWright typed itself' -Tag 'UI' -Skip:(-not $script:HaveD
     }
 
     It 'survives every entry being removed, because the user owns it' {
-        while ((Get-EntryCount $script:Win) -gt 0) {
-            Select-ListRow -Win $script:Win -Index 0
-            Invoke-CtlNamed $script:Win 'Remove' | Out-Null
-            Start-Sleep -Milliseconds 800
-        }
+        Clear-AllEntries -Win $script:Win
         Get-EntryCount $script:Win | Should -Be 0
         (Get-BoxAfter $script:Win '2)  Disc label*').Current.Name | Should -Be 'UI Fixture'
     }

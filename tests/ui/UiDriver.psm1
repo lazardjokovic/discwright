@@ -459,7 +459,34 @@ function Save-WindowShot {
     $bmp.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
 }
 
+function Clear-AllEntries {
+    <#
+    .SYNOPSIS
+        Remove every installer from the list, whatever happens to be in it.
+
+    .DESCRIPTION
+        Selects row 0 and clicks Remove until the list is empty, rather than
+        clicking a counted number of times.
+
+        A test that assumes how many entries the tests above it left behind
+        passes in sequence and fails the first time somebody runs it on its own -
+        which is exactly when they are least likely to believe the failure.
+
+        The guard stops a runaway if Remove ever stops emptying the list. A suite
+        that fails is useful; one that hangs is not.
+    #>
+    param($Win, [int]$Max = 12)
+    $n = 0
+    while ((Get-EntryCount $Win) -gt 0 -and $n -lt $Max) {
+        Select-ListRow -Win $Win -Index 0
+        if (-not (Test-CtlEnabled $Win 'Remove')) { break }
+        Invoke-CtlNamed $Win 'Remove' | Out-Null
+        Start-Sleep -Milliseconds 800
+        $n++
+    }
+}
+
 Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
-    Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow,
+    Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
     Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow

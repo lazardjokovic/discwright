@@ -1666,6 +1666,23 @@ function New-FolderDialog([string]$description,[string]$startAt) {
 # GOG Galaxy's own download folder is the best guess there is: DiscWright exists to
 # read GOG offline installers, and that is where Galaxy puts them unless told
 # otherwise. If it is not there, fall back to nothing rather than to a wrong guess.
+
+# Whether the disc label sitting in the box is one DiscWright typed itself, and may
+# therefore be taken back when the last entry goes.
+#
+# A named predicate rather than an inline condition because it is the entire rule,
+# and the click handler that applies it cannot be reached from a test: getting a
+# game onto the form means driving the folder picker, whose tree is invisible to UI
+# Automation. This way the rule is tested even though the wiring is not.
+#
+# Compared against what was SEEDED, never against the entry being removed. A user
+# who types a label that happens to match the game's name still owns it - they typed
+# it, so it survives.
+function Test-LabelIsSeeded([string]$current, [string]$seeded) {
+    if ([string]::IsNullOrEmpty($seeded)) { return $false }
+    return ($current -eq $seeded)
+}
+
 function Get-DefaultGameBrowseFolder {
     foreach ($p in @(
         (Join-Path ${env:ProgramFiles(x86)} 'GOG Galaxy\Games\Offline Installers'),
@@ -2665,8 +2682,7 @@ $btnGameDel.Add_Click({
     # carried the previous game's name. Compared against what was seeded rather
     # than against the game just removed, so a label the user typed survives even
     # if they typed the game's own name.
-    if (@($state.Games).Count -eq 0 -and $state.LabelSeededFrom -and
-        $txtLabel.Text -eq $state.LabelSeededFrom) {
+    if (@($state.Games).Count -eq 0 -and (Test-LabelIsSeeded $txtLabel.Text $state.LabelSeededFrom)) {
         $txtLabel.Clear(); $state.LabelSeededFrom = $null
     }
     Update-GameList; Update-MediaLabel; Update-ActionButtons

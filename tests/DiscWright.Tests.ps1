@@ -1722,3 +1722,43 @@ Describe 'Where the game picker opens when the form points nowhere' -Tag 'Unit' 
         { Get-DefaultGameBrowseFolder } | Should -Not -Throw
     }
 }
+
+Describe 'Whether the disc label is ours to take back' -Tag 'Unit' {
+
+    # Adding a game to an empty form seeds the disc label from its name. Removing
+    # that game has to take the name back, or the next game added never replaces
+    # it - seeding only fires into an EMPTY box - and the disc is built carrying
+    # the previous game's name in This PC.
+    #
+    # The click handler cannot be driven from a test: getting a game onto the form
+    # means the folder picker, whose tree UI Automation cannot see. So the rule
+    # lives in a function and the function is what is tested here.
+
+    It 'takes back a label it typed itself' {
+        Test-LabelIsSeeded 'Alan Wake' 'Alan Wake' | Should -BeTrue
+    }
+
+    It 'leaves a label the user typed over the top of the seeded one' {
+        Test-LabelIsSeeded 'ALAN WAKE DISC' 'Alan Wake' | Should -BeFalse
+    }
+
+    It 'leaves a label that was never seeded, however it looks' {
+        # A project file's label, or one typed into an empty box before any game
+        # was added. Nothing was seeded, so nothing is ours.
+        Test-LabelIsSeeded 'UI Fixture' ''    | Should -BeFalse
+        Test-LabelIsSeeded 'Alan Wake'  ''    | Should -BeFalse
+        Test-LabelIsSeeded 'Alan Wake'  $null | Should -BeFalse
+    }
+
+    It 'leaves a label the user typed that happens to match the game name' {
+        # They typed it, so they own it - even though the text is identical to
+        # what seeding would have produced. Only a recorded seed makes it ours,
+        # which is why this compares against the seed and not against the entry.
+        Test-LabelIsSeeded 'Alan Wake' $null | Should -BeFalse
+    }
+
+    It 'is not fooled by an empty box' {
+        Test-LabelIsSeeded '' 'Alan Wake' | Should -BeFalse
+        Test-LabelIsSeeded '' ''          | Should -BeFalse
+    }
+}
