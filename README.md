@@ -54,7 +54,7 @@ The launchers run the script with `-ExecutionPolicy Bypass`, the flag Windows re
 
 ## Making a disc
 
-![The whole build in one pass: add the game, add artwork and extras, hit BUILD ISO, preview the menu](docs/demo.gif)
+![The whole build in one pass: add the game, set the label, icon and background, attach the manual and extras, preview the menu, then BUILD ISO through to the finished file](docs/demo.gif)
 
 1. **Add the games** — each one a GOG folder holding `setup_*.exe` and any `.bin` parts. DiscWright reads the game's name out of the installer and tells you which disc size the lot of them needs. Add as many as fit.
 
@@ -72,6 +72,14 @@ The launchers run the script with `-ExecutionPolicy Bypass`, the flag Windows re
 Every build writes a `discproject.json` next to the ISO. **Open existing disc...** loads it back so you can change one thing and rebuild, months later.
 
 **New disc** clears the form and starts over without restarting the app — useful when you are making several discs in one sitting. It asks first, and it keeps the output folder, since that is the one field you would otherwise retype every time.
+
+### More than one game on a disc
+
+![Two games and two patches on one disc: each add-on is filed under the game it belongs to, and the menu opens on a chooser](docs/multi-game.gif)
+
+Two games and two Hollow Knight patches, ending on the menu the disc will show.
+
+The patches sit on Hollow Knight's own screen rather than in the chooser, and they stay **greyed until that game is installed** — applying a patch to nothing produces an error from GOG's installer several clicks later, which is a poor place to learn the rule.
 
 ### Where to get artwork
 
