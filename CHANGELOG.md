@@ -9,6 +9,30 @@ between minor versions.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-21
+
+### Added
+
+- **`New disc` — start a fresh disc without restarting the app.** There has always
+  been an `Open existing disc...` with no counterpart: the only way back to an empty
+  form was to close DiscWright and open it again. That is fine once and tiresome by
+  the third disc of an evening.
+
+  It clears the installer list, the disc label, the icon, every menu setting and the
+  extra content, and puts the log back to the line a fresh window opens with. It asks
+  first, and it is greyed out when there is nothing to clear, so the dialog only ever
+  appears when something would actually be discarded. Nothing on disk is touched — a
+  disc already built stays where it is.
+
+  **The output folder is deliberately kept.** Three discs made in one sitting go to
+  the same place, and it is the one field that would have to be retyped every time.
+
+### Changed
+
+- The top row now holds four buttons in the width that held three, so
+  `Open existing disc...`, `Show disc folder` and `Preview menu` are each somewhat
+  narrower. Nothing moved rows and no label is clipped.
+
 ### Fixed
 
 - **An add-on's Install button no longer offers to run before its game exists.**
@@ -173,7 +197,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/lazardjokovic/discwright/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/lazardjokovic/discwright/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/lazardjokovic/discwright/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lazardjokovic/discwright/compare/v0.1.1...v0.2.0
