@@ -1248,7 +1248,7 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
 
         # A stand-in for Star Wars: Empire at War Gold Pack - one installer, two
         # games. Nobody here owns that game, so this is a reconstruction; what
-        # makes it worth trusting is that its SHAPE is copied from the two real
+        # makes it worth trusting is that its SHAPE is copied from the four real
         # .info files on hand rather than invented:
         #
         #   - pretty-printed, one key per line, a space after every colon. GOG
@@ -1264,10 +1264,23 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
         #     next.
         #   - a task with NO "category" key at all, which is how The Witcher
         #     ships its Safe Mode entry. It must not become a third choice.
+        #
+        # The folder names and executables are not guesses either. GOG's own
+        # public build manifest for product 1421404887 lists GameData\sweaw.exe
+        # and EAWX\swfoc.exe under an install directory called "Star Wars -
+        # Empire At War Gold", and the whole depot holds exactly one .info file.
+        # EAWX is not a folder name anybody would invent.
+        #
+        # What that manifest cannot give is the CONTENTS of the .info: it ships
+        # inside the depot, and the depot answers 403 without an ownership token.
+        # So the playTasks below are still the reconstructed part, and one thing
+        # is still unconfirmed - whether the real file marks Forces of Corruption
+        # with category "game". If it does not, playTasks drops it and Play goes
+        # on launching only the base game.
         $script:TaskDir = Join-Path $script:Sandbox 'installed-bundle'
         New-Item -ItemType Directory -Force -Path (Join-Path $script:TaskDir 'GameData') | Out-Null
-        New-Item -ItemType Directory -Force -Path (Join-Path $script:TaskDir 'corruption') | Out-Null
-        foreach ($f in 'GameData\sweaw.exe','corruption\swfoc.exe','GameData\hidden.exe','Manual.pdf') {
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:TaskDir 'EAWX') | Out-Null
+        foreach ($f in 'GameData\sweaw.exe','EAWX\swfoc.exe','GameData\hidden.exe','Manual.pdf') {
             Set-Content -LiteralPath (Join-Path $script:TaskDir $f) -Value 'x' -Encoding Ascii
         }
         $info = @'
@@ -1299,9 +1312,9 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
                 "*"
             ],
             "name": "Forces of Corruption",
-            "path": "corruption//swfoc.exe",
+            "path": "EAWX//swfoc.exe",
             "type": "FileTask",
-            "workingDir": "corruption"
+            "workingDir": "EAWX"
         },
         {
             "category": "game",
@@ -1389,8 +1402,8 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
     It 'resolves both spellings of a relative path' -Skip:(-not $script:HaveCScript) {
         $t = Invoke-PlayTasks $script:TaskDir
         $t[0].Path | Should -Be (Join-Path $script:TaskDir 'GameData\sweaw.exe')
-        # Written "corruption//swfoc.exe" in the fixture, as GOG really does.
-        $t[1].Path | Should -Be (Join-Path $script:TaskDir 'corruption\swfoc.exe')
+        # Written "EAWX//swfoc.exe" in the fixture, as GOG really does.
+        $t[1].Path | Should -Be (Join-Path $script:TaskDir 'EAWX\swfoc.exe')
     }
 
     It 'leaves out the manual, the hidden exe and a task whose file is gone' -Skip:(-not $script:HaveCScript) {
