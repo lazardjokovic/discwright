@@ -169,7 +169,7 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
     }
 
     It 'leaves <_> greyed until there is something for it to act on' -ForEach @(
-        'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu'
+        'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu', 'New disc'
     ) {
         Test-CtlEnabled $script:Win $_ | Should -BeFalse
     }
@@ -223,6 +223,71 @@ Describe 'Opening a disc that was already built' -Tag 'UI' -Skip:(-not $script:H
         Select-ListRow -Win $script:Win -Index 0
         Test-CtlEnabled $script:Win 'Change*' | Should -BeTrue
         Test-CtlEnabled $script:Win 'Remove'  | Should -BeTrue
+    }
+}
+
+Describe 'Starting a new disc' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # Loaded rather than typed in, so every field this has to clear is genuinely
+    # populated - list, label, icon, background, output folder - and the test is
+    # about the reset rather than about how the form got filled.
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:ProjOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'wakes New disc once there is something to clear' {
+        Test-CtlEnabled $script:Win 'New disc' | Should -BeTrue
+    }
+
+    It 'asks before discarding, and says nothing on disk is touched' {
+        Invoke-CtlNamed $script:Win 'New disc' | Out-Null
+        # Dismissed with No: the confirmation has to be a real gate, not a
+        # formality that clears the form whichever button is pressed.
+        $script:Asked = Read-MessageBox -Win $script:Win -TitleLike 'New disc' -Button 'No'
+        $script:Asked | Should -Match 'Nothing on disk is touched'
+        Get-EntryCount $script:Win | Should -BeGreaterThan 0
+    }
+
+    It 'clears the installer list when confirmed' {
+        Invoke-CtlNamed $script:Win 'New disc' | Out-Null
+        Read-MessageBox -Win $script:Win -TitleLike 'New disc' -Button 'Yes' | Out-Null
+        Start-Sleep -Seconds 1
+        Get-EntryCount $script:Win | Should -Be 0
+    }
+
+    It 'clears the disc label and the icon' {
+        (Get-BoxAfter $script:Win '2)  Disc label*').Current.Name | Should -BeNullOrEmpty
+        (Get-BoxAfter $script:Win '3)  Disc icon*').Current.Name  | Should -BeNullOrEmpty
+    }
+
+    It 'keeps the output folder, which is the one field you would retype' {
+        (Get-BoxAfter $script:Win '6)  Output folder*').Current.Name | Should -Be $script:ProjOut
+    }
+
+    It 'greys itself out again, having nothing left to clear' {
+        # The output folder survives on purpose, so it must not count as dirty -
+        # otherwise this stays lit and a second click does nothing visible.
+        Test-CtlEnabled $script:Win 'New disc' | Should -BeFalse
+    }
+
+    It 'greys the buttons that need an entry, and leaves Add game available' {
+        Test-CtlEnabled $script:Win 'Add-on*'      | Should -BeFalse
+        Test-CtlEnabled $script:Win 'Preview menu' | Should -BeFalse
+        Test-CtlEnabled $script:Win 'Add game*'    | Should -BeTrue
+    }
+
+    It 'ends up looking like a window that just opened' {
+        Save-WindowShot $script:Win (Join-Path $script:ShotDir 'after-new-disc.png')
+        # The status line under the list is blank on a fresh window. Leaving the
+        # previous disc's "2 games + 1 add-on" sitting under an empty list is
+        # exactly the kind of stale text that makes a reset look like a failure.
+        Get-StatusText $script:Win | Should -BeNullOrEmpty
     }
 }
 

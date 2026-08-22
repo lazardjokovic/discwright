@@ -9,7 +9,23 @@ between minor versions.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-21
+
 ### Added
+
+- **`New disc` — start a fresh disc without restarting the app.** There has always
+  been an `Open existing disc...` with no counterpart: the only way back to an empty
+  form was to close DiscWright and open it again. That is fine once and tiresome by
+  the third disc of an evening.
+
+  It clears the installer list, the disc label, the icon, every menu setting and the
+  extra content, and puts the log back to the line a fresh window opens with. It asks
+  first, and it is greyed out when there is nothing to clear, so the dialog only ever
+  appears when something would actually be discarded. Nothing on disk is touched — a
+  disc already built stays where it is.
+
+  **The output folder is deliberately kept.** Three discs made in one sitting go to
+  the same place, and it is the one field that would have to be retyped every time.
 
 - **Play asks which one, for a bundle that ships two games in a single installer.**
   Star Wars: Empire at War Gold Pack installs both the base game and the Forces of
@@ -25,10 +41,32 @@ between minor versions.
   when it holds more than one. Back returns to the game's screen.
 
   **A game with one launch target is completely unaffected** — Play launches it
-  directly, exactly as before. Checked against real installs: The Witcher Enhanced
-  Edition and Resident Evil 0 both report a single target, with the manual, the
-  hidden raw executable behind GOG's launcher and the Safe Mode variant all
-  correctly left out.
+  directly, exactly as before. Checked against four real installs — The Witcher
+  Enhanced Edition, Resident Evil 0, Alan Wake and Hollow Knight — which all report
+  a single target, with manuals, support links, the hidden raw executable behind
+  GOG's launcher and the Safe Mode variant all correctly left out.
+
+### Changed
+
+- The top row now holds four buttons in the width that held three, so
+  `Open existing disc...`, `Show disc folder` and `Preview menu` are each somewhat
+  narrower. Nothing moved rows and no label is clipped.
+
+### Fixed
+
+- **An add-on's Install button no longer offers to run before its game exists.**
+  A patch, a piece of DLC or a mod is applied *on top of* the game it belongs to.
+  The menu enabled those buttons purely on whether the file was present on the
+  disc, so on a freshly inserted disc every one of them was live — and clicking one
+  produced an error from GOG's installer several clicks later, which is a poor place
+  to learn the rule. They now need the game installed as well, using the same
+  registry check `Play` already relies on, and the tooltip distinguishes the two
+  reasons a button can be grey: the installer is missing from the disc, or the game
+  is not installed yet.
+
+  This does not sequence anything. GOG's patches are incremental and have to be
+  applied in order; DiscWright shows them in the order they were added and cannot
+  tell which have already been applied. Add them in the order they should be run.
 
 ## [0.3.1] — 2026-08-21
 
@@ -178,7 +216,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/lazardjokovic/discwright/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/lazardjokovic/discwright/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/lazardjokovic/discwright/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lazardjokovic/discwright/compare/v0.1.1...v0.2.0

@@ -61,7 +61,7 @@ $PROJECT_FILE = 'discproject.json'
 # this cannot quietly drift a release behind. Shown in the title bar and the log,
 # and written into every project file - a bug report that comes with a project
 # file then says for itself which version built the disc.
-$APP_VERSION  = '0.3.1'
+$APP_VERSION  = '0.4.0'
 
 # =================== SMALL HELPERS ===================
 
@@ -892,17 +892,26 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var g=GAMES[cur];
     setEnabled("btn_Install", (PREVIEW || (g.s!="" && fso.FileExists(fso.BuildPath(root,g.s)))),
                "The installer is not next to this menu.");
+    // Registry-based, so it tells the truth in preview as well. Worked out once
+    // and used by both the add-ons and Play below.
+    var parentOn = (findGame(g.m)!=null);
+    // An add-on - a patch, a piece of DLC, a mod - is applied ON TOP of the game
+    // it belongs to and needs that game installed first. A GOG patch in
+    // particular refuses outright, and the error comes from GOG's installer
+    // several clicks later rather than from the menu, which is a poor place to
+    // discover the rule. Being on the disc is necessary but not sufficient.
     for(var j=0;j<g.a.length;j++){
-      setEnabled("btn_addon_"+j, (PREVIEW || fso.FileExists(fso.BuildPath(root,g.a[j].s))),
-                 "This add-on's installer is not on the disc.");
+      var here = fso.FileExists(fso.BuildPath(root,g.a[j].s));
+      setEnabled("btn_addon_"+j, (PREVIEW || (here && parentOn)),
+                 here ? (g.n+" is not installed yet - use Install first.")
+                      : "This add-on's installer is not on the disc.");
     }
     var gman = manualOf(g), gext = extrasOf(g);
     setEnabled("btn_Manual", (PREVIEW || (gman!="" && fso.FileExists(fso.BuildPath(root,gman)))),
                "There is no manual for " + g.n + " on this disc.");
     setEnabled("btn_Extras", (PREVIEW || fso.FolderExists(fso.BuildPath(root,gext))),
                "There is nothing extra for " + g.n + " on this disc.");
-    // Play is registry-based, so it tells the truth even in preview.
-    setEnabled("btn_Play", (findGame(g.m)!=null),
+    setEnabled("btn_Play", parentOn,
                g.n+" is not installed yet - use Install first.");
     if(PREVIEW){
       var ids=["btn_Install","btn_Manual","btn_Extras"];
@@ -1639,10 +1648,14 @@ function New-FolderDialog([string]$description,[string]$startAt) {
     return $d
 }
 
-# --- reopen / inspect row ---
-$btnOpenProj = AddBtn 'Open existing disc...' 15 8 210
-$btnOpenDisc = AddBtn 'Show disc folder' 235 8 200
-$btnPreview  = AddBtn 'Preview menu' 445 8 210
+# --- new / reopen / inspect row ---
+# Four buttons in the width that held three, so they are narrower than they were.
+# Each is still wider than its own longest label at 9pt with room to spare; the
+# window test that no two controls overlap is what guards the arithmetic.
+$btnNew      = AddBtn 'New disc' 15 8 110
+$btnOpenProj = AddBtn 'Open existing disc...' 135 8 185
+$btnOpenDisc = AddBtn 'Show disc folder' 330 8 160
+$btnPreview  = AddBtn 'Preview menu' 500 8 155
 
 # Step 1 was one text box holding one folder. It is a list now, because a disc
 # can carry several games and their add-ons, and the one thing the old box could
@@ -1846,6 +1859,29 @@ function Test-AlreadyBuilt([string]$outDir) {
     return (@(Get-ChildItem -LiteralPath $outDir -Filter '*.iso' -File -EA SilentlyContinue).Count -gt 0)
 }
 
+# Whether anything on the form differs from how it opens, which is what decides
+# if "New disc" has anything to do.
+#
+# The output folder is deliberately NOT part of this. New disc keeps it - if you
+# are making three discs in an evening they all go to the same place, and clearing
+# it is the one field you would have to retype every time. Counting it as dirty
+# would leave the button enabled straight after a reset, so clicking it again
+# would do nothing visible and look broken.
+function Test-FormDirty {
+    if (@($state.Games).Count) { return $true }
+    foreach ($box in $txtLabel,$txtIcon,$txtBg,$txtMusic,$txtMan,$txtEx,$txtTitle) {
+        if ($box.Text.Trim()) { return $true }
+    }
+    if ($lstExtra.Items.Count) { return $true }
+    # Anything switched away from its opening position, in either direction.
+    if (-not $chkMenu.Checked -or -not $chkWinBorder.Checked) { return $true }
+    if ($chkBgAsIs.Checked -or $chkTitle.Checked -or $chkMusic.Checked -or $chkDivider.Checked) { return $true }
+    if ($cmbSide.SelectedIndex -ne 0 -or $cmbBtnStyle.SelectedIndex -ne 0) { return $true }
+    if (-not $cbPlay.Checked -or -not $cbInst.Checked -or -not $cbExit.Checked) { return $true }
+    if ($cbMan.Checked -or $cbExtra.Checked) { return $true }
+    return $false
+}
+
 # Grey out the two inspect buttons when there is nothing for them to open, and
 # make the build button say what it will actually do.
 function Update-ActionButtons {
@@ -1853,8 +1889,11 @@ function Update-ActionButtons {
     $hasOut  = $t -and (Test-Path $t)
     # Preview renders current settings, so it needs no build - only a menu and a background.
     $canPreview = $chkMenu.Checked -and $state.BgPath -and (Test-Path $state.BgPath)
+    $isDirty = Test-FormDirty
     $btnOpenDisc.Enabled = [bool]$hasOut
     $btnPreview.Enabled  = [bool]$canPreview
+    $btnNew.Enabled      = [bool]$isDirty
+    $tips.SetToolTip($btnNew, $(if($isDirty){'Clear everything and start a new disc. The output folder is kept.'}else{'Nothing to clear - this is already a new disc'}))
     $tips.SetToolTip($btnOpenDisc, $(if($hasOut){'Open the disc staging folder in Explorer'}else{'Set an output folder first (step 6)'}))
     $tips.SetToolTip($btnPreview,  $(if($canPreview){'Show the menu using the current settings - no rebuild needed'}else{'Turn the menu on and choose a background first (step 4)'}))
     $tips.SetToolTip($btnOpenProj, 'Load a disc you already built, to edit and rebuild it')
@@ -2306,6 +2345,10 @@ function Add-ExtraItem([string]$path) {
     [void]$lstExtra.Items.Add($full)
     $state.ExtraItems = @($lstExtra.Items)
     Update-MediaLabel
+    # A ListBox raises nothing when its Items collection changes, so the two places
+    # that change it say so themselves - otherwise a disc holding nothing but extra
+    # content would leave "New disc" greyed out with plenty to clear.
+    Update-ActionButtons
 }
 
 function Set-IconFile([string]$path) {
@@ -2339,6 +2382,59 @@ function Set-BgFile([string]$path) {
     # Set BOTH ways: picking a fresh source must clear a previously-ticked as-is,
     # or the divider and panel side stay greyed out with no way to reach them.
     $chkBgAsIs.Checked = [bool](Test-ComposedBg $path)
+    Update-ActionButtons
+}
+
+# Put every control back where it opens. The counterpart to Open-Project: the app
+# has always had a way to load a disc and no way to start a fresh one short of
+# closing and reopening it, which is a real gap once you are making more than one
+# disc in a sitting.
+#
+# The values here are the control defaults from the UI section above, repeated
+# rather than read back from the controls - there is nowhere else to read them
+# from, since a WinForms control does not remember what it was constructed with.
+# If a default changes up there and not here, the window test that a reset form
+# matches a freshly opened one is what says so.
+#
+# Nothing on disk is touched. A disc already built stays built; this clears the
+# form, not the output.
+function Reset-Form {
+    $state.Loading = $true   # same reason as Open-Project: no dialogs mid-reset
+
+    $null = Set-GameEntries @()
+    $lblGame.Text = ''; $lblGame.ForeColor = [System.Drawing.Color]::DimGray
+
+    $txtLabel.Clear()
+
+    $txtIcon.Clear(); $state.IconPath = $null; $state.IconIsIco = $false
+    $lblIcon.Text = ''; $lblIcon.ForeColor = [System.Drawing.Color]::DimGray
+    # Disposed the same way Set-IconFile does it - the preview holds the bitmap
+    # open, and a reset that leaked one per disc would add up over an evening.
+    if ($picIcon.Image) { $old = $picIcon.Image; $picIcon.Image = $null; $old.Dispose() }
+
+    $chkMenu.Checked = $true
+    $txtBg.Clear(); $state.BgPath = $null
+    $chkBgAsIs.Checked = $false
+    $cmbSide.SelectedIndex = 0
+    $chkTitle.Checked = $false; $txtTitle.Clear()
+    $chkMusic.Checked = $false; $txtMusic.Clear(); $state.MusicFile = $null
+    $cbPlay.Checked = $true; $cbInst.Checked = $true; $cbExit.Checked = $true
+    $cbMan.Checked = $false; $cbExtra.Checked = $false
+    $txtMan.Clear(); $state.ManualPath = $null
+    $txtEx.Clear();  $state.ExtrasPath = $null
+    $chkDivider.Checked = $false
+    $chkWinBorder.Checked = $true
+    $cmbBtnStyle.SelectedIndex = 0
+
+    $lstExtra.Items.Clear(); $state.ExtraItems = @()
+
+    $state.Loading = $false
+    $txtLog.Clear()
+    # Same first line a fresh window writes, so a pasted log still says which
+    # version and which PowerShell produced it.
+    & $log "DiscWright $APP_VERSION  -  Windows PowerShell $($PSVersionTable.PSVersion)"
+    if ($txtOut.Text.Trim()) { & $log "New disc. The output folder was kept." }
+    else { & $log "New disc." }
     Update-ActionButtons
 }
 
@@ -2435,6 +2531,16 @@ function Open-Project([string]$folder) {
 }
 
 # ---- events ----
+$btnNew.Add_Click({
+    # Asked before, not undone after: everything on the form goes, and there is no
+    # undo. The button is greyed out when there is nothing to lose, so reaching
+    # this dialog always means something would actually be discarded.
+    $msg = "Clear everything and start a new disc?" + "`r`n`r`n" +
+           "The installer list, disc label, icon, menu settings and extra content are all reset." + "`r`n`r`n" +
+           "Nothing on disk is touched - a disc you have already built stays where it is, and the output folder is kept."
+    if (-not (Show-Confirm $msg 'New disc')) { return }
+    Reset-Form
+})
 $btnOpenProj.Add_Click({
     $d = New-FolderDialog 'Pick the disc output folder (the one holding disc\ and the .iso)' $txtOut.Text.Trim()
     if ($d.ShowDialog() -eq 'OK') { Open-Project $d.SelectedPath }
@@ -2539,7 +2645,7 @@ $btnXDir.Add_Click({
 })
 $btnXDel.Add_Click({
     foreach($i in @($lstExtra.SelectedIndices | Sort-Object -Descending)){ $lstExtra.Items.RemoveAt($i) }
-    $state.ExtraItems = @($lstExtra.Items); Update-MediaLabel
+    $state.ExtraItems = @($lstExtra.Items); Update-MediaLabel; Update-ActionButtons
 })
 $chkMusic.Add_CheckedChanged({ $txtMusic.Enabled=$chkMusic.Checked; $btnMusic.Enabled=$chkMusic.Checked; Update-MediaLabel })
 $cbMan.Add_CheckedChanged({ $txtMan.Enabled=$cbMan.Checked; $btnMan.Enabled=$cbMan.Checked; Update-MediaLabel })
@@ -2714,6 +2820,22 @@ Add-Type -Namespace GDA -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
 '@
+# "New disc" greys itself out when there is nothing to clear, so every edit that
+# can make the form dirty has to refresh it. Most already run through
+# Update-ActionButtons for their own reasons - the background, the output folder,
+# the installer list - but the plain fields and toggles did not, because until now
+# nothing depended on them. Wired in one loop rather than appended to fifteen
+# separate handlers, which is where one would eventually get missed.
+foreach ($c in @($txtLabel,$txtIcon,$txtMusic,$txtMan,$txtEx,$txtTitle)) {
+    $c.Add_TextChanged({ Update-ActionButtons })
+}
+foreach ($c in @($chkBgAsIs,$chkMusic,$chkDivider,$chkWinBorder,$cbPlay,$cbInst,$cbMan,$cbExtra,$cbExit)) {
+    $c.Add_CheckedChanged({ Update-ActionButtons })
+}
+foreach ($c in @($cmbSide,$cmbBtnStyle)) {
+    $c.Add_SelectedIndexChanged({ Update-ActionButtons })
+}
+
 Update-ActionButtons   # start greyed out - nothing to open yet
 Update-GameList        # and the same for Change.../Remove, with an empty list
 
