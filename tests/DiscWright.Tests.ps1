@@ -1694,3 +1694,71 @@ Describe 'Removing an entry the way the button does it' -Tag 'Unit' {
         @($after | Where-Object { $_.ParentIndex -ne -1 }).Count | Should -Be 0
     }
 }
+
+Describe 'Where the game picker opens when the form points nowhere' -Tag 'Unit' {
+
+    # FolderBrowserDialog is the old SHBrowseForFolder tree and does NOT remember
+    # its last folder between openings, so the first pick of a session has to be
+    # aimed by the app or it lands wherever the shell feels like. This is the
+    # aiming, and the only part of it that is a function rather than a click
+    # handler.
+
+    It 'names GOG Galaxy own download folder, or nothing at all' {
+        $p = Get-DefaultGameBrowseFolder
+        $p | Should -BeOfType [string]
+        if ($p) {
+            # Never a guess that does not exist - a SelectedPath pointing at a
+            # missing folder is silently ignored, which is the same as no aim at
+            # all but harder to notice.
+            Test-Path $p -PathType Container | Should -BeTrue
+            $p | Should -BeLike '*Offline Installers'
+        }
+    }
+
+    It 'never throws, whatever the machine looks like' {
+        # Runs on CI, where no GOG Galaxy exists and ProgramFiles(x86) may not
+        # either. Returning '' is the answer there; an exception would take the
+        # Add game button down with it.
+        { Get-DefaultGameBrowseFolder } | Should -Not -Throw
+    }
+}
+
+Describe 'Whether the disc label is ours to take back' -Tag 'Unit' {
+
+    # Adding a game to an empty form seeds the disc label from its name. Removing
+    # that game has to take the name back, or the next game added never replaces
+    # it - seeding only fires into an EMPTY box - and the disc is built carrying
+    # the previous game's name in This PC.
+    #
+    # The click handler cannot be driven from a test: getting a game onto the form
+    # means the folder picker, whose tree UI Automation cannot see. So the rule
+    # lives in a function and the function is what is tested here.
+
+    It 'takes back a label it typed itself' {
+        Test-LabelIsSeeded 'Alan Wake' 'Alan Wake' | Should -BeTrue
+    }
+
+    It 'leaves a label the user typed over the top of the seeded one' {
+        Test-LabelIsSeeded 'ALAN WAKE DISC' 'Alan Wake' | Should -BeFalse
+    }
+
+    It 'leaves a label that was never seeded, however it looks' {
+        # A project file's label, or one typed into an empty box before any game
+        # was added. Nothing was seeded, so nothing is ours.
+        Test-LabelIsSeeded 'UI Fixture' ''    | Should -BeFalse
+        Test-LabelIsSeeded 'Alan Wake'  ''    | Should -BeFalse
+        Test-LabelIsSeeded 'Alan Wake'  $null | Should -BeFalse
+    }
+
+    It 'leaves a label the user typed that happens to match the game name' {
+        # They typed it, so they own it - even though the text is identical to
+        # what seeding would have produced. Only a recorded seed makes it ours,
+        # which is why this compares against the seed and not against the entry.
+        Test-LabelIsSeeded 'Alan Wake' $null | Should -BeFalse
+    }
+
+    It 'is not fooled by an empty box' {
+        Test-LabelIsSeeded '' 'Alan Wake' | Should -BeFalse
+        Test-LabelIsSeeded '' ''          | Should -BeFalse
+    }
+}
