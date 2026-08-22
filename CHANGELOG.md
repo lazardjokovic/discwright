@@ -27,6 +27,25 @@ between minor versions.
   **The output folder is deliberately kept.** Three discs made in one sitting go to
   the same place, and it is the one field that would have to be retyped every time.
 
+- **Play asks which one, for a bundle that ships two games in a single installer.**
+  Star Wars: Empire at War Gold Pack installs both the base game and the Forces of
+  Corruption expansion, and registers **one** GOG game name with **one** executable.
+  Play could therefore only ever launch Empire at War; Forces of Corruption sat in
+  the next folder with nothing able to reach it. Reported by someone who did a full
+  build and install and said exactly what they saw, which is why it could be fixed
+  at all.
+
+  GOG writes a `goggame-<id>.info` beside every installed game listing its play
+  tasks, and a bundle lists both games there. DiscWright now reads it: two or more
+  launchable entries and Play opens a chooser, the same way the disc asks which game
+  when it holds more than one. Back returns to the game's screen.
+
+  **A game with one launch target is completely unaffected** — Play launches it
+  directly, exactly as before. Checked against four real installs — The Witcher
+  Enhanced Edition, Resident Evil 0, Alan Wake and Hollow Knight — which all report
+  a single target, with manuals, support links, the hidden raw executable behind
+  GOG's launcher and the Safe Mode variant all correctly left out.
+
 ### Changed
 
 - The top row now holds four buttons in the width that held three, so

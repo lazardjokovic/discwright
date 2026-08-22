@@ -716,6 +716,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // A disc holding one game has nothing to choose, so it opens on that game and
   // never shows a Back button.
   var cur = (GAMES.length==1) ? 0 : -1;
+  // Non-null while the "which one?" screen is up, for a game whose single installer
+  // put more than one launchable thing on the machine. It sits on top of whatever
+  // screen was showing rather than replacing it, so Back returns there.
+  var tasks = null;
   var player=null, musicOn=false;
   // Where this .hta actually lives. document.URL is always an absolute file: URL,
   // unlike app.commandLine - AutoRun can launch the menu with a path relative to the
@@ -869,11 +873,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(has("Exit"))    h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
     setPanel(h);
   }
-  function show(){ if(cur<0) renderChooser(); else renderGame(); }
+  function show(){ if(tasks) renderTasks(); else if(cur<0) renderChooser(); else renderGame(); }
   function pick(i){ cur=i; show(); }
-  function goBack(){ cur=-1; show(); }
+  function goBack(){ tasks=null; cur=-1; show(); }
   function refreshButtons(){
-    if(!root) return;
+    // The launch chooser's buttons are built already enabled and none of the ids
+    // below exist while it is up.
+    if(!root || tasks) return;
     // In preview the game files are not beside the menu, so the existence checks
     // would grey out buttons that will be fine on the real disc. Show them live.
     if(cur<0){
@@ -956,18 +962,91 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // Takes the name to match rather than reading a global: on a multi-game disc
   // each game asks this about itself, and Play has to light up for the ones that
   // are installed while staying grey for the ones that are not.
+  // Returns {exe,dir} for an installed copy, or null. The folder matters as much as
+  // the executable: it is where GOG's own goggame-<id>.info sits, and that file is
+  // the only place a bundle admits to containing more than one game.
   function findGame(match){ try{ var HKLM=0x80000002; var svc=GetObject("winmgmts:\\\\.\\root\\default"); var reg=svc.Get("StdRegProv");
     var bases=["SOFTWARE\\WOW6432Node\\GOG.com\\Games","SOFTWARE\\GOG.com\\Games"];
     for(var b=0;b<bases.length;b++){ var mi=reg.Methods_.Item("EnumKey").InParameters.SpawnInstance_(); mi.hDefKey=HKLM; mi.sSubKeyName=bases[b];
       var mo=reg.ExecMethod_("EnumKey",mi); if(mo.ReturnValue!=0||mo.sNames==null)continue; var ids=new VBArray(mo.sNames).toArray();
       for(var k=0;k<ids.length;k++){ var sub=bases[b]+"\\"+ids[k]; var nm=regGet(reg,HKLM,sub,"gameName");
-        if(nm && nameHit(nm,match)){ var exe=regGet(reg,HKLM,sub,"exe");
-          if(exe && fso.FileExists(exe))return exe; var p=regGet(reg,HKLM,sub,"path"), ef=regGet(reg,HKLM,sub,"exeFile");
-          if(p&&ef&&fso.FileExists(fso.BuildPath(p,ef)))return fso.BuildPath(p,ef); } } } }catch(e){} return null; }
+        if(nm && nameHit(nm,match)){ var p=regGet(reg,HKLM,sub,"path"); var exe=regGet(reg,HKLM,sub,"exe");
+          if(exe && fso.FileExists(exe)) return {exe:exe, dir:(p||fso.GetParentFolderName(exe))};
+          var ef=regGet(reg,HKLM,sub,"exeFile");
+          if(p&&ef&&fso.FileExists(fso.BuildPath(p,ef))) return {exe:fso.BuildPath(p,ef), dir:p}; } } } }catch(e){} return null; }
+
+  // One string out of a JSON object, unescaped. Picked apart with a regular
+  // expression rather than JSON.parse, which the quirks-mode engine an HTA gets
+  // does not have.
+  function jsonStr(block,key){
+    var m=block.match(new RegExp('"'+key+'"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'));
+    if(!m) return "";
+    return m[1].replace(/\\\\/g,"\\").replace(/\\"/g,'"').replace(/\\\//g,"/");
+  }
+  // Real .info files contain both "System\\witcher.exe" and "System//witcher.exe".
+  function relPath(s){ return String(s).replace(/\//g,"\\").replace(/\\+/g,"\\"); }
+
+  // GOG writes a goggame-<id>.info beside every installed game, listing its play
+  // tasks. This exists because a bundle that ships two games in ONE installer -
+  // Star Wars: Empire at War Gold Pack, which is what turned this up - registers a
+  // single gameName and a single exe. The registry can therefore only ever point at
+  // the base game, and the expansion sitting in the next folder is unreachable. The
+  // .info file lists both.
+  //
+  // Every {...} in that file is a play task: the rest is scalars and arrays of
+  // strings, so brace pairs containing no braces find exactly the tasks and nothing
+  // else. Only the ones that start the game count - "document" is the manual and the
+  // readme, which this menu already has its own buttons for, and a hidden task is the
+  // raw exe GOG keeps behind its own launcher.
+  function playTasks(dir){
+    var out=[];
+    try{
+      if(!dir || !fso.FolderExists(dir)) return out;
+      var info=null, en=new Enumerator(fso.GetFolder(dir).Files);
+      for(;!en.atEnd();en.moveNext()){ if(/^goggame-\d+\.info$/i.test(en.item().Name)){ info=en.item().Path; break; } }
+      if(!info) return out;
+      var st=fso.OpenTextFile(info,1), txt=st.ReadAll(); st.Close();
+      var re=/\{[^{}]*\}/g, m;
+      while((m=re.exec(txt))!=null){
+        var b=m[0];
+        if(!/"type"\s*:\s*"FileTask"/.test(b)) continue;
+        if(/"isHidden"\s*:\s*true/.test(b)) continue;
+        var cat=jsonStr(b,"category");
+        if(cat!="game" && cat!="launcher") continue;
+        var rel=jsonStr(b,"path"); if(!rel) continue;
+        var full=fso.BuildPath(dir,relPath(rel));
+        if(!fso.FileExists(full)) continue;
+        var wd=jsonStr(b,"workingDir");
+        out[out.length]={ n:(jsonStr(b,"name")||fso.GetFileName(full)), p:full,
+                          a:jsonStr(b,"arguments"),
+                          w:(wd ? fso.BuildPath(dir,relPath(wd)) : fso.GetParentFolderName(full)) };
+      }
+    }catch(ex){}
+    return out;
+  }
+  function launchExe(p,args,wd){
+    try{ shell.ShellExecute(p,args||"",wd||fso.GetParentFolderName(p),"open",1); window.close(); }
+    catch(ex){ alert(ex.message); }
+  }
+  function renderTasks(){
+    var h="";
+    for(var i=0;i<tasks.length;i++){ h+=btnHtml("btn_task_"+i,"play",tasks[i].n,"playTask("+i+")",tasks[i].n); }
+    h+=btnHtml("btn_TaskBack","","Back","tasksBack()","Back to "+GAMES[cur].n);
+    if(has("Exit")) h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
+    setPanel(h);
+  }
+  function playTask(i){ var t=tasks[i]; launchExe(t.p,t.a,t.w); }
+  function tasksBack(){ tasks=null; show(); }
   function doPlay(){ if(off("btn_Play")) return;
     var g=GAMES[cur];
-    var exe=findGame(g.m); if(exe){ try{ shell.ShellExecute(exe,"",fso.GetParentFolderName(exe),"open",1); window.close(); }catch(e){alert(e.message);} }
-    else { alert(g.n+" isn't installed yet.\n\nUse INSTALL first, then PLAY."); } }
+    var hit=findGame(g.m);
+    if(!hit){ alert(g.n+" isn't installed yet.\n\nUse INSTALL first, then PLAY."); return; }
+    // Two or more launch targets means a bundle, so ask which - the same way the
+    // disc asks which game when it holds more than one. One target, or an install
+    // with no .info file at all, behaves exactly as it always has.
+    var t=playTasks(hit.dir);
+    if(t.length>1){ tasks=t; show(); return; }
+    launchExe(hit.exe,"",fso.GetParentFolderName(hit.exe)); }
   // Re-check when the menu regains focus, so Play lights up after the installer finishes.
   window.onfocus = refreshButtons;
   document.onkeydown=function(){ if(window.event.keyCode==27) window.close(); };

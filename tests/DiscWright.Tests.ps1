@@ -1225,6 +1225,227 @@ Describe 'Reading a real GOG download' -Tag 'Real' -Skip:($script:GogFolders.Cou
 
 
 
+Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
+
+    # The only tests in this file that RUN the menu's JavaScript rather than
+    # reading it. The play-task reader is a regular expression picking apart JSON
+    # written by somebody else, which is exactly the kind of code that passes a
+    # text assertion and fails on a real file - and the case it exists for, a
+    # bundle holding two games, cannot be reproduced by owning the game unless you
+    # happen to own that one.
+    #
+    # The functions are lifted out of DiscWright.ps1 and handed to cscript, so this
+    # exercises the code that ships. A copy pasted in here would prove nothing.
+    #
+    # Worked out twice, deliberately. -Skip: is decided during discovery and
+    # BeforeAll does not run until afterwards, so a value set only there leaves
+    # every test in this block skipped on a machine that has cscript. Same reason
+    # $script:CanBuildIso is computed in both phases at the top of this file.
+    BeforeDiscovery {
+        $script:HaveCScript = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:CScript = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        function Get-JsFunction([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        # A stand-in for Star Wars: Empire at War Gold Pack - one installer, two
+        # games. Nobody here owns that game, so this is a reconstruction; what
+        # makes it worth trusting is that its SHAPE is copied from the four real
+        # .info files on hand rather than invented:
+        #
+        #   - pretty-printed, one key per line, a space after every colon. GOG
+        #     never writes compact JSON, and an earlier version of this fixture
+        #     did - so it agreed with the parser about a format that does not
+        #     occur.
+        #   - "languages" is a multi-line array. It is the reason playTasks may
+        #     not simply split on braces: the task-matching regex only takes
+        #     innermost braces, which is safe precisely because a real task holds
+        #     arrays and never a nested object. Both real files confirm that.
+        #   - both path spellings, because The Witcher's own file carries both:
+        #     "System\\witcher.exe" on one task and "System//witcher.exe" on the
+        #     next.
+        #   - a task with NO "category" key at all, which is how The Witcher
+        #     ships its Safe Mode entry. It must not become a third choice.
+        #
+        # The folder names and executables are not guesses either. GOG's own
+        # public build manifest for product 1421404887 lists GameData\sweaw.exe
+        # and EAWX\swfoc.exe under an install directory called "Star Wars -
+        # Empire At War Gold", and the whole depot holds exactly one .info file.
+        # EAWX is not a folder name anybody would invent.
+        #
+        # What that manifest cannot give is the CONTENTS of the .info: it ships
+        # inside the depot, and the depot answers 403 without an ownership token.
+        # So the playTasks below are still the reconstructed part, and one thing
+        # is still unconfirmed - whether the real file marks Forces of Corruption
+        # with category "game". If it does not, playTasks drops it and Play goes
+        # on launching only the base game.
+        $script:TaskDir = Join-Path $script:Sandbox 'installed-bundle'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:TaskDir 'GameData') | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:TaskDir 'EAWX') | Out-Null
+        foreach ($f in 'GameData\sweaw.exe','EAWX\swfoc.exe','GameData\hidden.exe','Manual.pdf') {
+            Set-Content -LiteralPath (Join-Path $script:TaskDir $f) -Value 'x' -Encoding Ascii
+        }
+        $info = @'
+{
+    "buildId": "58076094395251196",
+    "gameId": "1421404887",
+    "language": "English",
+    "languages": [
+        "en-US"
+    ],
+    "name": "STAR WARS Empire at War - Gold Pack",
+    "playTasks": [
+        {
+            "category": "game",
+            "isPrimary": true,
+            "languages": [
+                "en-US",
+                "de-DE",
+                "fr-FR"
+            ],
+            "name": "Empire at War",
+            "path": "GameData\\sweaw.exe",
+            "type": "FileTask",
+            "workingDir": "GameData"
+        },
+        {
+            "category": "game",
+            "languages": [
+                "*"
+            ],
+            "name": "Forces of Corruption",
+            "path": "EAWX//swfoc.exe",
+            "type": "FileTask",
+            "workingDir": "EAWX"
+        },
+        {
+            "category": "game",
+            "isHidden": true,
+            "languages": [
+                "*"
+            ],
+            "name": "Raw exe",
+            "path": "GameData\\hidden.exe",
+            "type": "FileTask"
+        },
+        {
+            "category": "game",
+            "languages": [
+                "*"
+            ],
+            "name": "Gone missing",
+            "path": "GameData\\notthere.exe",
+            "type": "FileTask"
+        },
+        {
+            "arguments": "-dontForceMinReqs",
+            "icon": "goggame-1421404887.dll",
+            "languages": [
+                "*"
+            ],
+            "name": "Safe Mode",
+            "path": "GameData//sweaw.exe",
+            "type": "FileTask",
+            "workingDir": "GameData"
+        },
+        {
+            "category": "document",
+            "languages": [
+                "en-US"
+            ],
+            "name": "Manual",
+            "path": "Manual.pdf",
+            "type": "FileTask"
+        },
+        {
+            "category": "document",
+            "languages": [
+                "*"
+            ],
+            "link": "http://example.invalid",
+            "name": "Support",
+            "type": "URLTask"
+        }
+    ],
+    "rootGameId": "1421404887",
+    "version": 1
+}
+'@
+        # No BOM: GOG's files have none, and OpenTextFile would read one as content.
+        [IO.File]::WriteAllText((Join-Path $script:TaskDir 'goggame-1421404887.info'),
+                                $info, (New-Object Text.UTF8Encoding($false)))
+
+        $script:PlainDir = Join-Path $script:Sandbox 'installed-plain'
+        New-Item -ItemType Directory -Force -Path $script:PlainDir | Out-Null
+
+        function Invoke-PlayTasks([string]$dir) {
+            $src = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+            $js = @('var fso=new ActiveXObject("Scripting.FileSystemObject");')
+            foreach ($fn in 'jsonStr','relPath','playTasks') { $js += (Get-JsFunction $src $fn) }
+            $js += 'var t=playTasks(WScript.Arguments(0));'
+            $js += 'for(var i=0;i<t.length;i++){ WScript.Echo(t[i].n+"|"+t[i].p+"|"+t[i].a+"|"+t[i].w); }'
+            $tmp = Join-Path $script:Sandbox ('tasks_' + [Guid]::NewGuid().ToString('N').Substring(0,6) + '.js')
+            Set-Content -LiteralPath $tmp -Value ($js -join "`r`n") -Encoding Ascii
+            $out = & $script:CScript //Nologo //E:JScript $tmp $dir 2>&1
+            return @($out | Where-Object { $_ -and $_ -notmatch '^\s*$' } | ForEach-Object {
+                $p = ([string]$_).Split('|')
+                [pscustomobject]@{ Name=$p[0]; Path=$p[1]; Args=$p[2]; WorkDir=$p[3] }
+            })
+        }
+    }
+
+    It 'finds both games in a bundle that ships them in one installer' -Skip:(-not $script:HaveCScript) {
+        $t = Invoke-PlayTasks $script:TaskDir
+        $t.Count | Should -Be 2
+        $t[0].Name | Should -Be 'Empire at War'
+        $t[1].Name | Should -Be 'Forces of Corruption'
+    }
+
+    It 'resolves both spellings of a relative path' -Skip:(-not $script:HaveCScript) {
+        $t = Invoke-PlayTasks $script:TaskDir
+        $t[0].Path | Should -Be (Join-Path $script:TaskDir 'GameData\sweaw.exe')
+        # Written "EAWX//swfoc.exe" in the fixture, as GOG really does.
+        $t[1].Path | Should -Be (Join-Path $script:TaskDir 'EAWX\swfoc.exe')
+    }
+
+    It 'leaves out the manual, the hidden exe and a task whose file is gone' -Skip:(-not $script:HaveCScript) {
+        $t = Invoke-PlayTasks $script:TaskDir
+        @($t | Where-Object { $_.Name -in @('Manual','Support','Raw exe','Gone missing') }).Count | Should -Be 0
+    }
+
+    It 'leaves out a task with no category, the way Safe Mode ships' -Skip:(-not $script:HaveCScript) {
+        # The Witcher's Safe Mode entry has no "category" key at all. It points at
+        # the same executable as the real one with an extra argument, so treating
+        # it as a game would offer the same game twice - and would put a chooser
+        # in front of a single-game disc that never had one before.
+        $t = Invoke-PlayTasks $script:TaskDir
+        @($t | Where-Object { $_.Name -eq 'Safe Mode' }).Count | Should -Be 0
+    }
+
+    It 'reports nothing for an install with no .info file, so Play is unchanged' -Skip:(-not $script:HaveCScript) {
+        # Fewer than two tasks means doPlay uses the registry exe exactly as it
+        # always has. Every disc built before this keeps behaving identically.
+        (Invoke-PlayTasks $script:PlainDir).Count | Should -Be 0
+    }
+}
+
 Describe 'Naming an add-on' -Tag 'Unit' {
 
     It 'puts the version a GOG patch moves TO at the front' {
