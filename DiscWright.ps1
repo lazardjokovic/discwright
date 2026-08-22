@@ -1594,11 +1594,12 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 # =================== UI ===================
 # LabelSeededFrom records the name DiscWright typed into the disc label itself, so
 # it can tell its own guess from something the user wrote. LastGameBrowse is the
-# folder the game picker should reopen on; it deliberately outlives both New disc
-# and removing every entry, because where your GOG downloads live does not change
+# folder the game picker should reopen on, and LastFileBrowse the same for the icon,
+# background, music and manual pickers. Both deliberately outlive New disc and
+# removing every entry: where your GOG downloads and artwork live does not change
 # when you start a second disc.
 $state = @{ Games=@(); IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
-            LabelSeededFrom=$null; LastGameBrowse=$null }
+            LabelSeededFrom=$null; LastGameBrowse=$null; LastFileBrowse=$null }
 
 # One game per disc is still the common case, so the disc layout, the UI and the
 # menu are unchanged for it. Only sizing, the build's copy step and the menu need
@@ -1691,6 +1692,59 @@ function Get-DefaultGameBrowseFolder {
         if ($p -and (Test-Path $p -PathType Container)) { return $p }
     }
     return ''
+}
+
+# The folder a path points into, whether the path is a folder or a file inside one.
+# Returns '' for anything that is not there any more, so a stale box does not aim a
+# dialog at a folder that has been deleted.
+function Get-ExistingFolderOf([string]$path) {
+    if ([string]::IsNullOrWhiteSpace($path)) { return '' }
+    $p = $path.Trim()
+    if (Test-Path $p -PathType Container) { return $p }
+    $dir = Split-Path $p -Parent
+    if ($dir -and (Test-Path $dir -PathType Container)) { return $dir }
+    return ''
+}
+
+# Where a FILE picker should open. Same problem the game picker had, and the same
+# answer: an OpenFileDialog with no InitialDirectory opens wherever the shell last
+# left it, which on a machine with a redirected Desktop is somebody's OneDrive - so
+# the icon, background, music and manual pickers all started there.
+#
+# Asked in order:
+#   1. the folder the picker's own box already points at, so reopening a picker
+#      lands where its current value came from;
+#   2. wherever a file was last picked from - artwork, a manual and a soundtrack
+#      for one disc usually live near each other, and this outlives New disc for
+#      the same reason the game picker's memory does;
+#   3. the first game's folder, because GOG's extras are downloaded beside the
+#      installer they belong to.
+# If none of those exist, no aim is better than a wrong one: a SelectedPath that
+# does not exist is ignored silently, which is indistinguishable from not setting
+# it, only harder to notice later.
+function Get-MediaBrowseFallback {
+    $p = Get-ExistingFolderOf $state.LastFileBrowse
+    if ($p) { return $p }
+    $first = Get-FirstGame
+    if ($first -and $first.Folder) { return (Get-ExistingFolderOf ([string]$first.Folder)) }
+    return ''
+}
+
+function New-FileDialog([string]$title, [string]$filter, [string]$current) {
+    $d = New-Object System.Windows.Forms.OpenFileDialog
+    if ($title)  { $d.Title  = $title }
+    if ($filter) { $d.Filter = $filter }
+
+    $start = Get-ExistingFolderOf $current
+    if (-not $start) { $start = Get-MediaBrowseFallback }
+    if ($start) { $d.InitialDirectory = $start }
+    return $d
+}
+
+# Remembers where a file was just taken from, so the next picker opens there.
+function Set-LastFileBrowse([string]$picked) {
+    $dir = Get-ExistingFolderOf (Split-Path $picked -Parent)
+    if ($dir) { $state.LastFileBrowse = $dir }
 }
 
 # --- new / reopen / inspect row ---
@@ -2318,15 +2372,22 @@ function Show-EntryKindDialog([int]$index) {
     $dlg.Controls.Add($btnExt)
 
     $btnMan.Add_Click({
-        $d=New-Object System.Windows.Forms.OpenFileDialog
-        $d.Filter='Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*'
-        $d.Title="Pick the manual for this game"
+        # This entry's own folder before the shared fallback, for the same reason as
+        # its extras below.
+        $cur = $txtMan.Text.Trim()
+        if (-not $cur) { $cur = [string]$me.Folder }
+        $d=New-FileDialog "Pick the manual for this game" 'Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*' $cur
         if ($txtMan.Text -and (Test-Path $txtMan.Text)) { $d.FileName = $txtMan.Text }
-        if ($d.ShowDialog() -eq 'OK') { $txtMan.Text = $d.FileName }
+        if ($d.ShowDialog() -eq 'OK') { Set-LastFileBrowse $d.FileName; $txtMan.Text = $d.FileName }
         $d.Dispose()
     }.GetNewClosure())
     $btnExt.Add_Click({
-        $d=New-FolderDialog 'Pick a folder of extras for this game' $txtExt.Text.Trim()
+        # This entry's own folder before the shared fallback: a game's extras were
+        # downloaded beside that game, not beside whichever one was touched last.
+        $start = $txtExt.Text.Trim()
+        if (-not $start) { $start = Get-ExistingFolderOf ([string]$me.Folder) }
+        if (-not $start) { $start = Get-MediaBrowseFallback }
+        $d=New-FolderDialog 'Pick a folder of extras for this game' $start
         if ($d.ShowDialog() -eq 'OK') { $txtExt.Text = $d.SelectedPath }
     }.GetNewClosure())
 
@@ -2457,7 +2518,8 @@ function Reset-Form {
     $null = Set-GameEntries @()
     $lblGame.Text = ''; $lblGame.ForeColor = [System.Drawing.Color]::DimGray
 
-    # LastGameBrowse is deliberately NOT reset - see where $state is declared.
+    # LastGameBrowse and LastFileBrowse are deliberately NOT reset - see where
+    # $state is declared.
     $txtLabel.Clear(); $state.LabelSeededFrom = $null
 
     $txtIcon.Clear(); $state.IconPath = $null; $state.IconIsIco = $false
@@ -2696,20 +2758,26 @@ $btnGameEdit.Add_Click({
 $lvGames.Add_SelectedIndexChanged({ Update-GameButtons })
 $lvGames.Add_DoubleClick({ if ($btnGameEdit.Enabled) { $btnGameEdit.PerformClick() } })
 $btnIcon.Add_Click({
-    $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Images|*.ico;*.png;*.jpg;*.jpeg;*.bmp'
-    if ($d.ShowDialog() -eq 'OK') { Set-IconFile $d.FileName }
+    $d=New-FileDialog 'Pick the disc icon' 'Images|*.ico;*.png;*.jpg;*.jpeg;*.bmp' $txtIcon.Text
+    if ($d.ShowDialog() -eq 'OK') { Set-LastFileBrowse $d.FileName; Set-IconFile $d.FileName }
 })
-$btnBg.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Images|*.png;*.jpg;*.jpeg;*.bmp'; if($d.ShowDialog() -eq 'OK'){ Set-BgFile $d.FileName } })
-$btnMusic.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Audio|*.mp3;*.wav;*.wma'; if($d.ShowDialog() -eq 'OK'){ $txtMusic.Text=$d.FileName; $state.MusicFile=$d.FileName } })
+$btnBg.Add_Click({ $d=New-FileDialog 'Pick the menu background' 'Images|*.png;*.jpg;*.jpeg;*.bmp' $txtBg.Text; if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileName; Set-BgFile $d.FileName } })
+$btnMusic.Add_Click({ $d=New-FileDialog 'Pick the background music' 'Audio|*.mp3;*.wav;*.wma' $txtMusic.Text; if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileName; $txtMusic.Text=$d.FileName; $state.MusicFile=$d.FileName } })
 # Manuals are usually PDF but plenty ship as text or HTML, and the menu just
 # shell-executes whatever it is - nothing in the pipeline needs it to be a PDF.
-$btnMan.Add_Click({ $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*'; if($d.ShowDialog() -eq 'OK'){ $txtMan.Text=$d.FileName; $state.ManualPath=$d.FileName; Update-MediaLabel } })
-$btnEx.Add_Click({ $d=New-FolderDialog 'Pick a folder of extras to put on the disc' $txtEx.Text.Trim(); if($d.ShowDialog() -eq 'OK'){ $txtEx.Text=$d.SelectedPath; $state.ExtrasPath=$d.SelectedPath; Update-MediaLabel } })
+$btnMan.Add_Click({ $d=New-FileDialog 'Pick the manual for this disc' 'Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*' $txtMan.Text; if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileName; $txtMan.Text=$d.FileName; $state.ManualPath=$d.FileName; Update-MediaLabel } })
+$btnEx.Add_Click({
+    # Folder pickers READ the shared fallback but never write it. Only a file pick
+    # updates it, so choosing an extras folder cannot quietly move where the icon
+    # picker opens next.
+    $start = $txtEx.Text.Trim(); if (-not $start) { $start = Get-MediaBrowseFallback }
+    $d=New-FolderDialog 'Pick a folder of extras to put on the disc' $start
+    if($d.ShowDialog() -eq 'OK'){ $txtEx.Text=$d.SelectedPath; $state.ExtrasPath=$d.SelectedPath; Update-MediaLabel } })
 $btnOut.Add_Click({ $d=New-FolderDialog 'Pick where the disc folder and the ISO get written' $txtOut.Text.Trim(); if($d.ShowDialog() -eq 'OK'){ $txtOut.Text=$d.SelectedPath } })
 $btnXFile.Add_Click({
-    $d=New-Object System.Windows.Forms.OpenFileDialog; $d.Filter='All files|*.*'; $d.Multiselect=$true
-    $d.Title='Pick any files to put on the disc'
-    if($d.ShowDialog() -eq 'OK'){ foreach($fn in $d.FileNames){ Add-ExtraItem $fn } }
+    $d=New-FileDialog 'Pick any files to put on the disc' 'All files|*.*' ''
+    $d.Multiselect=$true
+    if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileNames[0]; foreach($fn in $d.FileNames){ Add-ExtraItem $fn } }
 })
 $btnXDir.Add_Click({
     $first = Get-FirstGame

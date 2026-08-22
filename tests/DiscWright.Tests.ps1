@@ -1762,3 +1762,54 @@ Describe 'Whether the disc label is ours to take back' -Tag 'Unit' {
         Test-LabelIsSeeded '' ''          | Should -BeFalse
     }
 }
+
+Describe 'Aiming the file pickers' -Tag 'Unit' {
+
+    # Same wart the game picker had, on four more dialogs. An OpenFileDialog with no
+    # InitialDirectory opens wherever the shell last left it - on a machine with a
+    # redirected Desktop that is somebody's OneDrive, which is how a username ends
+    # up on screen in a screen recording.
+    #
+    # The click handlers cannot be driven from a test, so the folder-resolving is a
+    # function and the function is what is tested.
+
+    BeforeAll {
+        $script:PickDir  = Join-Path $script:Sandbox 'pickers'
+        $script:PickFile = Join-Path $script:PickDir 'artwork.png'
+        New-Item -ItemType Directory -Force -Path $script:PickDir | Out-Null
+        Set-Content -LiteralPath $script:PickFile -Value 'x' -Encoding Ascii
+    }
+
+    It 'takes the folder a file sits in' {
+        Get-ExistingFolderOf $script:PickFile | Should -Be $script:PickDir
+    }
+
+    It 'takes a folder as itself' {
+        Get-ExistingFolderOf $script:PickDir | Should -Be $script:PickDir
+    }
+
+    It 'falls back one level when the leaf is gone, rather than giving up' {
+        # A box can hold a path to something since deleted - a manual that moved, a
+        # disc folder cleaned out. Landing in the parent puts you next to where you
+        # were, which beats being dropped wherever the shell feels like.
+        Get-ExistingFolderOf (Join-Path $script:Sandbox 'no-such-folder') | Should -Be $script:Sandbox
+    }
+
+    It 'gives up when the parent is gone too' {
+        # Two levels missing leaves nothing sensible to aim at. A dialog pointed at
+        # a folder that does not exist is silently ignored by Windows, which looks
+        # exactly like not aiming it at all, only harder to notice later - so return
+        # nothing and let the caller fall through to the next guess.
+        Get-ExistingFolderOf (Join-Path $script:Sandbox 'no-such-folder\gone.png') | Should -Be ''
+    }
+
+    It 'ignores nothing at all' {
+        Get-ExistingFolderOf ''      | Should -Be ''
+        Get-ExistingFolderOf '   '   | Should -Be ''
+        Get-ExistingFolderOf $null   | Should -Be ''
+    }
+
+    It 'trims, because a pasted path often carries a space' {
+        Get-ExistingFolderOf ("  $($script:PickDir)  ") | Should -Be $script:PickDir
+    }
+}
