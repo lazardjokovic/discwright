@@ -464,6 +464,65 @@ Describe 'Removing an entry' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         Get-EntryCount $script:Win | Should -Be 1
         (Get-StatusText $script:Win) | Should -Not -Match 'add-on'
     }
+
+    It 'clears the status line when the last entry goes' {
+        # Update-MediaLabel returned early on an empty list without touching the
+        # label, so the previous disc's summary stayed under an empty list - still
+        # green, still naming a size and a disc type that nothing on the form
+        # accounted for any more. New disc always cleared it; Remove never did.
+        (Get-StatusText $script:Win) | Should -Not -BeNullOrEmpty -Because 'one entry is still on the disc'
+        Select-ListRow -Win $script:Win -Index 0
+        Invoke-CtlNamed $script:Win 'Remove' | Out-Null
+        Start-Sleep -Seconds 1
+        Get-EntryCount $script:Win | Should -Be 0
+        Get-StatusText $script:Win | Should -BeNullOrEmpty
+    }
+
+    It 'keeps a disc label that came out of the project file' {
+        # The label is only taken back when DiscWright typed it itself. This one
+        # was loaded from a project, so emptying the list must leave it alone.
+        (Get-BoxAfter $script:Win '2)  Disc label*').Current.Name | Should -Be 'UI Fixture'
+    }
+}
+
+Describe 'The label DiscWright typed itself' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # Adding a game to an empty form seeds the disc label from its name. Removing
+    # that game used to leave the name behind - and because seeding only fires
+    # into an EMPTY box, the next game added never replaced it. Swapping the game
+    # out therefore built a disc carrying the previous game's name in This PC.
+    #
+    # Driven through Open existing disc rather than Add game, because the folder
+    # tree is invisible to UI Automation and Add game is now aimed at wherever a
+    # game was last picked from - which is nowhere, on a freshly started app.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:ProjOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'starts from the project label, not from a game name' {
+        (Get-BoxAfter $script:Win '2)  Disc label*').Current.Name | Should -Be 'UI Fixture'
+    }
+
+    It 'survives every entry being removed, because the user owns it' {
+        while ((Get-EntryCount $script:Win) -gt 0) {
+            Select-ListRow -Win $script:Win -Index 0
+            Invoke-CtlNamed $script:Win 'Remove' | Out-Null
+            Start-Sleep -Milliseconds 800
+        }
+        Get-EntryCount $script:Win | Should -Be 0
+        (Get-BoxAfter $script:Win '2)  Disc label*').Current.Name | Should -Be 'UI Fixture'
+    }
+
+    It 'and the status line is gone even though the label stayed' {
+        Get-StatusText $script:Win | Should -BeNullOrEmpty
+    }
 }
 
 Describe 'What the build refuses, and whether it says why' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {

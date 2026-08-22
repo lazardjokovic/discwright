@@ -52,6 +52,17 @@ between minor versions.
   `Open existing disc...`, `Show disc folder` and `Preview menu` are each somewhat
   narrower. Nothing moved rows and no label is clipped.
 
+- **`Add game...` reopens where a game was last picked from**, and remembers it
+  across `New disc` and across removing every entry — where your GOG downloads
+  live does not change because you started a second disc. On a fresh start with
+  nothing to go on it opens GOG Galaxy's own download folder, if that exists.
+
+  Previously the first pick of a session had no starting folder at all, so Windows
+  opened the tree wherever it happened to be — which on a machine with a
+  OneDrive-redirected Desktop is several expansions away from anything useful. The
+  dialog does not remember on its own: it is the old `SHBrowseForFolder` tree, and
+  opening it once and cancelling teaches it nothing.
+
 ### Fixed
 
 - **An add-on's Install button no longer offers to run before its game exists.**
@@ -67,6 +78,20 @@ between minor versions.
   This does not sequence anything. GOG's patches are incremental and have to be
   applied in order; DiscWright shows them in the order they were added and cannot
   tell which have already been applied. Add them in the order they should be run.
+
+- **Removing the last entry left the disc label and the status line behind.** The
+  size and media summary under the list stayed exactly as it was — still green,
+  still naming a payload and a disc type that nothing on the form accounted for.
+
+  The disc label was worse than untidy. Adding a game to an empty form seeds the
+  label from its name, and seeding only fires into an *empty* box. So removing the
+  game left its name there, the next game added never replaced it, and swapping
+  one game for another built a disc carrying the previous game's name in This PC.
+  DiscWright now takes back only the label it typed itself: one loaded from a
+  project, or typed by hand, survives an empty list even if it happens to match a
+  game's name.
+
+  `New disc` always cleared both of these. `Remove` never did.
 
 ## [0.3.1] — 2026-08-21
 

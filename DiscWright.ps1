@@ -1592,7 +1592,13 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 }
 
 # =================== UI ===================
-$state = @{ Games=@(); IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@() }
+# LabelSeededFrom records the name DiscWright typed into the disc label itself, so
+# it can tell its own guess from something the user wrote. LastGameBrowse is the
+# folder the game picker should reopen on; it deliberately outlives both New disc
+# and removing every entry, because where your GOG downloads live does not change
+# when you start a second disc.
+$state = @{ Games=@(); IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
+            LabelSeededFrom=$null; LastGameBrowse=$null }
 
 # One game per disc is still the common case, so the disc layout, the UI and the
 # menu are unchanged for it. Only sizing, the build's copy step and the menu need
@@ -1646,6 +1652,28 @@ function New-FolderDialog([string]$description,[string]$startAt) {
     if ($description) { $d.Description = $description }
     if ($startAt -and (Test-Path $startAt -PathType Container)) { $d.SelectedPath = $startAt }
     return $d
+}
+
+# Where the game picker opens when nothing on the form points anywhere yet: a fresh
+# start, or straight after New disc emptied the list.
+#
+# It does not simply reopen where it was last time. FolderBrowserDialog is the old
+# SHBrowseForFolder tree, and it does NOT restore the previous folder between
+# openings - opening it once and cancelling teaches it nothing. So the first pick of
+# a session landed wherever the shell felt like, which on a machine with a redirected
+# Desktop is several expansions away from anything useful.
+#
+# GOG Galaxy's own download folder is the best guess there is: DiscWright exists to
+# read GOG offline installers, and that is where Galaxy puts them unless told
+# otherwise. If it is not there, fall back to nothing rather than to a wrong guess.
+function Get-DefaultGameBrowseFolder {
+    foreach ($p in @(
+        (Join-Path ${env:ProgramFiles(x86)} 'GOG Galaxy\Games\Offline Installers'),
+        (Join-Path $env:ProgramFiles        'GOG Galaxy\Games\Offline Installers')
+    )) {
+        if ($p -and (Test-Path $p -PathType Container)) { return $p }
+    }
+    return ''
 }
 
 # --- new / reopen / inspect row ---
@@ -1797,7 +1825,15 @@ function Get-PayloadBytes {
 
 function Update-MediaLabel {
     $games = Get-Games
-    if ($games.Count -eq 0) { return }
+    if ($games.Count -eq 0) {
+        # Removing the last entry has to clear this line, not leave it alone.
+        # Returning early left the previous disc's summary sitting under an empty
+        # list - still green, still naming a size and a disc type that nothing on
+        # the form accounted for any more.
+        $lblGame.Text = ''
+        $lblGame.ForeColor = [System.Drawing.Color]::DimGray
+        return
+    }
     $g = $games[0]
     $p = Get-PayloadBytes
     $m = Get-MediaRec $p.Total
@@ -2404,7 +2440,8 @@ function Reset-Form {
     $null = Set-GameEntries @()
     $lblGame.Text = ''; $lblGame.ForeColor = [System.Drawing.Color]::DimGray
 
-    $txtLabel.Clear()
+    # LastGameBrowse is deliberately NOT reset - see where $state is declared.
+    $txtLabel.Clear(); $state.LabelSeededFrom = $null
 
     $txtIcon.Clear(); $state.IconPath = $null; $state.IconIsIco = $false
     $lblIcon.Text = ''; $lblIcon.ForeColor = [System.Drawing.Color]::DimGray
@@ -2483,7 +2520,9 @@ function Open-Project([string]$folder) {
     }
     foreach ($g in (Set-GameEntries $entries)) { if (-not $g.Ok) { & $log "  WARNING: $($g.Msg)" } }
 
-    $txtLabel.Text = $p.Label
+    # A label out of a project file is the user's, whatever it says - so no seed
+    # marker. Removing the last game must not take it away.
+    $txtLabel.Text = $p.Label; $state.LabelSeededFrom = $null
     if ($p.IconPath -and (Test-Path $p.IconPath)) { Set-IconFile $p.IconPath } else { & $log "  icon missing - pick one again." }
 
     $chkMenu.Checked = $p.Menu
@@ -2568,16 +2607,23 @@ $txtOut.Add_TextChanged({ Update-ActionButtons })
 $btnFolder.Add_Click({
     # Open where the last one came from: several games on a disc usually come
     # from sibling folders in the same download directory.
+    # Beside the last game added, else wherever a game was last picked from - which
+    # survives New disc and survives removing every entry, because where the GOG
+    # downloads live does not change when you start a second disc. Only when neither
+    # exists does it fall back to guessing.
     $start = ''
     $last = @($state.Games) | Select-Object -Last 1
-    if ($last -and $last.Folder) { $start = Split-Path $last.Folder -Parent }
+    if     ($last -and $last.Folder)  { $start = Split-Path $last.Folder -Parent }
+    elseif ($state.LastGameBrowse)    { $start = $state.LastGameBrowse }
+    else                              { $start = Get-DefaultGameBrowseFolder }
     $d = New-FolderDialog 'Pick a folder you downloaded from GOG (it holds setup_*.exe)' $start
     if ($d.ShowDialog() -eq 'OK') {
+        $state.LastGameBrowse = Split-Path $d.SelectedPath -Parent
         $g = Add-GameFolder $d.SelectedPath
         # Label and output folder are seeded from the first game only. Changing
         # them on the second would rename a disc the user had already named.
         if ($g -and @($state.Games).Count -eq 1) {
-            if ([string]::IsNullOrWhiteSpace($txtLabel.Text)) { $txtLabel.Text=$g.GameName }
+            if ([string]::IsNullOrWhiteSpace($txtLabel.Text)) { $txtLabel.Text=$g.GameName; $state.LabelSeededFrom=$g.GameName }
             if ([string]::IsNullOrWhiteSpace($txtOut.Text)) { $txtOut.Text=Join-Path ([Environment]::GetFolderPath('Desktop')) ((($g.GameName -replace '[^A-Za-z0-9_\- ]','_').Trim())+' Disc') }
         }
         Update-ActionButtons
@@ -2612,6 +2658,17 @@ $btnGameDel.Add_Click({
     # entries left a single row whose name was all four remaining names run
     # together. Same trap as Get-Games and Get-FirstGame.
     $state.Games = Remove-GameEntry @($state.Games) $lvGames.SelectedIndices[0]
+    # Take back the label DiscWright typed, but only that one. Adding a game to an
+    # empty form seeds the label from its name; removing that game used to leave
+    # the name behind, and because seeding only fires into an EMPTY box, the next
+    # game added never replaced it - so a disc built after swapping the game out
+    # carried the previous game's name. Compared against what was seeded rather
+    # than against the game just removed, so a label the user typed survives even
+    # if they typed the game's own name.
+    if (@($state.Games).Count -eq 0 -and $state.LabelSeededFrom -and
+        $txtLabel.Text -eq $state.LabelSeededFrom) {
+        $txtLabel.Clear(); $state.LabelSeededFrom = $null
+    }
     Update-GameList; Update-MediaLabel; Update-ActionButtons
 })
 $btnGameEdit.Add_Click({
