@@ -63,6 +63,22 @@ between minor versions.
   dialog does not remember on its own: it is the old `SHBrowseForFolder` tree, and
   opening it once and cancelling teaches it nothing.
 
+- **The disc icon, background, music, manual and extras pickers are aimed too.**
+  They ask, in order: the folder their own box already points at, then wherever a
+  file was last picked from, then the first game's folder — because GOG downloads
+  its extras beside the installer they belong to. A game's *own* manual and extras
+  start in that game's folder rather than the last one touched.
+
+  Only picking a file updates the shared memory; choosing a folder reads it but
+  does not write it, so setting an extras folder cannot quietly move where the icon
+  picker opens next. A box pointing at something since deleted falls back to its
+  parent rather than giving up, which puts you next to where you were.
+
+  This is the same wart as above, on five more dialogs. It is worth naming what it
+  actually cost: recording the two README demos, every one of those pickers opened
+  on the Desktop and put the author's account name on screen, and both recordings
+  had to be re-cut to take it out.
+
 ### Fixed
 
 - **An add-on's Install button no longer offers to run before its game exists.**
