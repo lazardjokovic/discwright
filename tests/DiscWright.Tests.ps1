@@ -1247,8 +1247,23 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
         }
 
         # A stand-in for Star Wars: Empire at War Gold Pack - one installer, two
-        # games. Both path spellings that turn up in real .info files are used on
-        # purpose: GOG writes "a\\b.exe" in some and "a//b.exe" in others.
+        # games. Nobody here owns that game, so this is a reconstruction; what
+        # makes it worth trusting is that its SHAPE is copied from the two real
+        # .info files on hand rather than invented:
+        #
+        #   - pretty-printed, one key per line, a space after every colon. GOG
+        #     never writes compact JSON, and an earlier version of this fixture
+        #     did - so it agreed with the parser about a format that does not
+        #     occur.
+        #   - "languages" is a multi-line array. It is the reason playTasks may
+        #     not simply split on braces: the task-matching regex only takes
+        #     innermost braces, which is safe precisely because a real task holds
+        #     arrays and never a nested object. Both real files confirm that.
+        #   - both path spellings, because The Witcher's own file carries both:
+        #     "System\\witcher.exe" on one task and "System//witcher.exe" on the
+        #     next.
+        #   - a task with NO "category" key at all, which is how The Witcher
+        #     ships its Safe Mode entry. It must not become a third choice.
         $script:TaskDir = Join-Path $script:Sandbox 'installed-bundle'
         New-Item -ItemType Directory -Force -Path (Join-Path $script:TaskDir 'GameData') | Out-Null
         New-Item -ItemType Directory -Force -Path (Join-Path $script:TaskDir 'corruption') | Out-Null
@@ -1257,19 +1272,87 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
         }
         $info = @'
 {
+    "buildId": "58076094395251196",
     "gameId": "1421404887",
+    "language": "English",
+    "languages": [
+        "en-US"
+    ],
     "name": "STAR WARS Empire at War - Gold Pack",
     "playTasks": [
-        { "category":"game", "isPrimary":true, "languages":["*"], "name":"Empire at War",
-          "path":"GameData\\sweaw.exe", "type":"FileTask", "workingDir":"GameData" },
-        { "category":"game", "languages":["*"], "name":"Forces of Corruption",
-          "path":"corruption//swfoc.exe", "type":"FileTask", "workingDir":"corruption" },
-        { "category":"game", "isHidden":true, "name":"Raw exe",
-          "path":"GameData\\hidden.exe", "type":"FileTask" },
-        { "category":"game", "name":"Gone missing", "path":"GameData\\notthere.exe", "type":"FileTask" },
-        { "category":"document", "name":"Manual", "path":"Manual.pdf", "type":"FileTask" },
-        { "category":"document", "name":"Support", "link":"http://example.invalid", "type":"URLTask" }
+        {
+            "category": "game",
+            "isPrimary": true,
+            "languages": [
+                "en-US",
+                "de-DE",
+                "fr-FR"
+            ],
+            "name": "Empire at War",
+            "path": "GameData\\sweaw.exe",
+            "type": "FileTask",
+            "workingDir": "GameData"
+        },
+        {
+            "category": "game",
+            "languages": [
+                "*"
+            ],
+            "name": "Forces of Corruption",
+            "path": "corruption//swfoc.exe",
+            "type": "FileTask",
+            "workingDir": "corruption"
+        },
+        {
+            "category": "game",
+            "isHidden": true,
+            "languages": [
+                "*"
+            ],
+            "name": "Raw exe",
+            "path": "GameData\\hidden.exe",
+            "type": "FileTask"
+        },
+        {
+            "category": "game",
+            "languages": [
+                "*"
+            ],
+            "name": "Gone missing",
+            "path": "GameData\\notthere.exe",
+            "type": "FileTask"
+        },
+        {
+            "arguments": "-dontForceMinReqs",
+            "icon": "goggame-1421404887.dll",
+            "languages": [
+                "*"
+            ],
+            "name": "Safe Mode",
+            "path": "GameData//sweaw.exe",
+            "type": "FileTask",
+            "workingDir": "GameData"
+        },
+        {
+            "category": "document",
+            "languages": [
+                "en-US"
+            ],
+            "name": "Manual",
+            "path": "Manual.pdf",
+            "type": "FileTask"
+        },
+        {
+            "category": "document",
+            "languages": [
+                "*"
+            ],
+            "link": "http://example.invalid",
+            "name": "Support",
+            "type": "URLTask"
+        }
     ],
+    "rootGameId": "1421404887",
     "version": 1
 }
 '@
@@ -1313,6 +1396,15 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
     It 'leaves out the manual, the hidden exe and a task whose file is gone' -Skip:(-not $script:HaveCScript) {
         $t = Invoke-PlayTasks $script:TaskDir
         @($t | Where-Object { $_.Name -in @('Manual','Support','Raw exe','Gone missing') }).Count | Should -Be 0
+    }
+
+    It 'leaves out a task with no category, the way Safe Mode ships' -Skip:(-not $script:HaveCScript) {
+        # The Witcher's Safe Mode entry has no "category" key at all. It points at
+        # the same executable as the real one with an extra argument, so treating
+        # it as a game would offer the same game twice - and would put a chooser
+        # in front of a single-game disc that never had one before.
+        $t = Invoke-PlayTasks $script:TaskDir
+        @($t | Where-Object { $_.Name -eq 'Safe Mode' }).Count | Should -Be 0
     }
 
     It 'reports nothing for an install with no .info file, so Play is unchanged' -Skip:(-not $script:HaveCScript) {
