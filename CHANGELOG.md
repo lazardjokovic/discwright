@@ -9,6 +9,27 @@ between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- **Play asks which one, for a bundle that ships two games in a single installer.**
+  Star Wars: Empire at War Gold Pack installs both the base game and the Forces of
+  Corruption expansion, and registers **one** GOG game name with **one** executable.
+  Play could therefore only ever launch Empire at War; Forces of Corruption sat in
+  the next folder with nothing able to reach it. Reported by someone who did a full
+  build and install and said exactly what they saw, which is why it could be fixed
+  at all.
+
+  GOG writes a `goggame-<id>.info` beside every installed game listing its play
+  tasks, and a bundle lists both games there. DiscWright now reads it: two or more
+  launchable entries and Play opens a chooser, the same way the disc asks which game
+  when it holds more than one. Back returns to the game's screen.
+
+  **A game with one launch target is completely unaffected** — Play launches it
+  directly, exactly as before. Checked against real installs: The Witcher Enhanced
+  Edition and Resident Evil 0 both report a single target, with the manual, the
+  hidden raw executable behind GOG's launcher and the Safe Mode variant all
+  correctly left out.
+
 ## [0.3.1] — 2026-08-21
 
 ### Fixed
