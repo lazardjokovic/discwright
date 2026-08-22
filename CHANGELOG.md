@@ -33,6 +33,22 @@ between minor versions.
   `Open existing disc...`, `Show disc folder` and `Preview menu` are each somewhat
   narrower. Nothing moved rows and no label is clipped.
 
+### Fixed
+
+- **An add-on's Install button no longer offers to run before its game exists.**
+  A patch, a piece of DLC or a mod is applied *on top of* the game it belongs to.
+  The menu enabled those buttons purely on whether the file was present on the
+  disc, so on a freshly inserted disc every one of them was live — and clicking one
+  produced an error from GOG's installer several clicks later, which is a poor place
+  to learn the rule. They now need the game installed as well, using the same
+  registry check `Play` already relies on, and the tooltip distinguishes the two
+  reasons a button can be grey: the installer is missing from the disc, or the game
+  is not installed yet.
+
+  This does not sequence anything. GOG's patches are incremental and have to be
+  applied in order; DiscWright shows them in the order they were added and cannot
+  tell which have already been applied. Add them in the order they should be run.
+
 ## [0.3.1] — 2026-08-21
 
 ### Fixed

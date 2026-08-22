@@ -886,17 +886,26 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var g=GAMES[cur];
     setEnabled("btn_Install", (PREVIEW || (g.s!="" && fso.FileExists(fso.BuildPath(root,g.s)))),
                "The installer is not next to this menu.");
+    // Registry-based, so it tells the truth in preview as well. Worked out once
+    // and used by both the add-ons and Play below.
+    var parentOn = (findGame(g.m)!=null);
+    // An add-on - a patch, a piece of DLC, a mod - is applied ON TOP of the game
+    // it belongs to and needs that game installed first. A GOG patch in
+    // particular refuses outright, and the error comes from GOG's installer
+    // several clicks later rather than from the menu, which is a poor place to
+    // discover the rule. Being on the disc is necessary but not sufficient.
     for(var j=0;j<g.a.length;j++){
-      setEnabled("btn_addon_"+j, (PREVIEW || fso.FileExists(fso.BuildPath(root,g.a[j].s))),
-                 "This add-on's installer is not on the disc.");
+      var here = fso.FileExists(fso.BuildPath(root,g.a[j].s));
+      setEnabled("btn_addon_"+j, (PREVIEW || (here && parentOn)),
+                 here ? (g.n+" is not installed yet - use Install first.")
+                      : "This add-on's installer is not on the disc.");
     }
     var gman = manualOf(g), gext = extrasOf(g);
     setEnabled("btn_Manual", (PREVIEW || (gman!="" && fso.FileExists(fso.BuildPath(root,gman)))),
                "There is no manual for " + g.n + " on this disc.");
     setEnabled("btn_Extras", (PREVIEW || fso.FolderExists(fso.BuildPath(root,gext))),
                "There is nothing extra for " + g.n + " on this disc.");
-    // Play is registry-based, so it tells the truth even in preview.
-    setEnabled("btn_Play", (findGame(g.m)!=null),
+    setEnabled("btn_Play", parentOn,
                g.n+" is not installed yet - use Install first.");
     if(PREVIEW){
       var ids=["btn_Install","btn_Manual","btn_Extras"];

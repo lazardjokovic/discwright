@@ -976,6 +976,25 @@ Describe 'Building a disc that has an add-on on it' {
         ([regex]::Matches($script:AoHta,',a:\[\{n:"')).Count | Should -Be 1
     }
 
+    It 'greys an add-on until the game it belongs to is installed' {
+        # A patch, a piece of DLC or a mod goes ON TOP of its game. An Install
+        # button that is live before the game exists can only produce an error
+        # from GOG's installer, several clicks later - the worst place to learn
+        # the rule. Being present on the disc is necessary, not sufficient.
+        $call = [regex]::Match($script:AoHta, 'setEnabled\("btn_addon_"\+j,[^;]*;')
+        $call.Success | Should -BeTrue -Because 'the add-on buttons must be enabled somewhere'
+        $call.Value   | Should -Match 'parentOn' -Because 'the game being installed has to be part of the condition'
+        $script:AoHta | Should -Match 'var parentOn = \(findGame\(g\.m\)!=null\)'
+    }
+
+    It 'says which of the two reasons an add-on is greyed out' {
+        # "Not on the disc" and "the game is not installed yet" send you to
+        # completely different places. One message for both would be wrong half
+        # the time.
+        $script:AoHta | Should -Match "is not installed yet - use Install first"
+        $script:AoHta | Should -Match "This add-on's installer is not on the disc"
+    }
+
     It 'points every path in the menu at a file that is really there' {
         foreach ($m in [regex]::Matches($script:AoHta,'s:"([^"]+)"')) {
             $rel = $m.Groups[1].Value -replace '\\\\','\'
