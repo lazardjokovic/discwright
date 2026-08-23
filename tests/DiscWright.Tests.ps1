@@ -1877,3 +1877,69 @@ Describe 'Whether BUILD is about to overwrite anything' -Tag 'Unit' {
         Test-AlreadyBuilt (Join-Path $script:Sandbox 'never-made') 'ALAN WAKE' | Should -BeFalse
     }
 }
+
+Describe 'Control characters cannot escape into what a disc carries' -Tag 'Unit' {
+
+    # Everything the build writes is line-based or quoted. autorun.inf is one
+    # directive per line; the menu's JScript puts names inside string literals. So a
+    # CR or LF does not corrupt the text - it ends the line and starts a new one.
+    #
+    # The UI cannot produce one: the label box is single line. A project file can,
+    # and assigning to a single-line TextBox does NOT strip them, which is the exact
+    # path a loaded project takes to reach the build. That assumption - "the box is
+    # single line, so it cannot happen" - is what let this through in the first
+    # place.
+
+    It 'strips the characters that end a line' {
+        Remove-ControlChars ("a" + [char]13 + [char]10 + "b") | Should -Be 'ab'
+        Remove-ControlChars ("a" + [char]9  + "b")            | Should -Be 'ab'
+        Remove-ControlChars ("a" + [char]0  + "b")            | Should -Be 'ab'
+        Remove-ControlChars ("a" + [char]27 + "b")            | Should -Be 'ab'
+        Remove-ControlChars ("a" + [char]127 + "b")           | Should -Be 'ab'
+    }
+
+    It 'leaves everything a real disc label needs' {
+        # Accents and typographic dashes are all over GOG titles and must survive.
+        Remove-ControlChars 'The Witcher - Enhanced Edition' | Should -Be 'The Witcher - Enhanced Edition'
+        Remove-ControlChars 'Uber Alles'                     | Should -Be 'Uber Alles'
+        Remove-ControlChars 'STAR WARS: Empire at War'       | Should -Be 'STAR WARS: Empire at War'
+    }
+
+    It 'survives nothing at all' {
+        Remove-ControlChars ''    | Should -Be ''
+        Remove-ControlChars $null | Should -BeNullOrEmpty
+    }
+
+    It 'writes no extra directive when the label carries a newline' {
+        # The proof. Before this, "label=<newline>open=..." wrote open= as a
+        # directive of its own - twice, because the label is also used for
+        # action=Run.
+        $out = Join-Path $script:Sandbox 'poisoned-autorun.inf'
+        New-AutorunInf ("My Game" + [char]13 + [char]10 + "open=Extras\payload.exe") 'game.ico' $true $out
+        $txt = Get-Content -LiteralPath $out -Raw
+        $txt | Should -Not -Match '(?m)^open='
+        # Compared as whole lines, not by regex. The payload is full of backslashes
+        # and dots, and a pattern that has to escape them is a pattern that can be
+        # wrong in a way the test cannot see - which is exactly what happened on the
+        # first attempt at this test.
+        $lines = @($txt -split "`r`n")
+        $lines | Should -Contain 'label=My Gameopen=Extras\payload.exe'
+        $lines | Should -Contain 'action=Run My Gameopen=Extras\payload.exe'
+        @($lines | Where-Object { $_ -eq '[autorun]' }).Count | Should -Be 1
+    }
+
+    It 'keeps the menu parsable when a name carries a newline' {
+        # A newline inside a JS string literal is not a character to encode, it is
+        # the end of the literal - JScript rejects the whole file, so one bad name
+        # would take the entire menu with it.
+        $js = ConvertTo-JsString ("Hollow" + [char]13 + [char]10 + "Knight")
+        $js | Should -Be 'HollowKnight'
+        $js | Should -Not -Match "[`r`n]"
+    }
+
+    It 'still escapes the characters that matter, unchanged' {
+        # The stripping is additive - it must not have loosened anything.
+        ConvertTo-JsString 'He said "hi" \ <script>' | Should -Be 'He said \"hi\" \\ \x3cscript\x3e'
+        ConvertTo-HtmlText '<b>&"'                   | Should -Be '&lt;b&gt;&amp;&quot;'
+    }
+}

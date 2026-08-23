@@ -9,6 +9,49 @@ between minor versions.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-08-23
+
+### Fixed
+
+- **A project file could put extra directives into `autorun.inf`.** Found by
+  auditing the repo before pointing more people at it. Nobody has reported it, and
+  it is not reachable through the window.
+
+  `New-AutorunInf` wrote the disc label straight into a line-based file, so a label
+  carrying a carriage return did not stay a label:
+
+  ```ini
+  label=My Game
+  open=Extras\payload.exe        <- came from inside the "label"
+  action=Run My Game
+  open=Extras\payload.exe        <- and again, the label is reused here
+  ```
+
+  The label box is a single line and cannot produce this. A `discproject.json` can
+  — and assigning to a single-line text box does **not** strip control characters,
+  so a loaded project carried them all the way to the build. That assumption, "the
+  box is single line so it cannot happen", is what let it through.
+
+  Windows 7 and later will not silently run an `open=` from optical media; it
+  offers it in the AutoPlay prompt. But the wording of that prompt and the file it
+  points at would both have been chosen by whoever wrote the project file, on a
+  disc the person burning it believed was theirs — and project files are meant to
+  travel. This repo suggests attaching one to a bug report.
+
+  Control characters are now stripped by every writer: `autorun.inf`, the menu's
+  JScript strings and the HTML title. They are stripped on load as well, so the box
+  shows the label that will actually be built rather than one thing on screen and
+  another on the disc.
+
+- **A game name containing a newline broke the whole menu.** Same cause, duller
+  consequence: a newline inside a JScript string literal is not a character to
+  encode, it ends the literal — so JScript refused the file and the disc opened to
+  nothing. One bad name took the entire menu with it.
+
+  Quoting was never the problem. `"`, `\`, `<` and `>` were already escaped
+  correctly and the HTA is written as ASCII. It was only the characters that end a
+  line, in both writers.
+
 ## [0.4.0] — 2026-08-23
 
 ### Added
@@ -278,7 +321,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/lazardjokovic/discwright/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/lazardjokovic/discwright/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/lazardjokovic/discwright/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/lazardjokovic/discwright/compare/v0.2.0...v0.3.0

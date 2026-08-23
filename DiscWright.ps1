@@ -61,7 +61,7 @@ $PROJECT_FILE = 'discproject.json'
 # this cannot quietly drift a release behind. Shown in the title bar and the log,
 # and written into every project file - a bug report that comes with a project
 # file then says for itself which version built the disc.
-$APP_VERSION  = '0.4.0'
+$APP_VERSION  = '0.4.1'
 
 # =================== SMALL HELPERS ===================
 
@@ -125,12 +125,24 @@ function Format-Size([double]$bytes) {
 # For text that lands in HTML markup (title, button captions).
 function ConvertTo-HtmlText([string]$s) {
     if ([string]::IsNullOrEmpty($s)) { return '' }
+    # Harmless in HTML, where a newline is just whitespace - stripped anyway so that
+    # every writer in the build treats them the same way. A rule with an exception
+    # is a rule somebody has to remember.
+    $s = Remove-ControlChars $s
+    if ([string]::IsNullOrEmpty($s)) { return '' }
     return ($s -replace '&','&amp;' -replace '<','&lt;' -replace '>','&gt;' -replace '"','&quot;')
 }
 
 # For text that lands inside a JS string literal. HTML entities are NOT decoded
 # inside <script>, so these must be backslash-escaped, not entity-escaped.
 function ConvertTo-JsString([string]$s) {
+    if ([string]::IsNullOrEmpty($s)) { return '' }
+    # Control characters first, and by removal rather than by escaping. A newline
+    # inside a JS string literal is not a character to encode, it is the end of the
+    # literal - JScript treats it as an unterminated string and refuses the whole
+    # file, so one bad name takes the entire menu with it. Nothing in a game name
+    # needs them.
+    $s = Remove-ControlChars $s
     if ([string]::IsNullOrEmpty($s)) { return '' }
     return ($s -replace '\\','\\' -replace '"','\"' -replace '<','\x3c' -replace '>','\x3e')
 }
@@ -605,6 +617,34 @@ function New-Background([string]$imgPath,[string]$title,[string]$outPng,[string]
     $g.Dispose(); Save-PngAtomic $bmp $outPng; $bmp.Dispose()
 }
 
+# Control characters, gone. Everything a build writes goes into a line-based or a
+# quoted format - autorun.inf is one directive per line, the menu's JScript puts
+# names inside string literals - so a stray CR or LF does not corrupt the text, it
+# ends the line and starts a new one.
+#
+# In autorun.inf that means a label carrying a newline writes further directives:
+#
+#     label=My Game
+#     open=Extras\payload.exe        <- came from inside the "label"
+#
+# Windows 7 and later will not silently run an open= from optical media; it offers
+# it in the AutoPlay prompt. But the wording of that prompt and what it points at
+# would both be chosen by whoever wrote the project file, on a disc the person
+# burning it believed was theirs. Project files do get passed around - this repo's
+# own README suggests attaching one to a bug report.
+#
+# In the menu's JScript a newline is an unterminated string literal, so the whole
+# HTA fails to parse and the disc opens to nothing.
+#
+# This is not a restriction on what may be typed. The label box is single line and
+# the UI cannot produce these. It is a filter on what a FILE may carry: assigning
+# to a single-line TextBox does not strip them, which is exactly the path a loaded
+# project takes to reach the build.
+function Remove-ControlChars([string]$s) {
+    if ([string]::IsNullOrEmpty($s)) { return $s }
+    return ($s -replace '[\x00-\x1F\x7F]','')
+}
+
 # What a label will actually look like once it has been through autorun.inf.
 # AutoRun reads the file in the system ANSI codepage - it has no Unicode mode at
 # all - so this is a property of Windows, not something the tool can fix. Returns
@@ -617,6 +657,10 @@ function Get-AutorunLabelPreview([string]$label) {
 }
 
 function New-AutorunInf([string]$label,[string]$iconName,[bool]$menu,[string]$out) {
+    # Stripped here rather than only at the call site: this function is what turns
+    # text into directives, so it is the last place that can be sure.
+    $label    = Remove-ControlChars $label
+    $iconName = Remove-ControlChars $iconName
     $lines = @('[autorun]')
     if ($menu) { $lines += 'shellexecute=AUTORUN\menu.hta' }
     $lines += "icon=$iconName"
@@ -2632,7 +2676,12 @@ function Open-Project([string]$folder) {
 
     # A label out of a project file is the user's, whatever it says - so no seed
     # marker. Removing the last game must not take it away.
-    $txtLabel.Text = $p.Label; $state.LabelSeededFrom = $null
+    #
+    # Cleaned on the way in as well as on the way out, so the box shows the label
+    # that will actually be built. The writers strip control characters regardless;
+    # doing it here too means a poisoned project file cannot present one thing in
+    # the window and put another on the disc.
+    $txtLabel.Text = Remove-ControlChars $p.Label; $state.LabelSeededFrom = $null
     if ($p.IconPath -and (Test-Path $p.IconPath)) { Set-IconFile $p.IconPath } else { & $log "  icon missing - pick one again." }
 
     $chkMenu.Checked = $p.Menu
