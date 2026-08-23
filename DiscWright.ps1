@@ -480,6 +480,25 @@ function Get-DiscPlanText([hashtable]$plan, [string]$mediaKey) {
     return "$n discs of $name"
 }
 
+# Every label a build of $discs discs will use, in order. One disc gives one
+# plain label, which is what a single-disc build has always written.
+function Get-SetLabels([string]$label, [int]$discs) {
+    $n = $(if ($discs -lt 1) { 1 } else { $discs })
+    return ,@(1..$n | ForEach-Object { Get-DiscSetLabel $label $_ $n })
+}
+
+# What a build is about to write, and how much of it is already there. The BUILD
+# button and the confirmation dialog both ask this - separately, they drifted: the
+# dialog listed "RETRO NIGHT D1.iso" and "D2.iso" while the button was still
+# asking whether "RETRO NIGHT.iso" existed, a name a set never writes, so it read
+# BUILD ISO over a folder holding the whole set.
+function Get-BuildTargets([string]$outDir, [string]$label, [int]$discs) {
+    $labels = Get-SetLabels $label $discs
+    $isos   = @($labels | ForEach-Object { Get-IsoPath $outDir $_ })
+    $have   = @($labels | Where-Object { Test-AlreadyBuilt $outDir $_ })
+    return @{ Labels=@($labels); Isos=$isos; Existing=$have.Count; Count=@($labels).Count }
+}
+
 # What This PC calls each disc in a set. A set of one keeps the plain label:
 # a disc with no set around it should not announce itself as "D1".
 function Get-DiscSetLabel([string]$label, [int]$n, [int]$of) {
@@ -2408,8 +2427,14 @@ function Update-DiscWideLabels($plan) {
     if ($script:grpX.Text   -ne $cap) { $script:grpX.Text   = $cap }
 }
 
+# How many discs the current form comes to. Cached by Update-MediaLabel rather than
+# recomputed by Update-ActionButtons: planning walks the extras folder, and the
+# buttons refresh on every keystroke in the disc label.
+$script:PlannedDiscs = 1
+
 function Update-MediaLabel {
     $games = Get-Games
+    $script:PlannedDiscs = 1
     Update-MediaOptions
     if ($games.Count -eq 0) {
         # Removing the last entry has to clear this line, not leave it alone.
@@ -2447,6 +2472,7 @@ function Update-MediaLabel {
         # user has told DiscWright which discs are actually in the drawer.
         $pi   = Get-PlanInputs $p
         $plan = Get-DiscPlan $games $key $pi.Overhead $pi.FirstDiscExtra
+        if ($plan.Ok) { $script:PlannedDiscs = @($plan.Discs).Count }
         $lblGame.Text = "$txt   ->   $(Get-DiscPlanText $plan $key)"
         $lblGame.ForeColor = if($plan.Ok){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
         Update-DiscWideLabels $plan
@@ -2563,13 +2589,18 @@ function Update-ActionButtons {
     # The button names the file it is about to write, so REBUILD always means "this
     # exact file is going to be overwritten" rather than "there is something in that
     # folder somewhere".
-    $isoNow = Get-IsoPath $t $txtLabel.Text.Trim()
-    if (Test-AlreadyBuilt $t $txtLabel.Text.Trim()) {
+    $bt     = Get-BuildTargets $t $txtLabel.Text.Trim() $script:PlannedDiscs
+    $isoNow = $(if (@($bt.Isos).Count) { $bt.Isos[0] } else { '' })
+    $names  = ($bt.Isos | Where-Object { $_ } | ForEach-Object { Split-Path $_ -Leaf }) -join ', '
+    if ($bt.Existing -gt 0) {
         $btnBuild.Text = 'REBUILD ISO'
-        $tips.SetToolTip($btnBuild, "Replace $(Split-Path $isoNow -Leaf) and rebuild the disc folder")
+        $tips.SetToolTip($btnBuild, $(if ($bt.Count -gt 1) { "Rebuild the set - $($bt.Existing) of $($bt.Count) already there: $names" }
+                                      else { "Replace $names and rebuild the disc folder" }))
     } else {
         $btnBuild.Text = 'BUILD ISO'
-        $tips.SetToolTip($btnBuild, $(if($isoNow){"Write $(Split-Path $isoNow -Leaf) and the disc folder"}else{'Build the disc folder and ISO'}))
+        $tips.SetToolTip($btnBuild, $(if (-not $names) { 'Build the disc folder and ISO' }
+                                      elseif ($bt.Count -gt 1) { "Write $($bt.Count) ISOs and the disc folder: $names" }
+                                      else { "Write $names and the disc folder" }))
     }
 
     # Divider and panel side are painted into bg.png by New-Background, which is
@@ -3526,11 +3557,10 @@ $btnBuild.Add_Click({
     $stage      = Join-Path $outDir 'disc'
     # Every ISO this build is about to write, so the confirmation can name them
     # rather than describe "the ISO" and then quietly replace three files.
-    $setLabels  = @(1..$discCount | ForEach-Object { Get-DiscSetLabel $txtLabel.Text.Trim() $_ $discCount })
-    $setIsos    = @($setLabels | ForEach-Object { Get-IsoPath $outDir $_ })
+    $bt         = Get-BuildTargets $outDir $txtLabel.Text.Trim() $discCount
+    $setIsos    = @($bt.Isos)
     $isoPath    = $setIsos[0]
-    $existing   = @($setLabels | Where-Object { Test-AlreadyBuilt $outDir $_ })
-    $isoExists  = ($existing.Count -gt 0)
+    $isoExists  = ($bt.Existing -gt 0)
     $stageExists = Test-Path $stage
     # Ask before destroying anything - but only about what actually goes. The ISO
     # named by THIS label, and the staging folder. A differently named ISO sitting
@@ -3544,7 +3574,7 @@ $btnBuild.Add_Click({
         $isoList = ($setIsos | ForEach-Object { '  ' + (Split-Path $_ -Leaf) }) -join "`r`n"
         if ($discCount -gt 1) {
             $msg = "Build a set of $discCount discs in:`r`n$outDir`r`n`r`nThese will be written:`r`n$isoList"
-            if ($isoExists) { $msg += "`r`n`r`n$($existing.Count) of them already exist and will be replaced." }
+            if ($isoExists) { $msg += "`r`n`r`n$($bt.Existing) of them already exist and will be replaced." }
             $msg += "`r`n`r`nAny other ISO already in this folder is left alone."
         } elseif ($isoExists) {
             $msg = "Rebuild the disc in:`r`n$outDir`r`n`r`n$isoName already exists and will be replaced."

@@ -91,6 +91,13 @@ between minor versions.
   `DVD9 8.5 GB (dual layer)`), the label is 15px wider, and it ends a line it cannot
   fit with an ellipsis rather than a half-word, with the whole line on the tooltip.
   The dropdown keeps the full names — a row has the width to itself.
+- **The BUILD button knows about the whole set.** It asked whether `RETRO NIGHT.iso`
+  existed — a name a set never writes — so a folder holding the finished set still
+  read *BUILD ISO*, and the tooltip promised to write a file that would never appear.
+  It now reads *REBUILD ISO* when any disc of the set is already there, and says how
+  many: *"Rebuild the set - 2 of 2 already there"*. The button and the confirmation
+  dialog now work this out through one shared function, which is why they had drifted
+  apart in the first place.
 - **The progress line says which disc of the set is being written.** A set runs
   the bar from nothing to full once per disc, and with nothing naming the disc the
   second pass read as the first one having started over.

@@ -2698,3 +2698,63 @@ Describe 'Saying on the form where the disc-wide content lands' {
         $script:lblEx.Text | Should -Be 'Extras folder:'
     }
 }
+
+Describe 'Knowing what a build is about to overwrite' {
+
+    BeforeAll {
+        $script:BtDir = Join-Path $script:Sandbox 'buildtargets'
+        New-Item -ItemType Directory -Force -Path $script:BtDir | Out-Null
+        function New-EmptyIso([string]$name) {
+            $fs = [IO.File]::Create((Join-Path $script:BtDir $name)); $fs.SetLength(1024); $fs.Close()
+        }
+    }
+
+    It 'names one file for a single disc, keeping the plain label' {
+        $l = Get-SetLabels 'RETRO NIGHT' 1
+        @($l).Count | Should -Be 1
+        $l[0]       | Should -Be 'RETRO NIGHT'
+    }
+
+    It 'numbers every label of a set' {
+        (Get-SetLabels 'RETRO NIGHT' 3) -join '|' | Should -Be 'RETRO NIGHT D1|RETRO NIGHT D2|RETRO NIGHT D3'
+    }
+
+    It 'treats a nonsense disc count as one disc rather than none' {
+        @(Get-SetLabels 'X' 0).Count  | Should -Be 1
+        @(Get-SetLabels 'X' -4).Count | Should -Be 1
+    }
+
+    It 'counts nothing as built in an empty folder' {
+        $bt = Get-BuildTargets $script:BtDir 'SET A' 2
+        $bt.Count    | Should -Be 2
+        $bt.Existing | Should -Be 0
+        ($bt.Isos | ForEach-Object { Split-Path $_ -Leaf }) -join '|' | Should -Be 'SET A D1.iso|SET A D2.iso'
+    }
+
+    It 'notices a set that is only half built' {
+        New-EmptyIso 'SET B D1.iso'
+        $bt = Get-BuildTargets $script:BtDir 'SET B' 2
+        $bt.Existing | Should -Be 1
+        $bt.Count    | Should -Be 2
+    }
+
+    It 'notices a set that is entirely there' {
+        New-EmptyIso 'SET C D1.iso'
+        New-EmptyIso 'SET C D2.iso'
+        (Get-BuildTargets $script:BtDir 'SET C' 2).Existing | Should -Be 2
+    }
+
+    It 'does not mistake a single-disc build for a set that was already made' {
+        # The bug: the button asked whether "SET C.iso" existed. A set never writes
+        # that name, so a folder holding the whole set still read BUILD ISO.
+        New-EmptyIso 'SET D.iso'
+        (Get-BuildTargets $script:BtDir 'SET D' 1).Existing | Should -Be 1
+        (Get-BuildTargets $script:BtDir 'SET D' 2).Existing | Should -Be 0
+        (Get-BuildTargets $script:BtDir 'SET C' 1).Existing | Should -Be 0
+    }
+
+    It 'ignores an ISO belonging to a different disc in the same folder' {
+        New-EmptyIso 'SOMETHING ELSE.iso'
+        (Get-BuildTargets $script:BtDir 'SET E' 1).Existing | Should -Be 0
+    }
+}

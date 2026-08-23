@@ -128,6 +128,11 @@ BeforeAll {
         Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
         ExtraItems=@(); MediaKey='CD'; OutDir=$script:BigOutSet
     } $script:BigOutSet
+    # Stand-ins for a set that has already been built into this folder. Sparse, so
+    # two "ISOs" cost nothing - only their names matter to the button.
+    foreach ($n in 'Big Set D1.iso','Big Set D2.iso') {
+        $fs = [IO.File]::Create((Join-Path $script:BigOutSet $n)); $fs.SetLength(1024); $fs.Close()
+    }
 
     # Extras button on, no folder chosen yet: the state you are in the moment
     # before browsing for one, which is where the greying bug lived.
@@ -728,6 +733,13 @@ Describe 'Reopening a project that was planned as a set' -Tag 'UI' -Skip:(-not $
 
     It 'plans the set again straight away, without touching the dropdown' {
         Get-StatusText $script:Win | Should -Match 'discs of CD-R 700 MB'
+    }
+
+    It 'offers to REBUILD, having noticed the set is already there' {
+        # The button used to ask whether "Big Set.iso" existed - a name a set never
+        # writes - so a folder holding the whole set still read BUILD ISO.
+        Find-Ctl $script:Win 'REBUILD ISO' -TimeoutSec 4 | Should -Not -BeNullOrEmpty
+        Find-Ctl $script:Win 'BUILD ISO'   -TimeoutSec 1 | Should -BeNullOrEmpty
     }
 
     It 'still reopens an older project as no target at all' {

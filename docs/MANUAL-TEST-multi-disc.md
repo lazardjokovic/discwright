@@ -244,8 +244,10 @@ The four that matter most:
 1. Back in the app, tick **Also put the manual and extras on every disc of a set**
 2. The three labels from 6a lose their `(disc 1)` note - the checkbox now says it in
    words, so repeating it would be noise
-3. **BUILD ISO** again, **Yes** to replacing both
-4. Mount `RETRO NIGHT D2.iso`: `Extras\` is now **present** and the Extras button works
+3. The button should now read **REBUILD ISO** - the set is on disk. Hover it: *Rebuild
+   the set - 2 of 2 already there*
+4. **REBUILD ISO**, **Yes** to replacing both
+5. Mount `RETRO NIGHT D2.iso`: `Extras\` is now **present** and the Extras button works
 
 Untick it, rebuild, and disc 2 goes back to having no `Extras\`.
 
@@ -308,6 +310,7 @@ nothing else should wake it, since that is now a change worth discarding.
 - A chooser on a disc holding one game
 - The plan promising a number of discs and the build writing a different number
 - A status line cut off mid-word with no tooltip behind it
+- The button reading BUILD ISO over a folder that already holds the set
 - Anything at all different while `Fit on one disc` is selected
 
 ## Tidying up
