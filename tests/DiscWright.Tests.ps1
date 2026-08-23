@@ -2313,6 +2313,24 @@ Describe 'Telling you what the plan came to' {
     # @() flattens a SINGLE argument, so a one-disc @(@(0,1)) collapses into a
     # two-element array and reads back as a two-disc set. Several arguments are
     # left alone. The planner sidesteps both by appending with ",@()".
+    It 'uses the short form of the medium, because the line is shared' {
+        # The advice line already carries the payload total and can carry a game
+        # title too. "(dual layer)" is thirteen characters of nothing useful, and
+        # the line was being cut off mid-word without them.
+        $plan = @{ Ok=$false; Reason='entry'; TooBigName='The Witcher - Enhanced Edition'
+                   TooBigBytes=9.48GB; Discs=@() }
+        Get-DiscPlanText $plan 'DVD9' | Should -Be 'The Witcher - Enhanced Edition is 9.48 GB, too big for a DVD9 8.5 GB'
+        Get-DiscPlanText @{ Ok=$true; Discs=@(@(0),@(1)) } 'BD50' | Should -Be '2 discs of BD-R DL 50 GB'
+    }
+
+    It 'has a short form for every tier it lists' {
+        foreach ($t in Get-MediaTiers) {
+            $t.Short | Should -Not -BeNullOrEmpty
+            (Get-MediaShortFromKey $t.Key) | Should -Be $t.Short
+            $t.Short.Length | Should -BeLessOrEqual $t.Name.Length
+        }
+    }
+
     It 'counts the discs and names the medium' {
         $plan = @{ Ok=$true; Discs=@(@(0), @(1), @(2)) }
         Get-DiscPlanText $plan 'DVD5' | Should -Be '3 discs of DVD5 4.7 GB'
@@ -2328,7 +2346,7 @@ Describe 'Telling you what the plan came to' {
         # (8.94 GB)". Without the game's OWN size beside its name, the refusal
         # reads as though the 8.94 was the figure that would not fit.
         $plan = @{ Ok=$false; Reason='entry'; TooBigName='The Witcher'; TooBigBytes=9.48GB; Discs=@() }
-        Get-DiscPlanText $plan 'DVD5' | Should -Be 'The Witcher is 9.48 GB on its own, too big for a DVD5 4.7 GB'
+        Get-DiscPlanText $plan 'DVD5' | Should -Be 'The Witcher is 9.48 GB, too big for a DVD5 4.7 GB'
     }
 
     It 'separates extras that will not fit from a game that will not fit' {

@@ -68,6 +68,12 @@ between minor versions.
   than a DVD5"* sat on a line beginning *"2 games (8.94 GB)"* and read as though
   the 8.94 was the figure that would not fit. It now reads *"Alan Wake is 7.79 GB
   on its own, too big for a DVD5 4.7 GB"*.
+- **The advice line no longer runs off its own end.** A refusal naming a long game
+  measured 642px against a 640px label and lost its last word — *"too big for a DVD9
+  8.5 GB (dual"*. Prose now uses the short form of each medium (`DVD9 8.5 GB`, not
+  `DVD9 8.5 GB (dual layer)`), the label is 15px wider, and it ends a line it cannot
+  fit with an ellipsis rather than a half-word, with the whole line on the tooltip.
+  The dropdown keeps the full names — a row has the width to itself.
 - **The progress line says which disc of the set is being written.** A set runs
   the bar from nothing to full once per disc, and with nothing naming the disc the
   second pass read as the first one having started over.

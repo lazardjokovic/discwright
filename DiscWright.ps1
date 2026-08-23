@@ -292,12 +292,12 @@ function Get-AddOnInfo([string]$exePath) {
 # on a DVD gets the whole premise wrong.
 function Get-MediaTiers {
     return @(
-        @{ Key='CD';   Gib=0.68; Name='CD-R 700 MB';                RecText='fits CD-R 700 MB' },
-        @{ Key='DVD5'; Gib=4.37; Name='DVD5 4.7 GB';                RecText='fits DVD5 4.7 GB (single layer)' },
-        @{ Key='DVD9'; Gib=7.95; Name='DVD9 8.5 GB (dual layer)';   RecText='needs DVD9 8.5 GB (dual layer)' },
-        @{ Key='BD25'; Gib=23.3; Name='BD-R 25 GB';                 RecText='too big for DVD - needs BD-R 25 GB' },
-        @{ Key='BD50'; Gib=46.6; Name='BD-R DL 50 GB (dual layer)'; RecText='needs BD-R DL 50 GB (dual layer)' },
-        @{ Key='BDXL'; Gib=93.0; Name='BD-R XL 100 GB';             RecText='needs BD-R XL 100 GB' }
+        @{ Key='CD';   Gib=0.68; Name='CD-R 700 MB';                Short='CD-R 700 MB';    RecText='fits CD-R 700 MB' },
+        @{ Key='DVD5'; Gib=4.37; Name='DVD5 4.7 GB';                Short='DVD5 4.7 GB';    RecText='fits DVD5 4.7 GB (single layer)' },
+        @{ Key='DVD9'; Gib=7.95; Name='DVD9 8.5 GB (dual layer)';   Short='DVD9 8.5 GB';    RecText='needs DVD9 8.5 GB (dual layer)' },
+        @{ Key='BD25'; Gib=23.3; Name='BD-R 25 GB';                 Short='BD-R 25 GB';     RecText='too big for DVD - needs BD-R 25 GB' },
+        @{ Key='BD50'; Gib=46.6; Name='BD-R DL 50 GB (dual layer)'; Short='BD-R DL 50 GB';  RecText='needs BD-R DL 50 GB (dual layer)' },
+        @{ Key='BDXL'; Gib=93.0; Name='BD-R XL 100 GB';             Short='BD-R XL 100 GB'; RecText='needs BD-R XL 100 GB' }
     )
 }
 
@@ -327,6 +327,13 @@ function Get-MediaKeyFromName([string]$name) {
 }
 function Get-MediaNameFromKey([string]$key) {
     foreach ($t in Get-MediaTiers) { if ($t.Key -ieq $key) { return $t.Name } }
+    return (Get-MediaAutoText)
+}
+# The same medium, minus the "(dual layer)" note. The dropdown has a row to
+# itself and can afford the full name; a sentence sharing one line with the
+# payload total and a game's title cannot.
+function Get-MediaShortFromKey([string]$key) {
+    foreach ($t in Get-MediaTiers) { if ($t.Key -ieq $key) { return $t.Short } }
     return (Get-MediaAutoText)
 }
 
@@ -455,15 +462,16 @@ function Get-DiscPlan([array]$entries, [string]$mediaKey, [double]$overhead, [do
 # refuses a build. One sentence, no jargon: the number of discs is the answer to
 # the only question being asked.
 function Get-DiscPlanText([hashtable]$plan, [string]$mediaKey) {
-    $name = Get-MediaNameFromKey $mediaKey
+    $name = Get-MediaShortFromKey $mediaKey
     if (-not $plan.Ok) {
         switch ($plan.Reason) {
             # The game's OWN size, not the total on the form. "Alan Wake alone is
             # bigger than a DVD5" sat on a line beginning "2 games (8.94 GB)", and
             # read as though the 8.94 was what would not fit. Naming the figure
             # that is actually too big settles it in the same breath.
-            'entry'  { return ("{0} is {1:N2} GB on its own, too big for a {2}" -f $plan.TooBigName, ([double]$plan.TooBigBytes/1GB), $name) }
+            'entry'  { return ("{0} is {1:N2} GB, too big for a {2}" -f $plan.TooBigName, ([double]$plan.TooBigBytes/1GB), $name) }
             'extras' { return ("the extra content alone is bigger than a $name") }
+            'media'  { return ("no such disc") }
             default  { return ("cannot be split onto $name") }
         }
     }
@@ -2142,7 +2150,11 @@ $btnFolder  =AddBtn 'Add game...' 545 68  110
 $btnAddOn   =AddBtn 'Add-on...'   545 96  110
 $btnGameEdit=AddBtn 'Change...'   545 124 110
 $btnGameDel =AddBtn 'Remove'      545 152 110
-$lblGame=AddLabel '' 15 180 640; $lblGame.ForeColor=[System.Drawing.Color]::DimGray
+$lblGame=AddLabel '' 15 180 655; $lblGame.ForeColor=[System.Drawing.Color]::DimGray
+# A game's title is user data and a refusal quotes it in full, so no width is
+# wide enough for every case. AutoEllipsis ends a line that will not fit with
+# "..." instead of cutting a word in half, and the tooltip carries the rest.
+$lblGame.AutoSize=$false; $lblGame.AutoEllipsis=$true
 
 AddLabel '2)  Disc label (shown in This PC):' 15 210 300 | Out-Null
 $txtLabel=AddText 15 232 300
@@ -2409,6 +2421,7 @@ function Update-MediaLabel {
         $lblGame.Text = "$txt   ->   Disc: $($m.Text)"
         $lblGame.ForeColor = if($m.Fit){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
     }
+    Set-StatusTip $lblGame.Text
     # A missing installer part outranks the media advice - it is the thing that
     # makes the disc useless, so it takes the label and the colour.
     # With several games the label can only carry one warning, so take the first -
@@ -2420,7 +2433,15 @@ function Update-MediaLabel {
         $w = $warned[0]
         $lblGame.Text = if ($games.Count -eq 1) { $w.Warning } else { "$($w.GameName): $($w.Warning)" }
         $lblGame.ForeColor = if($w.MissingParts.Count -gt 0){[System.Drawing.Color]::Firebrick}else{[System.Drawing.Color]::DarkOrange}
+        Set-StatusTip $lblGame.Text
     }
+}
+
+# The advice line is clipped when it will not fit, so the whole of it has to be
+# reachable somewhere. Guarded because the logic tests exercise Update-MediaLabel
+# with stand-in controls and no tooltip provider.
+function Set-StatusTip([string]$text) {
+    if ($tips -and $lblGame -is [System.Windows.Forms.Control]) { $tips.SetToolTip($lblGame, $text) }
 }
 
 # The log box is for build progress. A click that cannot do its job needs an
