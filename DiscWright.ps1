@@ -1376,6 +1376,18 @@ function Import-DiscFolder([string]$discDir) {
 }
 
 # =================== BUILD ORCHESTRATION ===================
+
+# The file this build will write. One function rather than the same expression in
+# two places, because the BUILD button promises to replace a file and this names
+# that file - if the two ever drifted apart the button would be lying and nothing
+# would say so. Returns '' when there is not enough yet to name one.
+function Get-IsoPath([string]$outDir, [string]$label) {
+    if ([string]::IsNullOrWhiteSpace($outDir)) { return '' }
+    $name = ($label -replace '[^A-Za-z0-9_\- ]','_').Trim()
+    if ([string]::IsNullOrWhiteSpace($name)) { return '' }
+    return (Join-Path $outDir ($name + '.iso'))
+}
+
 function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$null) {
     $stage = Join-Path $s.OutDir 'disc'
     $tmpKeep = $null
@@ -1581,7 +1593,7 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     New-AutorunInf $s.Label $icoName $s.Menu (Join-Path $stage 'autorun.inf')
 
     & $log "Building ISO (UDF, this can take ~30-60s for a full game)..."
-    $iso = Join-Path $s.OutDir (($s.Label -replace '[^A-Za-z0-9_\- ]','_').Trim()+'.iso')
+    $iso = Get-IsoPath $s.OutDir $s.Label
     New-Iso $stage $iso $s.Label $progress
     & $log ("DONE.  ISO: {0}  ({1:N2} GB)" -f $iso, ((Get-Item $iso).Length/1GB))
 
@@ -1959,11 +1971,26 @@ function Deny-Build([string]$logMsg,[string]$dlgMsg) { & $log "ERROR: $logMsg"; 
 
 $tips = New-Object System.Windows.Forms.ToolTip
 
-# True when the output folder already holds a built disc or image.
-function Test-AlreadyBuilt([string]$outDir) {
+# True when building now would overwrite the ISO this disc writes.
+#
+# It used to ask "is there ANY .iso in here", which is a different question and got
+# a misleading answer: build one disc labelled ALAN WAKE and the next THE WITCHER
+# into the same folder, and the button still read REBUILD ISO with a tooltip
+# offering to "replace the ISO already in the output folder" - then it wrote a
+# second file and left the first one untouched.
+#
+# The staging folder deliberately does not count. It is rebuilt from scratch by
+# every build and holds nothing that is not also in the ISO, so warning about
+# replacing it would be warning about nothing.
+#
+# DiscWright still never deletes an ISO it did not write. Two discs built into one
+# folder means two files, which is correct - it cannot tell its own leftovers from
+# something you put there. The button just has to stop claiming otherwise.
+function Test-AlreadyBuilt([string]$outDir, [string]$label) {
     if ([string]::IsNullOrWhiteSpace($outDir) -or -not (Test-Path $outDir)) { return $false }
-    if (Test-Path (Join-Path $outDir 'disc')) { return $true }
-    return (@(Get-ChildItem -LiteralPath $outDir -Filter '*.iso' -File -EA SilentlyContinue).Count -gt 0)
+    $iso = Get-IsoPath $outDir $label
+    if (-not $iso) { return $false }
+    return (Test-Path -LiteralPath $iso -PathType Leaf)
 }
 
 # Whether anything on the form differs from how it opens, which is what decides
@@ -2005,12 +2032,16 @@ function Update-ActionButtons {
     $tips.SetToolTip($btnPreview,  $(if($canPreview){'Show the menu using the current settings - no rebuild needed'}else{'Turn the menu on and choose a background first (step 4)'}))
     $tips.SetToolTip($btnOpenProj, 'Load a disc you already built, to edit and rebuild it')
 
-    if (Test-AlreadyBuilt $t) {
+    # The button names the file it is about to write, so REBUILD always means "this
+    # exact file is going to be overwritten" rather than "there is something in that
+    # folder somewhere".
+    $isoNow = Get-IsoPath $t $txtLabel.Text.Trim()
+    if (Test-AlreadyBuilt $t $txtLabel.Text.Trim()) {
         $btnBuild.Text = 'REBUILD ISO'
-        $tips.SetToolTip($btnBuild,'Replace the disc folder and ISO already in the output folder')
+        $tips.SetToolTip($btnBuild, "Replace $(Split-Path $isoNow -Leaf) and rebuild the disc folder")
     } else {
         $btnBuild.Text = 'BUILD ISO'
-        $tips.SetToolTip($btnBuild,'Build the disc folder and ISO')
+        $tips.SetToolTip($btnBuild, $(if($isoNow){"Write $(Split-Path $isoNow -Leaf) and the disc folder"}else{'Build the disc folder and ISO'}))
     }
 
     # Divider and panel side are painted into bg.png by New-Background, which is
@@ -2906,14 +2937,25 @@ $btnBuild.Add_Click({
     }
 
     # A rebuild replaces work that already exists - say exactly what goes.
-    if (Test-AlreadyBuilt $outDir) {
-        $stage   = Join-Path $outDir 'disc'
+    $stage      = Join-Path $outDir 'disc'
+    $isoPath    = Get-IsoPath $outDir $txtLabel.Text.Trim()
+    $isoExists  = Test-AlreadyBuilt $outDir $txtLabel.Text.Trim()
+    $stageExists = Test-Path $stage
+    # Ask before destroying anything - but only about what actually goes. The ISO
+    # named by THIS label, and the staging folder. A differently named ISO sitting
+    # in the same folder is not touched and must not be described as if it were.
+    if ($isoExists -or $stageExists) {
         # Rebuilding in place only applies to a single game whose folder IS the
         # stage. Several games always live in Games\ subfolders, never at the root.
         $bGames  = Get-Games
         $inPlace = ($bGames.Count -eq 1) -and (Test-SamePath $bGames[0].Folder $stage)
-        $msg = "Rebuild the disc in:`r`n$outDir`r`n`r`nThe existing ISO will be replaced."
-        if ((Test-Path $stage) -and -not $inPlace) {
+        $isoName = if ($isoPath) { Split-Path $isoPath -Leaf } else { 'the ISO' }
+        if ($isoExists) {
+            $msg = "Rebuild the disc in:`r`n$outDir`r`n`r`n$isoName already exists and will be replaced."
+        } else {
+            $msg = "Build the disc in:`r`n$outDir`r`n`r`n$isoName will be written. Any other ISO already in this folder is left alone."
+        }
+        if ($stageExists -and -not $inPlace) {
             $msg += "`r`n`r`nThe 'disc' folder will be rebuilt from scratch. Anything you added to it by hand that is not listed under Extra content will be lost."
         } elseif ($inPlace) {
             $msg += "`r`n`r`nThe game files already in the disc folder will be left untouched."

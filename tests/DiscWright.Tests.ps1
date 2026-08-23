@@ -1813,3 +1813,67 @@ Describe 'Aiming the file pickers' -Tag 'Unit' {
         Get-ExistingFolderOf ("  $($script:PickDir)  ") | Should -Be $script:PickDir
     }
 }
+
+Describe 'Whether BUILD is about to overwrite anything' -Tag 'Unit' {
+
+    # The ISO is named from the disc label, so two discs built into one output
+    # folder are two files. That is correct - DiscWright cannot tell its own
+    # leftovers from something you put there, so it never deletes an ISO it did not
+    # write.
+    #
+    # What was wrong is what the button SAID. Test-AlreadyBuilt used to answer "is
+    # there any .iso in here", so building ALAN WAKE and then THE WITCHER into the
+    # same folder left the button reading REBUILD ISO, offering to replace an ISO
+    # that was never touched.
+
+    BeforeAll {
+        $script:OutA = Join-Path $script:Sandbox 'outA'
+        New-Item -ItemType Directory -Force -Path $script:OutA | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:OutA 'ALAN WAKE.iso') -Value 'x' -Encoding Ascii
+    }
+
+    It 'names the file from the label, the way the build does' {
+        Get-IsoPath $script:OutA 'ALAN WAKE' | Should -Be (Join-Path $script:OutA 'ALAN WAKE.iso')
+    }
+
+    It 'strips what a filename cannot carry' {
+        # Same fold the build applies. A label is allowed characters a path is not.
+        Get-IsoPath $script:OutA 'The Witcher: Enhanced' | Should -Be (Join-Path $script:OutA 'The Witcher_ Enhanced.iso')
+    }
+
+    It 'names nothing when there is nothing to name' {
+        Get-IsoPath ''             'ALAN WAKE' | Should -Be ''
+        Get-IsoPath $script:OutA   ''          | Should -Be ''
+        Get-IsoPath $script:OutA   '   '       | Should -Be ''
+    }
+
+    It 'replaces what it cannot use rather than dropping it' {
+        # A label of nothing but punctuation still yields a name - the fold swaps
+        # each character for an underscore instead of removing it. Odd label, odd
+        # filename, but the button and the build agree on it, which is the only
+        # property that matters here.
+        Get-IsoPath $script:OutA '***' | Should -Be (Join-Path $script:OutA '___.iso')
+    }
+
+    It 'says REBUILD only for the ISO this label writes' {
+        Test-AlreadyBuilt $script:OutA 'ALAN WAKE' | Should -BeTrue
+    }
+
+    It 'says BUILD when the label changed, because nothing of that name is there' {
+        # The regression this block exists for.
+        Test-AlreadyBuilt $script:OutA 'The Witcher - Enhanced Edition' | Should -BeFalse
+    }
+
+    It 'is not fooled by a staging folder left behind' {
+        # The disc folder is rebuilt from scratch by every build and holds nothing
+        # that is not also in the ISO, so it must not make the button claim an ISO
+        # is about to be replaced.
+        $out = Join-Path $script:Sandbox 'outB'
+        New-Item -ItemType Directory -Force -Path (Join-Path $out 'disc') | Out-Null
+        Test-AlreadyBuilt $out 'ALAN WAKE' | Should -BeFalse
+    }
+
+    It 'says nothing about a folder that is not there' {
+        Test-AlreadyBuilt (Join-Path $script:Sandbox 'never-made') 'ALAN WAKE' | Should -BeFalse
+    }
+}
