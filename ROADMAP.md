@@ -31,6 +31,26 @@ on the continuation discs, and a check that the default path really does resolve
 swap. That last one is testable by mounting two ISOs to the same drive letter in turn, no
 burning required.
 
+**What it will not be able to promise.** DiscWright can only move whole files, and GOG
+slices its installers at about 4 GB — measured across four real downloads:
+
+```
+Alan Wake      4.00 GB + 3.79 GB
+The Witcher    4.00 GB + 4.00 GB + 1.48 GB
+Dead Space     3.91 GB + 3.91 GB + 0.29 GB
+Hollow Knight  1.16 GB, one file, nothing to split
+```
+
+So one slice is the floor. **No game with `.bin` parts can go on CDs**, however many you
+have, and re-slicing is not a way out: the installer asks for the exact filenames GOG
+produced, and half of one is not a file it recognises. A 100 GB game is roughly 25
+slices — about 25 DVDs, 5 BD-Rs, or 2 BD-R XLs.
+
+Whether a disc takes one slice or two depends on the exact slice size rather than the
+tier: two of Dead Space's 3.91 GB parts fit a DVD9's 7.95 GB, two 4.00 GB parts do not.
+CDs keep the role they already have here, the sub-700 MB back catalogue, where the whole
+game is a single `.exe` and none of this arises.
+
 ## Delivered
 
 **Several games across a disc set** — the first half of multi-disc splitting, requested
