@@ -1565,6 +1565,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         ExtrasPath   = $s.ExtrasPath
         ExtraItems   = @($s.ExtraItems)
         MediaKey     = [string]$s.MediaKey
+        ExtrasEveryDisc = [bool]$s.ExtrasEveryDisc
         OutDir       = $outDir
     }
     $o | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outDir $PROJECT_FILE) -Encoding UTF8
@@ -1612,6 +1613,7 @@ function Import-Project([string]$jsonPath) {
             # Version 5. Absent in anything older, which is the automatic setting -
             # and the automatic setting is what those projects always described.
             MediaKey=$(if ($j.PSObject.Properties.Name -contains 'MediaKey') { [string]$j.MediaKey } else { '' })
+            ExtrasEveryDisc=$(if ($j.PSObject.Properties.Name -contains 'ExtrasEveryDisc') { [bool]$j.ExtrasEveryDisc } else { $false })
             ExtraItems=@($j.ExtraItems); OutDir=$j.OutDir; Origin='project file'
         }
     } catch { return $null }
@@ -1952,11 +1954,12 @@ function Invoke-BuildSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progres
         $ds.SkipProject = $true
         $ds.DiscNum     = $num
         $ds.DiscOf      = $n
-        # The disc-wide manual, extras and loose files ride on disc 1 alone.
-        # Copying them onto every disc would multiply gigabytes of bonus content
-        # by the size of the set, which is nobody's idea of "extras on the disc".
-        # A game carries its own manual and extras with it, wherever it lands.
-        if ($num -ne 1) { $ds.ManualPath = $null; $ds.ExtrasPath = $null; $ds.ExtraItems = @() }
+        # The disc-wide manual, extras and loose files ride on disc 1 alone unless
+        # the form says otherwise: copying them onto every disc multiplies bonus
+        # content by the size of the set - the wrong default for a 2 GB making-of
+        # and the right one for a 3 MB manual, hence the choice.
+        # A game carries its OWN manual and extras with it, wherever it lands.
+        if ($num -ne 1 -and -not $s.ExtrasEveryDisc) { $ds.ManualPath = $null; $ds.ExtrasPath = $null; $ds.ExtraItems = @() }
         $isos += (Invoke-Build $ds $log $progress)
     }
 
@@ -2223,8 +2226,13 @@ $chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Wind
 $lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,250); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
 $cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,247); $cmbBtnStyle.Size=New-Object System.Drawing.Size(130,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
 
-$grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,668); $grpX.Size=New-Object System.Drawing.Size(645,118); $form.Controls.Add($grpX)
-$lstExtra=New-Object System.Windows.Forms.ListBox; $lstExtra.Location=New-Object System.Drawing.Point(15,22); $lstExtra.Size=New-Object System.Drawing.Size(480,100); $lstExtra.SelectionMode='MultiExtended'; $lstExtra.HorizontalScrollbar=$true; $grpX.Controls.Add($lstExtra)
+$grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,668); $grpX.Size=New-Object System.Drawing.Size(645,124); $form.Controls.Add($grpX)
+$lstExtra=New-Object System.Windows.Forms.ListBox; $lstExtra.Location=New-Object System.Drawing.Point(15,22); $lstExtra.Size=New-Object System.Drawing.Size(480,72); $lstExtra.SelectionMode='MultiExtended'; $lstExtra.HorizontalScrollbar=$true; $grpX.Controls.Add($lstExtra)
+# The disc-wide manual, Extras folder and loose files ride on disc 1 of a set,
+# because copying a 2 GB extras folder onto five discs costs ten. That is the
+# right default and the wrong answer for a 3 MB PDF, so it is a choice. A game's
+# OWN manual and extras always travel with that game and are not affected.
+$chkXAll=New-Object System.Windows.Forms.CheckBox; $chkXAll.Text='Also put the manual and extras on every disc of a set'; $chkXAll.Location=New-Object System.Drawing.Point(15,98); $chkXAll.Size=New-Object System.Drawing.Size(400,22); $grpX.Controls.Add($chkXAll)
 $btnXFile=New-Object System.Windows.Forms.Button; $btnXFile.Text='Add files...'; $btnXFile.Location=New-Object System.Drawing.Point(505,22); $btnXFile.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXFile)
 $btnXDir =New-Object System.Windows.Forms.Button; $btnXDir.Text='Add folder...'; $btnXDir.Location=New-Object System.Drawing.Point(505,52); $btnXDir.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDir)
 $btnXDel =New-Object System.Windows.Forms.Button; $btnXDel.Text='Remove'; $btnXDel.Location=New-Object System.Drawing.Point(505,82); $btnXDel.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDel)
@@ -2312,6 +2320,9 @@ function Get-PlanInputs([hashtable]$payload=$null) {
     $p = $(if ($payload) { $payload } else { Get-PayloadBytes })
     $o = Get-DiscOverheadBytes @{ IconPath=$state.IconPath; BgPath=$state.BgPath
                                   MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null}) }
+    # On every disc they are overhead, like the menu. On disc 1 alone they are a
+    # one-off charge against the first disc's room. Same bytes, different bill.
+    if ($chkXAll.Checked) { return @{ Overhead=($o + $p.DiscExtra); FirstDiscExtra=[double]0; Payload=$p } }
     return @{ Overhead=$o; FirstDiscExtra=$p.DiscExtra; Payload=$p }
 }
 
@@ -2504,6 +2515,7 @@ function Test-FormDirty {
     if ($chkBgAsIs.Checked -or $chkTitle.Checked -or $chkMusic.Checked -or $chkDivider.Checked) { return $true }
     if ($cmbSide.SelectedIndex -ne 0 -or $cmbBtnStyle.SelectedIndex -ne 0) { return $true }
     if ($cmbMedia.SelectedIndex -ne 0) { return $true }
+    if ($chkXAll.Checked) { return $true }
     if (-not $cbPlay.Checked -or -not $cbInst.Checked -or -not $cbExit.Checked) { return $true }
     if ($cbMan.Checked -or $cbExtra.Checked) { return $true }
     return $false
@@ -2559,6 +2571,12 @@ function Update-ActionButtons {
     $tips.SetToolTip($txtTitle, $(if(-not $composites){$whyOff}
                                   elseif(-not $chkTitle.Checked){'Tick "Show title" first'}
                                   else{'Leave blank to use the disc label from step 2'}))
+
+    # Nothing disc-wide to carry means nothing for this to decide about.
+    $hasWide = ($cbMan.Checked -and $state.ManualPath) -or ($cbExtra.Checked -and $state.ExtrasPath) -or ($lstExtra.Items.Count -gt 0)
+    $chkXAll.Enabled = [bool]$hasWide
+    $tips.SetToolTip($chkXAll, $(if(-not $hasWide){'Add a manual, an Extras folder or some extra content first'}
+                                 else{'Off: they go on disc 1 of a set. On: every disc carries its own copy, which costs their size per disc. A game''s own manual and extras always travel with that game either way.'}))
 }
 
 # Renders the CURRENT settings into a temp folder so look changes can be checked
@@ -3042,6 +3060,7 @@ function Reset-Form {
     $null = Set-GameEntries @()
     $lblGame.Text = ''; $lblGame.ForeColor = [System.Drawing.Color]::DimGray
     $cmbMedia.SelectedIndex = 0
+    $chkXAll.Checked = $false
 
     # LastGameBrowse and LastFileBrowse are deliberately NOT reset - see where
     # $state is declared.
@@ -3177,6 +3196,7 @@ function Open-Project([string]$folder) {
     $out = $p.OutDir; if (-not $out -or -not (Test-Path $out)) { $out = Split-Path $disc -Parent }
     $txtOut.Text = $out
 
+    $chkXAll.Checked = $(if ($p.ContainsKey('ExtrasEveryDisc')) { [bool]$p.ExtrasEveryDisc } else { $false })
     # Last, not beside the label: the rows are annotated from the entries, so the
     # list this has to find its medium in does not exist until they are loaded.
     Update-MediaOptions
@@ -3516,7 +3536,8 @@ $btnBuild.Add_Click({
          WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem;
          MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null});
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
-         ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey; Plan=$plan }
+         ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey; Plan=$plan
+         ExtrasEveryDisc=$chkXAll.Checked }
     $btnBuild.Enabled=$false
     $script:BuildDiscTag = ''
     $pbBuild.Value=0; $pbBuild.Visible=$true
@@ -3567,6 +3588,9 @@ foreach ($c in @($txtLabel,$txtIcon,$txtMusic,$txtMan,$txtEx,$txtTitle)) {
 foreach ($c in @($chkBgAsIs,$chkMusic,$chkDivider,$chkWinBorder,$cbPlay,$cbInst,$cbMan,$cbExtra,$cbExit)) {
     $c.Add_CheckedChanged({ Update-ActionButtons })
 }
+# This one moves bytes between "disc 1 only" and "every disc", so it changes the
+# plan as well as the buttons.
+$chkXAll.Add_CheckedChanged({ Update-MediaLabel; Update-ActionButtons })
 foreach ($c in @($cmbSide,$cmbBtnStyle)) {
     $c.Add_SelectedIndexChanged({ Update-ActionButtons })
 }

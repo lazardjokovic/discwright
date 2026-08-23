@@ -38,6 +38,16 @@ between minor versions.
   characters, `THE WITCHER ENHANCED EDITION D2` would otherwise cut back to the
   same id as disc 1, and Windows would show two discs with the same name.
 
+- **"Also put the manual and extras on every disc of a set"**, under the extra
+  content list. Off by default, which keeps the disc-wide manual, Extras folder and
+  loose files on disc 1 alone: copying a 2 GB extras folder onto a five-disc set
+  costs ten. That is the right call for a making-of video and the wrong one for a
+  3 MB PDF, and no single rule covers both — so it is a choice rather than a
+  decision made for you. Greyed out when there is nothing disc-wide to carry.
+
+  A game's **own** manual and extras always travel with that game, on whichever
+  disc it lands, and are unaffected either way.
+
 - **Every row of the target-disc list says what it would cost.** *CD-R 700 MB - will
   not fit*, *DVD9 8.5 GB (dual layer) - 2 discs*, *BD-R 25 GB - 1 disc*. The list is
   where "which disc should I use" gets asked, so it is where the answer belongs.

@@ -306,6 +306,7 @@ Describe 'Recovering from a bad folder choice' -Tag 'Unit' {
         # rebuilds its Items and moves its selection, so a fake would only prove
         # the fake works.
         $script:cmbMedia  = New-Object System.Windows.Forms.ComboBox
+        $script:chkXAll   = [pscustomobject]@{ Checked = $false }
         $script:lblGame   = [pscustomobject]@{ Text = ''; ForeColor = $null }
         $script:cbMan     = [pscustomobject]@{ Checked = $false }
         $script:cbExtra   = [pscustomobject]@{ Checked = $false }
@@ -1086,6 +1087,7 @@ Describe 'Adding and removing entries in the list' {
         $script:btnAddOn    = New-Object System.Windows.Forms.Button
         $script:btnGameEdit = New-Object System.Windows.Forms.Button
         $script:cmbMedia = New-Object System.Windows.Forms.ComboBox
+        $script:chkXAll  = [pscustomobject]@{ Checked=$false }
         $script:lblGame  = [pscustomobject]@{ Text=''; ForeColor=$null }
         $script:cbMan    = [pscustomobject]@{ Checked=$false }
         $script:cbExtra  = [pscustomobject]@{ Checked=$false }
@@ -2577,5 +2579,64 @@ Describe 'What the menu says about the disc it is on' {
         $h = New-Menu @{ DiscNum=1; DiscOf=2 }
         $h.Contains('var capH=c ? c.offsetHeight+10 : 0;') | Should -BeTrue
         $h.Contains('avail=440-capH')                      | Should -BeTrue
+    }
+}
+
+Describe 'A set told to carry its extras on every disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    BeforeAll {
+        $script:EvGames = @(
+            (Get-GameInfo (New-FixtureGame -Slug 'ev_one' -ExeMb 2)),
+            (Get-GameInfo (New-FixtureGame -Slug 'ev_two' -ExeMb 2))
+        )
+        $script:EvOut = Join-Path $script:Sandbox 'build-ev'
+        New-Item -ItemType Directory -Force -Path $script:EvOut | Out-Null
+        $script:EvExtras = Join-Path $script:Sandbox 'ev-extras'
+        New-Item -ItemType Directory -Force -Path $script:EvExtras | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:EvExtras 'manual.txt') -Value 'read me' -Encoding ASCII
+
+        $s = New-BuildSettings -Games $script:EvGames -Label 'Every Disc' -OutDir $script:EvOut
+        $s.ExtrasPath      = $script:EvExtras
+        $s.Buttons         = @('Play','Install','Extras','Exit')
+        $s.MediaKey        = 'CD'
+        $s.ExtrasEveryDisc = $true
+        $s.Plan = @{ Ok=$true; Reason=''; Discs=@(@(0), @(1))
+                     Capacity=(Get-MediaCapacity 'CD'); TooBigName=''; Room=[double]0 }
+        $script:EvIsos = @(Invoke-BuildSet $s $script:LogSink)
+    }
+
+    It 'still writes one ISO per disc' {
+        $script:EvIsos.Count | Should -Be 2
+    }
+
+    Context 'on the discs themselves' -Skip:(-not $script:SevenZip) {
+
+        It 'puts the extras on the later discs too, not just the first' {
+            # The opposite of the default, and the whole point of the option: a
+            # small manual is worth its size on every disc of the set.
+            $d1 = Get-IsoEntries -IsoPath $script:EvIsos[0] -SevenZip $script:SevenZip
+            $d2 = Get-IsoEntries -IsoPath $script:EvIsos[1] -SevenZip $script:SevenZip
+            $d1 | Should -Contain 'Extras\manual.txt'
+            $d2 | Should -Contain 'Extras\manual.txt'
+        }
+    }
+
+    It 'records the choice so a reopened project rebuilds the same set' {
+        $j = Get-Content -Raw (Join-Path $script:EvOut 'discproject.json') | ConvertFrom-Json
+        $j.ExtrasEveryDisc | Should -BeTrue
+        (Import-Project (Join-Path $script:EvOut 'discproject.json')).ExtrasEveryDisc | Should -BeTrue
+    }
+
+    It 'reads a project that predates the option as disc 1 only' {
+        # Every project written before this existed described the old behaviour,
+        # and has to keep describing it.
+        $out = Join-Path $script:Sandbox 'ev-old'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        Save-Project (New-BuildSettings -Games $script:EvGames -Label 'Old' -OutDir $out) $out
+        $f = Join-Path $out 'discproject.json'
+        $j = Get-Content -Raw $f | ConvertFrom-Json
+        $j.PSObject.Properties.Remove('ExtrasEveryDisc')
+        $j | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $f -Encoding UTF8
+        (Import-Project $f).ExtrasEveryDisc | Should -BeFalse
     }
 }

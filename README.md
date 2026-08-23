@@ -101,7 +101,9 @@ produces a set that looks fine and behaves badly:
   position in the list, so one left on the next disc would show up as a game of its own.
 - **The disc-wide manual and extras go on disc 1 only.** Otherwise a 2 GB extras folder
   costs 2 GB on every disc in the set. Anything you attached to a *particular* game
-  travels with that game.
+  travels with that game. Tick **Also put the manual and extras on every disc of a set**
+  in step 5 if you would rather pay that — worth it for a small manual, not for a
+  making-of video.
 
 **A single game bigger than the disc is still refused**, by name, rather than split. That
 one needs the game's own installer to ask for the next disc, which is the next thing on

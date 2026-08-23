@@ -652,6 +652,12 @@ Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script
         $s | Should -Not -Match 'Disc: '
     }
 
+    It 'greys the every-disc option until there is something to put on every disc' {
+        # This project has no manual, no Extras folder and no loose files, so the
+        # option governs nothing and must not look as though it does.
+        Test-CtlEnabled $script:Win 'Also put the manual*' | Should -BeFalse
+    }
+
     It 'says on the row itself how many discs that disc would take' {
         # The dropdown is where "which disc should I use" gets asked, so the
         # count belongs in the list rather than only on the line underneath.

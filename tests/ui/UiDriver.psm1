@@ -351,10 +351,12 @@ function Get-StatusText {
     for ($i = 0; $i -lt $all.Count; $i++) {
         try {
             $n = $all.Item($i).Current.Name
-            # "-> Disc: fits DVD5" is the advice line. "-> 3 discs of DVD5" is
-            # the same line once a target disc is chosen, and it carries no
-            # "Disc: " for the first pattern to catch.
-            if ($n -match 'Disc: |Detected: |setup_\*|already on this disc|no installer|discs? of |disc, |bigger than a ') { $found = $n }
+            # Both shapes of the advice line - "... -> Disc: fits DVD5" and
+            # "... -> 3 discs of DVD5" - are joined by that arrow, and nothing
+            # else in the window contains it. Matching on the words instead was
+            # a trap: a checkbox captioned "...on every disc of a set" matched
+            # "discs? of", and this takes the LAST hit, so the caption won.
+            if ($n -match 'Disc: |Detected: |setup_\*|already on this disc|no installer|   ->   ') { $found = $n }
         } catch {}
     }
     return $found
