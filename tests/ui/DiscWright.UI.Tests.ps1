@@ -645,17 +645,27 @@ Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script
         # Index 1 is CD-R, the first real medium. A gigabyte of games does not
         # fit one, so this is a genuine set and not a relabelled single disc.
         Set-MediaTarget -Win $script:Win -Index 1
-        Get-MediaTargetText $script:Win | Should -Be 'CD-R 700 MB'
+        # The row carries its own answer now, so match the tier it names.
+        Get-MediaTargetText $script:Win | Should -BeLike 'CD-R 700 MB*'
         $s = Get-StatusText $script:Win
         $s | Should -Match 'discs of CD-R 700 MB'
         $s | Should -Not -Match 'Disc: '
+    }
+
+    It 'says on the row itself how many discs that disc would take' {
+        # The dropdown is where "which disc should I use" gets asked, so the
+        # count belongs in the list rather than only on the line underneath.
+        Set-MediaTarget -Win $script:Win -Index 1
+        Get-MediaTargetText $script:Win | Should -Be 'CD-R 700 MB  -  2 discs'
+        Set-MediaTarget -Win $script:Win -Index 2
+        Get-MediaTargetText $script:Win | Should -Be 'DVD5 4.7 GB  -  1 disc'
     }
 
     It 'needs fewer discs when a bigger one is chosen' {
         # Index 2 is DVD5. The same games now fit on one, and a single disc is
         # not called a set.
         Set-MediaTarget -Win $script:Win -Index 2
-        Get-MediaTargetText $script:Win | Should -Be 'DVD5 4.7 GB'
+        Get-MediaTargetText $script:Win | Should -BeLike 'DVD5 4.7 GB*'
         Get-StatusText $script:Win | Should -Match '1 disc, DVD5 4\.7 GB'
     }
 
@@ -667,7 +677,7 @@ Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script
 
     It 'is put back to the automatic setting by New disc' {
         Set-MediaTarget -Win $script:Win -Index 3
-        Get-MediaTargetText $script:Win | Should -Be 'DVD9 8.5 GB (dual layer)'
+        Get-MediaTargetText $script:Win | Should -BeLike 'DVD9 8.5 GB (dual layer)*'
         Invoke-CtlNamed $script:Win 'New disc' | Out-Null
         Read-MessageBox -Win $script:Win -TitleLike 'New disc' -Button 'Yes' | Out-Null
         Start-Sleep -Seconds 1
@@ -693,7 +703,7 @@ Describe 'Reopening a project that was planned as a set' -Tag 'UI' -Skip:(-not $
     AfterAll { Stop-DiscWright $script:App; $script:App = $null }
 
     It 'comes back on the disc it was planned for' {
-        Get-MediaTargetText $script:Win | Should -Be 'CD-R 700 MB'
+        Get-MediaTargetText $script:Win | Should -BeLike 'CD-R 700 MB*'
     }
 
     It 'plans the set again straight away, without touching the dropdown' {

@@ -305,9 +305,24 @@ function Get-MediaTiers {
 # always done, which is recommend a size and build exactly one disc.
 function Get-MediaAutoText { return 'Fit on one disc (recommended)' }
 
-# The dropdown shows names; everything else works in keys.
+# What one row of the dropdown reads, given what the planner made of that tier.
+# The list is where the question "which disc should I use" gets asked, so it is
+# where the answer belongs. No games on the form means no plan and no annotation.
+function Get-MediaOptionText([hashtable]$tier, $plan) {
+    if (-not $plan) { return [string]$tier.Name }
+    if (-not $plan.Ok) { return ("{0}  -  will not fit" -f $tier.Name) }
+    $n = @($plan.Discs).Count
+    return ("{0}  -  {1} disc{2}" -f $tier.Name, $n, $(if ($n -eq 1) { '' } else { 's' }))
+}
+
+# The dropdown shows names; everything else works in keys. Rows carry an
+# annotation once there is something to plan, so a row is matched on the tier
+# name it starts with rather than on the whole string.
 function Get-MediaKeyFromName([string]$name) {
-    foreach ($t in Get-MediaTiers) { if ($t.Name -eq $name) { return $t.Key } }
+    $n = "$name".Trim()
+    foreach ($t in Get-MediaTiers) {
+        if ($n -eq $t.Name -or $n.StartsWith($t.Name + '  ')) { return $t.Key }
+    }
     return ''
 }
 function Get-MediaNameFromKey([string]$key) {
@@ -2291,6 +2306,57 @@ function Get-PlanInputs([hashtable]$payload=$null) {
 # The medium the form is currently pointed at, '' for the automatic setting.
 function Get-SelectedMediaKey { return (Get-MediaKeyFromName ([string]$cmbMedia.SelectedItem)) }
 
+# Rebuilding the rows re-enters through SelectedIndexChanged, and the handler
+# calls straight back here. One flag rather than unhooking the event: unhooking
+# and rehooking a WinForms handler around every list refresh is the kind of thing
+# that eventually leaves it unhooked.
+$script:MediaRowsBusy = $false
+
+# Re-annotate the dropdown for what is on the form now. Selection is restored by
+# KEY, because the text it was selected by has just changed underneath it.
+function Update-MediaOptions {
+    if ($script:MediaRowsBusy) { return }
+    $games = Get-Games
+    $pi    = $(if ($games.Count) { Get-PlanInputs } else { $null })
+    $rows  = @((Get-MediaAutoText))
+    foreach ($t in Get-MediaTiers) {
+        $plan = $null
+        if ($games.Count) { $plan = Get-DiscPlan $games $t.Key $pi.Overhead $pi.FirstDiscExtra }
+        $rows += (Get-MediaOptionText $t $plan)
+    }
+    # Only touch the control when something actually changed. Rewriting the list
+    # on every keystroke would close the dropdown under a user reading it.
+    $now = @($cmbMedia.Items | ForEach-Object { [string]$_ })
+    if (($now -join '|') -eq ($rows -join '|')) { return }
+
+    $key = Get-SelectedMediaKey
+    $script:MediaRowsBusy = $true
+    try {
+        $cmbMedia.BeginUpdate()
+        $cmbMedia.Items.Clear()
+        [void]$cmbMedia.Items.AddRange([object[]]$rows)
+        $idx = 0
+        if ($key) {
+            for ($i = 1; $i -lt $rows.Count; $i++) {
+                if ((Get-MediaKeyFromName $rows[$i]) -eq $key) { $idx = $i; break }
+            }
+        }
+        $cmbMedia.SelectedIndex = $idx
+    } finally {
+        $cmbMedia.EndUpdate()
+        $script:MediaRowsBusy = $false
+    }
+}
+
+# Point the dropdown at a medium by key. Used when a project is reopened: the row
+# text depends on what is on the form, so the key is the only stable handle.
+function Select-MediaKey([string]$key) {
+    for ($i = 0; $i -lt $cmbMedia.Items.Count; $i++) {
+        if ((Get-MediaKeyFromName ([string]$cmbMedia.Items[$i])) -eq $key) { $cmbMedia.SelectedIndex = $i; return }
+    }
+    $cmbMedia.SelectedIndex = 0
+}
+
 # The plan for what is on the form right now, or $null when no target is chosen.
 function Get-CurrentPlan([hashtable]$payload=$null) {
     $key = Get-SelectedMediaKey
@@ -2301,6 +2367,7 @@ function Get-CurrentPlan([hashtable]$payload=$null) {
 
 function Update-MediaLabel {
     $games = Get-Games
+    Update-MediaOptions
     if ($games.Count -eq 0) {
         # Removing the last entry has to clear this line, not leave it alone.
         # Returning early left the previous disc's summary sitting under an empty
@@ -3053,7 +3120,7 @@ function Open-Project([string]$folder) {
     # false for every project ever saved and the target disc was silently dropped
     # on reopen. Found by hand-testing the round trip, which no test covered.
     $mk = $(if ($p.ContainsKey('MediaKey')) { [string]$p.MediaKey } else { '' })
-    $cmbMedia.SelectedItem = $(if ($mk -and (Get-MediaCapacity $mk) -gt 0) { Get-MediaNameFromKey $mk } else { Get-MediaAutoText })
+    if ((Get-MediaCapacity $mk) -le 0) { $mk = '' }
     if ($p.IconPath -and (Test-Path $p.IconPath)) { Set-IconFile $p.IconPath } else { & $log "  icon missing - pick one again." }
 
     $chkMenu.Checked = $p.Menu
@@ -3088,6 +3155,12 @@ function Open-Project([string]$folder) {
 
     $out = $p.OutDir; if (-not $out -or -not (Test-Path $out)) { $out = Split-Path $disc -Parent }
     $txtOut.Text = $out
+
+    # Last, not beside the label: the rows are annotated from the entries, so the
+    # list this has to find its medium in does not exist until they are loaded.
+    Update-MediaOptions
+    Select-MediaKey $mk
+    Update-MediaLabel
 
     $state.Loading = $false
     Update-ActionButtons

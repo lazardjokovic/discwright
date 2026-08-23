@@ -302,6 +302,10 @@ Describe 'Recovering from a bad folder choice' -Tag 'Unit' {
         $script:btnGameEdit = New-Object System.Windows.Forms.Button
 
         # Stand-ins for the plain labels Set-GameEntries and Update-MediaLabel write to.
+        # The dropdown is a real ComboBox rather than a stub object: Update-MediaOptions
+        # rebuilds its Items and moves its selection, so a fake would only prove
+        # the fake works.
+        $script:cmbMedia  = New-Object System.Windows.Forms.ComboBox
         $script:lblGame   = [pscustomobject]@{ Text = ''; ForeColor = $null }
         $script:cbMan     = [pscustomobject]@{ Checked = $false }
         $script:cbExtra   = [pscustomobject]@{ Checked = $false }
@@ -1081,6 +1085,7 @@ Describe 'Adding and removing entries in the list' {
         $script:btnGameDel  = New-Object System.Windows.Forms.Button
         $script:btnAddOn    = New-Object System.Windows.Forms.Button
         $script:btnGameEdit = New-Object System.Windows.Forms.Button
+        $script:cmbMedia = New-Object System.Windows.Forms.ComboBox
         $script:lblGame  = [pscustomobject]@{ Text=''; ForeColor=$null }
         $script:cbMan    = [pscustomobject]@{ Checked=$false }
         $script:cbExtra  = [pscustomobject]@{ Checked=$false }
@@ -2339,6 +2344,28 @@ Describe 'Turning what the dropdown says into what the planner needs' {
             Get-MediaKeyFromName $t.Name | Should -Be $t.Key
             Get-MediaNameFromKey $t.Key  | Should -Be $t.Name
         }
+    }
+
+    It 'annotates a row with the number of discs that medium would take' {
+        $tier = @(Get-MediaTiers | Where-Object { $_.Key -eq 'DVD5' })[0]
+        Get-MediaOptionText $tier @{ Ok=$true; Discs=@(@(0),@(1),@(2)) } | Should -Be 'DVD5 4.7 GB  -  3 discs'
+        Get-MediaOptionText $tier @{ Ok=$true; Discs=@(,@(0,1)) }        | Should -Be 'DVD5 4.7 GB  -  1 disc'
+        Get-MediaOptionText $tier @{ Ok=$false; Discs=@() }              | Should -Be 'DVD5 4.7 GB  -  will not fit'
+    }
+
+    It 'leaves a row bare when there is nothing to plan' {
+        # An empty form has no answer to give, so the list says only what the
+        # media are - which is what it said before any of this existed.
+        $tier = @(Get-MediaTiers | Where-Object { $_.Key -eq 'DVD5' })[0]
+        Get-MediaOptionText $tier $null | Should -Be 'DVD5 4.7 GB'
+    }
+
+    It 'still reads an annotated row back as the medium it names' {
+        # The row text changes with the form; the key it stands for must not.
+        Get-MediaKeyFromName 'DVD5 4.7 GB  -  3 discs'      | Should -Be 'DVD5'
+        Get-MediaKeyFromName 'BD-R 25 GB  -  will not fit'  | Should -Be 'BD25'
+        Get-MediaKeyFromName 'BD-R DL 50 GB (dual layer)  -  1 disc' | Should -Be 'BD50'
+        Get-MediaKeyFromName 'DVD5 4.7 GB'                  | Should -Be 'DVD5'
     }
 
     It 'reads the automatic setting as no medium at all' {

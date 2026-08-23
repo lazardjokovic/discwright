@@ -474,7 +474,7 @@ function Find-MediaTarget {
         makes finding it by text safe.
     #>
     param($Win)
-    foreach ($t in @('Fit on one disc*','CD-R 700 MB','DVD5 4.7 GB','DVD9 8.5 GB*','BD-R 25 GB','BD-R DL 50 GB*','BD-R XL 100 GB')) {
+    foreach ($t in @('Fit on one disc*','CD-R 700 MB*','DVD5 4.7 GB*','DVD9 8.5 GB*','BD-R 25 GB*','BD-R DL 50 GB*','BD-R XL 100 GB*')) {
         $c = Find-Ctl $Win $t -TimeoutSec 1
         if ($c) { return $c }
     }

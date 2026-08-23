@@ -38,6 +38,17 @@ between minor versions.
   characters, `THE WITCHER ENHANCED EDITION D2` would otherwise cut back to the
   same id as disc 1, and Windows would show two discs with the same name.
 
+- **Every row of the target-disc list says what it would cost.** *CD-R 700 MB - will
+  not fit*, *DVD9 8.5 GB (dual layer) - 2 discs*, *BD-R 25 GB - 1 disc*. The list is
+  where "which disc should I use" gets asked, so it is where the answer belongs.
+
+  Rows that cannot work are **not** greyed out, deliberately. The total on the form
+  is the wrong test — a set exists precisely so that twenty gigabytes can go on five
+  DVDs — and what actually rules a medium out is the largest single game plus its
+  add-ons. More to the point, a disabled row explains nothing, while selecting one
+  names the game that will not fit and how big it is. An empty form annotates
+  nothing, since there is no plan to report.
+
 - **The menu names the game whose screen you are on.** A one-game disc used to go
   straight to Play and Install with nothing anywhere saying which game they
   belonged to — fine when there was one disc and the drive label told you, useless
