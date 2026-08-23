@@ -128,11 +128,24 @@ that it refuses by name instead of building something unburnable.
 Three entries, and the line reads:
 
 ```
-2 games + 1 add-on (8.95 GB)   ->   2 discs of DVD9 8.5 GB
+2 games + 1 add-on (9.55 GB)   ->   2 discs of DVD9 8.5 GB
 ```
 
 **Two discs, not three.** Three would mean a group was split and the patch stranded
 away from its game.
+
+What ends up where, for reference:
+
+| Disc | Payload | Contents |
+|---|---|---|
+| 1 | 1.76 GB | Hollow Knight 1.16 GB + its patch 0.61 GB |
+| 2 | 7.79 GB | Alan Wake |
+
+**You do not need to burn anything to run this test** - mounting the ISOs shows
+everything. If you do burn: disc 2 needs a DVD9 (7.79 GB against 7.95 GB usable, so
+0.16 GB spare), but disc 1 is only 1.8 GB and a DVD5 holds it comfortably. DiscWright
+plans the set for one medium; nothing stops you putting a small disc on a smaller
+blank.
 
 ---
 
@@ -152,7 +165,7 @@ Keep the form from test 5 and fill in the rest.
 The line now reads:
 
 ```
-2 games + 1 add-on (8.95 GB) + 5 MB extra   ->   2 discs of DVD9 8.5 GB
+2 games + 1 add-on (9.55 GB) + 5 MB extra   ->   2 discs of DVD9 8.5 GB
 ```
 
 ### 6a. The form says where the extras go
@@ -190,8 +203,8 @@ The bar fills twice; without the tag the second pass reads as the first restarti
 Afterwards `C:\dwtest` holds exactly:
 
 ```
-RETRO NIGHT D1.iso        about 1.2 GB
-RETRO NIGHT D2.iso        about 7.8 GB
+RETRO NIGHT D1.iso        about 1.8 GB   Hollow Knight + its patch
+RETRO NIGHT D2.iso        about 7.8 GB   Alan Wake
 discproject.json          ONE file, describing the whole set
 disc\                     staging, holding disc 2
 ```
