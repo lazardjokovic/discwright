@@ -59,7 +59,9 @@ The launchers run the script with `-ExecutionPolicy Bypass`, the flag Windows re
 1. **Add the games** — each one a GOG folder holding `setup_*.exe` and any `.bin` parts. DiscWright reads the game's name out of the installer and tells you which disc size the lot of them needs. Add as many as fit.
 
    **Add-ons** — DLC, expansions, GOG patches, mods — are added the same way, except you pick the **installer file** rather than a folder, and it can be **any `.exe`**: the `setup_*.exe` rule is how a GOG *game* folder is recognised, and GOG ships patches as `patch_*.exe` while a mod installer is named whatever its author chose. You say which game each one belongs to. Names come from the filename and can be edited, because every GOG patch reports the game's own name as its product name — all four Hollow Knight patches call themselves "Hollow Knight".
-2. **Set the disc label** — what This PC will call the drive.
+2. **Set the disc label** — what This PC will call the drive. **Target disc** next
+   to it is where you say which discs you actually own; leave it on *Fit on one
+   disc* and DiscWright recommends a size and builds one ISO, as it always has.
 3. **Choose an icon** — a `.ico`, or any PNG/JPG and it builds a proper multi-size icon for you.
 4. **Set up the menu** — background artwork, which side the buttons sit on, which buttons you want, optional music, optional title text over the artwork.
 5. **Add extra content** — a manual, an Extras folder, or any loose files and folders to drop at the disc root. Each game can also have a manual and an Extras folder **of its own**, set when you add it; a game with none of its own falls back to the disc-wide ones.
@@ -80,6 +82,32 @@ Every build writes a `discproject.json` next to the ISO. **Open existing disc...
 Two games and two Hollow Knight patches, ending on the menu the disc will show.
 
 The patches sit on Hollow Knight's own screen rather than in the chooser, and they stay **greyed until that game is installed** — applying a patch to nothing produces an error from GOG's installer several clicks later, which is a poor place to learn the rule.
+
+### When it does not fit on one disc
+
+Pick the disc you are going to burn from **Target disc** in step 2 and the line under
+the installer list stops recommending a size and starts telling you how many discs it
+will take: *3 discs of DVD5 4.7 GB*.
+
+Each disc in the set is a whole disc. Own icon, own menu, own label — `BOXED SET D1`,
+`BOXED SET D2` — and its own ISO. There is no disc 2 that is useless without disc 1.
+
+Three rules decide what lands where, and all three exist because the alternative
+produces a set that looks fine and behaves badly:
+
+- **The order on the form is the order on the discs.** Repacking to save a disc would
+  put the game you listed first on disc 2.
+- **A game and its add-ons stay together.** A patch knows its game by that game's
+  position in the list, so one left on the next disc would show up as a game of its own.
+- **The disc-wide manual and extras go on disc 1 only.** Otherwise a 2 GB extras folder
+  costs 2 GB on every disc in the set. Anything you attached to a *particular* game
+  travels with that game. Tick **Also put the manual and extras on every disc of a set**
+  in step 5 if you would rather pay that — worth it for a small manual, not for a
+  making-of video.
+
+**A single game bigger than the disc is still refused**, by name, rather than split. That
+one needs the game's own installer to ask for the next disc, which is the next thing on
+the roadmap.
 
 ### Where to get artwork
 
@@ -144,10 +172,12 @@ Stated up front rather than discovered later.
 - **AutoPlay has to be allowed.** If you have previously told Windows to "Take no action" for this drive, the menu will not launch on insert. Double-clicking the drive still opens it.
 - **Paths longer than 260 characters** will fail during the copy. PowerShell 5.1 limitation.
 - **One music track** per disc, by design. Manuals are per game.
-- **No multi-disc splitting.** Anything larger than a 100 GB BD-R XL is out of scope.
+- **One game bigger than one disc cannot be split.** Several games are packed across a
+  set happily, but a single installer larger than the disc you picked is refused by
+  name. Spreading one game's `.bin` parts across a set is next on the [roadmap](ROADMAP.md).
 - **Disc labels are limited to what Windows can encode.** AutoRun reads `autorun.inf` in the system ANSI codepage and has no Unicode mode at all, so accented Latin characters are fine but Cyrillic, Greek and CJK are not. DiscWright shows you exactly what This PC will display and asks before building one it cannot represent.
 
-Not all of these are permanent — multi-disc splitting in particular is on the [roadmap](ROADMAP.md). [Issues](../../issues) is the place to ask for something, and [CHANGELOG.md](CHANGELOG.md) records what has changed between releases.
+Not all of these are permanent — splitting one game across a set in particular is on the [roadmap](ROADMAP.md). [Issues](../../issues) is the place to ask for something, and [CHANGELOG.md](CHANGELOG.md) records what has changed between releases.
 
 ## Media sizes
 

@@ -9,6 +9,109 @@ between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- **A disc set, when the games do not fit on one disc.** Step 2 has a new
+  **Target disc** dropdown. Leave it on *Fit on one disc* and nothing changes:
+  DiscWright recommends a size and builds exactly one ISO, byte for byte as
+  before. Choose the disc you actually own — CD-R through BD-R XL — and it packs
+  the games onto as many discs as it takes.
+
+  Each disc in a set is a complete disc in its own right: its own icon, its own
+  menu, its own label. `WITCHER + HK D1`, `WITCHER + HK D2`, one ISO each. There
+  is no disc 2 that only makes sense with disc 1 in the drawer.
+
+  **The order on the form is the order on the discs.** A packer that reordered
+  games to save a disc would produce a set whose disc 2 holds the game you put
+  first, and the menu numbers follow the list. Saving one disc is worth less than
+  a set that matches what is on screen.
+
+  **A game and its add-ons always travel together.** An add-on knows which game it
+  belongs to by that game's position in the list, so a patch stranded on the next
+  disc would come out as a game of its own in the menu.
+
+  **The disc-wide manual and extras ride on disc 1 only.** Copying them onto every
+  disc would multiply gigabytes of bonus content by the size of the set. A game's
+  own manual and extras go wherever that game goes.
+
+  The volume id gets the disc number reserved before the name is truncated: at 16
+  characters, `THE WITCHER ENHANCED EDITION D2` would otherwise cut back to the
+  same id as disc 1, and Windows would show two discs with the same name.
+
+- **"Also put the manual and extras on every disc of a set"**, under the extra
+  content list. Off by default, which keeps the disc-wide manual, Extras folder and
+  loose files on disc 1 alone: copying a 2 GB extras folder onto a five-disc set
+  costs ten. That is the right call for a making-of video and the wrong one for a
+  3 MB PDF, and no single rule covers both — so it is a choice rather than a
+  decision made for you. Greyed out when there is nothing disc-wide to carry.
+
+  A game's **own** manual and extras always travel with that game, on whichever
+  disc it lands, and are unaffected either way.
+
+  **The form says where they land**, since the option sits in step 5 and governs
+  step 4 as well. Once the build becomes a set, the two labels in step 4 read
+  *Manual file (disc 1)* and *Extras folder (disc 1)*, and step 5's heading reads
+  *copied to disc 1 of the set*. They go back to their plain wording on a single
+  disc, and when the option is ticked — the checkbox says so in words directly
+  underneath, and repeating it three times is noise.
+
+- **Every row of the target-disc list says what it would cost.** *CD-R 700 MB - will
+  not fit*, *DVD9 8.5 GB (dual layer) - 2 discs*, *BD-R 25 GB - 1 disc*. The list is
+  where "which disc should I use" gets asked, so it is where the answer belongs.
+
+  Rows that cannot work are **not** greyed out, deliberately. The total on the form
+  is the wrong test — a set exists precisely so that twenty gigabytes can go on five
+  DVDs — and what actually rules a medium out is the largest single game plus its
+  add-ons. More to the point, a disabled row explains nothing, while selecting one
+  names the game that will not fit and how big it is. An empty form annotates
+  nothing, since there is no plan to report.
+
+- **The menu names the game whose screen you are on.** A one-game disc used to go
+  straight to Play and Install with nothing anywhere saying which game they
+  belonged to — fine when there was one disc and the drive label told you, useless
+  across a set where every disc shares an icon and a background. The chooser had
+  the same gap: it lists the games, but the screen you land on after picking one
+  did not name it.
+
+  A disc that belongs to a set also says which one it is, under the game's name.
+  The caption is measured rather than assumed, so the existing shrink-to-fit rule
+  keeps a crowded screen inside the window.
+
+### Changed
+
+- **A payload too big for any single disc no longer just refuses.** It says to
+  pick the disc you are going to burn, because that is now an answer.
+- **A refusal says how big the offending game is.** *"Alan Wake alone is bigger
+  than a DVD5"* sat on a line beginning *"2 games (8.94 GB)"* and read as though
+  the 8.94 was the figure that would not fit. It now reads *"Alan Wake is 7.79 GB
+  on its own, too big for a DVD5 4.7 GB"*.
+- **The advice line no longer runs off its own end.** A refusal naming a long game
+  measured 642px against a 640px label and lost its last word — *"too big for a DVD9
+  8.5 GB (dual"*. Prose now uses the short form of each medium (`DVD9 8.5 GB`, not
+  `DVD9 8.5 GB (dual layer)`), the label is 15px wider, and it ends a line it cannot
+  fit with an ellipsis rather than a half-word, with the whole line on the tooltip.
+  The dropdown keeps the full names — a row has the width to itself.
+- **The BUILD button knows about the whole set.** It asked whether `RETRO NIGHT.iso`
+  existed — a name a set never writes — so a folder holding the finished set still
+  read *BUILD ISO*, and the tooltip promised to write a file that would never appear.
+  It now reads *REBUILD ISO* when any disc of the set is already there, and says how
+  many: *"Rebuild the set - 2 of 2 already there"*. The button and the confirmation
+  dialog now work this out through one shared function, which is why they had drifted
+  apart in the first place.
+- **The progress line says which disc of the set is being written.** A set runs
+  the bar from nothing to full once per disc, and with nothing naming the disc the
+  second pass read as the first one having started over.
+- The project file is at schema 5, which records the target disc. Anything older
+  reads back as *Fit on one disc*, which is what those projects always were.
+
+### Still not handled
+
+- **One game bigger than one disc.** Spreading a single installer's `.bin` parts
+  across a set is a different problem: GOG's installer asks for the next part
+  itself, which makes a real "insert disc 2" possible, and that is worth doing
+  properly rather than bolting on. Until then, a set is refused with the name of
+  the game that will not fit.
+
 ## [0.4.1] — 2026-08-23
 
 ### Fixed

@@ -15,13 +15,61 @@ feature only creates pressure to cram things in to justify it.
 
 ## Next
 
-**Multi-disc splitting.** The largest thing still outstanding, and the one most likely to
-be asked for next: anything bigger than a single disc is a known limitation today. It was
-requested twice, independently, within hours of the first release. Needs a splitting
-strategy, a volume label convention, and a menu that can ask for disc 2 — which is,
-admittedly, most of what made the original experience feel like the original experience.
+**Splitting one game across a set.** Half of multi-disc splitting shipped: several games
+are now packed onto as many discs as they need. What is left is the harder and better
+half — a single installer larger than one disc.
+
+This turns out to be more promising than expected. GOG's installers are Inno Setup with
+disk spanning switched on: run one without a `.bin` part beside it and it raises
+*"Installer needs the next part (.BIN) file"* with a path box, rather than failing. It
+also runs from a temp copy of itself, so ejecting disc 1 mid-install is safe, and it
+defaults the path to the installer's own folder — so a set that keeps the same layout on
+every disc may need nothing more than a disc swap and OK.
+
+Needs: parts distributed across the set, a menu that explains the swap, Install disabled
+on the continuation discs, and a check that the default path really does resolve after a
+swap. That last one is testable by mounting two ISOs to the same drive letter in turn, no
+burning required.
+
+**What this depends on, and it is worth stating plainly.** DiscWright would not cut
+anything up — GOG already ships a large game as numbered `.bin` parts, and all this
+feature does is put different existing parts on different discs. Nothing is sliced,
+joined or modified. So the whole idea rests on GOG continuing to split its installers
+the way it does today. Were they ever to switch to a single enormous file per game,
+there would be nothing left to distribute and the feature would stop applying to new
+downloads.
+
+That looks safe rather than lucky. Measured across six games from four publishers,
+1 GB to 137 GB, every one slices at about 4 GB:
+
+```
+Baldur's Gate 3   137.0 GB   33 parts   4.15 GB each
+Cyberpunk 2077    113.1 GB   28 parts   4.04 GB each
+The Witcher         9.48 GB   3 parts   4.00 / 4.00 / 1.48
+Dead Space          8.13 GB   3 parts   3.91 / 3.91 / 0.29
+Alan Wake           7.79 GB   2 parts   4.00 / 3.79
+Hollow Knight       1.16 GB   1 file    nothing to split
+```
+
+There is a reason it holds. 4 GiB is the largest file FAT32 can store, Inno Setup has
+`DiskSliceSize` precisely for that, and GOG sets it just under the line. It is a
+deliberate constraint rather than a habit, which makes it unlikely to change quietly.
+
+The practical consequence is that **one slice is the smallest thing that can move**.
+A 100 GB game is roughly 25 pieces, so two BD-R XLs or six BD-Rs. Whether a disc takes
+one piece or two depends on the exact slice size rather than the tier: two of Dead
+Space's 3.91 GB parts fit a DVD9's 7.95 GB, two 4.00 GB parts do not.
+
+If a game ever did arrive as one indivisible file, nothing breaks - the planner treats a
+slice as an atom, so it would refuse by name exactly as it refuses The Witcher on a DVD5
+today.
 
 ## Delivered
+
+**Several games across a disc set** — the first half of multi-disc splitting, requested
+twice within hours of the first release. Say which disc you own and the games are packed
+onto as many as it takes, in the order they sit on the form, with each game's add-ons
+kept alongside it and every disc standing on its own.
 
 **More than one installer on a disc** — shipped in 0.3.0, and it was the most-asked-for
 thing on this page. Several games on one disc with a chooser in the menu; DLC, expansions,
@@ -33,6 +81,26 @@ being the *game* on a disc. Add-ons accept any `.exe`, but detecting a game stil
 finding a `setup_*.exe` — see *Installers that are not from GOG* under Considering.
 
 ## Later
+
+**Say which blank each disc in a set actually needs.** A set is planned against one
+medium, so every disc is assumed to be the same size — and the last disc of a set is
+usually nowhere near full. Building Hollow Knight and Alan Wake for DVD9 today gives a
+1.8 GB disc and a 7.8 GB one, and the first of those wastes most of an expensive blank
+for no reason.
+
+DiscWright already knows each disc's payload, so it can simply say: *disc 1, 1.8 GB, a
+DVD5 will do; disc 2, 7.8 GB, needs a DVD9*. Nothing about the packing changes. It is a
+line of advice, and it costs one pass over a plan that has already been computed.
+
+The bigger version of this — telling DiscWright how many blanks of each size you own and
+letting it pack accordingly — is deliberately **not** the plan. It turns a simple problem
+into bin packing with heterogeneous bins, it needs a real inventory in the interface, and
+on the cases tried it changes which disc things land on without changing how many discs
+or which blanks get used. Advice gets nearly all of the benefit for almost none of it.
+
+Worth doing after splitting one game across a set, not before: a single game sliced at
+4 GB is where the waste becomes routine. One 4.00 GB slice on a DVD9 leaves 3.95 GB
+unused on every disc in the set, and a DVD5 would have been the right blank throughout.
 
 **Artwork without the detour through an image editor.** Two requests that meet in the
 middle. One: fetch the game's icon and cover art automatically rather than making you hunt

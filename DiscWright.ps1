@@ -280,21 +280,76 @@ function Get-AddOnInfo([string]$exePath) {
     return $info
 }
 
-# Recommend the smallest media that fits the payload (usable capacities, GiB).
+# Every disc size DiscWright knows about, smallest first (usable capacities, GiB).
+# One table rather than a ladder of magic numbers, because two features now read
+# the same figures: the advice line under the installer list, and the splitter
+# that packs a set.
+#
+# An 80-minute CD-R is 360,000 sectors of 2048 bytes = 0.686 GiB; 0.68 leaves a
+# little room for the filesystem. Worth having as its own tier rather than
+# rounding up to DVD: the sub-700 MB back catalogue is exactly the audience for
+# a tool about authentic period discs, and telling someone to put a 1998 game
+# on a DVD gets the whole premise wrong.
+function Get-MediaTiers {
+    return @(
+        @{ Key='CD';   Gib=0.68; Name='CD-R 700 MB';                Short='CD-R 700 MB';    RecText='fits CD-R 700 MB' },
+        @{ Key='DVD5'; Gib=4.37; Name='DVD5 4.7 GB';                Short='DVD5 4.7 GB';    RecText='fits DVD5 4.7 GB (single layer)' },
+        @{ Key='DVD9'; Gib=7.95; Name='DVD9 8.5 GB (dual layer)';   Short='DVD9 8.5 GB';    RecText='needs DVD9 8.5 GB (dual layer)' },
+        @{ Key='BD25'; Gib=23.3; Name='BD-R 25 GB';                 Short='BD-R 25 GB';     RecText='too big for DVD - needs BD-R 25 GB' },
+        @{ Key='BD50'; Gib=46.6; Name='BD-R DL 50 GB (dual layer)'; Short='BD-R DL 50 GB';  RecText='needs BD-R DL 50 GB (dual layer)' },
+        @{ Key='BDXL'; Gib=93.0; Name='BD-R XL 100 GB';             Short='BD-R XL 100 GB'; RecText='needs BD-R XL 100 GB' }
+    )
+}
+
+# The first entry in the target-disc list: carry on doing what DiscWright has
+# always done, which is recommend a size and build exactly one disc.
+function Get-MediaAutoText { return 'Fit on one disc (recommended)' }
+
+# What one row of the dropdown reads, given what the planner made of that tier.
+# The list is where the question "which disc should I use" gets asked, so it is
+# where the answer belongs. No games on the form means no plan and no annotation.
+function Get-MediaOptionText([hashtable]$tier, $plan) {
+    if (-not $plan) { return [string]$tier.Name }
+    if (-not $plan.Ok) { return ("{0}  -  will not fit" -f $tier.Name) }
+    $n = @($plan.Discs).Count
+    return ("{0}  -  {1} disc{2}" -f $tier.Name, $n, $(if ($n -eq 1) { '' } else { 's' }))
+}
+
+# The dropdown shows names; everything else works in keys. Rows carry an
+# annotation once there is something to plan, so a row is matched on the tier
+# name it starts with rather than on the whole string.
+function Get-MediaKeyFromName([string]$name) {
+    $n = "$name".Trim()
+    foreach ($t in Get-MediaTiers) {
+        if ($n -eq $t.Name -or $n.StartsWith($t.Name + '  ')) { return $t.Key }
+    }
+    return ''
+}
+function Get-MediaNameFromKey([string]$key) {
+    foreach ($t in Get-MediaTiers) { if ($t.Key -ieq $key) { return $t.Name } }
+    return (Get-MediaAutoText)
+}
+# The same medium, minus the "(dual layer)" note. The dropdown has a row to
+# itself and can afford the full name; a sentence sharing one line with the
+# payload total and a game's title cannot.
+function Get-MediaShortFromKey([string]$key) {
+    foreach ($t in Get-MediaTiers) { if ($t.Key -ieq $key) { return $t.Short } }
+    return (Get-MediaAutoText)
+}
+
+# Usable bytes for one disc of the named medium, or 0 for a key nothing recognises.
+function Get-MediaCapacity([string]$key) {
+    foreach ($t in Get-MediaTiers) { if ($t.Key -ieq $key) { return [double]$t.Gib * 1GB } }
+    return [double]0
+}
+
+# Recommend the smallest media that fits the payload.
 function Get-MediaRec([double]$bytes) {
     $gib = $bytes/1GB
-    # An 80-minute CD-R is 360,000 sectors of 2048 bytes = 0.686 GiB; 0.68 leaves a
-    # little room for the filesystem. Worth having as its own tier rather than
-    # rounding up to DVD: the sub-700 MB back catalogue is exactly the audience for
-    # a tool about authentic period discs, and telling someone to put a 1998 game
-    # on a DVD gets the whole premise wrong.
-    if     ($gib -le 0.68) { return @{ Fit=$true;  Text='fits CD-R 700 MB' } }
-    elseif ($gib -le 4.37) { return @{ Fit=$true;  Text='fits DVD5 4.7 GB (single layer)' } }
-    elseif ($gib -le 7.95) { return @{ Fit=$true;  Text='needs DVD9 8.5 GB (dual layer)' } }
-    elseif ($gib -le 23.3) { return @{ Fit=$true;  Text='too big for DVD - needs BD-R 25 GB' } }
-    elseif ($gib -le 46.6) { return @{ Fit=$true;  Text='needs BD-R DL 50 GB (dual layer)' } }
-    elseif ($gib -le 93.0) { return @{ Fit=$true;  Text='needs BD-R XL 100 GB' } }
-    else                   { return @{ Fit=$false; Text=("too big for one disc ({0:N1} GB) - multi-disc not supported" -f $gib) } }
+    foreach ($t in Get-MediaTiers) {
+        if ($gib -le $t.Gib) { return @{ Fit=$true; Key=$t.Key; Text=$t.RecText } }
+    }
+    return @{ Fit=$false; Key=''; Text=("too big for one disc ({0:N1} GB) - split it across a set" -f $gib) }
 }
 
 # Total bytes of a mixed list of files and folders.
@@ -308,6 +363,163 @@ function Get-ItemsSize($items) {
         } else { $sum += (Get-Item -LiteralPath $i).Length }
     }
     return $sum
+}
+
+# Packs a set in the order the entries already sit in on the form.
+#
+# Deliberately next-fit rather than any cleverer packing: the list on the form is
+# the order the user arranged, and the menu numbers follow it. A packer that
+# reordered games to save a disc would produce a set whose disc 2 holds the game
+# they put first. Saving one disc is worth less than a set that matches what is
+# on screen.
+#
+# $sizes is one figure per installer, in list order. $overhead is what every disc
+# carries no matter what else is on it - menu, icon, background, music.
+# $firstDiscExtra is the disc-wide manual and extras, which ride on disc 1 alone
+# rather than being copied onto every disc in the set.
+#
+# Refuses, rather than guessing, when a single installer is larger than a whole
+# disc. Spreading one game's parts across several discs is a different problem
+# with a different answer, and quietly producing a set that cannot install the
+# game would be worse than saying so.
+function Split-DiscSet([double[]]$sizes, [double]$capacity, [double]$overhead, [double]$firstDiscExtra) {
+    $usable = $capacity - $overhead
+    if ($usable -le 0) { return @{ Ok=$false; Reason='capacity'; TooBig=-1; Room=[double]0 } }
+    if ($firstDiscExtra -gt $usable) { return @{ Ok=$false; Reason='extras'; TooBig=-1; Room=$usable } }
+
+    $discs = @()
+    $cur   = @()
+    $used  = [double]0
+    $room  = $usable - $firstDiscExtra
+    for ($i = 0; $i -lt @($sizes).Count; $i++) {
+        $sz = [double]$sizes[$i]
+        if ($sz -gt $usable) { return @{ Ok=$false; Reason='entry'; TooBig=$i; Room=$usable } }
+        # Disc 1 gives up room to the disc-wide extras, so the first entry can be
+        # too big for disc 1 and still fit every disc after it. Let disc 1 carry
+        # the extras on their own rather than refuse a set that packs fine.
+        if ($cur.Count -eq 0 -and $sz -gt $room) { $discs += ,@(); $room = $usable }
+        if ($cur.Count -gt 0 -and ($used + $sz) -gt $room) {
+            $discs += ,@($cur)
+            $cur = @(); $used = [double]0; $room = $usable
+        }
+        $cur  += $i
+        $used += $sz
+    }
+    if ($cur.Count -gt 0 -or $discs.Count -eq 0) { $discs += ,@($cur) }
+    return @{ Ok=$true; Reason=''; TooBig=-1; Room=$usable; Discs=$discs }
+}
+
+# What every disc in a set carries no matter which games land on it: the icon at
+# the root and again inside AUTORUN, the composed background, the menu itself and
+# autorun.inf. Counted twice for the icon and the background because each ships
+# in two places, or is recomposed into a PNG that can come out larger than the
+# JPG it was made from. Erring high costs a little headroom; erring low produces
+# a disc that will not burn.
+function Get-DiscOverheadBytes([hashtable]$s) {
+    $b  = [double]2MB
+    $b += 2 * (Get-ItemsSize @($s.IconPath))
+    $b += 2 * (Get-ItemsSize @($s.BgPath))
+    $b += (Get-ItemsSize @($s.MusicFile))
+    return $b
+}
+
+# Works out how many discs the set needs and what goes on each, in entry indices.
+# Packs by group rather than by entry so a game and its add-ons stay together.
+function Get-DiscPlan([array]$entries, [string]$mediaKey, [double]$overhead, [double]$firstDiscExtra) {
+    $cap = Get-MediaCapacity $mediaKey
+    if ($cap -le 0) { return @{ Ok=$false; Reason='media'; Discs=@(); Capacity=[double]0; TooBigName=''; Room=[double]0 } }
+
+    $groups = Get-EntryGroups $entries
+    $sizes  = @()
+    foreach ($g in $groups) {
+        $t = [double]0
+        foreach ($i in $g) { $t += [double]$entries[$i].TotalBytes }
+        $sizes += $t
+    }
+
+    $r = Split-DiscSet ([double[]]$sizes) $cap $overhead $firstDiscExtra
+    if (-not $r.Ok) {
+        # Name the game rather than the group index. "Group 2 is too big" is a
+        # sentence about the packer; the user needs the sentence about the disc.
+        $nm = ''; $nb = [double]0
+        if ($r.Reason -eq 'entry' -and $r.TooBig -ge 0) {
+            $nm = [string]$entries[$groups[$r.TooBig][0]].GameName
+            $nb = [double]$sizes[$r.TooBig]
+        }
+        return @{ Ok=$false; Reason=$r.Reason; Discs=@(); Capacity=$cap; TooBigName=$nm; TooBigBytes=$nb; Room=$r.Room }
+    }
+
+    $discs = @()
+    foreach ($d in $r.Discs) {
+        $idx = @()
+        foreach ($gi in $d) { foreach ($e in $groups[$gi]) { $idx += $e } }
+        $discs += ,@($idx)
+    }
+    return @{ Ok=$true; Reason=''; Discs=$discs; Capacity=$cap; TooBigName=''; TooBigBytes=[double]0; Room=$r.Room }
+}
+
+# How the plan reads on the line under the installer list, and in the dialog that
+# refuses a build. One sentence, no jargon: the number of discs is the answer to
+# the only question being asked.
+function Get-DiscPlanText([hashtable]$plan, [string]$mediaKey) {
+    $name = Get-MediaShortFromKey $mediaKey
+    if (-not $plan.Ok) {
+        switch ($plan.Reason) {
+            # The game's OWN size, not the total on the form. "Alan Wake alone is
+            # bigger than a DVD5" sat on a line beginning "2 games (8.94 GB)", and
+            # read as though the 8.94 was what would not fit. Naming the figure
+            # that is actually too big settles it in the same breath.
+            'entry'  { return ("{0} is {1:N2} GB, too big for a {2}" -f $plan.TooBigName, ([double]$plan.TooBigBytes/1GB), $name) }
+            'extras' { return ("the extra content alone is bigger than a $name") }
+            'media'  { return ("no such disc") }
+            default  { return ("cannot be split onto $name") }
+        }
+    }
+    $n = @($plan.Discs).Count
+    if ($n -le 1) { return "1 disc, $name" }
+    return "$n discs of $name"
+}
+
+# Every label a build of $discs discs will use, in order. One disc gives one
+# plain label, which is what a single-disc build has always written.
+function Get-SetLabels([string]$label, [int]$discs) {
+    $n = $(if ($discs -lt 1) { 1 } else { $discs })
+    return ,@(1..$n | ForEach-Object { Get-DiscSetLabel $label $_ $n })
+}
+
+# What a build is about to write, and how much of it is already there. The BUILD
+# button and the confirmation dialog both ask this - separately, they drifted: the
+# dialog listed "RETRO NIGHT D1.iso" and "D2.iso" while the button was still
+# asking whether "RETRO NIGHT.iso" existed, a name a set never writes, so it read
+# BUILD ISO over a folder holding the whole set.
+function Get-BuildTargets([string]$outDir, [string]$label, [int]$discs) {
+    $labels = Get-SetLabels $label $discs
+    $isos   = @($labels | ForEach-Object { Get-IsoPath $outDir $_ })
+    $have   = @($labels | Where-Object { Test-AlreadyBuilt $outDir $_ })
+    return @{ Labels=@($labels); Isos=$isos; Existing=$have.Count; Count=@($labels).Count }
+}
+
+# What This PC calls each disc in a set. A set of one keeps the plain label:
+# a disc with no set around it should not announce itself as "D1".
+function Get-DiscSetLabel([string]$label, [int]$n, [int]$of) {
+    $base = "$label".Trim()
+    if ($of -le 1) { return $base }
+    return ("{0} D{1}" -f $base, $n)
+}
+
+# The ISO9660 volume identifier is 16 characters, and New-Iso folds anything that
+# is not alphanumeric to an underscore. Truncating the finished label at 16 would
+# cut the disc number off the end of a long name and hand every disc in the set
+# the same volume id, so the number is reserved first and the name takes what is
+# left over.
+function Get-VolumeLabel([string]$label, [int]$n, [int]$of) {
+    $sfx  = if ($of -le 1) { '' } else { "_D$n" }
+    $base = (("$label" -replace '[^A-Za-z0-9_]','_')).Trim('_')
+    $max  = 16 - $sfx.Length
+    if ($max -lt 1) { $max = 1 }
+    if ($base.Length -gt $max) { $base = $base.Substring(0, $max) }
+    if ([string]::IsNullOrEmpty($base)) { $base = 'DISC' }
+    return ($base + $sfx)
 }
 
 # Every disc used to ship its icon as "disc.ico". Explorer caches icon bitmaps
@@ -437,6 +649,51 @@ function Get-MenuGames([array]$entries) {
         $out += @{ Name=$e.GameName; MatchName=$e.GameName
                    Setup=(Get-DiscEntrySetup $entries $i); AddOns=@($addOns)
                    Manual=$man; Extras=$ext }
+    }
+    return ,@($out)
+}
+
+# A game and everything filed under it travel together when a set is packed.
+# Splitting them would strand an add-on on a disc whose ParentIndex points at a
+# game that is not on it, and the menu would show the patch as a game of its own.
+# Uses the same test for "is this really an add-on" as the menu does, so an
+# orphan - an add-on whose parent was removed - forms its own group, exactly as
+# it becomes its own entry in the menu.
+function Get-EntryGroups([array]$entries) {
+    $groups = @()
+    for ($i = 0; $i -lt $entries.Count; $i++) {
+        $e = $entries[$i]
+        $p = [int]$e.ParentIndex
+        $isAddOn = ($e.Kind -eq 'AddOn') -and $p -ge 0 -and $p -lt $entries.Count -and
+                   $p -ne $i -and $entries[$p].Kind -ne 'AddOn'
+        if ($isAddOn) { continue }
+        $g = @($i)
+        for ($j = 0; $j -lt $entries.Count; $j++) {
+            $a = $entries[$j]
+            if ($j -eq $i -or $a.Kind -ne 'AddOn') { continue }
+            if ([int]$a.ParentIndex -ne $i) { continue }
+            $g += $j
+        }
+        $groups += ,@($g)
+    }
+    return ,@($groups)
+}
+
+# One disc's slice of the list, renumbered so the disc stands on its own. Both
+# the folder names and the menu key off an entry's position, and ParentIndex has
+# to point inside the slice - left pointing at the full list it would either miss
+# or, worse, land on a different game.
+function Get-DiscEntries([array]$entries, [int[]]$indices) {
+    $map = @{}
+    for ($k = 0; $k -lt @($indices).Count; $k++) { $map[[int]$indices[$k]] = $k }
+    $out = @()
+    foreach ($i in @($indices)) {
+        $src  = $entries[[int]$i]
+        $copy = @{}
+        foreach ($key in $src.Keys) { $copy[$key] = $src[$key] }
+        $p = [int]$src.ParentIndex
+        $copy.ParentIndex = $(if ($map.ContainsKey($p)) { $map[$p] } else { -1 })
+        $out += $copy
     }
     return ,@($out)
 }
@@ -745,6 +1002,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   #mute{position:absolute;right:44px;top:8px;width:28px;height:26px;line-height:26px;text-align:center;color:#e6ebef;
     font-family:'Segoe UI',Arial;font-size:15px;background:#0a1519;border:1px solid #16545a;cursor:pointer;display:none;}
   #mute:hover{color:#fff;border-color:#00bec8;}
+  /* The caption above the buttons: which game this screen is for, and which disc
+     of the set you are holding. Same nowrap+ellipsis rule as the buttons - game
+     names are user data and a long one must not push the panel around. */
+  #cap{width:250px;margin:0 0 10px 0;font-family:'Segoe UI',Arial;}
+  #cap .capn{display:block;font-size:17px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+    color:#dfe9ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #cap .capd{display:block;font-size:12px;letter-spacing:2px;color:#8fa5ad;margin-top:3px;}
   #status{position:absolute;left:%%PANELLEFT%%px;bottom:18px;width:250px;text-align:center;display:none;
     color:#9fb3ba;font-size:12px;line-height:17px;}
 </style>
@@ -756,6 +1020,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var BTNS=%%BTNS%%;         // which of Play/Install/Manual/Extras/Exit the disc was built with
   var MANUAL="%%MANUAL%%"; var MUSIC="%%MUSIC%%";
   var PREVIEW=%%PREVIEW%%;   // true only for the app's Preview - see refreshButtons
+  var DISCNUM=%%DISCNUM%%, DISCOF=%%DISCOF%%;   // 1 and 1 unless this disc is part of a set
   // Which screen is showing: -1 is the game chooser, otherwise an index into GAMES.
   // A disc holding one game has nothing to choose, so it opens on that game and
   // never shows a Back button.
@@ -871,14 +1136,27 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   }
   // The panel is centred on however many buttons this screen happens to have, so
   // a three-game chooser and a six-button game screen both sit in the middle.
-  function setPanel(h){
+  // "Disc 2 of 3", or nothing at all on a disc that is not part of a set.
+  function discLine(){ return DISCOF>1 ? '<span class="capd">Disc '+DISCNUM+' of '+DISCOF+'</span>' : ''; }
+  // Game names arrive already escaped for a JS string literal, which turns "<"
+  // into < - so they cannot open a tag when they land in innerHTML here.
+  function capFor(name){
+    var d=discLine();
+    if(!name && !d) return "";
+    return (name ? '<span class="capn">'+name+'</span>' : '') + d;
+  }
+  function setPanel(h,cap){
     var p=document.getElementById("pan");
-    p.innerHTML=h;
+    p.innerHTML=(cap ? '<div id="cap">'+cap+'</div>' : '')+h;
+    var c=document.getElementById("cap");
+    // Measured rather than assumed: the caption is one line or two depending on
+    // whether this disc belongs to a set.
+    var capH=c ? c.offsetHeight+10 : 0;
     var a=p.getElementsByTagName("A"), n=a.length;
     // 46px buttons with 12px between them fill a 480px window at eight, and a
     // game with four add-ons already needs eight. Rather than let the ninth draw
     // off the bottom edge where nothing can reach it, the buttons shrink to fit.
-    var bh=46, gap=12, avail=440;
+    var bh=46, gap=12, avail=440-capH;
     if(n*bh+(n-1)*gap > avail){
       gap = 8;
       bh = Math.floor((avail-(n-1)*gap)/n);
@@ -888,7 +1166,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         a[i].style.height=bh+"px"; a[i].style.lineHeight=bh+"px"; a[i].style.marginBottom=gap+"px";
       }
     }
-    var block=n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
+    var block=capH+n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
     if(t<10) t=10;
     p.style.top=t+"px";
     setupHover();
@@ -898,7 +1176,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var h="";
     for(var i=0;i<GAMES.length;i++){ h+=btnHtml("btn_game_"+i,"play",GAMES[i].n,"pick("+i+")",GAMES[i].n); }
     if(has("Exit")) h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
-    setPanel(h);
+    // The chooser lists the games itself, so it needs only the disc line.
+    setPanel(h,capFor(""));
   }
   function renderGame(){
     var g=GAMES[cur], h="";
@@ -915,7 +1194,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(has("Extras"))  h+=btnHtml("btn_Extras","","Extras","doExtras()","");
     if(GAMES.length>1) h+=btnHtml("btn_Back","","Back","goBack()","Back to the game list");
     if(has("Exit"))    h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
-    setPanel(h);
+    setPanel(h,capFor(g.n));
   }
   function show(){ if(tasks) renderTasks(); else if(cur<0) renderChooser(); else renderGame(); }
   function pick(i){ cur=i; show(); }
@@ -1077,7 +1356,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     for(var i=0;i<tasks.length;i++){ h+=btnHtml("btn_task_"+i,"play",tasks[i].n,"playTask("+i+")",tasks[i].n); }
     h+=btnHtml("btn_TaskBack","","Back","tasksBack()","Back to "+GAMES[cur].n);
     if(has("Exit")) h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
-    setPanel(h);
+    setPanel(h,capFor(GAMES[cur].n));
   }
   function playTask(i){ var t=tasks[i]; launchExe(t.p,t.a,t.w); }
   function tasksBack(){ tasks=null; show(); }
@@ -1127,6 +1406,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
                  Replace('%%BTNBORDER%%',$btnBorder).
                  Replace('%%TITLE%%',(ConvertTo-HtmlText $cfg.GameName)).
                  Replace('%%PANELLEFT%%',"$panelLeft").
+                 Replace('%%DISCNUM%%',"$([int]$(if($cfg.DiscNum){$cfg.DiscNum}else{1}))").
+                 Replace('%%DISCOF%%', "$([int]$(if($cfg.DiscOf){$cfg.DiscOf}else{1}))").
                  Replace('%%GAMES%%',$gamesJs).
                  Replace('%%BTNS%%',$btnsJs).
                  Replace('%%MANUAL%%',(ConvertTo-JsString $cfg.ManualFile)).
@@ -1258,7 +1539,10 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # wrote it - two different things, deliberately two different keys. This
         # merge is why: the schema went to 2 for the games list while the app was
         # independently at 0.2.0, and one field could not have said both.
-        Version      = 4
+        # Version 5 adds MediaKey - which disc the set was planned for. Absent in
+        # anything older, which reads back as the automatic setting and so builds
+        # the single disc those projects always described.
+        Version      = 5
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -1299,6 +1583,8 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         ManualPath   = $s.ManualPath
         ExtrasPath   = $s.ExtrasPath
         ExtraItems   = @($s.ExtraItems)
+        MediaKey     = [string]$s.MediaKey
+        ExtrasEveryDisc = [bool]$s.ExtrasEveryDisc
         OutDir       = $outDir
     }
     $o | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outDir $PROJECT_FILE) -Encoding UTF8
@@ -1343,6 +1629,10 @@ function Import-Project([string]$jsonPath) {
             WindowBorder=[bool]$j.WindowBorder
             ButtonStyle=$(if($j.ButtonStyle){$j.ButtonStyle}else{'Bordered'})
             MusicFile=$j.MusicFile; Buttons=@($j.Buttons); ManualPath=$j.ManualPath; ExtrasPath=$j.ExtrasPath
+            # Version 5. Absent in anything older, which is the automatic setting -
+            # and the automatic setting is what those projects always described.
+            MediaKey=$(if ($j.PSObject.Properties.Name -contains 'MediaKey') { [string]$j.MediaKey } else { '' })
+            ExtrasEveryDisc=$(if ($j.PSObject.Properties.Name -contains 'ExtrasEveryDisc') { [bool]$j.ExtrasEveryDisc } else { $false })
             ExtraItems=@($j.ExtraItems); OutDir=$j.OutDir; Origin='project file'
         }
     } catch { return $null }
@@ -1609,7 +1899,8 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         }
         New-MenuHta @{ GameName=$s.Label; Games=$menuGames; Buttons=$s.Buttons;
                        MusicFile=$musicName; ManualFile=$manualName; PanelSide=$s.PanelSide; IconName=$icoName
-                       WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle } (Join-Path $stage 'AUTORUN\menu.hta')
+                       WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle
+                       DiscNum=$(if($s.DiscNum){[int]$s.DiscNum}else{1}); DiscOf=$(if($s.DiscOf){[int]$s.DiscOf}else{1}) } (Join-Path $stage 'AUTORUN\menu.hta')
     }
 
     # extra content - copied to the disc root, keeping its own name
@@ -1638,13 +1929,63 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 
     & $log "Building ISO (UDF, this can take ~30-60s for a full game)..."
     $iso = Get-IsoPath $s.OutDir $s.Label
-    New-Iso $stage $iso $s.Label $progress
+    # A disc in a set gets its volume id worked out with the disc number reserved,
+    # so a long name cannot truncate away the one part that tells two discs apart.
+    $vol = $(if ($s.VolumeLabel) { [string]$s.VolumeLabel } else { Get-VolumeLabel $s.Label 1 1 })
+    New-Iso $stage $iso $vol $progress
     & $log ("DONE.  ISO: {0}  ({1:N2} GB)" -f $iso, ((Get-Item $iso).Length/1GB))
 
-    Save-Project $s $s.OutDir
-    & $log "Saved $PROJECT_FILE - use 'Open existing disc project' to edit and rebuild."
+    # One project file describes the whole set, so the caller saves it once after
+    # the last disc rather than each disc overwriting it with its own slice.
+    if (-not $s.SkipProject) {
+        Save-Project $s $s.OutDir
+        & $log "Saved $PROJECT_FILE - use 'Open existing disc project' to edit and rebuild."
+    }
     if ($tmpKeep -and (Test-Path $tmpKeep)) { Remove-Item $tmpKeep -Recurse -Force -EA SilentlyContinue }
     return $iso
+}
+
+# Builds every disc the plan calls for, one after another, and returns the ISOs.
+# A plan of one disc goes straight through to Invoke-Build unchanged - a single
+# disc must come out byte for byte the way it always has, label and all.
+function Invoke-BuildSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$null, [scriptblock]$onDisc=$null) {
+    $plan = $s.Plan
+    # Returned as a plain array, not the ",@()" wrapper used for values that get
+    # assigned straight across: every caller here wraps the result in @(), and a
+    # wrapper on top of that nests the list one level deeper than anyone reads.
+    if (-not $plan -or -not $plan.Ok -or @($plan.Discs).Count -le 1) {
+        return @(Invoke-Build $s $log $progress)
+    }
+
+    $all  = @($s.Games)
+    $n    = @($plan.Discs).Count
+    $isos = @()
+    for ($d = 0; $d -lt $n; $d++) {
+        $num = $d + 1
+        if ($onDisc) { & $onDisc $num $n }
+        & $log ''
+        & $log "===== Disc $num of $n ====="
+        $ds = @{}
+        foreach ($k in $s.Keys) { $ds[$k] = $s[$k] }
+        $ds.Games       = Get-DiscEntries $all @($plan.Discs[$d])
+        $ds.Label       = Get-DiscSetLabel $s.Label $num $n
+        $ds.VolumeLabel = Get-VolumeLabel  $s.Label $num $n
+        $ds.SkipProject = $true
+        $ds.DiscNum     = $num
+        $ds.DiscOf      = $n
+        # The disc-wide manual, extras and loose files ride on disc 1 alone unless
+        # the form says otherwise: copying them onto every disc multiplies bonus
+        # content by the size of the set - the wrong default for a 2 GB making-of
+        # and the right one for a 3 MB manual, hence the choice.
+        # A game carries its OWN manual and extras with it, wherever it lands.
+        if ($num -ne 1 -and -not $s.ExtrasEveryDisc) { $ds.ManualPath = $null; $ds.ExtrasPath = $null; $ds.ExtraItems = @() }
+        $isos += (Invoke-Build $ds $log $progress)
+    }
+
+    Save-Project $s $s.OutDir
+    & $log ''
+    & $log "Saved $PROJECT_FILE - use 'Open existing disc project' to edit and rebuild the set."
+    return @($isos)
 }
 
 # =================== UI ===================
@@ -1831,10 +2172,28 @@ $btnFolder  =AddBtn 'Add game...' 545 68  110
 $btnAddOn   =AddBtn 'Add-on...'   545 96  110
 $btnGameEdit=AddBtn 'Change...'   545 124 110
 $btnGameDel =AddBtn 'Remove'      545 152 110
-$lblGame=AddLabel '' 15 180 640; $lblGame.ForeColor=[System.Drawing.Color]::DimGray
+$lblGame=AddLabel '' 15 180 655; $lblGame.ForeColor=[System.Drawing.Color]::DimGray
+# A game's title is user data and a refusal quotes it in full, so no width is
+# wide enough for every case. AutoEllipsis ends a line that will not fit with
+# "..." instead of cutting a word in half, and the tooltip carries the rest.
+$lblGame.AutoSize=$false; $lblGame.AutoEllipsis=$true
 
-AddLabel '2)  Disc label (shown in This PC):' 15 210 520 | Out-Null
+AddLabel '2)  Disc label (shown in This PC):' 15 210 300 | Out-Null
 $txtLabel=AddText 15 232 300
+
+# Which disc you are actually going to burn. Until now DiscWright only ever
+# recommended a size; a payload past the biggest disc was simply refused. Saying
+# which medium you own turns that into a set: the games are packed onto as many
+# discs as it takes, in the order they sit in the list.
+AddLabel 'Target disc:' 330 210 200 | Out-Null
+$cmbMedia=New-Object System.Windows.Forms.ComboBox
+$cmbMedia.DropDownStyle='DropDownList'
+$cmbMedia.Location=New-Object System.Drawing.Point(330,232)
+$cmbMedia.Size=New-Object System.Drawing.Size(240,24)
+[void]$cmbMedia.Items.Add((Get-MediaAutoText))
+foreach ($t in Get-MediaTiers) { [void]$cmbMedia.Items.Add($t.Name) }
+$cmbMedia.SelectedIndex=0
+$form.Controls.Add($cmbMedia)
 
 AddLabel '3)  Disc icon (.ico, or .png/.jpg to auto-convert):' 15 268 520 | Out-Null
 $txtIcon=AddText 15 290 520
@@ -1886,8 +2245,13 @@ $chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Wind
 $lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,250); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
 $cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,247); $cmbBtnStyle.Size=New-Object System.Drawing.Size(130,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
 
-$grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,668); $grpX.Size=New-Object System.Drawing.Size(645,118); $form.Controls.Add($grpX)
-$lstExtra=New-Object System.Windows.Forms.ListBox; $lstExtra.Location=New-Object System.Drawing.Point(15,22); $lstExtra.Size=New-Object System.Drawing.Size(480,100); $lstExtra.SelectionMode='MultiExtended'; $lstExtra.HorizontalScrollbar=$true; $grpX.Controls.Add($lstExtra)
+$grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,668); $grpX.Size=New-Object System.Drawing.Size(645,124); $form.Controls.Add($grpX)
+$lstExtra=New-Object System.Windows.Forms.ListBox; $lstExtra.Location=New-Object System.Drawing.Point(15,22); $lstExtra.Size=New-Object System.Drawing.Size(480,72); $lstExtra.SelectionMode='MultiExtended'; $lstExtra.HorizontalScrollbar=$true; $grpX.Controls.Add($lstExtra)
+# The disc-wide manual, Extras folder and loose files ride on disc 1 of a set,
+# because copying a 2 GB extras folder onto five discs costs ten. That is the
+# right default and the wrong answer for a 3 MB PDF, so it is a choice. A game's
+# OWN manual and extras always travel with that game and are not affected.
+$chkXAll=New-Object System.Windows.Forms.CheckBox; $chkXAll.Text='Also put the manual and extras on every disc of a set'; $chkXAll.Location=New-Object System.Drawing.Point(15,98); $chkXAll.Size=New-Object System.Drawing.Size(400,22); $grpX.Controls.Add($chkXAll)
 $btnXFile=New-Object System.Windows.Forms.Button; $btnXFile.Text='Add files...'; $btnXFile.Location=New-Object System.Drawing.Point(505,22); $btnXFile.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXFile)
 $btnXDir =New-Object System.Windows.Forms.Button; $btnXDir.Text='Add folder...'; $btnXDir.Location=New-Object System.Drawing.Point(505,52); $btnXDir.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDir)
 $btnXDel =New-Object System.Windows.Forms.Button; $btnXDel.Text='Remove'; $btnXDel.Location=New-Object System.Drawing.Point(505,82); $btnXDel.Size=New-Object System.Drawing.Size(120,24); $grpX.Controls.Add($btnXDel)
@@ -1906,10 +2270,17 @@ $pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Obje
 $lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
 
 $buildWatch = New-Object System.Diagnostics.Stopwatch
+# Prefixed onto the elapsed line while a set builds. A set runs the progress bar
+# from 0 to 100 once per disc, and with nothing saying which disc that was, the
+# second pass reads as the first one having restarted.
+$script:BuildDiscTag = ''
 
 $log = { param($m)
     $txtLog.AppendText($m + "`r`n")
-    if ($buildWatch.IsRunning) { $lblElapsed.Text = 'Elapsed  ' + (Format-Elapsed $buildWatch.Elapsed) }
+    if ($buildWatch.IsRunning) {
+        $lblElapsed.Text = $(if ($script:BuildDiscTag) { $script:BuildDiscTag + '  ' + (Format-Elapsed $buildWatch.Elapsed) }
+                             else                     { 'Elapsed  ' + (Format-Elapsed $buildWatch.Elapsed) })
+    }
     [System.Windows.Forms.Application]::DoEvents()
 }
 
@@ -1921,7 +2292,11 @@ $buildProgress = { param($done,$total)
     if ($total -gt 0) {
         $v = [int](1000.0 * $done / $total); if ($v -gt 1000) { $v = 1000 }
         $pbBuild.Value = $v
-        $lblElapsed.Text = 'ISO  {0}%   {1}' -f [int]($v/10), (Format-Elapsed $buildWatch.Elapsed)
+        # The label has 160px before it runs under the log box, so the disc tag
+        # replaces the word ISO rather than being added in front of it: a set
+        # shows "D1/2  45%  0:32" in the same width "ISO  45%   0:32" needed.
+        $lblElapsed.Text = $(if ($script:BuildDiscTag) { '{0}  {1}%   {2}' -f $script:BuildDiscTag, [int]($v/10), (Format-Elapsed $buildWatch.Elapsed) }
+                             else                     { 'ISO  {0}%   {1}'  -f [int]($v/10), (Format-Elapsed $buildWatch.Elapsed) })
     }
     [System.Windows.Forms.Application]::DoEvents()
 }
@@ -1941,17 +2316,126 @@ function Get-PayloadBytes {
     # not go through that path.
     $installer = [double]0
     foreach ($g in $games) { $installer += [double]$g.TotalBytes }
+    # Split out rather than summed in one go: the music rides on every disc of a
+    # set because every disc has its own menu, while the manual, the extras and
+    # the loose files ride on disc 1 alone. Adding them together would charge the
+    # wrong disc for one of them.
     $side = @()
     $side += @($state.ExtraItems)
     if ($cbMan.Checked   -and $state.ManualPath) { $side += $state.ManualPath }
     if ($cbExtra.Checked -and $state.ExtrasPath) { $side += $state.ExtrasPath }
-    if ($chkMusic.Checked -and $state.MusicFile) { $side += $state.MusicFile }
-    $extra = [double](Get-ItemsSize $side)
-    return @{ Installer=$installer; Extra=$extra; Total=($installer + $extra) }
+    $discExtra = [double](Get-ItemsSize $side)
+    $music     = [double]0
+    if ($chkMusic.Checked -and $state.MusicFile) { $music = [double](Get-ItemsSize @($state.MusicFile)) }
+    return @{ Installer=$installer; Extra=($discExtra + $music); DiscExtra=$discExtra; Music=$music
+              Total=($installer + $discExtra + $music) }
 }
+
+# The overhead figure and the disc-1 figure the planner needs, read off the form.
+# Takes an already-measured payload when the caller has one: Get-PayloadBytes
+# walks the extras folder, and the advice line runs on every keystroke in the
+# disc label. Measuring the same folder twice per character is not free.
+function Get-PlanInputs([hashtable]$payload=$null) {
+    $p = $(if ($payload) { $payload } else { Get-PayloadBytes })
+    $o = Get-DiscOverheadBytes @{ IconPath=$state.IconPath; BgPath=$state.BgPath
+                                  MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null}) }
+    # On every disc they are overhead, like the menu. On disc 1 alone they are a
+    # one-off charge against the first disc's room. Same bytes, different bill.
+    if ($chkXAll.Checked) { return @{ Overhead=($o + $p.DiscExtra); FirstDiscExtra=[double]0; Payload=$p } }
+    return @{ Overhead=$o; FirstDiscExtra=$p.DiscExtra; Payload=$p }
+}
+
+# The medium the form is currently pointed at, '' for the automatic setting.
+function Get-SelectedMediaKey { return (Get-MediaKeyFromName ([string]$cmbMedia.SelectedItem)) }
+
+# Rebuilding the rows re-enters through SelectedIndexChanged, and the handler
+# calls straight back here. One flag rather than unhooking the event: unhooking
+# and rehooking a WinForms handler around every list refresh is the kind of thing
+# that eventually leaves it unhooked.
+$script:MediaRowsBusy = $false
+
+# Re-annotate the dropdown for what is on the form now. Selection is restored by
+# KEY, because the text it was selected by has just changed underneath it.
+function Update-MediaOptions {
+    if ($script:MediaRowsBusy) { return }
+    $games = Get-Games
+    $pi    = $(if ($games.Count) { Get-PlanInputs } else { $null })
+    $rows  = @((Get-MediaAutoText))
+    foreach ($t in Get-MediaTiers) {
+        $plan = $null
+        if ($games.Count) { $plan = Get-DiscPlan $games $t.Key $pi.Overhead $pi.FirstDiscExtra }
+        $rows += (Get-MediaOptionText $t $plan)
+    }
+    # Only touch the control when something actually changed. Rewriting the list
+    # on every keystroke would close the dropdown under a user reading it.
+    $now = @($cmbMedia.Items | ForEach-Object { [string]$_ })
+    if (($now -join '|') -eq ($rows -join '|')) { return }
+
+    $key = Get-SelectedMediaKey
+    $script:MediaRowsBusy = $true
+    try {
+        $cmbMedia.BeginUpdate()
+        $cmbMedia.Items.Clear()
+        [void]$cmbMedia.Items.AddRange([object[]]$rows)
+        $idx = 0
+        if ($key) {
+            for ($i = 1; $i -lt $rows.Count; $i++) {
+                if ((Get-MediaKeyFromName $rows[$i]) -eq $key) { $idx = $i; break }
+            }
+        }
+        $cmbMedia.SelectedIndex = $idx
+    } finally {
+        $cmbMedia.EndUpdate()
+        $script:MediaRowsBusy = $false
+    }
+}
+
+# Point the dropdown at a medium by key. Used when a project is reopened: the row
+# text depends on what is on the form, so the key is the only stable handle.
+function Select-MediaKey([string]$key) {
+    for ($i = 0; $i -lt $cmbMedia.Items.Count; $i++) {
+        if ((Get-MediaKeyFromName ([string]$cmbMedia.Items[$i])) -eq $key) { $cmbMedia.SelectedIndex = $i; return }
+    }
+    $cmbMedia.SelectedIndex = 0
+}
+
+# The plan for what is on the form right now, or $null when no target is chosen.
+function Get-CurrentPlan([hashtable]$payload=$null) {
+    $key = Get-SelectedMediaKey
+    if (-not $key) { return $null }
+    $pi = Get-PlanInputs $payload
+    return (Get-DiscPlan (Get-Games) $key $pi.Overhead $pi.FirstDiscExtra)
+}
+
+# When a set is planned, say on the form where the disc-wide content lands. Only
+# the surprising case is annotated: unticked means disc 1 alone and nothing else
+# on the form says so, while ticked is spelled out on the checkbox itself.
+#
+# $script: on every control, deliberately. The entry dialog declares its own
+# $lblMan for "Its own manual:", and PowerShell's dynamic scoping would hand
+# that one to this function whenever it is reached from inside that dialog.
+function Update-DiscWideLabels($plan) {
+    if (-not $script:lblMan -or -not $script:lblEx -or -not $script:grpX) { return }
+    $isSet = ($plan -and $plan.Ok -and @($plan.Discs).Count -gt 1)
+    $note  = ($isSet -and -not $script:chkXAll.Checked)
+    $man  = $(if ($note) { 'Manual file (disc 1):' }   else { 'Manual file:' })
+    $ext  = $(if ($note) { 'Extras folder (disc 1):' } else { 'Extras folder:' })
+    $cap  = $(if ($note) { '5)  Extra content (copied to disc 1 of the set)' }
+             else        { '5)  Extra content (copied to the disc root as-is)' })
+    if ($script:lblMan.Text -ne $man) { $script:lblMan.Text = $man }
+    if ($script:lblEx.Text  -ne $ext) { $script:lblEx.Text  = $ext }
+    if ($script:grpX.Text   -ne $cap) { $script:grpX.Text   = $cap }
+}
+
+# How many discs the current form comes to. Cached by Update-MediaLabel rather than
+# recomputed by Update-ActionButtons: planning walks the extras folder, and the
+# buttons refresh on every keystroke in the disc label.
+$script:PlannedDiscs = 1
 
 function Update-MediaLabel {
     $games = Get-Games
+    $script:PlannedDiscs = 1
+    Update-MediaOptions
     if ($games.Count -eq 0) {
         # Removing the last entry has to clear this line, not leave it alone.
         # Returning early left the previous disc's summary sitting under an empty
@@ -1959,6 +2443,7 @@ function Update-MediaLabel {
         # the form accounted for any more.
         $lblGame.Text = ''
         $lblGame.ForeColor = [System.Drawing.Color]::DimGray
+        Update-DiscWideLabels $null
         return
     }
     $g = $games[0]
@@ -1980,8 +2465,23 @@ function Update-MediaLabel {
                "$part ($(Format-Size $p.Installer))"
            }
     if ($p.Extra -gt 0) { $txt += " + $(Format-Size $p.Extra) extra" }
-    $lblGame.Text = "$txt   ->   Disc: $($m.Text)"
-    $lblGame.ForeColor = if($m.Fit){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
+    $key  = Get-SelectedMediaKey
+    if ($key) {
+        # A target disc turns the advice line into a plan: how many discs, of
+        # what. The recommendation is no longer the interesting number once the
+        # user has told DiscWright which discs are actually in the drawer.
+        $pi   = Get-PlanInputs $p
+        $plan = Get-DiscPlan $games $key $pi.Overhead $pi.FirstDiscExtra
+        if ($plan.Ok) { $script:PlannedDiscs = @($plan.Discs).Count }
+        $lblGame.Text = "$txt   ->   $(Get-DiscPlanText $plan $key)"
+        $lblGame.ForeColor = if($plan.Ok){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
+        Update-DiscWideLabels $plan
+    } else {
+        $lblGame.Text = "$txt   ->   Disc: $($m.Text)"
+        $lblGame.ForeColor = if($m.Fit){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
+        Update-DiscWideLabels $null
+    }
+    Set-StatusTip $lblGame.Text
     # A missing installer part outranks the media advice - it is the thing that
     # makes the disc useless, so it takes the label and the colour.
     # With several games the label can only carry one warning, so take the first -
@@ -1993,7 +2493,15 @@ function Update-MediaLabel {
         $w = $warned[0]
         $lblGame.Text = if ($games.Count -eq 1) { $w.Warning } else { "$($w.GameName): $($w.Warning)" }
         $lblGame.ForeColor = if($w.MissingParts.Count -gt 0){[System.Drawing.Color]::Firebrick}else{[System.Drawing.Color]::DarkOrange}
+        Set-StatusTip $lblGame.Text
     }
+}
+
+# The advice line is clipped when it will not fit, so the whole of it has to be
+# reachable somewhere. Guarded because the logic tests exercise Update-MediaLabel
+# with stand-in controls and no tooltip provider.
+function Set-StatusTip([string]$text) {
+    if ($tips -and $lblGame -is [System.Windows.Forms.Control]) { $tips.SetToolTip($lblGame, $text) }
 }
 
 # The log box is for build progress. A click that cannot do its job needs an
@@ -2055,6 +2563,8 @@ function Test-FormDirty {
     if (-not $chkMenu.Checked -or -not $chkWinBorder.Checked) { return $true }
     if ($chkBgAsIs.Checked -or $chkTitle.Checked -or $chkMusic.Checked -or $chkDivider.Checked) { return $true }
     if ($cmbSide.SelectedIndex -ne 0 -or $cmbBtnStyle.SelectedIndex -ne 0) { return $true }
+    if ($cmbMedia.SelectedIndex -ne 0) { return $true }
+    if ($chkXAll.Checked) { return $true }
     if (-not $cbPlay.Checked -or -not $cbInst.Checked -or -not $cbExit.Checked) { return $true }
     if ($cbMan.Checked -or $cbExtra.Checked) { return $true }
     return $false
@@ -2079,13 +2589,18 @@ function Update-ActionButtons {
     # The button names the file it is about to write, so REBUILD always means "this
     # exact file is going to be overwritten" rather than "there is something in that
     # folder somewhere".
-    $isoNow = Get-IsoPath $t $txtLabel.Text.Trim()
-    if (Test-AlreadyBuilt $t $txtLabel.Text.Trim()) {
+    $bt     = Get-BuildTargets $t $txtLabel.Text.Trim() $script:PlannedDiscs
+    $isoNow = $(if (@($bt.Isos).Count) { $bt.Isos[0] } else { '' })
+    $names  = ($bt.Isos | Where-Object { $_ } | ForEach-Object { Split-Path $_ -Leaf }) -join ', '
+    if ($bt.Existing -gt 0) {
         $btnBuild.Text = 'REBUILD ISO'
-        $tips.SetToolTip($btnBuild, "Replace $(Split-Path $isoNow -Leaf) and rebuild the disc folder")
+        $tips.SetToolTip($btnBuild, $(if ($bt.Count -gt 1) { "Rebuild the set - $($bt.Existing) of $($bt.Count) already there: $names" }
+                                      else { "Replace $names and rebuild the disc folder" }))
     } else {
         $btnBuild.Text = 'BUILD ISO'
-        $tips.SetToolTip($btnBuild, $(if($isoNow){"Write $(Split-Path $isoNow -Leaf) and the disc folder"}else{'Build the disc folder and ISO'}))
+        $tips.SetToolTip($btnBuild, $(if (-not $names) { 'Build the disc folder and ISO' }
+                                      elseif ($bt.Count -gt 1) { "Write $($bt.Count) ISOs and the disc folder: $names" }
+                                      else { "Write $names and the disc folder" }))
     }
 
     # Divider and panel side are painted into bg.png by New-Background, which is
@@ -2110,6 +2625,12 @@ function Update-ActionButtons {
     $tips.SetToolTip($txtTitle, $(if(-not $composites){$whyOff}
                                   elseif(-not $chkTitle.Checked){'Tick "Show title" first'}
                                   else{'Leave blank to use the disc label from step 2'}))
+
+    # Nothing disc-wide to carry means nothing for this to decide about.
+    $hasWide = ($cbMan.Checked -and $state.ManualPath) -or ($cbExtra.Checked -and $state.ExtrasPath) -or ($lstExtra.Items.Count -gt 0)
+    $chkXAll.Enabled = [bool]$hasWide
+    $tips.SetToolTip($chkXAll, $(if(-not $hasWide){'Add a manual, an Extras folder or some extra content first'}
+                                 else{'Off: they go on disc 1 of a set. On: every disc carries its own copy, which costs their size per disc. A game''s own manual and extras always travel with that game either way.'}))
 }
 
 # Renders the CURRENT settings into a temp folder so look changes can be checked
@@ -2592,6 +3113,8 @@ function Reset-Form {
 
     $null = Set-GameEntries @()
     $lblGame.Text = ''; $lblGame.ForeColor = [System.Drawing.Color]::DimGray
+    $cmbMedia.SelectedIndex = 0
+    $chkXAll.Checked = $false
 
     # LastGameBrowse and LastFileBrowse are deliberately NOT reset - see where
     # $state is declared.
@@ -2682,6 +3205,16 @@ function Open-Project([string]$folder) {
     # doing it here too means a poisoned project file cannot present one thing in
     # the window and put another on the disc.
     $txtLabel.Text = Remove-ControlChars $p.Label; $state.LabelSeededFrom = $null
+    # A project written before target discs existed has no MediaKey, and a key
+    # this build does not recognise is not worth guessing at either: both fall
+    # back to the automatic setting rather than silently planning a set.
+    #
+    # ContainsKey, not PSObject.Properties: Import-Project hands back a HASHTABLE.
+    # A hashtable's keys are not PSObject properties, so the property test read
+    # false for every project ever saved and the target disc was silently dropped
+    # on reopen. Found by hand-testing the round trip, which no test covered.
+    $mk = $(if ($p.ContainsKey('MediaKey')) { [string]$p.MediaKey } else { '' })
+    if ((Get-MediaCapacity $mk) -le 0) { $mk = '' }
     if ($p.IconPath -and (Test-Path $p.IconPath)) { Set-IconFile $p.IconPath } else { & $log "  icon missing - pick one again." }
 
     $chkMenu.Checked = $p.Menu
@@ -2716,6 +3249,13 @@ function Open-Project([string]$folder) {
 
     $out = $p.OutDir; if (-not $out -or -not (Test-Path $out)) { $out = Split-Path $disc -Parent }
     $txtOut.Text = $out
+
+    $chkXAll.Checked = $(if ($p.ContainsKey('ExtrasEveryDisc')) { [bool]$p.ExtrasEveryDisc } else { $false })
+    # Last, not beside the label: the rows are annotated from the entries, so the
+    # list this has to find its medium in does not exist until they are loaded.
+    Update-MediaOptions
+    Select-MediaKey $mk
+    Update-MediaLabel
 
     $state.Loading = $false
     Update-ActionButtons
@@ -2845,14 +3385,23 @@ $btnBg.Add_Click({ $d=New-FileDialog 'Pick the menu background' 'Images|*.png;*.
 $btnMusic.Add_Click({ $d=New-FileDialog 'Pick the background music' 'Audio|*.mp3;*.wav;*.wma' $txtMusic.Text; if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileName; $txtMusic.Text=$d.FileName; $state.MusicFile=$d.FileName } })
 # Manuals are usually PDF but plenty ship as text or HTML, and the menu just
 # shell-executes whatever it is - nothing in the pipeline needs it to be a PDF.
-$btnMan.Add_Click({ $d=New-FileDialog 'Pick the manual for this disc' 'Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*' $txtMan.Text; if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileName; $txtMan.Text=$d.FileName; $state.ManualPath=$d.FileName; Update-MediaLabel } })
+# Both of these refresh the BUTTONS as well as the advice line. What they set -
+# the disc-wide manual and extras - is what decides whether "put them on every
+# disc" has anything to govern, and that rule lives in Update-ActionButtons.
+# Without this the checkbox sat greyed out with a folder chosen right above it.
+# Add-ExtraItem has said the same thing for the step 5 list since 0.3.0.
+$btnMan.Add_Click({ $d=New-FileDialog 'Pick the manual for this disc' 'Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*' $txtMan.Text; if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileName; $state.ManualPath=$d.FileName; $txtMan.Text=$d.FileName; Update-MediaLabel; Update-ActionButtons } })
 $btnEx.Add_Click({
     # Folder pickers READ the shared fallback but never write it. Only a file pick
     # updates it, so choosing an extras folder cannot quietly move where the icon
     # picker opens next.
     $start = $txtEx.Text.Trim(); if (-not $start) { $start = Get-MediaBrowseFallback }
     $d=New-FolderDialog 'Pick a folder of extras to put on the disc' $start
-    if($d.ShowDialog() -eq 'OK'){ $txtEx.Text=$d.SelectedPath; $state.ExtrasPath=$d.SelectedPath; Update-MediaLabel } })
+    # $state first, box second. Assigning .Text raises TextChanged synchronously,
+    # and that handler runs Update-ActionButtons, which reads $state.ExtrasPath to
+    # decide whether the every-disc option has anything to govern. Written the
+    # other way round it read the value one statement before it was set.
+    if($d.ShowDialog() -eq 'OK'){ $state.ExtrasPath=$d.SelectedPath; $txtEx.Text=$d.SelectedPath; Update-MediaLabel; Update-ActionButtons } })
 $btnOut.Add_Click({ $d=New-FolderDialog 'Pick where the disc folder and the ISO get written' $txtOut.Text.Trim(); if($d.ShowDialog() -eq 'OK'){ $txtOut.Text=$d.SelectedPath } })
 $btnXFile.Add_Click({
     $d=New-FileDialog 'Pick any files to put on the disc' 'All files|*.*' ''
@@ -2944,12 +3493,31 @@ $btnBuild.Add_Click({
     # The media label has always worked out that a payload is too big for any disc,
     # but nothing acted on it - the build ran to completion and handed back an ISO
     # that could never be burned.
+    $mediaKey  = Get-SelectedMediaKey
+    $plan      = Get-CurrentPlan $pay
+    $discCount = $(if ($plan -and $plan.Ok) { @($plan.Discs).Count } else { 1 })
+
+    if ($plan -and -not $plan.Ok) {
+        # A chosen medium that cannot hold the set is a different failure from a
+        # payload past the biggest disc there is, and it needs its own sentence.
+        $mName = Get-MediaNameFromKey $mediaKey
+        $why   = switch ($plan.Reason) {
+            'entry'  { ("{0} on its own is {1:N2} GB, and a {2} holds {3:N2} GB." -f $plan.TooBigName,
+                        ([double]$plan.TooBigBytes/1GB), $mName, ($plan.Room/1GB)) +
+                       "`r`n`r`nSpreading one game's installer across several discs is not something DiscWright can do yet. Choose a larger disc in step 2, or leave that game off this set." }
+            'extras' { "The extra content in step 5 is bigger than one $mName on its own, before any game is added.`r`n`r`nRemove some of it, or choose a larger disc." }
+            default  { "This set cannot be planned for a $mName." }
+        }
+        Deny-Build ("cannot plan a set of $mName - $($plan.Reason).") $why
+        return
+    }
+
     $rec = Get-MediaRec $pay.Total
-    if (-not $rec.Fit) {
+    if (-not $plan -and -not $rec.Fit) {
         Deny-Build ("payload is {0:N1} GB - too big for any single disc." -f ($pay.Total/1GB)) (
             ("This disc would be {0:N1} GB, which is bigger than any single disc DiscWright can write." -f ($pay.Total/1GB)) +
             "`r`n`r`nThe largest supported medium is BD-R XL at 100 GB." +
-            "`r`n`r`nRemove some extra content in step 5, or split the game across several discs by hand.")
+            "`r`n`r`nPick the disc you are going to burn in step 2 and DiscWright will split the games across a set.")
         return
     }
 
@@ -2987,8 +3555,12 @@ $btnBuild.Add_Click({
 
     # A rebuild replaces work that already exists - say exactly what goes.
     $stage      = Join-Path $outDir 'disc'
-    $isoPath    = Get-IsoPath $outDir $txtLabel.Text.Trim()
-    $isoExists  = Test-AlreadyBuilt $outDir $txtLabel.Text.Trim()
+    # Every ISO this build is about to write, so the confirmation can name them
+    # rather than describe "the ISO" and then quietly replace three files.
+    $bt         = Get-BuildTargets $outDir $txtLabel.Text.Trim() $discCount
+    $setIsos    = @($bt.Isos)
+    $isoPath    = $setIsos[0]
+    $isoExists  = ($bt.Existing -gt 0)
     $stageExists = Test-Path $stage
     # Ask before destroying anything - but only about what actually goes. The ISO
     # named by THIS label, and the staging folder. A differently named ISO sitting
@@ -2999,7 +3571,12 @@ $btnBuild.Add_Click({
         $bGames  = Get-Games
         $inPlace = ($bGames.Count -eq 1) -and (Test-SamePath $bGames[0].Folder $stage)
         $isoName = if ($isoPath) { Split-Path $isoPath -Leaf } else { 'the ISO' }
-        if ($isoExists) {
+        $isoList = ($setIsos | ForEach-Object { '  ' + (Split-Path $_ -Leaf) }) -join "`r`n"
+        if ($discCount -gt 1) {
+            $msg = "Build a set of $discCount discs in:`r`n$outDir`r`n`r`nThese will be written:`r`n$isoList"
+            if ($isoExists) { $msg += "`r`n`r`n$($bt.Existing) of them already exist and will be replaced." }
+            $msg += "`r`n`r`nAny other ISO already in this folder is left alone."
+        } elseif ($isoExists) {
             $msg = "Rebuild the disc in:`r`n$outDir`r`n`r`n$isoName already exists and will be replaced."
         } else {
             $msg = "Build the disc in:`r`n$outDir`r`n`r`n$isoName will be written. Any other ISO already in this folder is left alone."
@@ -3021,21 +3598,30 @@ $btnBuild.Add_Click({
          WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem;
          MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null});
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
-         ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim() }
+         ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey; Plan=$plan
+         ExtrasEveryDisc=$chkXAll.Checked }
     $btnBuild.Enabled=$false
+    $script:BuildDiscTag = ''
     $pbBuild.Value=0; $pbBuild.Visible=$true
     $buildWatch.Restart()
     $lblElapsed.Text='Starting...'
     try {
-        $iso=Invoke-Build $s $log $buildProgress
+        $onDisc = { param($num,$of)
+            $script:BuildDiscTag = "D$num/$of"
+            $pbBuild.Value = 0
+            [System.Windows.Forms.Application]::DoEvents()
+        }
+        $isos = @(Invoke-BuildSet $s $log $buildProgress $onDisc)
         $buildWatch.Stop()
         $took = Format-Elapsed $buildWatch.Elapsed
-        $lblElapsed.Text = "Done in $took"
+        $script:BuildDiscTag = ''
+        $lblElapsed.Text = $(if ($isos.Count -gt 1) { "$($isos.Count) discs in $took" } else { "Done in $took" })
         & $log "Total time: $took"
-        [System.Windows.Forms.MessageBox]::Show("Build complete in $took`n`n$iso","DiscWright") | Out-Null
+        $what = $(if ($isos.Count -gt 1) { "$($isos.Count) discs built in $took" } else { "Build complete in $took" })
+        [System.Windows.Forms.MessageBox]::Show(($what + "`n`n" + ($isos -join "`n")),"DiscWright") | Out-Null
     }
     catch {
-        $buildWatch.Stop(); $lblElapsed.Text='Failed'
+        $buildWatch.Stop(); $script:BuildDiscTag = ''; $lblElapsed.Text='Failed'
         & $log ('ERROR: '+$_.Exception.Message); Show-Warn ("The build failed:`r`n`r`n" + $_.Exception.Message)
     }
     finally {
@@ -3064,9 +3650,14 @@ foreach ($c in @($txtLabel,$txtIcon,$txtMusic,$txtMan,$txtEx,$txtTitle)) {
 foreach ($c in @($chkBgAsIs,$chkMusic,$chkDivider,$chkWinBorder,$cbPlay,$cbInst,$cbMan,$cbExtra,$cbExit)) {
     $c.Add_CheckedChanged({ Update-ActionButtons })
 }
+# This one moves bytes between "disc 1 only" and "every disc", so it changes the
+# plan as well as the buttons.
+$chkXAll.Add_CheckedChanged({ Update-MediaLabel; Update-ActionButtons })
 foreach ($c in @($cmbSide,$cmbBtnStyle)) {
     $c.Add_SelectedIndexChanged({ Update-ActionButtons })
 }
+# The target disc changes the answer on the advice line, not only the buttons.
+$cmbMedia.Add_SelectedIndexChanged({ Update-MediaLabel; Update-ActionButtons })
 
 Update-ActionButtons   # start greyed out - nothing to open yet
 Update-GameList        # and the same for Change.../Remove, with an empty list

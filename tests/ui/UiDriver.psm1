@@ -351,7 +351,12 @@ function Get-StatusText {
     for ($i = 0; $i -lt $all.Count; $i++) {
         try {
             $n = $all.Item($i).Current.Name
-            if ($n -match 'Disc: |Detected: |setup_\*|already on this disc|no installer') { $found = $n }
+            # Both shapes of the advice line - "... -> Disc: fits DVD5" and
+            # "... -> 3 discs of DVD5" - are joined by that arrow, and nothing
+            # else in the window contains it. Matching on the words instead was
+            # a trap: a checkbox captioned "...on every disc of a set" matched
+            # "discs? of", and this takes the LAST hit, so the caption won.
+            if ($n -match 'Disc: |Detected: |setup_\*|already on this disc|no installer|   ->   ') { $found = $n }
         } catch {}
     }
     return $found
@@ -459,6 +464,76 @@ function Save-WindowShot {
     $bmp.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
 }
 
+function Find-RowButton {
+    <#  .SYNOPSIS
+        The button sitting on the same row as a given label.
+
+        Several rows have a button called "Browse...", so a name alone picks
+        whichever the enumeration reaches first - which is not stable and is not
+        the one the test means. Rows are, so the label's vertical centre is what
+        identifies it.
+    #>
+    param($Win, [string]$LabelLike, [string]$ButtonLike = 'Browse...', [int]$TimeoutSec = 6)
+    $lbl = Find-Ctl -Root $Win -NameLike $LabelLike -TimeoutSec $TimeoutSec
+    if (-not $lbl) { throw "no label matching '$LabelLike'" }
+    $lr = $lbl.Current.BoundingRectangle
+    $ly = $lr.Y + ($lr.Height / 2)
+    $all = $Win.FindAll($script:UiScope::Descendants, $script:UiAny)
+    for ($i = 0; $i -lt $all.Count; $i++) {
+        $e = $all.Item($i)
+        try {
+            if ($e.Current.Name -notlike $ButtonLike) { continue }
+            $r = $e.Current.BoundingRectangle
+            if ([Math]::Abs(($r.Y + $r.Height / 2) - $ly) -le 8) { return $e }
+        } catch {}
+    }
+    return $null
+}
+
+function Find-MediaTarget {
+    <#  .SYNOPSIS
+        The Target disc dropdown, found by what it currently says.
+
+        Every control in this application comes through UI Automation as a bare
+        Pane with no patterns at all - no ExpandCollapse, no SelectionItem - so
+        the dropdown cannot be driven the way a dropdown normally would be. It is
+        located by its text and worked with the keyboard, like everything else
+        here. The strings it can hold are unique in the window, which is what
+        makes finding it by text safe.
+    #>
+    param($Win)
+    foreach ($t in @('Fit on one disc*','CD-R 700 MB*','DVD5 4.7 GB*','DVD9 8.5 GB*','BD-R 25 GB*','BD-R DL 50 GB*','BD-R XL 100 GB*')) {
+        $c = Find-Ctl $Win $t -TimeoutSec 1
+        if ($c) { return $c }
+    }
+    return $null
+}
+
+function Get-MediaTargetText {
+    <#  .SYNOPSIS What the Target disc dropdown currently reads. #>
+    param($Win)
+    $c = Find-MediaTarget $Win
+    if (-not $c) { return '' }
+    return [string]$c.Current.Name
+}
+
+function Set-MediaTarget {
+    <#  .SYNOPSIS
+        Choose an entry in the Target disc dropdown by its position in the list.
+
+        Absolute, not relative: {HOME} goes to the first entry whatever was
+        selected before, so the same call lands on the same medium no matter what
+        an earlier test left behind.
+    #>
+    param($Win, [int]$Index)
+    $c = Find-MediaTarget $Win
+    if (-not $c) { throw 'the Target disc dropdown is not on the window' }
+    Invoke-Ctl -Ctl $c -SettleMs 300
+    Send-Keys '{HOME}' 150
+    for ($i = 0; $i -lt $Index; $i++) { Send-Keys '{DOWN}' 100 }
+    Send-Keys '{ENTER}' 350
+}
+
 function Clear-AllEntries {
     <#
     .SYNOPSIS
@@ -489,4 +564,5 @@ function Clear-AllEntries {
 Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
-    Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow
+    Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,
+    Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton
