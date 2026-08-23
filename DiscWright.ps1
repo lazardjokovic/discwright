@@ -2388,6 +2388,26 @@ function Get-CurrentPlan([hashtable]$payload=$null) {
     return (Get-DiscPlan (Get-Games) $key $pi.Overhead $pi.FirstDiscExtra)
 }
 
+# When a set is planned, say on the form where the disc-wide content lands. Only
+# the surprising case is annotated: unticked means disc 1 alone and nothing else
+# on the form says so, while ticked is spelled out on the checkbox itself.
+#
+# $script: on every control, deliberately. The entry dialog declares its own
+# $lblMan for "Its own manual:", and PowerShell's dynamic scoping would hand
+# that one to this function whenever it is reached from inside that dialog.
+function Update-DiscWideLabels($plan) {
+    if (-not $script:lblMan -or -not $script:lblEx -or -not $script:grpX) { return }
+    $isSet = ($plan -and $plan.Ok -and @($plan.Discs).Count -gt 1)
+    $note  = ($isSet -and -not $script:chkXAll.Checked)
+    $man  = $(if ($note) { 'Manual file (disc 1):' }   else { 'Manual file:' })
+    $ext  = $(if ($note) { 'Extras folder (disc 1):' } else { 'Extras folder:' })
+    $cap  = $(if ($note) { '5)  Extra content (copied to disc 1 of the set)' }
+             else        { '5)  Extra content (copied to the disc root as-is)' })
+    if ($script:lblMan.Text -ne $man) { $script:lblMan.Text = $man }
+    if ($script:lblEx.Text  -ne $ext) { $script:lblEx.Text  = $ext }
+    if ($script:grpX.Text   -ne $cap) { $script:grpX.Text   = $cap }
+}
+
 function Update-MediaLabel {
     $games = Get-Games
     Update-MediaOptions
@@ -2398,6 +2418,7 @@ function Update-MediaLabel {
         # the form accounted for any more.
         $lblGame.Text = ''
         $lblGame.ForeColor = [System.Drawing.Color]::DimGray
+        Update-DiscWideLabels $null
         return
     }
     $g = $games[0]
@@ -2428,9 +2449,11 @@ function Update-MediaLabel {
         $plan = Get-DiscPlan $games $key $pi.Overhead $pi.FirstDiscExtra
         $lblGame.Text = "$txt   ->   $(Get-DiscPlanText $plan $key)"
         $lblGame.ForeColor = if($plan.Ok){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
+        Update-DiscWideLabels $plan
     } else {
         $lblGame.Text = "$txt   ->   Disc: $($m.Text)"
         $lblGame.ForeColor = if($m.Fit){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
+        Update-DiscWideLabels $null
     }
     Set-StatusTip $lblGame.Text
     # A missing installer part outranks the media advice - it is the thing that

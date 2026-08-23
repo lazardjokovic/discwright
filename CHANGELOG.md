@@ -48,6 +48,13 @@ between minor versions.
   A game's **own** manual and extras always travel with that game, on whichever
   disc it lands, and are unaffected either way.
 
+  **The form says where they land**, since the option sits in step 5 and governs
+  step 4 as well. Once the build becomes a set, the two labels in step 4 read
+  *Manual file (disc 1)* and *Extras folder (disc 1)*, and step 5's heading reads
+  *copied to disc 1 of the set*. They go back to their plain wording on a single
+  disc, and when the option is ticked — the checkbox says so in words directly
+  underneath, and repeating it three times is noise.
+
 - **Every row of the target-disc list says what it would cost.** *CD-R 700 MB - will
   not fit*, *DVD9 8.5 GB (dual layer) - 2 discs*, *BD-R 25 GB - 1 disc*. The list is
   where "which disc should I use" gets asked, so it is where the answer belongs.

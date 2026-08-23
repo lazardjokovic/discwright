@@ -307,6 +307,9 @@ Describe 'Recovering from a bad folder choice' -Tag 'Unit' {
         # the fake works.
         $script:cmbMedia  = New-Object System.Windows.Forms.ComboBox
         $script:chkXAll   = [pscustomobject]@{ Checked = $false }
+        $script:lblMan    = [pscustomobject]@{ Text = 'Manual file:' }
+        $script:lblEx     = [pscustomobject]@{ Text = 'Extras folder:' }
+        $script:grpX      = [pscustomobject]@{ Text = '5)  Extra content (copied to the disc root as-is)' }
         $script:lblGame   = [pscustomobject]@{ Text = ''; ForeColor = $null }
         $script:cbMan     = [pscustomobject]@{ Checked = $false }
         $script:cbExtra   = [pscustomobject]@{ Checked = $false }
@@ -1088,6 +1091,9 @@ Describe 'Adding and removing entries in the list' {
         $script:btnGameEdit = New-Object System.Windows.Forms.Button
         $script:cmbMedia = New-Object System.Windows.Forms.ComboBox
         $script:chkXAll  = [pscustomobject]@{ Checked=$false }
+        $script:lblMan   = [pscustomobject]@{ Text='Manual file:' }
+        $script:lblEx    = [pscustomobject]@{ Text='Extras folder:' }
+        $script:grpX     = [pscustomobject]@{ Text='5)  Extra content (copied to the disc root as-is)' }
         $script:lblGame  = [pscustomobject]@{ Text=''; ForeColor=$null }
         $script:cbMan    = [pscustomobject]@{ Checked=$false }
         $script:cbExtra  = [pscustomobject]@{ Checked=$false }
@@ -2638,5 +2644,57 @@ Describe 'A set told to carry its extras on every disc' -Tag 'Build' -Skip:(-not
         $j.PSObject.Properties.Remove('ExtrasEveryDisc')
         $j | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $f -Encoding UTF8
         (Import-Project $f).ExtrasEveryDisc | Should -BeFalse
+    }
+}
+
+Describe 'Saying on the form where the disc-wide content lands' {
+
+    BeforeAll {
+        $script:lblMan  = [pscustomobject]@{ Text = 'Manual file:' }
+        $script:lblEx   = [pscustomobject]@{ Text = 'Extras folder:' }
+        $script:grpX    = [pscustomobject]@{ Text = '5)  Extra content (copied to the disc root as-is)' }
+        $script:chkXAll = [pscustomobject]@{ Checked = $false }
+        $script:SetPlan = @{ Ok=$true; Discs=@(@(0), @(1)) }
+        $script:OnePlan = @{ Ok=$true; Discs=@(,@(0,1)) }
+    }
+
+    It 'says nothing at all when the build is a single disc' {
+        # The overwhelmingly common case, and there is nothing to disclose.
+        Update-DiscWideLabels $script:OnePlan
+        $script:lblEx.Text  | Should -Be 'Extras folder:'
+        $script:lblMan.Text | Should -Be 'Manual file:'
+        $script:grpX.Text   | Should -Be '5)  Extra content (copied to the disc root as-is)'
+    }
+
+    It 'says nothing when there is no plan yet' {
+        Update-DiscWideLabels $null
+        $script:lblEx.Text | Should -Be 'Extras folder:'
+    }
+
+    It 'names the disc once the build becomes a set' {
+        # The gap this closes: the option lives under the extra-content list in
+        # step 5, so nothing beside the Extras folder in step 4 said that it also
+        # goes on disc 1 alone.
+        Update-DiscWideLabels $script:SetPlan
+        $script:lblEx.Text  | Should -Be 'Extras folder (disc 1):'
+        $script:lblMan.Text | Should -Be 'Manual file (disc 1):'
+        $script:grpX.Text   | Should -Be '5)  Extra content (copied to disc 1 of the set)'
+    }
+
+    It 'stops naming a disc once they go on all of them' {
+        # Ticked, the checkbox says so in words directly underneath, so repeating
+        # it on three labels would be noise.
+        $script:chkXAll.Checked = $true
+        try {
+            Update-DiscWideLabels $script:SetPlan
+            $script:lblEx.Text  | Should -Be 'Extras folder:'
+            $script:lblMan.Text | Should -Be 'Manual file:'
+            $script:grpX.Text   | Should -Be '5)  Extra content (copied to the disc root as-is)'
+        } finally { $script:chkXAll.Checked = $false }
+    }
+
+    It 'says nothing when the set could not be planned at all' {
+        Update-DiscWideLabels @{ Ok=$false; Discs=@() }
+        $script:lblEx.Text | Should -Be 'Extras folder:'
     }
 }
