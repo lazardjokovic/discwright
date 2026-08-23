@@ -115,6 +115,20 @@ BeforeAll {
         ExtraItems=@(); MediaKey=''; OutDir=$script:BigOut
     } $script:BigOut
 
+    # The same project again, but saved with a target disc on it. Reopening this
+    # one has to bring the dropdown back with it.
+    $script:BigOutSet = Join-Path $script:Sandbox 'bigproj-set'
+    New-Item -ItemType Directory -Force -Path $script:BigOutSet | Out-Null
+    Save-Project @{
+        Games=@((Get-GameInfo $script:BigA),(Get-GameInfo $script:BigB)); Label='Big Set'
+        IconPath=$script:Art; IconIsIco=$false
+        Menu=$true; BgPath=$script:Art; BgAsIs=$false; PanelSide='Right'
+        Divider=$false; ShowTitle=$false; TitleText=''
+        WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+        Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
+        ExtraItems=@(); MediaKey='CD'; OutDir=$script:BigOutSet
+    } $script:BigOutSet
+
     $script:App = $null
 }
 
@@ -658,5 +672,42 @@ Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script
         Read-MessageBox -Win $script:Win -TitleLike 'New disc' -Button 'Yes' | Out-Null
         Start-Sleep -Seconds 1
         Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
+    }
+}
+
+Describe 'Reopening a project that was planned as a set' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The bug this block exists for: Save-Project wrote the target disc correctly
+    # and Import-Project never copied it into what it hands back, so every reopen
+    # silently fell back to "Fit on one disc". Writing the file had a test.
+    # Reading it back did not, and the round trip only shows up from the window.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:BigOutSet
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'comes back on the disc it was planned for' {
+        Get-MediaTargetText $script:Win | Should -Be 'CD-R 700 MB'
+    }
+
+    It 'plans the set again straight away, without touching the dropdown' {
+        Get-StatusText $script:Win | Should -Match 'discs of CD-R 700 MB'
+    }
+
+    It 'still reopens an older project as no target at all' {
+        # $script:BigOut was saved with an empty MediaKey, which is what every
+        # project written before 0.5 looks like.
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:BigOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
+        Get-StatusText $script:Win | Should -Match 'Disc: '
     }
 }

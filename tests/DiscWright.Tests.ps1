@@ -523,6 +523,33 @@ Describe 'Project file' -Tag 'Unit' {
             $script:PJson.MediaKey | Should -Be ''
         }
 
+        It 'hands the chosen medium back when the project is read again' {
+            # The bug this pins: Save-Project wrote MediaKey correctly and
+            # Import-Project never copied it into what it returns, so reopening
+            # any project silently dropped the target disc. Writing the file was
+            # tested; reading it back was not.
+            $out = Join-Path $script:POut 'roundtrip'
+            New-Item -ItemType Directory -Force -Path $out | Out-Null
+            $s = New-BuildSettings -Games $script:PGames -Label 'Trilogy' -OutDir $out
+            $s.MediaKey = 'BD25'
+            Save-Project $s $out
+            $back = Import-Project (Join-Path $out 'discproject.json')
+            $back.MediaKey | Should -Be 'BD25'
+        }
+
+        It 'reads a project from before target discs existed as no medium at all' {
+            $out = Join-Path $script:POut 'v4'
+            New-Item -ItemType Directory -Force -Path $out | Out-Null
+            $s = New-BuildSettings -Games $script:PGames -Label 'Trilogy' -OutDir $out
+            Save-Project $s $out
+            $f = Join-Path $out 'discproject.json'
+            # Strip the key back out, which is what a 0.4.1 file looks like.
+            $j = Get-Content -Raw $f | ConvertFrom-Json
+            $j.PSObject.Properties.Remove('MediaKey')
+            $j | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $f -Encoding UTF8
+            (Import-Project $f).MediaKey | Should -Be ''
+        }
+
         It 'keeps the chosen medium when there is one' {
             $out = Join-Path $script:POut 'withmedia'
             New-Item -ItemType Directory -Force -Path $out | Out-Null
@@ -2242,6 +2269,20 @@ Describe 'Planning a set for the disc you are going to burn' {
         $plan.Ok         | Should -BeFalse
         $plan.Reason     | Should -Be 'entry'
         $plan.TooBigName | Should -Be 'The Witcher'
+        $plan.TooBigBytes | Should -Be 9.48GB
+    }
+
+    It 'reports the whole group size when a game plus its add-ons is what overflows' {
+        # The figure has to describe what the packer actually refused, which is
+        # the group - naming the game's size alone would not add up.
+        $grp = @(
+            @{ GameName='Hollow Knight'; Kind='Game';  ParentIndex=-1; TotalBytes=4GB }
+            @{ GameName='Big patch';     Kind='AddOn'; ParentIndex=0;  TotalBytes=1GB }
+        )
+        $plan = Get-DiscPlan $grp 'DVD5' 10MB 0
+        $plan.Ok          | Should -BeFalse
+        $plan.TooBigName  | Should -Be 'Hollow Knight'
+        $plan.TooBigBytes | Should -Be 5GB
     }
 
     It 'refuses a medium it does not have a capacity for' {
@@ -2277,9 +2318,12 @@ Describe 'Telling you what the plan came to' {
         Get-DiscPlanText $plan 'BD25' | Should -Be '1 disc, BD-R 25 GB'
     }
 
-    It 'says which game is the problem, in the words on the dropdown' {
-        $plan = @{ Ok=$false; Reason='entry'; TooBigName='The Witcher'; Discs=@() }
-        Get-DiscPlanText $plan 'DVD5' | Should -Be 'The Witcher alone is bigger than a DVD5 4.7 GB'
+    It 'says which game is the problem, how big it is, and against what' {
+        # The line this sits on begins with the total on the form - "2 games
+        # (8.94 GB)". Without the game's OWN size beside its name, the refusal
+        # reads as though the 8.94 was the figure that would not fit.
+        $plan = @{ Ok=$false; Reason='entry'; TooBigName='The Witcher'; TooBigBytes=9.48GB; Discs=@() }
+        Get-DiscPlanText $plan 'DVD5' | Should -Be 'The Witcher is 9.48 GB on its own, too big for a DVD5 4.7 GB'
     }
 
     It 'separates extras that will not fit from a game that will not fit' {
@@ -2370,6 +2414,13 @@ Describe 'Building a set of discs' -Tag 'Build' -Skip:(-not $script:CanBuildIso)
         @(Get-ChildItem (Join-Path $script:SetStage 'Games') -Directory).Count | Should -Be 2
     }
 
+    It 'tells each disc which one of the set it is' {
+        # Read out of the staged disc rather than the ISO: what matters is
+        # that the number is per disc and not the same on every one.
+        $hta = Get-Content -Raw (Join-Path $script:SetStage (Join-Path 'AUTORUN' 'menu.hta'))
+        $hta.Contains('var DISCNUM=2, DISCOF=2;') | Should -BeTrue
+    }
+
     It 'renumbers each disc from 01 rather than carrying on from the last one' {
         # Disc 2 holds entries 1 and 2 of the list. On the disc they are 01 and 02:
         # the folder numbers are the menu order for THAT disc.
@@ -2418,5 +2469,68 @@ Describe 'Building a set of discs' -Tag 'Build' -Skip:(-not $script:CanBuildIso)
             ($onD2 | Where-Object { $_ -match 'alpha' }).Count      | Should -Be 0
             $onD2.Count | Should -BeGreaterThan 1
         }
+    }
+}
+
+Describe 'What the menu says about the disc it is on' {
+
+    BeforeAll {
+        $script:CapDir = Join-Path $script:Sandbox 'caption'
+        New-Item -ItemType Directory -Force -Path $script:CapDir | Out-Null
+
+        function New-Menu([hashtable]$extra) {
+            $cfg = @{ GameName='Boxed Set'; Buttons=@('Play','Install','Exit'); MusicFile=''
+                      ManualFile=''; PanelSide='Right'; IconName='disc.ico'
+                      WindowBorder=$true; ButtonStyle='Minimal'
+                      Games=@(@{ Name='Hollow Knight'; MatchName='Hollow Knight'
+                                 Setup='setup.exe'; AddOns=@(); Manual=''; Extras='' }) }
+            foreach ($k in $extra.Keys) { $cfg[$k] = $extra[$k] }
+            $out = Join-Path $script:CapDir ('menu_' + [Guid]::NewGuid().ToString('N').Substring(0,6) + '.hta')
+            New-MenuHta $cfg $out
+            return (Get-Content -Raw $out)
+        }
+    }
+
+    It 'says it is one of one when nothing said otherwise' {
+        # Every disc built before sets existed, and every single disc built now.
+        $h = New-Menu @{}
+        $h.Contains('var DISCNUM=1, DISCOF=1;') | Should -BeTrue
+    }
+
+    It 'carries its place in the set' {
+        $h = New-Menu @{ DiscNum=2; DiscOf=3 }
+        $h.Contains('var DISCNUM=2, DISCOF=3;') | Should -BeTrue
+    }
+
+    It 'shows the disc line only when there is a set to be part of' {
+        # discLine is what decides it, and it reads DISCOF at run time - so the
+        # single-disc menu carries the same code and simply renders nothing.
+        $h = New-Menu @{}
+        $h.Contains('DISCOF>1') | Should -BeTrue
+    }
+
+    It 'names the game on its own screen' {
+        # The gap this closes: a one-game disc went straight to Play/Install with
+        # nothing anywhere saying which game they belonged to. On a set of discs
+        # that all share an icon and a background, that is the only difference
+        # between them.
+        $h = New-Menu @{}
+        $h.Contains('setPanel(h,capFor(g.n));') | Should -BeTrue
+    }
+
+    It 'leaves the chooser to name the games itself' {
+        # The chooser is a list of game names, so a caption naming one of them
+        # would be both redundant and wrong.
+        $h = New-Menu @{}
+        $h.Contains('setPanel(h,capFor(""));') | Should -BeTrue
+    }
+
+    It 'measures the caption instead of assuming how tall it is' {
+        # The panel is centred on its contents and the buttons shrink to fit. A
+        # hard-coded caption height would push a crowded screen off the bottom
+        # the moment the disc line appeared.
+        $h = New-Menu @{ DiscNum=1; DiscOf=2 }
+        $h.Contains('var capH=c ? c.offsetHeight+10 : 0;') | Should -BeTrue
+        $h.Contains('avail=440-capH')                      | Should -BeTrue
     }
 }

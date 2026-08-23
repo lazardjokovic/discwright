@@ -419,9 +419,12 @@ function Get-DiscPlan([array]$entries, [string]$mediaKey, [double]$overhead, [do
     if (-not $r.Ok) {
         # Name the game rather than the group index. "Group 2 is too big" is a
         # sentence about the packer; the user needs the sentence about the disc.
-        $nm = ''
-        if ($r.Reason -eq 'entry' -and $r.TooBig -ge 0) { $nm = [string]$entries[$groups[$r.TooBig][0]].GameName }
-        return @{ Ok=$false; Reason=$r.Reason; Discs=@(); Capacity=$cap; TooBigName=$nm; Room=$r.Room }
+        $nm = ''; $nb = [double]0
+        if ($r.Reason -eq 'entry' -and $r.TooBig -ge 0) {
+            $nm = [string]$entries[$groups[$r.TooBig][0]].GameName
+            $nb = [double]$sizes[$r.TooBig]
+        }
+        return @{ Ok=$false; Reason=$r.Reason; Discs=@(); Capacity=$cap; TooBigName=$nm; TooBigBytes=$nb; Room=$r.Room }
     }
 
     $discs = @()
@@ -430,7 +433,7 @@ function Get-DiscPlan([array]$entries, [string]$mediaKey, [double]$overhead, [do
         foreach ($gi in $d) { foreach ($e in $groups[$gi]) { $idx += $e } }
         $discs += ,@($idx)
     }
-    return @{ Ok=$true; Reason=''; Discs=$discs; Capacity=$cap; TooBigName=''; Room=$r.Room }
+    return @{ Ok=$true; Reason=''; Discs=$discs; Capacity=$cap; TooBigName=''; TooBigBytes=[double]0; Room=$r.Room }
 }
 
 # How the plan reads on the line under the installer list, and in the dialog that
@@ -440,7 +443,11 @@ function Get-DiscPlanText([hashtable]$plan, [string]$mediaKey) {
     $name = Get-MediaNameFromKey $mediaKey
     if (-not $plan.Ok) {
         switch ($plan.Reason) {
-            'entry'  { return ("$($plan.TooBigName) alone is bigger than a $name") }
+            # The game's OWN size, not the total on the form. "Alan Wake alone is
+            # bigger than a DVD5" sat on a line beginning "2 games (8.94 GB)", and
+            # read as though the 8.94 was what would not fit. Naming the figure
+            # that is actually too big settles it in the same breath.
+            'entry'  { return ("{0} is {1:N2} GB on its own, too big for a {2}" -f $plan.TooBigName, ([double]$plan.TooBigBytes/1GB), $name) }
             'extras' { return ("the extra content alone is bigger than a $name") }
             default  { return ("cannot be split onto $name") }
         }
@@ -953,6 +960,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   #mute{position:absolute;right:44px;top:8px;width:28px;height:26px;line-height:26px;text-align:center;color:#e6ebef;
     font-family:'Segoe UI',Arial;font-size:15px;background:#0a1519;border:1px solid #16545a;cursor:pointer;display:none;}
   #mute:hover{color:#fff;border-color:#00bec8;}
+  /* The caption above the buttons: which game this screen is for, and which disc
+     of the set you are holding. Same nowrap+ellipsis rule as the buttons - game
+     names are user data and a long one must not push the panel around. */
+  #cap{width:250px;margin:0 0 10px 0;font-family:'Segoe UI',Arial;}
+  #cap .capn{display:block;font-size:17px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
+    color:#dfe9ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #cap .capd{display:block;font-size:12px;letter-spacing:2px;color:#8fa5ad;margin-top:3px;}
   #status{position:absolute;left:%%PANELLEFT%%px;bottom:18px;width:250px;text-align:center;display:none;
     color:#9fb3ba;font-size:12px;line-height:17px;}
 </style>
@@ -964,6 +978,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var BTNS=%%BTNS%%;         // which of Play/Install/Manual/Extras/Exit the disc was built with
   var MANUAL="%%MANUAL%%"; var MUSIC="%%MUSIC%%";
   var PREVIEW=%%PREVIEW%%;   // true only for the app's Preview - see refreshButtons
+  var DISCNUM=%%DISCNUM%%, DISCOF=%%DISCOF%%;   // 1 and 1 unless this disc is part of a set
   // Which screen is showing: -1 is the game chooser, otherwise an index into GAMES.
   // A disc holding one game has nothing to choose, so it opens on that game and
   // never shows a Back button.
@@ -1079,14 +1094,27 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   }
   // The panel is centred on however many buttons this screen happens to have, so
   // a three-game chooser and a six-button game screen both sit in the middle.
-  function setPanel(h){
+  // "Disc 2 of 3", or nothing at all on a disc that is not part of a set.
+  function discLine(){ return DISCOF>1 ? '<span class="capd">Disc '+DISCNUM+' of '+DISCOF+'</span>' : ''; }
+  // Game names arrive already escaped for a JS string literal, which turns "<"
+  // into < - so they cannot open a tag when they land in innerHTML here.
+  function capFor(name){
+    var d=discLine();
+    if(!name && !d) return "";
+    return (name ? '<span class="capn">'+name+'</span>' : '') + d;
+  }
+  function setPanel(h,cap){
     var p=document.getElementById("pan");
-    p.innerHTML=h;
+    p.innerHTML=(cap ? '<div id="cap">'+cap+'</div>' : '')+h;
+    var c=document.getElementById("cap");
+    // Measured rather than assumed: the caption is one line or two depending on
+    // whether this disc belongs to a set.
+    var capH=c ? c.offsetHeight+10 : 0;
     var a=p.getElementsByTagName("A"), n=a.length;
     // 46px buttons with 12px between them fill a 480px window at eight, and a
     // game with four add-ons already needs eight. Rather than let the ninth draw
     // off the bottom edge where nothing can reach it, the buttons shrink to fit.
-    var bh=46, gap=12, avail=440;
+    var bh=46, gap=12, avail=440-capH;
     if(n*bh+(n-1)*gap > avail){
       gap = 8;
       bh = Math.floor((avail-(n-1)*gap)/n);
@@ -1096,7 +1124,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         a[i].style.height=bh+"px"; a[i].style.lineHeight=bh+"px"; a[i].style.marginBottom=gap+"px";
       }
     }
-    var block=n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
+    var block=capH+n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
     if(t<10) t=10;
     p.style.top=t+"px";
     setupHover();
@@ -1106,7 +1134,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var h="";
     for(var i=0;i<GAMES.length;i++){ h+=btnHtml("btn_game_"+i,"play",GAMES[i].n,"pick("+i+")",GAMES[i].n); }
     if(has("Exit")) h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
-    setPanel(h);
+    // The chooser lists the games itself, so it needs only the disc line.
+    setPanel(h,capFor(""));
   }
   function renderGame(){
     var g=GAMES[cur], h="";
@@ -1123,7 +1152,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(has("Extras"))  h+=btnHtml("btn_Extras","","Extras","doExtras()","");
     if(GAMES.length>1) h+=btnHtml("btn_Back","","Back","goBack()","Back to the game list");
     if(has("Exit"))    h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
-    setPanel(h);
+    setPanel(h,capFor(g.n));
   }
   function show(){ if(tasks) renderTasks(); else if(cur<0) renderChooser(); else renderGame(); }
   function pick(i){ cur=i; show(); }
@@ -1285,7 +1314,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     for(var i=0;i<tasks.length;i++){ h+=btnHtml("btn_task_"+i,"play",tasks[i].n,"playTask("+i+")",tasks[i].n); }
     h+=btnHtml("btn_TaskBack","","Back","tasksBack()","Back to "+GAMES[cur].n);
     if(has("Exit")) h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
-    setPanel(h);
+    setPanel(h,capFor(GAMES[cur].n));
   }
   function playTask(i){ var t=tasks[i]; launchExe(t.p,t.a,t.w); }
   function tasksBack(){ tasks=null; show(); }
@@ -1335,6 +1364,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
                  Replace('%%BTNBORDER%%',$btnBorder).
                  Replace('%%TITLE%%',(ConvertTo-HtmlText $cfg.GameName)).
                  Replace('%%PANELLEFT%%',"$panelLeft").
+                 Replace('%%DISCNUM%%',"$([int]$(if($cfg.DiscNum){$cfg.DiscNum}else{1}))").
+                 Replace('%%DISCOF%%', "$([int]$(if($cfg.DiscOf){$cfg.DiscOf}else{1}))").
                  Replace('%%GAMES%%',$gamesJs).
                  Replace('%%BTNS%%',$btnsJs).
                  Replace('%%MANUAL%%',(ConvertTo-JsString $cfg.ManualFile)).
@@ -1555,6 +1586,9 @@ function Import-Project([string]$jsonPath) {
             WindowBorder=[bool]$j.WindowBorder
             ButtonStyle=$(if($j.ButtonStyle){$j.ButtonStyle}else{'Bordered'})
             MusicFile=$j.MusicFile; Buttons=@($j.Buttons); ManualPath=$j.ManualPath; ExtrasPath=$j.ExtrasPath
+            # Version 5. Absent in anything older, which is the automatic setting -
+            # and the automatic setting is what those projects always described.
+            MediaKey=$(if ($j.PSObject.Properties.Name -contains 'MediaKey') { [string]$j.MediaKey } else { '' })
             ExtraItems=@($j.ExtraItems); OutDir=$j.OutDir; Origin='project file'
         }
     } catch { return $null }
@@ -1821,7 +1855,8 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         }
         New-MenuHta @{ GameName=$s.Label; Games=$menuGames; Buttons=$s.Buttons;
                        MusicFile=$musicName; ManualFile=$manualName; PanelSide=$s.PanelSide; IconName=$icoName
-                       WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle } (Join-Path $stage 'AUTORUN\menu.hta')
+                       WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle
+                       DiscNum=$(if($s.DiscNum){[int]$s.DiscNum}else{1}); DiscOf=$(if($s.DiscOf){[int]$s.DiscOf}else{1}) } (Join-Path $stage 'AUTORUN\menu.hta')
     }
 
     # extra content - copied to the disc root, keeping its own name
@@ -1869,7 +1904,7 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 # Builds every disc the plan calls for, one after another, and returns the ISOs.
 # A plan of one disc goes straight through to Invoke-Build unchanged - a single
 # disc must come out byte for byte the way it always has, label and all.
-function Invoke-BuildSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$null) {
+function Invoke-BuildSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$null, [scriptblock]$onDisc=$null) {
     $plan = $s.Plan
     # Returned as a plain array, not the ",@()" wrapper used for values that get
     # assigned straight across: every caller here wraps the result in @(), and a
@@ -1883,6 +1918,7 @@ function Invoke-BuildSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progres
     $isos = @()
     for ($d = 0; $d -lt $n; $d++) {
         $num = $d + 1
+        if ($onDisc) { & $onDisc $num $n }
         & $log ''
         & $log "===== Disc $num of $n ====="
         $ds = @{}
@@ -1891,6 +1927,8 @@ function Invoke-BuildSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progres
         $ds.Label       = Get-DiscSetLabel $s.Label $num $n
         $ds.VolumeLabel = Get-VolumeLabel  $s.Label $num $n
         $ds.SkipProject = $true
+        $ds.DiscNum     = $num
+        $ds.DiscOf      = $n
         # The disc-wide manual, extras and loose files ride on disc 1 alone.
         # Copying them onto every disc would multiply gigabytes of bonus content
         # by the size of the set, which is nobody's idea of "extras on the disc".
@@ -2178,10 +2216,17 @@ $pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Obje
 $lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
 
 $buildWatch = New-Object System.Diagnostics.Stopwatch
+# Prefixed onto the elapsed line while a set builds. A set runs the progress bar
+# from 0 to 100 once per disc, and with nothing saying which disc that was, the
+# second pass reads as the first one having restarted.
+$script:BuildDiscTag = ''
 
 $log = { param($m)
     $txtLog.AppendText($m + "`r`n")
-    if ($buildWatch.IsRunning) { $lblElapsed.Text = 'Elapsed  ' + (Format-Elapsed $buildWatch.Elapsed) }
+    if ($buildWatch.IsRunning) {
+        $lblElapsed.Text = $(if ($script:BuildDiscTag) { $script:BuildDiscTag + '  ' + (Format-Elapsed $buildWatch.Elapsed) }
+                             else                     { 'Elapsed  ' + (Format-Elapsed $buildWatch.Elapsed) })
+    }
     [System.Windows.Forms.Application]::DoEvents()
 }
 
@@ -2193,7 +2238,11 @@ $buildProgress = { param($done,$total)
     if ($total -gt 0) {
         $v = [int](1000.0 * $done / $total); if ($v -gt 1000) { $v = 1000 }
         $pbBuild.Value = $v
-        $lblElapsed.Text = 'ISO  {0}%   {1}' -f [int]($v/10), (Format-Elapsed $buildWatch.Elapsed)
+        # The label has 160px before it runs under the log box, so the disc tag
+        # replaces the word ISO rather than being added in front of it: a set
+        # shows "D1/2  45%  0:32" in the same width "ISO  45%   0:32" needed.
+        $lblElapsed.Text = $(if ($script:BuildDiscTag) { '{0}  {1}%   {2}' -f $script:BuildDiscTag, [int]($v/10), (Format-Elapsed $buildWatch.Elapsed) }
+                             else                     { 'ISO  {0}%   {1}'  -f [int]($v/10), (Format-Elapsed $buildWatch.Elapsed) })
     }
     [System.Windows.Forms.Application]::DoEvents()
 }
@@ -2998,8 +3047,12 @@ function Open-Project([string]$folder) {
     # A project written before target discs existed has no MediaKey, and a key
     # this build does not recognise is not worth guessing at either: both fall
     # back to the automatic setting rather than silently planning a set.
-    $mk = ''
-    if ($p.PSObject.Properties.Name -contains 'MediaKey') { $mk = [string]$p.MediaKey }
+    #
+    # ContainsKey, not PSObject.Properties: Import-Project hands back a HASHTABLE.
+    # A hashtable's keys are not PSObject properties, so the property test read
+    # false for every project ever saved and the target disc was silently dropped
+    # on reopen. Found by hand-testing the round trip, which no test covered.
+    $mk = $(if ($p.ContainsKey('MediaKey')) { [string]$p.MediaKey } else { '' })
     $cmbMedia.SelectedItem = $(if ($mk -and (Get-MediaCapacity $mk) -gt 0) { Get-MediaNameFromKey $mk } else { Get-MediaAutoText })
     if ($p.IconPath -and (Test-Path $p.IconPath)) { Set-IconFile $p.IconPath } else { & $log "  icon missing - pick one again." }
 
@@ -3272,9 +3325,8 @@ $btnBuild.Add_Click({
         # payload past the biggest disc there is, and it needs its own sentence.
         $mName = Get-MediaNameFromKey $mediaKey
         $why   = switch ($plan.Reason) {
-            'entry'  { ("{0} on its own is {1:N1} GB, and a {2} holds {3:N1} GB." -f $plan.TooBigName,
-                        (($(Get-Games) | Where-Object { $_.GameName -eq $plan.TooBigName } | Select-Object -First 1).TotalBytes/1GB),
-                        $mName, ($plan.Room/1GB)) +
+            'entry'  { ("{0} on its own is {1:N2} GB, and a {2} holds {3:N2} GB." -f $plan.TooBigName,
+                        ([double]$plan.TooBigBytes/1GB), $mName, ($plan.Room/1GB)) +
                        "`r`n`r`nSpreading one game's installer across several discs is not something DiscWright can do yet. Choose a larger disc in step 2, or leave that game off this set." }
             'extras' { "The extra content in step 5 is bigger than one $mName on its own, before any game is added.`r`n`r`nRemove some of it, or choose a larger disc." }
             default  { "This set cannot be planned for a $mName." }
@@ -3372,20 +3424,27 @@ $btnBuild.Add_Click({
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
          ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey; Plan=$plan }
     $btnBuild.Enabled=$false
+    $script:BuildDiscTag = ''
     $pbBuild.Value=0; $pbBuild.Visible=$true
     $buildWatch.Restart()
     $lblElapsed.Text='Starting...'
     try {
-        $isos = @(Invoke-BuildSet $s $log $buildProgress)
+        $onDisc = { param($num,$of)
+            $script:BuildDiscTag = "D$num/$of"
+            $pbBuild.Value = 0
+            [System.Windows.Forms.Application]::DoEvents()
+        }
+        $isos = @(Invoke-BuildSet $s $log $buildProgress $onDisc)
         $buildWatch.Stop()
         $took = Format-Elapsed $buildWatch.Elapsed
-        $lblElapsed.Text = "Done in $took"
+        $script:BuildDiscTag = ''
+        $lblElapsed.Text = $(if ($isos.Count -gt 1) { "$($isos.Count) discs in $took" } else { "Done in $took" })
         & $log "Total time: $took"
         $what = $(if ($isos.Count -gt 1) { "$($isos.Count) discs built in $took" } else { "Build complete in $took" })
         [System.Windows.Forms.MessageBox]::Show(($what + "`n`n" + ($isos -join "`n")),"DiscWright") | Out-Null
     }
     catch {
-        $buildWatch.Stop(); $lblElapsed.Text='Failed'
+        $buildWatch.Stop(); $script:BuildDiscTag = ''; $lblElapsed.Text='Failed'
         & $log ('ERROR: '+$_.Exception.Message); Show-Warn ("The build failed:`r`n`r`n" + $_.Exception.Message)
     }
     finally {

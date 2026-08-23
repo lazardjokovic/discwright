@@ -38,10 +38,28 @@ between minor versions.
   characters, `THE WITCHER ENHANCED EDITION D2` would otherwise cut back to the
   same id as disc 1, and Windows would show two discs with the same name.
 
+- **The menu names the game whose screen you are on.** A one-game disc used to go
+  straight to Play and Install with nothing anywhere saying which game they
+  belonged to — fine when there was one disc and the drive label told you, useless
+  across a set where every disc shares an icon and a background. The chooser had
+  the same gap: it lists the games, but the screen you land on after picking one
+  did not name it.
+
+  A disc that belongs to a set also says which one it is, under the game's name.
+  The caption is measured rather than assumed, so the existing shrink-to-fit rule
+  keeps a crowded screen inside the window.
+
 ### Changed
 
 - **A payload too big for any single disc no longer just refuses.** It says to
   pick the disc you are going to burn, because that is now an answer.
+- **A refusal says how big the offending game is.** *"Alan Wake alone is bigger
+  than a DVD5"* sat on a line beginning *"2 games (8.94 GB)"* and read as though
+  the 8.94 was the figure that would not fit. It now reads *"Alan Wake is 7.79 GB
+  on its own, too big for a DVD5 4.7 GB"*.
+- **The progress line says which disc of the set is being written.** A set runs
+  the bar from nothing to full once per disc, and with nothing naming the disc the
+  second pass read as the first one having started over.
 - The project file is at schema 5, which records the target disc. Anything older
   reads back as *Fit on one disc*, which is what those projects always were.
 
