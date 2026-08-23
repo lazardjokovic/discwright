@@ -9,7 +9,7 @@ between minor versions.
 
 ## [Unreleased]
 
-## [0.4.0] — 2026-08-21
+## [0.4.0] — 2026-08-23
 
 ### Added
 
