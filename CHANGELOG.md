@@ -9,6 +9,50 @@ between minor versions.
 
 ## [Unreleased]
 
+### Added
+
+- **A disc set, when the games do not fit on one disc.** Step 2 has a new
+  **Target disc** dropdown. Leave it on *Fit on one disc* and nothing changes:
+  DiscWright recommends a size and builds exactly one ISO, byte for byte as
+  before. Choose the disc you actually own — CD-R through BD-R XL — and it packs
+  the games onto as many discs as it takes.
+
+  Each disc in a set is a complete disc in its own right: its own icon, its own
+  menu, its own label. `WITCHER + HK D1`, `WITCHER + HK D2`, one ISO each. There
+  is no disc 2 that only makes sense with disc 1 in the drawer.
+
+  **The order on the form is the order on the discs.** A packer that reordered
+  games to save a disc would produce a set whose disc 2 holds the game you put
+  first, and the menu numbers follow the list. Saving one disc is worth less than
+  a set that matches what is on screen.
+
+  **A game and its add-ons always travel together.** An add-on knows which game it
+  belongs to by that game's position in the list, so a patch stranded on the next
+  disc would come out as a game of its own in the menu.
+
+  **The disc-wide manual and extras ride on disc 1 only.** Copying them onto every
+  disc would multiply gigabytes of bonus content by the size of the set. A game's
+  own manual and extras go wherever that game goes.
+
+  The volume id gets the disc number reserved before the name is truncated: at 16
+  characters, `THE WITCHER ENHANCED EDITION D2` would otherwise cut back to the
+  same id as disc 1, and Windows would show two discs with the same name.
+
+### Changed
+
+- **A payload too big for any single disc no longer just refuses.** It says to
+  pick the disc you are going to burn, because that is now an answer.
+- The project file is at schema 5, which records the target disc. Anything older
+  reads back as *Fit on one disc*, which is what those projects always were.
+
+### Still not handled
+
+- **One game bigger than one disc.** Spreading a single installer's `.bin` parts
+  across a set is a different problem: GOG's installer asks for the next part
+  itself, which makes a real "insert disc 2" possible, and that is worth doing
+  properly rather than bolting on. Until then, a set is refused with the name of
+  the game that will not fit.
+
 ## [0.4.1] — 2026-08-23
 
 ### Fixed

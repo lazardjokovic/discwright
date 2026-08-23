@@ -95,6 +95,26 @@ BeforeAll {
         ExtraItems=@(); OutDir=$script:ProjOut
     } { param($m) $null = $m }
 
+    # A second project, sized so that one CD-R cannot hold it. Sparse again, so a
+    # gigabyte of "game" costs nothing and takes no time. Saved as a project file
+    # rather than built: Open existing disc reads the JSON, and writing a real
+    # 1 GB ISO to prove a dropdown is wired would be a poor trade.
+    $script:BigA = Join-Path $script:SrcRoot 'ccc_big_one'
+    $script:BigB = Join-Path $script:SrcRoot 'ddd_big_two'
+    $null = New-Installer $script:BigA 'setup_big_one_1.0.exe' 500
+    $null = New-Installer $script:BigB 'setup_big_two_1.0.exe' 500
+    $script:BigOut = Join-Path $script:Sandbox 'bigproj'
+    New-Item -ItemType Directory -Force -Path $script:BigOut | Out-Null
+    Save-Project @{
+        Games=@((Get-GameInfo $script:BigA),(Get-GameInfo $script:BigB)); Label='Big Set'
+        IconPath=$script:Art; IconIsIco=$false
+        Menu=$true; BgPath=$script:Art; BgAsIs=$false; PanelSide='Right'
+        Divider=$false; ShowTitle=$false; TitleText=''
+        WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+        Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
+        ExtraItems=@(); MediaKey=''; OutDir=$script:BigOut
+    } $script:BigOut
+
     $script:App = $null
 }
 
@@ -583,5 +603,60 @@ Describe 'What the build refuses, and whether it says why' -Tag 'UI' -Skip:(-not
     It 'leaves the disc untouched after a refusal' {
         # A refused build must not have half-written anything.
         Get-EntryCount $script:Win | Should -Be 2
+    }
+}
+
+Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:BigOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'opens on the setting that behaves the way it always has' {
+        Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
+    }
+
+    It 'recommends a size until it is told which disc you own' {
+        # The old line, unchanged: a size DiscWright picked, not a plan.
+        Get-StatusText $script:Win | Should -Match 'Disc: '
+    }
+
+    It 'turns the advice line into a plan once a disc is chosen' {
+        # Index 1 is CD-R, the first real medium. A gigabyte of games does not
+        # fit one, so this is a genuine set and not a relabelled single disc.
+        Set-MediaTarget -Win $script:Win -Index 1
+        Get-MediaTargetText $script:Win | Should -Be 'CD-R 700 MB'
+        $s = Get-StatusText $script:Win
+        $s | Should -Match 'discs of CD-R 700 MB'
+        $s | Should -Not -Match 'Disc: '
+    }
+
+    It 'needs fewer discs when a bigger one is chosen' {
+        # Index 2 is DVD5. The same games now fit on one, and a single disc is
+        # not called a set.
+        Set-MediaTarget -Win $script:Win -Index 2
+        Get-MediaTargetText $script:Win | Should -Be 'DVD5 4.7 GB'
+        Get-StatusText $script:Win | Should -Match '1 disc, DVD5 4\.7 GB'
+    }
+
+    It 'goes back to recommending when the automatic setting is chosen again' {
+        Set-MediaTarget -Win $script:Win -Index 0
+        Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
+        Get-StatusText $script:Win | Should -Match 'Disc: '
+    }
+
+    It 'is put back to the automatic setting by New disc' {
+        Set-MediaTarget -Win $script:Win -Index 3
+        Get-MediaTargetText $script:Win | Should -Be 'DVD9 8.5 GB (dual layer)'
+        Invoke-CtlNamed $script:Win 'New disc' | Out-Null
+        Read-MessageBox -Win $script:Win -TitleLike 'New disc' -Button 'Yes' | Out-Null
+        Start-Sleep -Seconds 1
+        Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
     }
 }

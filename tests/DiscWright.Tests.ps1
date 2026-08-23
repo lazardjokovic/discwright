@@ -511,8 +511,26 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 4' {
-            $script:PJson.Version | Should -Be 4
+        It 'declares schema version 5' {
+            $script:PJson.Version | Should -Be 5
+        }
+
+        It 'records which disc the set was planned for' {
+            # Version 5. A project saved with the automatic setting stores an
+            # empty key, which is what reopens as "fit on one disc" - the same
+            # thing a version 4 file with no key at all reopens as.
+            $script:PJson.PSObject.Properties.Name | Should -Contain 'MediaKey'
+            $script:PJson.MediaKey | Should -Be ''
+        }
+
+        It 'keeps the chosen medium when there is one' {
+            $out = Join-Path $script:POut 'withmedia'
+            New-Item -ItemType Directory -Force -Path $out | Out-Null
+            $s = New-BuildSettings -Games $script:PGames -Label 'Trilogy' -OutDir $out
+            $s.MediaKey = 'DVD5'
+            Save-Project $s $out
+            $j = Get-Content -Raw (Join-Path $out 'discproject.json') | ConvertFrom-Json
+            $j.MediaKey | Should -Be 'DVD5'
         }
 
         It 'records a Kind and a Parent for every entry' {
@@ -1941,5 +1959,464 @@ Describe 'Control characters cannot escape into what a disc carries' -Tag 'Unit'
         # The stripping is additive - it must not have loosened anything.
         ConvertTo-JsString 'He said "hi" \ <script>' | Should -Be 'He said \"hi\" \\ \x3cscript\x3e'
         ConvertTo-HtmlText '<b>&"'                   | Should -Be '&lt;b&gt;&amp;&quot;'
+    }
+}
+
+Describe 'Which disc sizes DiscWright knows about' {
+
+    It 'hands back a capacity for every tier it lists' {
+        foreach ($t in Get-MediaTiers) {
+            (Get-MediaCapacity $t.Key) | Should -Be ([double]$t.Gib * 1GB) -Because "$($t.Key) is in the table"
+        }
+    }
+
+    It 'lists the tiers smallest first, so the recommendation stops at the first fit' {
+        $gib = @(Get-MediaTiers | ForEach-Object { $_.Gib })
+        $sorted = @($gib | Sort-Object)
+        ($gib -join ',') | Should -Be ($sorted -join ',')
+    }
+
+    It 'returns nothing for a medium it has never heard of' {
+        Get-MediaCapacity 'LASERDISC' | Should -Be 0
+        Get-MediaCapacity ''          | Should -Be 0
+    }
+
+    It 'still recommends what it always did, and now says which tier that was' {
+        $cd = Get-MediaRec (0.5 * 1GB)
+        $cd.Text | Should -Be 'fits CD-R 700 MB'
+        $cd.Key  | Should -Be 'CD'
+
+        (Get-MediaRec (5 * 1GB)).Text  | Should -Be 'needs DVD9 8.5 GB (dual layer)'
+        (Get-MediaRec (10 * 1GB)).Text | Should -Be 'too big for DVD - needs BD-R 25 GB'
+    }
+
+    It 'admits when a payload is past the largest disc there is' {
+        $r = Get-MediaRec (200 * 1GB)
+        $r.Fit | Should -BeFalse
+        $r.Key | Should -Be ''
+    }
+}
+
+Describe 'Packing a set onto the discs you actually have' {
+
+    BeforeAll {
+        $script:DVD5 = Get-MediaCapacity 'DVD5'
+        $script:OVER = 10MB
+    }
+
+    It 'leaves everything on one disc when everything fits' {
+        $r = Split-DiscSet @(1GB, 1GB) $script:DVD5 $script:OVER 0
+        $r.Ok            | Should -BeTrue
+        $r.Discs.Count   | Should -Be 1
+        ($r.Discs[0] -join ',') | Should -Be '0,1'
+    }
+
+    It 'starts a second disc when the next game will not fit on the first' {
+        $r = Split-DiscSet @(2GB, 2GB, 2GB) $script:DVD5 $script:OVER 0
+        $r.Ok          | Should -BeTrue
+        $r.Discs.Count | Should -Be 2
+        ($r.Discs[0] -join ',') | Should -Be '0,1'
+        ($r.Discs[1] -join ',') | Should -Be '2'
+    }
+
+    It 'keeps the order on the form rather than repacking to save a disc' {
+        # 3 + 1 + 3 fits two discs either way, but a best-fit packer would put
+        # the two 3s together and move the 1. The list on screen is the order
+        # the menu numbers follow, so the set has to match it.
+        $r = Split-DiscSet @(3GB, 1GB, 3GB) $script:DVD5 $script:OVER 0
+        $r.Ok | Should -BeTrue
+        ($r.Discs[0] -join ',') | Should -Be '0,1'
+        ($r.Discs[1] -join ',') | Should -Be '2'
+    }
+
+    It 'gives every entry a disc, exactly once, in order' {
+        $r = Split-DiscSet @(2GB, 2GB, 2GB, 2GB, 2GB) $script:DVD5 $script:OVER 0
+        $flat = @($r.Discs | ForEach-Object { $_ })
+        ($flat -join ',') | Should -Be '0,1,2,3,4'
+    }
+
+    It 'refuses a single installer bigger than a whole disc, and says which one' {
+        # This is the case a later release handles by spreading one game's parts
+        # across the set. Producing a disc set that cannot install the game would
+        # be worse than refusing to produce one.
+        $r = Split-DiscSet @(1GB, 6GB, 1GB) $script:DVD5 $script:OVER 0
+        $r.Ok     | Should -BeFalse
+        $r.Reason | Should -Be 'entry'
+        $r.TooBig | Should -Be 1
+    }
+
+    It 'charges the disc-wide extras to disc 1 only' {
+        # 3 GB of extras plus a 1 GB game fits disc 1; the second 1 GB game does
+        # not, and lands on disc 2 - which pays nothing for the extras.
+        $r = Split-DiscSet @(1GB, 1GB) $script:DVD5 $script:OVER (3GB)
+        $r.Ok          | Should -BeTrue
+        $r.Discs.Count | Should -Be 2
+        ($r.Discs[0] -join ',') | Should -Be '0'
+        ($r.Discs[1] -join ',') | Should -Be '1'
+    }
+
+    It 'lets disc 1 carry nothing but the extras rather than refusing the set' {
+        # 4 GB of extras leaves no room on disc 1 for a 1 GB game, but every disc
+        # after it has the room. A set is still the right answer here.
+        $r = Split-DiscSet @(1GB, 1GB) $script:DVD5 $script:OVER (4GB)
+        $r.Ok            | Should -BeTrue
+        $r.Discs.Count   | Should -Be 2
+        $r.Discs[0].Count | Should -Be 0
+        ($r.Discs[1] -join ',') | Should -Be '0,1'
+    }
+
+    It 'refuses when the disc-wide extras alone are bigger than a disc' {
+        $r = Split-DiscSet @(1GB) $script:DVD5 $script:OVER (5GB)
+        $r.Ok     | Should -BeFalse
+        $r.Reason | Should -Be 'extras'
+    }
+
+    It 'refuses when the menu overhead alone would fill the medium' {
+        $r = Split-DiscSet @(1GB) (5MB) (10MB) 0
+        $r.Ok     | Should -BeFalse
+        $r.Reason | Should -Be 'capacity'
+    }
+
+    It 'returns one empty disc for an empty list rather than no discs at all' {
+        $r = Split-DiscSet @() $script:DVD5 $script:OVER 0
+        $r.Ok          | Should -BeTrue
+        $r.Discs.Count | Should -Be 1
+    }
+
+    It 'counts the overhead against every disc in the set' {
+        # Two games of exactly half a disc each fit together only if the menu is
+        # free, which it is not.
+        $half = $script:DVD5 / 2
+        $r = Split-DiscSet @($half, $half) $script:DVD5 $script:OVER 0
+        $r.Discs.Count | Should -Be 2
+    }
+}
+
+Describe 'Naming the discs in a set' {
+
+    It 'leaves a lone disc alone' {
+        Get-DiscSetLabel 'ALAN WAKE' 1 1 | Should -Be 'ALAN WAKE'
+        Get-VolumeLabel  'ALAN WAKE' 1 1 | Should -Be 'ALAN_WAKE'
+    }
+
+    It 'numbers the discs when there is more than one' {
+        Get-DiscSetLabel 'ALAN WAKE' 1 3 | Should -Be 'ALAN WAKE D1'
+        Get-DiscSetLabel 'ALAN WAKE' 3 3 | Should -Be 'ALAN WAKE D3'
+    }
+
+    It 'keeps the disc number even when the name is too long to fit beside it' {
+        # The volume id is 16 characters. Truncating the finished label would cut
+        # the number off the end and give every disc in the set the same id.
+        $v = Get-VolumeLabel 'THE WITCHER ENHANCED EDITION' 2 3
+        $v.Length     | Should -BeLessOrEqual 16
+        $v            | Should -BeLike '*_D2'
+    }
+
+    It 'gives every disc in a long-named set its own volume id' {
+        $ids = 1..4 | ForEach-Object { Get-VolumeLabel 'THE WITCHER ENHANCED EDITION' $_ 4 }
+        (@($ids | Sort-Object -Unique)).Count | Should -Be 4
+    }
+
+    It 'folds a label the volume id cannot carry, and never comes back empty' {
+        Get-VolumeLabel 'Hollow Knight!' 1 1 | Should -Be 'Hollow_Knight'
+        Get-VolumeLabel '***'            1 1 | Should -Be 'DISC'
+        Get-VolumeLabel ''               2 2 | Should -Be 'DISC_D2'
+    }
+}
+
+Describe 'Keeping a game and its add-ons on the same disc' {
+
+    BeforeAll {
+        # Two games, with two patches filed under the second - the shape the
+        # multi-game GIF records, and the one most likely to straddle a disc.
+        $script:Entries = @(
+            @{ GameName='The Witcher';  Kind='Game';  ParentIndex=-1; TotalBytes=9.48GB }
+            @{ GameName='Hollow Knight';Kind='Game';  ParentIndex=-1; TotalBytes=1.16GB }
+            @{ GameName='Update 1.5';   Kind='AddOn'; ParentIndex=1;  TotalBytes=0.20GB }
+            @{ GameName='Update 1.6';   Kind='AddOn'; ParentIndex=1;  TotalBytes=0.20GB }
+        )
+    }
+
+    It 'gathers each game with the add-ons filed under it' {
+        $g = Get-EntryGroups $script:Entries
+        $g.Count | Should -Be 2
+        ($g[0] -join ',') | Should -Be '0'
+        ($g[1] -join ',') | Should -Be '1,2,3'
+    }
+
+    It 'treats an add-on whose game is gone as an entry in its own right' {
+        # Same rule the menu uses. An orphan still has to be built and still has
+        # to land on some disc, so it cannot simply vanish from the grouping.
+        $orphan = @(
+            @{ GameName='Hollow Knight'; Kind='Game';  ParentIndex=-1; TotalBytes=1GB }
+            @{ GameName='Stray patch';   Kind='AddOn'; ParentIndex=7;  TotalBytes=1GB }
+        )
+        $g = Get-EntryGroups $orphan
+        $g.Count | Should -Be 2
+        ($g[1] -join ',') | Should -Be '1'
+    }
+
+    It 'accounts for every entry exactly once' {
+        # Assign before flattening: piping the function's output straight into
+        # ForEach-Object leaves the wrapper that the ,@() return idiom exists to
+        # keep, and you get the groups back rather than the indices inside them.
+        $groups = Get-EntryGroups $script:Entries
+        $flat = @(); foreach ($g in $groups) { $flat += $g }
+        (@($flat | Sort-Object) -join ',') | Should -Be '0,1,2,3'
+    }
+}
+
+Describe 'Cutting the list down to one disc of it' {
+
+    BeforeAll {
+        $script:Entries = @(
+            @{ GameName='The Witcher';   Kind='Game';  ParentIndex=-1 }
+            @{ GameName='Hollow Knight'; Kind='Game';  ParentIndex=-1 }
+            @{ GameName='Update 1.5';    Kind='AddOn'; ParentIndex=1  }
+        )
+    }
+
+    It 'renumbers the parent so the add-on still points at its own game' {
+        # Hollow Knight is entry 1 of the full list but entry 0 of this disc.
+        # Left alone, ParentIndex=1 would point at the patch itself.
+        $d = Get-DiscEntries $script:Entries @(1,2)
+        $d.Count               | Should -Be 2
+        $d[0].GameName         | Should -Be 'Hollow Knight'
+        [int]$d[1].ParentIndex | Should -Be 0
+    }
+
+    It 'produces a slice the menu reads the same way the whole list reads' {
+        $d  = Get-DiscEntries $script:Entries @(1,2)
+        $mg = Get-MenuGames $d
+        $mg.Count            | Should -Be 1
+        $mg[0].Name          | Should -Be 'Hollow Knight'
+        $mg[0].AddOns.Count  | Should -Be 1
+    }
+
+    It 'cuts the parent loose when it did not come along' {
+        # Not a case the packer creates - groups travel whole - but a slice that
+        # silently kept a stale index would be a menu pointing at the wrong game.
+        $d = Get-DiscEntries $script:Entries @(2)
+        [int]$d[0].ParentIndex | Should -Be -1
+    }
+
+    It 'does not disturb the list it was given' {
+        $before = [int]$script:Entries[2].ParentIndex
+        Get-DiscEntries $script:Entries @(1,2) | Out-Null
+        [int]$script:Entries[2].ParentIndex | Should -Be $before
+    }
+}
+
+Describe 'Planning a set for the disc you are going to burn' {
+
+    BeforeAll {
+        $script:Two = @(
+            @{ GameName='Big';   Kind='Game';  ParentIndex=-1; TotalBytes=3GB    }
+            @{ GameName='Small'; Kind='Game';  ParentIndex=-1; TotalBytes=1.16GB }
+            @{ GameName='P1';    Kind='AddOn'; ParentIndex=1;  TotalBytes=0.2GB  }
+            @{ GameName='P2';    Kind='AddOn'; ParentIndex=1;  TotalBytes=0.2GB  }
+        )
+    }
+
+    It 'keeps a game and its patches on the same disc even when that costs a disc' {
+        # Big is 3 GB; Small plus its two patches is 1.56 GB. Both together are
+        # 4.56 GB, past a DVD5, so the group moves whole rather than leaving a
+        # patch behind on disc 1 pointing at a game that is not there.
+        $plan = Get-DiscPlan $script:Two 'DVD5' 10MB 0
+        $plan.Ok        | Should -BeTrue
+        $plan.Discs.Count | Should -Be 2
+        ($plan.Discs[0] -join ',') | Should -Be '0'
+        ($plan.Discs[1] -join ',') | Should -Be '1,2,3'
+    }
+
+    It 'puts the lot on one disc when the medium is big enough' {
+        $plan = Get-DiscPlan $script:Two 'BD25' 10MB 0
+        $plan.Ok          | Should -BeTrue
+        $plan.Discs.Count | Should -Be 1
+        ($plan.Discs[0] -join ',') | Should -Be '0,1,2,3'
+    }
+
+    It 'names the game that will not fit rather than the group that held it' {
+        $huge = @(@{ GameName='The Witcher'; Kind='Game'; ParentIndex=-1; TotalBytes=9.48GB })
+        $plan = Get-DiscPlan $huge 'DVD9' 10MB 0
+        $plan.Ok         | Should -BeFalse
+        $plan.Reason     | Should -Be 'entry'
+        $plan.TooBigName | Should -Be 'The Witcher'
+    }
+
+    It 'refuses a medium it does not have a capacity for' {
+        $plan = Get-DiscPlan $script:Two 'LASERDISC' 10MB 0
+        $plan.Ok     | Should -BeFalse
+        $plan.Reason | Should -Be 'media'
+    }
+
+    It 'hands the slicer indices it can build a working disc from' {
+        # The end-to-end shape: plan, slice, and the menu on disc 2 has to show
+        # one game carrying two add-ons - not three separate games.
+        $plan = Get-DiscPlan $script:Two 'DVD5' 10MB 0
+        $d2   = Get-DiscEntries $script:Two @($plan.Discs[1])
+        $mg   = Get-MenuGames $d2
+        $mg.Count           | Should -Be 1
+        $mg[0].Name         | Should -Be 'Small'
+        $mg[0].AddOns.Count | Should -Be 2
+    }
+}
+
+Describe 'Telling you what the plan came to' {
+
+    # @() flattens a SINGLE argument, so a one-disc @(@(0,1)) collapses into a
+    # two-element array and reads back as a two-disc set. Several arguments are
+    # left alone. The planner sidesteps both by appending with ",@()".
+    It 'counts the discs and names the medium' {
+        $plan = @{ Ok=$true; Discs=@(@(0), @(1), @(2)) }
+        Get-DiscPlanText $plan 'DVD5' | Should -Be '3 discs of DVD5 4.7 GB'
+    }
+
+    It 'does not call a single disc a set' {
+        $plan = @{ Ok=$true; Discs=@(,@(0,1)) }
+        Get-DiscPlanText $plan 'BD25' | Should -Be '1 disc, BD-R 25 GB'
+    }
+
+    It 'says which game is the problem, in the words on the dropdown' {
+        $plan = @{ Ok=$false; Reason='entry'; TooBigName='The Witcher'; Discs=@() }
+        Get-DiscPlanText $plan 'DVD5' | Should -Be 'The Witcher alone is bigger than a DVD5 4.7 GB'
+    }
+
+    It 'separates extras that will not fit from a game that will not fit' {
+        $plan = @{ Ok=$false; Reason='extras'; TooBigName=''; Discs=@() }
+        Get-DiscPlanText $plan 'CD' | Should -Be 'the extra content alone is bigger than a CD-R 700 MB'
+    }
+}
+
+Describe 'Turning what the dropdown says into what the planner needs' {
+
+    It 'round-trips every tier through its name' {
+        foreach ($t in Get-MediaTiers) {
+            Get-MediaKeyFromName $t.Name | Should -Be $t.Key
+            Get-MediaNameFromKey $t.Key  | Should -Be $t.Name
+        }
+    }
+
+    It 'reads the automatic setting as no medium at all' {
+        # This is what keeps a single disc building exactly as it always has.
+        Get-MediaKeyFromName (Get-MediaAutoText) | Should -Be ''
+        Get-MediaKeyFromName 'something else'    | Should -Be ''
+    }
+
+    It 'falls back to the automatic setting for a key it cannot place' {
+        Get-MediaNameFromKey 'LASERDISC' | Should -Be (Get-MediaAutoText)
+        Get-MediaNameFromKey ''          | Should -Be (Get-MediaAutoText)
+    }
+}
+
+Describe 'Building a set of discs' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    BeforeAll {
+        $script:SetGames = @(
+            (Get-GameInfo (New-FixtureGame -Slug 'set_alpha' -ExeMb 2)),
+            (Get-GameInfo (New-FixtureGame -Slug 'set_beta'  -ExeMb 2)),
+            (Get-GameInfo (New-FixtureGame -Slug 'set_gamma' -ExeMb 2))
+        )
+        $script:SetOut = Join-Path $script:Sandbox 'build-set'
+        New-Item -ItemType Directory -Force -Path $script:SetOut | Out-Null
+
+        # A disc-wide Extras folder, so the test can show which disc it lands on.
+        $script:SetExtras = Join-Path $script:Sandbox 'set-extras'
+        New-Item -ItemType Directory -Force -Path $script:SetExtras | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:SetExtras 'bonus.txt') -Value 'bonus' -Encoding ASCII
+
+        $s = New-BuildSettings -Games $script:SetGames -Label 'Boxed Set' -OutDir $script:SetOut
+        $s.ExtrasPath = $script:SetExtras
+        # The disc-wide Extras only ship when the Extras button is switched on -
+        # the folder alone is not enough, and the default fixture buttons omit it.
+        $s.Buttons    = @('Play','Install','Extras','Exit')
+        $s.MediaKey   = 'CD'
+        # The plan is handed in rather than worked out from real sizes. How the
+        # games get divided is Get-DiscPlan's job and has its own tests; a fixture
+        # big enough to actually fill a CD would add most of a gigabyte of writing
+        # to every run to prove something already proven.
+        # @(@(0), @(1,2)) is two elements because @() only flattens a SINGLE
+        # argument - which is why a one-disc plan has to be written @(,@(0,1)).
+        $s.Plan = @{ Ok=$true; Reason=''; Discs=@(@(0), @(1,2))
+                     Capacity=(Get-MediaCapacity 'CD'); TooBigName=''; Room=[double]0 }
+
+        $script:SetIsos  = @(Invoke-BuildSet $s $script:LogSink)
+        $script:SetStage = Join-Path $script:SetOut 'disc'
+    }
+
+    It 'writes one ISO per disc' {
+        $script:SetIsos.Count | Should -Be 2
+        foreach ($i in $script:SetIsos) { Test-Path $i | Should -BeTrue }
+    }
+
+    It 'numbers the ISOs so a set does not overwrite itself' {
+        # The bug this pins: every disc named from the same label would write the
+        # same file, and a three-disc set would leave one ISO behind.
+        (Split-Path $script:SetIsos[0] -Leaf) | Should -Be 'Boxed Set D1.iso'
+        (Split-Path $script:SetIsos[1] -Leaf) | Should -Be 'Boxed Set D2.iso'
+    }
+
+    It 'saves one project file, describing the whole set rather than the last disc' {
+        $j = Get-Content -Raw (Join-Path $script:SetOut 'discproject.json') | ConvertFrom-Json
+        @($j.Games).Count | Should -Be 3
+        $j.Label          | Should -Be 'Boxed Set'
+        $j.MediaKey       | Should -Be 'CD'
+    }
+
+    It 'stages the last disc of the set, not the first' {
+        # One staging folder is reused disc by disc, so what survives is disc 2 -
+        # two games, which always live in Games\.
+        Test-Path (Join-Path $script:SetStage 'Games') | Should -BeTrue
+        @(Get-ChildItem (Join-Path $script:SetStage 'Games') -Directory).Count | Should -Be 2
+    }
+
+    It 'renumbers each disc from 01 rather than carrying on from the last one' {
+        # Disc 2 holds entries 1 and 2 of the list. On the disc they are 01 and 02:
+        # the folder numbers are the menu order for THAT disc.
+        $names = @(Get-ChildItem (Join-Path $script:SetStage 'Games') -Directory | ForEach-Object { $_.Name } | Sort-Object)
+        $names[0] | Should -BeLike '01 - *'
+        $names[1] | Should -BeLike '02 - *'
+    }
+
+    Context 'what actually ended up on each disc' -Skip:(-not $script:SevenZip) {
+
+        BeforeAll {
+            $script:D1 = Get-IsoEntries -IsoPath $script:SetIsos[0] -SevenZip $script:SevenZip
+            $script:D2 = Get-IsoEntries -IsoPath $script:SetIsos[1] -SevenZip $script:SevenZip
+        }
+
+        It 'gives every disc its own volume id' {
+            $v1 = Get-IsoVolumeId -IsoPath $script:SetIsos[0] -SevenZip $script:SevenZip
+            $v2 = Get-IsoVolumeId -IsoPath $script:SetIsos[1] -SevenZip $script:SevenZip
+            $v1 | Should -Be 'Boxed_Set_D1'
+            $v2 | Should -Be 'Boxed_Set_D2'
+        }
+
+        It 'gives every disc a menu of its own' {
+            $script:D1 | Should -Contain 'AUTORUN\menu.hta'
+            $script:D2 | Should -Contain 'AUTORUN\menu.hta'
+            $script:D1 | Should -Contain 'autorun.inf'
+            $script:D2 | Should -Contain 'autorun.inf'
+        }
+
+        It 'leaves the one game on disc 1 at the root, as a one-game disc always is' {
+            @($script:D1 | Where-Object { $_ -like 'Games\*' }).Count | Should -Be 0
+            @($script:D1 | Where-Object { $_ -like 'setup_set_alpha*' }).Count | Should -BeGreaterThan 0
+        }
+
+        It 'carries the disc-wide extras on disc 1 only' {
+            # Copying them onto every disc would multiply bonus content by the
+            # size of the set - the reason they are charged to disc 1 in the plan.
+            $script:D1 | Should -Contain 'Extras\bonus.txt'
+            @($script:D2 | Where-Object { $_ -like 'Extras\*' }).Count | Should -Be 0
+        }
+
+        It 'puts each game on exactly one disc in the set' {
+            $onD1 = @($script:D1 | Where-Object { $_ -match 'setup_set_(alpha|beta|gamma)' })
+            $onD2 = @($script:D2 | Where-Object { $_ -match 'setup_set_(alpha|beta|gamma)' })
+            ($onD1 | Where-Object { $_ -match 'beta|gamma' }).Count | Should -Be 0
+            ($onD2 | Where-Object { $_ -match 'alpha' }).Count      | Should -Be 0
+            $onD2.Count | Should -BeGreaterThan 1
+        }
     }
 }

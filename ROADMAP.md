@@ -15,13 +15,28 @@ feature only creates pressure to cram things in to justify it.
 
 ## Next
 
-**Multi-disc splitting.** The largest thing still outstanding, and the one most likely to
-be asked for next: anything bigger than a single disc is a known limitation today. It was
-requested twice, independently, within hours of the first release. Needs a splitting
-strategy, a volume label convention, and a menu that can ask for disc 2 — which is,
-admittedly, most of what made the original experience feel like the original experience.
+**Splitting one game across a set.** Half of multi-disc splitting shipped: several games
+are now packed onto as many discs as they need. What is left is the harder and better
+half — a single installer larger than one disc.
+
+This turns out to be more promising than expected. GOG's installers are Inno Setup with
+disk spanning switched on: run one without a `.bin` part beside it and it raises
+*"Installer needs the next part (.BIN) file"* with a path box, rather than failing. It
+also runs from a temp copy of itself, so ejecting disc 1 mid-install is safe, and it
+defaults the path to the installer's own folder — so a set that keeps the same layout on
+every disc may need nothing more than a disc swap and OK.
+
+Needs: parts distributed across the set, a menu that explains the swap, Install disabled
+on the continuation discs, and a check that the default path really does resolve after a
+swap. That last one is testable by mounting two ISOs to the same drive letter in turn, no
+burning required.
 
 ## Delivered
+
+**Several games across a disc set** — the first half of multi-disc splitting, requested
+twice within hours of the first release. Say which disc you own and the games are packed
+onto as many as it takes, in the order they sit on the form, with each game's add-ons
+kept alongside it and every disc standing on its own.
 
 **More than one installer on a disc** — shipped in 0.3.0, and it was the most-asked-for
 thing on this page. Several games on one disc with a chooser in the menu; DLC, expansions,

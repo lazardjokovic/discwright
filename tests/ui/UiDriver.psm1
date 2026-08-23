@@ -351,7 +351,10 @@ function Get-StatusText {
     for ($i = 0; $i -lt $all.Count; $i++) {
         try {
             $n = $all.Item($i).Current.Name
-            if ($n -match 'Disc: |Detected: |setup_\*|already on this disc|no installer') { $found = $n }
+            # "-> Disc: fits DVD5" is the advice line. "-> 3 discs of DVD5" is
+            # the same line once a target disc is chosen, and it carries no
+            # "Disc: " for the first pattern to catch.
+            if ($n -match 'Disc: |Detected: |setup_\*|already on this disc|no installer|discs? of |disc, |bigger than a ') { $found = $n }
         } catch {}
     }
     return $found
@@ -459,6 +462,50 @@ function Save-WindowShot {
     $bmp.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
 }
 
+function Find-MediaTarget {
+    <#  .SYNOPSIS
+        The Target disc dropdown, found by what it currently says.
+
+        Every control in this application comes through UI Automation as a bare
+        Pane with no patterns at all - no ExpandCollapse, no SelectionItem - so
+        the dropdown cannot be driven the way a dropdown normally would be. It is
+        located by its text and worked with the keyboard, like everything else
+        here. The strings it can hold are unique in the window, which is what
+        makes finding it by text safe.
+    #>
+    param($Win)
+    foreach ($t in @('Fit on one disc*','CD-R 700 MB','DVD5 4.7 GB','DVD9 8.5 GB*','BD-R 25 GB','BD-R DL 50 GB*','BD-R XL 100 GB')) {
+        $c = Find-Ctl $Win $t -TimeoutSec 1
+        if ($c) { return $c }
+    }
+    return $null
+}
+
+function Get-MediaTargetText {
+    <#  .SYNOPSIS What the Target disc dropdown currently reads. #>
+    param($Win)
+    $c = Find-MediaTarget $Win
+    if (-not $c) { return '' }
+    return [string]$c.Current.Name
+}
+
+function Set-MediaTarget {
+    <#  .SYNOPSIS
+        Choose an entry in the Target disc dropdown by its position in the list.
+
+        Absolute, not relative: {HOME} goes to the first entry whatever was
+        selected before, so the same call lands on the same medium no matter what
+        an earlier test left behind.
+    #>
+    param($Win, [int]$Index)
+    $c = Find-MediaTarget $Win
+    if (-not $c) { throw 'the Target disc dropdown is not on the window' }
+    Invoke-Ctl -Ctl $c -SettleMs 300
+    Send-Keys '{HOME}' 150
+    for ($i = 0; $i -lt $Index; $i++) { Send-Keys '{DOWN}' 100 }
+    Send-Keys '{ENTER}' 350
+}
+
 function Clear-AllEntries {
     <#
     .SYNOPSIS
@@ -489,4 +536,5 @@ function Clear-AllEntries {
 Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
-    Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow
+    Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,
+    Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget
