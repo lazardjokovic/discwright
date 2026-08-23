@@ -64,6 +64,41 @@ If a game ever did arrive as one indivisible file, nothing breaks - the planner 
 slice as an atom, so it would refuse by name exactly as it refuses The Witcher on a DVD5
 today.
 
+**File a game's add-ons under the game, not beside it.** Requested by someone building a
+multi-game disc. On the disc today every entry gets its own numbered folder, so a game
+and its DLC sit as siblings:
+
+```
+Games\01 - Hollow Knight\
+Games\02 - Update 1.5.12459\
+Games\03 - Update 1.5.12618\
+Games\04 - Ori and the Blind Forest\
+```
+
+With two games carrying three patches each that is eight top-level folders and nothing
+saying what belongs to what. The menu already knows - an add-on shows as a second Install
+button on its game's screen, never in the chooser - so the disc layout is the only place
+they still look unrelated. Disc sets made that odder rather than better: a game and its
+add-ons now travel to the same disc together, and then land in folders that do not say so.
+
+The shape would be the game's own folder holding them, the way its manual and extras
+already are:
+
+```
+Games\01 - Hollow Knight\
+Games\01 - Hollow Knight\Add-ons\Update 1.5.12459\
+Games\02 - Ori and the Blind Forest\
+```
+
+Two things to settle first. **An orphan needs somewhere to go** - remove a game and its
+add-ons become entries in their own right, in the menu and so on the disc, which means
+moving back out to the top level. And **the numbering is the menu order**, so grouping
+changes what the numbers count; whether add-ons keep numbers of their own inside the
+folder or just use their names is a real choice rather than a detail.
+
+Small, and worth doing. It changes where files land on a disc, so it wants its own
+release note rather than riding along with something else.
+
 ## Delivered
 
 **Several games across a disc set** — the first half of multi-disc splitting, requested
