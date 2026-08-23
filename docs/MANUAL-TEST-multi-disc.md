@@ -164,10 +164,12 @@ target on `DVD9` and two discs planned, step 4 and step 5 read:
 - **`Extras folder (disc 1):`**
 - **`5)  Extra content (copied to disc 1 of the set)`**
 
+This is the disclosure that the every-disc option, which lives down in step 5,
+governs step 4 as well.
+
 Flip the target back to `Fit on one disc` and all three lose the note; flip to `DVD9`
-and it returns. If they never show the note at all, that is a bug - it was verified
-working, so a failure here means something regressed. This is the disclosure that the every-disc option, which lives down in
-step 5, governs step 4 as well.
+and it returns. If the note never appears at all, that is a regression - it was
+verified working on this branch.
 
 ### 6b. Build
 
