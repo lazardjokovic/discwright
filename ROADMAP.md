@@ -31,25 +31,38 @@ on the continuation discs, and a check that the default path really does resolve
 swap. That last one is testable by mounting two ISOs to the same drive letter in turn, no
 burning required.
 
-**What it will not be able to promise.** DiscWright can only move whole files, and GOG
-slices its installers at about 4 GB — measured across four real downloads:
+**What this depends on, and it is worth stating plainly.** DiscWright would not cut
+anything up — GOG already ships a large game as numbered `.bin` parts, and all this
+feature does is put different existing parts on different discs. Nothing is sliced,
+joined or modified. So the whole idea rests on GOG continuing to split its installers
+the way it does today. Were they ever to switch to a single enormous file per game,
+there would be nothing left to distribute and the feature would stop applying to new
+downloads.
+
+That looks safe rather than lucky. Measured across six games from four publishers,
+1 GB to 137 GB, every one slices at about 4 GB:
 
 ```
-Alan Wake      4.00 GB + 3.79 GB
-The Witcher    4.00 GB + 4.00 GB + 1.48 GB
-Dead Space     3.91 GB + 3.91 GB + 0.29 GB
-Hollow Knight  1.16 GB, one file, nothing to split
+Baldur's Gate 3   137.0 GB   33 parts   4.15 GB each
+Cyberpunk 2077    113.1 GB   28 parts   4.04 GB each
+The Witcher         9.48 GB   3 parts   4.00 / 4.00 / 1.48
+Dead Space          8.13 GB   3 parts   3.91 / 3.91 / 0.29
+Alan Wake           7.79 GB   2 parts   4.00 / 3.79
+Hollow Knight       1.16 GB   1 file    nothing to split
 ```
 
-So one slice is the floor. **No game with `.bin` parts can go on CDs**, however many you
-have, and re-slicing is not a way out: the installer asks for the exact filenames GOG
-produced, and half of one is not a file it recognises. A 100 GB game is roughly 25
-slices — about 25 DVDs, 5 BD-Rs, or 2 BD-R XLs.
+There is a reason it holds. 4 GiB is the largest file FAT32 can store, Inno Setup has
+`DiskSliceSize` precisely for that, and GOG sets it just under the line. It is a
+deliberate constraint rather than a habit, which makes it unlikely to change quietly.
 
-Whether a disc takes one slice or two depends on the exact slice size rather than the
-tier: two of Dead Space's 3.91 GB parts fit a DVD9's 7.95 GB, two 4.00 GB parts do not.
-CDs keep the role they already have here, the sub-700 MB back catalogue, where the whole
-game is a single `.exe` and none of this arises.
+The practical consequence is that **one slice is the smallest thing that can move**.
+A 100 GB game is roughly 25 pieces, so two BD-R XLs or six BD-Rs. Whether a disc takes
+one piece or two depends on the exact slice size rather than the tier: two of Dead
+Space's 3.91 GB parts fit a DVD9's 7.95 GB, two 4.00 GB parts do not.
+
+If a game ever did arrive as one indivisible file, nothing breaks - the planner treats a
+slice as an atom, so it would refuse by name exactly as it refuses The Witcher on a DVD5
+today.
 
 ## Delivered
 
