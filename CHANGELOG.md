@@ -81,6 +81,27 @@ between minor versions.
 
 ### Fixed
 
+- **`REBUILD ISO` claimed it would replace an ISO it was never going to touch.**
+  The ISO is named from the disc label, so building one disc as `ALAN WAKE` and the
+  next as `The Witcher` into the same output folder correctly produces two files —
+  DiscWright does not delete an ISO it did not write, because it cannot tell its own
+  leftovers from something you put there.
+
+  The button did not say that. It went by "is there *any* `.iso` in this folder", so
+  it read `REBUILD ISO` for the second disc and offered to "replace the ISO already
+  in the output folder", then wrote a new file and left the old one alone. The
+  confirmation dialog repeated the same claim.
+
+  Both now go by the ISO **this label** writes, and name the file: `REBUILD ISO`
+  means that exact file is about to be overwritten, and `BUILD ISO` means nothing of
+  that name is there yet. When a differently named ISO is present the dialog says so
+  — that it will be left alone — rather than implying it is about to go.
+
+  A leftover `disc\` staging folder no longer makes the button say `REBUILD` either.
+  It is rebuilt from scratch by every build and holds nothing that is not also in the
+  ISO, so it was warning about nothing. It is still called out separately in the
+  confirmation, since anything added to it by hand really does get lost.
+
 - **An add-on's Install button no longer offers to run before its game exists.**
   A patch, a piece of DLC or a mod is applied *on top of* the game it belongs to.
   The menu enabled those buttons purely on whether the file was present on the
