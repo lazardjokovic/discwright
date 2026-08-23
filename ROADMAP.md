@@ -82,6 +82,26 @@ finding a `setup_*.exe` — see *Installers that are not from GOG* under Conside
 
 ## Later
 
+**Say which blank each disc in a set actually needs.** A set is planned against one
+medium, so every disc is assumed to be the same size — and the last disc of a set is
+usually nowhere near full. Building Hollow Knight and Alan Wake for DVD9 today gives a
+1.8 GB disc and a 7.8 GB one, and the first of those wastes most of an expensive blank
+for no reason.
+
+DiscWright already knows each disc's payload, so it can simply say: *disc 1, 1.8 GB, a
+DVD5 will do; disc 2, 7.8 GB, needs a DVD9*. Nothing about the packing changes. It is a
+line of advice, and it costs one pass over a plan that has already been computed.
+
+The bigger version of this — telling DiscWright how many blanks of each size you own and
+letting it pack accordingly — is deliberately **not** the plan. It turns a simple problem
+into bin packing with heterogeneous bins, it needs a real inventory in the interface, and
+on the cases tried it changes which disc things land on without changing how many discs
+or which blanks get used. Advice gets nearly all of the benefit for almost none of it.
+
+Worth doing after splitting one game across a set, not before: a single game sliced at
+4 GB is where the waste becomes routine. One 4.00 GB slice on a DVD9 leaves 3.95 GB
+unused on every disc in the set, and a DVD5 would have been the right blank throughout.
+
 **Artwork without the detour through an image editor.** Two requests that meet in the
 middle. One: fetch the game's icon and cover art automatically rather than making you hunt
 for a PNG. Two: build printable case inserts as well as the disc face — cover on the
