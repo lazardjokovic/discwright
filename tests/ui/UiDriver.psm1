@@ -464,6 +464,32 @@ function Save-WindowShot {
     $bmp.Save($Path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
 }
 
+function Find-RowButton {
+    <#  .SYNOPSIS
+        The button sitting on the same row as a given label.
+
+        Several rows have a button called "Browse...", so a name alone picks
+        whichever the enumeration reaches first - which is not stable and is not
+        the one the test means. Rows are, so the label's vertical centre is what
+        identifies it.
+    #>
+    param($Win, [string]$LabelLike, [string]$ButtonLike = 'Browse...', [int]$TimeoutSec = 6)
+    $lbl = Find-Ctl -Root $Win -NameLike $LabelLike -TimeoutSec $TimeoutSec
+    if (-not $lbl) { throw "no label matching '$LabelLike'" }
+    $lr = $lbl.Current.BoundingRectangle
+    $ly = $lr.Y + ($lr.Height / 2)
+    $all = $Win.FindAll($script:UiScope::Descendants, $script:UiAny)
+    for ($i = 0; $i -lt $all.Count; $i++) {
+        $e = $all.Item($i)
+        try {
+            if ($e.Current.Name -notlike $ButtonLike) { continue }
+            $r = $e.Current.BoundingRectangle
+            if ([Math]::Abs(($r.Y + $r.Height / 2) - $ly) -le 8) { return $e }
+        } catch {}
+    }
+    return $null
+}
+
 function Find-MediaTarget {
     <#  .SYNOPSIS
         The Target disc dropdown, found by what it currently says.
@@ -539,4 +565,4 @@ Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWrigh
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
     Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,
-    Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget
+    Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton

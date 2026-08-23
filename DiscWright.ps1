@@ -3354,14 +3354,23 @@ $btnBg.Add_Click({ $d=New-FileDialog 'Pick the menu background' 'Images|*.png;*.
 $btnMusic.Add_Click({ $d=New-FileDialog 'Pick the background music' 'Audio|*.mp3;*.wav;*.wma' $txtMusic.Text; if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileName; $txtMusic.Text=$d.FileName; $state.MusicFile=$d.FileName } })
 # Manuals are usually PDF but plenty ship as text or HTML, and the menu just
 # shell-executes whatever it is - nothing in the pipeline needs it to be a PDF.
-$btnMan.Add_Click({ $d=New-FileDialog 'Pick the manual for this disc' 'Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*' $txtMan.Text; if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileName; $txtMan.Text=$d.FileName; $state.ManualPath=$d.FileName; Update-MediaLabel } })
+# Both of these refresh the BUTTONS as well as the advice line. What they set -
+# the disc-wide manual and extras - is what decides whether "put them on every
+# disc" has anything to govern, and that rule lives in Update-ActionButtons.
+# Without this the checkbox sat greyed out with a folder chosen right above it.
+# Add-ExtraItem has said the same thing for the step 5 list since 0.3.0.
+$btnMan.Add_Click({ $d=New-FileDialog 'Pick the manual for this disc' 'Manuals|*.pdf;*.txt;*.htm;*.html;*.rtf;*.doc;*.docx|All files|*.*' $txtMan.Text; if($d.ShowDialog() -eq 'OK'){ Set-LastFileBrowse $d.FileName; $state.ManualPath=$d.FileName; $txtMan.Text=$d.FileName; Update-MediaLabel; Update-ActionButtons } })
 $btnEx.Add_Click({
     # Folder pickers READ the shared fallback but never write it. Only a file pick
     # updates it, so choosing an extras folder cannot quietly move where the icon
     # picker opens next.
     $start = $txtEx.Text.Trim(); if (-not $start) { $start = Get-MediaBrowseFallback }
     $d=New-FolderDialog 'Pick a folder of extras to put on the disc' $start
-    if($d.ShowDialog() -eq 'OK'){ $txtEx.Text=$d.SelectedPath; $state.ExtrasPath=$d.SelectedPath; Update-MediaLabel } })
+    # $state first, box second. Assigning .Text raises TextChanged synchronously,
+    # and that handler runs Update-ActionButtons, which reads $state.ExtrasPath to
+    # decide whether the every-disc option has anything to govern. Written the
+    # other way round it read the value one statement before it was set.
+    if($d.ShowDialog() -eq 'OK'){ $state.ExtrasPath=$d.SelectedPath; $txtEx.Text=$d.SelectedPath; Update-MediaLabel; Update-ActionButtons } })
 $btnOut.Add_Click({ $d=New-FolderDialog 'Pick where the disc folder and the ISO get written' $txtOut.Text.Trim(); if($d.ShowDialog() -eq 'OK'){ $txtOut.Text=$d.SelectedPath } })
 $btnXFile.Add_Click({
     $d=New-FileDialog 'Pick any files to put on the disc' 'All files|*.*' ''

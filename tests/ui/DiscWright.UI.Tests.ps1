@@ -129,6 +129,20 @@ BeforeAll {
         ExtraItems=@(); MediaKey='CD'; OutDir=$script:BigOutSet
     } $script:BigOutSet
 
+    # Extras button on, no folder chosen yet: the state you are in the moment
+    # before browsing for one, which is where the greying bug lived.
+    $script:BigOutEx = Join-Path $script:Sandbox 'bigproj-ex'
+    New-Item -ItemType Directory -Force -Path $script:BigOutEx | Out-Null
+    Save-Project @{
+        Games=@((Get-GameInfo $script:BigA),(Get-GameInfo $script:BigB)); Label='Needs Extras'
+        IconPath=$script:Art; IconIsIco=$false
+        Menu=$true; BgPath=$script:Art; BgAsIs=$false; PanelSide='Right'
+        Divider=$false; ShowTitle=$false; TitleText=''
+        WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+        Buttons=@('Play','Install','Extras','Exit'); ManualPath=$null; ExtrasPath=$null
+        ExtraItems=@(); MediaKey='CD'; ExtrasEveryDisc=$false; OutDir=$script:BigOutEx
+    } $script:BigOutEx
+
     $script:App = $null
 }
 
@@ -725,5 +739,37 @@ Describe 'Reopening a project that was planned as a set' -Tag 'UI' -Skip:(-not $
         Start-Sleep -Seconds 2
         Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
         Get-StatusText $script:Win | Should -Match 'Disc: '
+    }
+}
+
+Describe 'Choosing an extras folder wakes the every-disc option' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The bug: the Browse handlers for the disc-wide manual and Extras folder
+    # refreshed the advice line but not the buttons, and the rule deciding whether
+    # "put them on every disc" has anything to govern lives with the buttons. So
+    # the checkbox stayed greyed out with a folder chosen directly above it.
+    # Add-ExtraItem had called both since 0.3.0; these two never did.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:BigOutEx
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'starts greyed, because there is no disc-wide content yet' {
+        Test-CtlEnabled $script:Win 'Also put the manual*' | Should -BeFalse
+    }
+
+    It 'wakes as soon as a folder is chosen, without touching anything else' {
+        $b = Find-RowButton -Win $script:Win -LabelLike 'Extras folder*'
+        $b | Should -Not -BeNullOrEmpty
+        Invoke-Ctl -Ctl $b -SettleMs 700
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 1
+        Test-CtlEnabled $script:Win 'Also put the manual*' | Should -BeTrue
     }
 }
