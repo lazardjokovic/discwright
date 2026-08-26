@@ -2276,3 +2276,90 @@ Describe 'Knowing what a build is about to overwrite' {
         (Get-BuildTargets $script:BtDir 'DISC D').Existing | Should -Be 0
     }
 }
+
+Describe "The menu's JavaScript is valid JavaScript" {
+
+    # The menu is ~23,000 characters of JScript living inside a PowerShell
+    # here-string. Nothing used to check it. A stray brace or a half-deleted
+    # function would sail through every test here - the parser only sees a
+    # string - and would then break the menu at runtime, on the disc, after a
+    # burn. The Play-task tests pull three functions out and run them, which
+    # says nothing about the other forty-two.
+    #
+    # new Function(src) parses without executing, so document, window and
+    # ActiveX are never touched. It throws on a syntax error, which is exactly
+    # and only what is being asked.
+
+    BeforeDiscovery {
+        $script:HaveCScriptMenu = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:CScriptMenu = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        $appSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $m = [regex]::Match($appSrc, "(?s)\`$tpl = @'\r?\n(.*?)\r?\n'@")
+        if (-not $m.Success) { throw 'the menu template is no longer a $tpl here-string' }
+        $tpl = $m.Groups[1].Value
+
+        # Values only have to be syntactically valid - nothing is executed. The
+        # test fails loudly on an unsubstituted placeholder rather than quietly
+        # parse-checking a template with %%NEWTHING%% still in it.
+        $subs = @{
+            '%%APPNAME%%'  = 'DiscMenu_Test'; '%%ICONFILE%%' = 'disc.ico'; '%%TITLE%%' = 'Test'
+            '%%STAGEBORDER%%' = 'border:0;';  '%%BTNBORDER%%' = 'border:0;'; '%%PANELLEFT%%' = '40'
+            '%%GAMES%%'    = '[{n:"A",m:"A",s:"setup.exe",man:"",ext:"",a:[]}]'
+            '%%BTNS%%'     = '["Play","Install","Exit"]'
+            '%%MANUAL%%'   = 'manual.pdf'; '%%MUSIC%%' = 'music.mp3'; '%%PREVIEW%%' = 'false'
+        }
+        foreach ($k in $subs.Keys) { $tpl = $tpl.Replace($k, $subs[$k]) }
+        $script:MenuLeftover = [regex]::Match($tpl, '%%[A-Z]+%%').Value
+
+        $js = [regex]::Match($tpl, '(?s)<script[^>]*>(.*?)</script>')
+        if (-not $js.Success) { throw 'no <script> block in the menu template' }
+        $script:MenuJs = $js.Groups[1].Value
+    }
+
+    It 'has no placeholder the substitution table has forgotten' {
+        # Otherwise a new %%TOKEN%% would be parse-checked as literal text and
+        # this whole block would quietly stop testing what it claims to.
+        $script:MenuLeftover | Should -BeNullOrEmpty
+    }
+
+    It 'parses' -Skip:(-not $script:HaveCScriptMenu) {
+        $probe = @'
+var src = WScript.StdIn.ReadAll();
+try { new Function(src); WScript.Echo("OK"); }
+catch (e) { WScript.Echo("SYNTAX ERROR: " + e.message); }
+'@
+        $pf = Join-Path $script:Sandbox 'jsparse.js'
+        $bf = Join-Path $script:Sandbox 'menubody.js'
+        Set-Content -LiteralPath $pf -Value $probe -Encoding Ascii
+        Set-Content -LiteralPath $bf -Value $script:MenuJs -Encoding Ascii
+        $out = (cmd /c "`"$script:CScriptMenu`" //Nologo //E:JScript `"$pf`" < `"$bf`"" 2>&1) -join ' '
+        $out.Trim() | Should -Be 'OK'
+    }
+
+    It 'still defines the functions the menu is built out of' {
+        # A parse check passes on an empty string too. This is the guard that the
+        # extraction above actually found the menu and not some other <script>.
+        foreach ($fn in 'init','show','doPlay','doInstall','playTasks','capFor','btnHtml') {
+            $script:MenuJs | Should -Match ("function\s+" + $fn + "\s*\(")
+        }
+    }
+
+    It 'has no leftovers of the disc-set caption' {
+        # capFor used to append "Disc 2 of 3" from DISCNUM/DISCOF. Disc sets are
+        # gone; a half-removal would leave an undefined reference that parses
+        # fine and throws only when the menu is opened.
+        foreach ($dead in 'DISCNUM','DISCOF','discLine','capd') {
+            $script:MenuJs | Should -Not -Match $dead
+        }
+    }
+}
