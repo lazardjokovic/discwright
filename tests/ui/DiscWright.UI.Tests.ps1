@@ -508,13 +508,23 @@ Describe 'Removing an entry' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         Get-EntryCount $script:Win | Should -Be 2
     }
 
-    It 'promotes orphaned add-ons instead of deleting them with their game' {
-        # Removing the game leaves its add-ons on the disc as games of their own.
-        # Silently discarding an installer the user chose is the worse outcome.
+    It 'asks what to do with the add-ons before removing their game' {
+        # Removing a game used to promote its add-ons to games of their own,
+        # silently. On the disc that means a patch listed in the menu as a game,
+        # whose Install runs it against a game that is not there. Deleting them
+        # silently is no better, so the button asks - and the dialog names them,
+        # because "2 add-ons" is not enough to decide on.
         Select-ListRow -Win $script:Win -Index 0
         Invoke-CtlNamed $script:Win 'Remove' | Out-Null
+        # Answers No, which is the old behaviour made explicit: the add-on stays,
+        # as a game of its own. Yes is covered by the unit tests and by
+        # Clear-AllEntries, which uses it on every run. Answering Yes here would
+        # empty the list and pull the ground out from under the test below.
+        $txt = Read-MessageBox -Win $script:Win -TitleLike 'Remove add-ons too?' -Button 'No'
+        $txt | Should -Not -BeNullOrEmpty -Because 'removing a game with add-ons must ask first'
+        $txt | Should -Match 'add-on'
         Start-Sleep -Seconds 1
-        Get-EntryCount $script:Win | Should -Be 1
+        Get-EntryCount $script:Win | Should -Be 1 -Because 'No keeps the add-on as an entry of its own'
         (Get-StatusText $script:Win) | Should -Not -Match 'add-on'
     }
 

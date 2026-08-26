@@ -549,6 +549,12 @@ function Clear-AllEntries {
 
         The guard stops a runaway if Remove ever stops emptying the list. A suite
         that fails is useful; one that hangs is not.
+
+        Removing a game that has add-ons raises a Yes/No/Cancel dialog. This
+        answers Yes - taking the add-ons with the game is what "clear every
+        entry" means, and it is also the answer that terminates: No promotes
+        them and leaves more rows to remove. An unanswered dialog is modal, so
+        every later click in the suite would land on nothing.
     #>
     param($Win, [int]$Max = 12)
     $n = 0
@@ -556,6 +562,8 @@ function Clear-AllEntries {
         Select-ListRow -Win $Win -Index 0
         if (-not (Test-CtlEnabled $Win 'Remove')) { break }
         Invoke-CtlNamed $Win 'Remove' | Out-Null
+        # Short timeout: most rows raise no dialog at all, and this runs per row.
+        Read-MessageBox -Win $Win -TitleLike 'Remove add-ons too?' -Button 'Yes' -TimeoutSec 2 | Out-Null
         Start-Sleep -Milliseconds 800
         $n++
     }
