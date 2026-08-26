@@ -164,6 +164,10 @@ was the original idea and it outranks this.
 This would be reconsidered if GOG's installers ever asked for slices in order, or if the
 number of swaps became something that could be stated up front.
 
+The harnesses and the raw run logs are kept in
+[`docs/research/spanning/`](docs/research/spanning/), so none of the above has to be
+taken on trust and nobody has to run the experiment twice.
+
 (Two entries used to sit here. **PowerShell 7** was ruled out because the ISO builder
 needed `Add-Type -CompilerParameters` with `/unsafe`, which PowerShell 6 removed; that
 dependency is gone, so it moved up to *Considering*. **Non-Windows support** was ruled out

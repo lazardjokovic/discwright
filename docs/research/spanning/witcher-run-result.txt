@@ -1,0 +1,26 @@
+The Witcher span test - 2026-08-23 23:15 - VALID
+(Inno log confirmed "Installation process succeeded"; 2685 files, 13.97 GB written)
+
+Staged one slice per pretend disc:
+  disc 1: setup_..._-1.bin  (4.00 GB)  + setup_....exe
+  disc 2: setup_..._-2.bin  (4.00 GB)
+  disc 3: setup_..._-3.bin  (1.48 GB)
+
+PROMPT #1  wants -3.bin   default path offered: C:\dwspan\disc1
+PROMPT #2  wants -2.bin   default path offered: C:\dwspan\disc1
+PROMPT #3  wants -3.bin   default path offered: C:\dwspan\disc1
+PROMPT #4  wants -2.bin   default path offered: C:\dwspan\disc1
+PROMPT #5  wants -3.bin   default path offered: C:\dwspan\disc1
+PROMPT #6  wants -2.bin   default path offered: C:\dwspan\disc1
+PROMPT #7  wants -3.bin   default path offered: C:\dwspan\disc1
+
+slices asked for : 3 -> 2 -> 3 -> 2 -> 3 -> 2 -> 3
+prompts handled  : 7
+asked twice      : yes, both -2.bin and -3.bin
+resumed          : YES, install completed
+
+Notes:
+- slice 1 was never asked for; it sat beside the exe in the launch folder
+- the default path never updated - always the installer's own original folder
+- installer exited -1073740771 (access violation) AFTER "Installation process
+  succeeded", during the GalaxyClient notify step. Install itself was fine.

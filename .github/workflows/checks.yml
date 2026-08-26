@@ -98,7 +98,14 @@ jobs:
           # Invoke-ScriptAnalyzer does find the settings file on its own when it
           # sits in the analyzed path, but naming it means the result does not
           # depend on where the job happens to be standing.
-          $results  = @(Invoke-ScriptAnalyzer -Path . -Recurse -Settings .\PSScriptAnalyzerSettings.psd1)
+          # docs/research holds throwaway harnesses preserved exactly as they were
+          # run, as the evidence behind a decision recorded in ROADMAP.md. They are
+          # not part of DiscWright and will never be edited - tidying them would
+          # make them no longer the scripts that produced the numbers. Linting them
+          # buys nothing and costs two dozen warnings on every run, and a check
+          # that always shouts is a check everybody learns to ignore.
+          $results  = @(Invoke-ScriptAnalyzer -Path . -Recurse -Settings .\PSScriptAnalyzerSettings.psd1 |
+                        Where-Object { $_.ScriptPath -notlike '*\docs\research\*' })
           $errors   = @($results | Where-Object { $_.Severity -eq 'Error' })
           $warnings = @($results | Where-Object { $_.Severity -eq 'Warning' })
 

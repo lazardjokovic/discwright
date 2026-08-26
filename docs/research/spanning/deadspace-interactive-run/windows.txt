@@ -1,0 +1,831 @@
+﻿window trees seen during the run
+
+=== 'Select Setup Language' ===
+    [Pane] 'Select the language to use during the installation:'
+    [Pane] 'English'
+    [Pane] 'OK'
+    [Pane] 'Cancel'
+
+=== 'Dead Space Setup' ===
+    [Pane] ''
+    [Pane] ''
+    [Pane] ''
+    [Pane] 'Options'
+    [Pane] 'Install'
+
+=== 'EULA' ===
+    [Pane] 'Save as .txt'
+    [Pane] 'Close'
+    [Pane] '
+ELECTRONIC ARTS 
+SOFTWARE END USER LICENSE AGREEMENT
+
+This End User License Agreement (“License”) is an agreement between you and Electronic Arts Inc., its subsidiaries and affiliates (“EA”).  This License governs your use of this software product and all related documentation, and updates and upgrades that replace or supplement the software in any respect and which are not distributed with a separate license (collectively, the "Software").  This Software is licensed to you, not sold.
+
+By installing or using the Software, you agree to the terms of this License and agree to be bound by it.  Section 3 below describes the data EA may use to provide services and support to you in connection with the Software.  If you do not agree to this use of data, do not install or use the Software. IF YOU INSTALL THE SOFTWARE, THE TERMS AND CONDITIONS OF THIS LICENSE ARE FULLY ACCEPTED BY YOU.  If you do not agree to the terms of this License, then do not install or use the Software. 
+
+1.	Limited License Grant and Terms of Use.  
+
+A.	Grant. Through this purchase, you are acquiring and EA grants you a personal, limited, non-exclusive license to install and use the Software for your non-commercial use solely as set forth in this License and the accompanying documentation. Your acquired rights are subject to your compliance with this Agreement.  Any commercial use is prohibited. You are expressly prohibited from sub-licensing, renting, leasing or otherwise distributing the Software or rights to use the Software.  The term of your License shall commence on the date that you install or otherwise use the Software, and shall end on the earlier of the date that you dispose of or transfer the Software; or EA's termination of this License.  Your license will terminate immediately if you attempt to circumvent the technical protection measures for the Software.  A separate Terms of Service agreement governs your use of online services in connection with the Software.  You may view the Terms of Service agreement at http://terms.ea.com.
+
+B.	Access to Software, Online Features And/Or Services.  An EA/Origin Account, including the acceptance of EA’s online Terms of Service and Privacy Policy (available at www.ea.com), the installation of Origin client application (www.origin/about.com) (or superceding download management software) as well as acceptance of the Origin  (or superceding download management software) End User License Agreement, may be required to access the Software, online services and/or features and to download and apply Software updates and patches (if any).  Only licensed software can be used to access online services and/or features (if any), including downloadable content, and access to such features is limited to you and your immediately family or members of your household.
+
+C.	Further Restrictions. Your right to use the Software is limited to the license grant above, and you may not otherwise copy, display, seek to disable, distribute, perform, publish, modify, create works from, or use the Software or any component of it, except as expressly authorized by EA.  Unless expressly authorized by EA, you are prohibited from making a copy of the Software available on a network where it could be used by multiple users. You are prohibited from making the Software available over a network where it could be downloaded by multiple users.  You may not remove or alter EA’s trademarks or logos, or legal notices included in the Software or related assets.  
+
+D.	Reservation of Rights.  You have obtained a license to the Software and your rights are subject to this License.  Except as expressly licensed to you herein, EA reserves all right, title and interest in the Software (including all characters, storyline, images, photographs, animations, video, music, text), and all associated copyrights, trademarks, and other intellectual property rights therein.  This License is limited to the intellectual property rights of EA and its licensors in the Software and does not include any rights to other patents or intellectual property. Except to the extent permitted under applicable law, you may not decompile, disassemble, or reverse engineer the Software, or any component thereof,  by any means whatsoever. You may not remove, alter, or obscure any product identification, copyright, or other intellectual property notices in the Software.   All rights not expressly granted herein are reserved by EA.
+
+E.	Your Contributions.  In exchange for use of the Software, and to the extent that your contributions through use of the Software give rise to any copyright interest, you hereby grant EA an exclusive, perpetual, irrevocable, fully transferable and sub-licensable worldwide right and license to use your contributions in any way and for any purpose in connection with the Software and related goods and services including the rights to reproduce, copy, adapt, modify, perform, display, publish, broadcast, transmit, or otherwise communicate to the public by any means whether now known or unknown and distribute your contributions without any further notice or compensation to you of any kind for the whole duration of protection granted to intellectual property rights by applicable laws and international conventions.  You hereby waive any moral rights of paternity, publication, reputation, or attribution with respect to EA’s and other players’ use and enjoyment of such assets in connection with the Software and related goods and services under applicable law.  The license grant to EA, and the above waiver of any applicable moral rights, survives any termination of this License.  
+
+
+2.  Consent to Use of Data.  When you play this game offline, EA and its affiliates may collect and store non-personally identifiable data including your Internet Protocol Address as well as game play and software usage statistics.  If and when you access online features and/or services (if any), this data may be transmitted to EA.  EA may use this information to improve our products and services and may share anonymous data with third parties.  
+
+To facilitate Technical Protection Measures (if any), the provision of software updates, any dynamically served content, product support and other services to you, including marketing, advertising and online play (if any), you agree that EA and its affiliates may collect, use, store and transmit technical and related information that identifies your computer (including an Internet Protocol Address and hardware identification), operating system and application software and peripheral hardware. EA and its affiliates may also use this information in the aggregate, in a form which does not personally identify you, to improve our products and services and we may share anonymous data with our third party service providers.  
+
+All data is collected, used, stored and transmitted in accordance with EA’s Privacy Policy located at http://privacy.ea.com.  To the extent that anything in this section conflicts with the terms of EA’s Privacy Policy, the terms of the Privacy Policy shall control.
+
+3. Consent to Public Display of Data. If you participate in online services, such as online play or the downloading and uploading of content, EA and its affiliates may also collect, use, store, transmit and publicly display statistical data regarding game play (including scores, rankings and achievements), or identify content that is created and shared by you with other players.  Data that personally identifies you is collected, used, stored and transmitted in accordance with EA’s Privacy Policy located at www.ea.com.  
+
+4. Termination. This License is effective until terminated. Your rights under this License will terminate immediately and automatically without any notice from EA if you fail to comply with any of the terms and conditions of this License. Promptly upon termination, you must cease all use of the Software and destroy all copies of the Software in your possession or control.  Termination will not limit any of EA’s other rights or remedies at law or in equity. Sections 4 - 13 of this License shall survive termination or expiration of this License for any reason. 
+
+5.  Disclaimer of Warranties. TO THE FULLEST EXTENT PERMISSIBLE UNDER APPLICABLE LAW, THE SOFTWARE IS PROVIDED TO YOU “AS IS,” WITH ALL FAULTS, WITHOUT WARRANTY OF ANY KIND, WITHOUT PERFORMANCE ASSURANCES OR GUARANTEES OF ANY KIND, AND YOUR USE IS AT YOUR SOLE RISK. THE ENTIRE RISK OF SATISFACTORY QUALITY AND PERFORMANCE RESIDES WITH YOU. EA AND EA’S LICENSORS (COLLECTIVELY “EA” FOR PURPOSES OF THIS SECTION AND SECTION 7) DO NOT MAKE, AND HEREBY DISCLAIM, ANY AND ALL EXPRESS, IMPLIED OR STATUTORY WARRANTIES, INCLUDING IMPLIED WARRANTIES OF CONDITION, UNINTERRUPTED USE, MERCHANTABILITY, SATISFACTORY QUALITY, FITNESS FOR A PARTICULAR PURPOSE, NONINFRINGEMENT OF THIRD PARTY RIGHTS, AND WARRANTIES (IF ANY) ARISING FROM A COURSE OF DEALING, USAGE, OR TRADE PRACTICE.  EA DOES NOT WARRANT AGAINST INTERFERENCE WITH YOUR ENJOYMENT OF THE SOFTWARE; THAT THE SOFTWARE WILL MEET YOUR REQUIREMENTS; THAT OPERATION OF THE SOFTWARE WILL BE UNINTERRUPTED OR ERROR-FREE, OR THAT THE SOFTWARE WILL INTEROPERATE OR BE COMPATIBLE WITH ANY OTHER SOFTWARE OR THAT ANY ERRORS IN THE SOFTWARE WILL BE CORRECTED. NO ORAL OR WRITTEN ADVICE PROVIDED BY EA OR ANY AUTHORIZED REPRESENTATIVE SHALL CREATE A WARRANTY. SOME JURISDICTIONS DO NOT ALLOW THE EXCLUSION OF OR LIMITATIONS ON IMPLIED WARRANTIES OR THE LIMITATIONS ON THE APPLICABLE STATUTORY RIGHTS OF A CONSUMER, SO SOME OR ALL OF THE ABOVE EXCLUSIONS AND LIMITATIONS MAY NOT APPLY TO YOU.
+
+6.  Limitation of Liability. TO THE FULLEST EXTENT PERMISSIBLE BY APPLICABLE LAW, IN NO EVENT SHALL EA, ITS SUBSIDIARIES OR ITS AFFILIATES BE LIABLE TO YOU FOR ANY PERSONAL INJURY, PROPERTY DAMAGE, LOST PROFITS, COST OF SUBSTITUTE GOODS OR SERVICES, LOSS OF DATA, LOSS OF GOODWILL, WORK STOPPAGE, COMPUTER FAILURE OR MALFUNCTION OR ANY OTHER FORM OF DIRECT OR INDIRECT, SPECIAL, INCIDENTAL, CONSEQUENTIAL OR PUNITIVE DAMAGES FROM ANY CAUSES OF ACTION ARISING OUT OF OR RELATED TO THIS LICENSE OR THE SOFTWARE, WHETHER ARISING IN TORT (INCLUDING NEGLIGENCE), CONTRACT, STRICT LIABILITY OR OTHERWISE, WHETHER OR NOT EA HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.  SOME JURISDICTIONS DO NOT ALLOW A LIMITATION OF LIABILITY FOR DEATH, PERSONAL INJURY, FRAUDULENT MISREPRESENTATIONS OR CERTAIN INTENTIONAL OR NEGLIGENT ACTS, OR VIOLATION OF SPECIFIC STATUTES, OR THE LIMITATION OF INCIDENTAL OR CONSEQUENTIAL DAMAGES, SO SOME OR ALL OF THE ABOVE LIMITATIONS OF LIABILITY MAY NOT APPLY TO YOU.  In no event shall EA’s total liability to you for all damages (except as required by applicable law) exceed the amount actually paid by you for the Software. 
+
+7. Limitation of Liability and Disclaimer of Warranties are Material Terms of this License. You agree that the provisions in this License that limit liability are essential terms of this License.  The foregoing limitations of liability apply even if the above stated remedy under the Limited Warranty for Recording Media fails in its essential purpose. 
+
+8.  Severability and Survival. If any provision of this License is illegal or unenforceable under applicable law, the remainder of the provision shall be amended to achieve as closely as possible the effect of the original term and all other provisions of this License shall continue in full force and effect.  
+
+9.  U.S. Government Restricted Rights. If you are a government end user, then this provision applies to you.  The Software provided in connection with this License has been developed entirely at private expense, as defined in FAR section 2.101, DFARS section 252.227-7014(a)(1) and DFARS section 252.227-7015 (or any equivalent or subsequent agency regulation thereof), and is provided as “commercial items,” “commercial computer software” and/or “commercial computer software documentation.”  Consistent with DFARS section 227.7202 and FAR section 12.212, and to the extent required under U.S. federal law, the minimum restricted rights as set forth in FAR section 52.227-19 (or any equivalent or subsequent agency regulation thereof), any use, modification, reproduction, release, performance, display, disclosure or distribution thereof by or for the U.S. Government shall be governed solely by this License and shall be prohibited except to the extent expressly permitted by this License.
+
+10.  Injunctive Relief. You agree that a breach of this License will cause irreparable injury to EA for which monetary damages would not be an adequate remedy and EA shall be entitled to seek equitable relief in addition to any remedies it may have hereunder or at law without a bond, other security or proof of damages.
+
+11.  Governing Law. If you reside in a Member State of the European Union: (i) the laws of England, excluding its conflicts-of-law rules, govern this License and your use of the Application; and (ii) you expressly agree that exclusive jurisdiction for any claim or action arising out of or relating to this License and/or your use of the Application shall be the Courts of England, and you expressly consent to the exercise of personal jurisdiction of such courts.  If you reside elsewhere: (i) the laws of the State of California, excluding its conflicts-of-law rules, govern this License and/or your use of the Application; and (ii) you expressly agree that for claims and disputes not subject to section 14, below, exclusive jurisdiction for any claim or action arising out of or relating to this License and/or your use of the Application shall be the federal or state courts that govern San Mateo County, California, and you expressly consent to the exercise of personal jurisdiction of such courts.  Please note that your conduct may also be subject to other local, state, national, and international laws.  The parties agree that the UN Convention on Contracts for the International Sale of Goods (Vienna, 1980) shall not apply to this License or to any dispute or transaction arising out of this License.
+
+12.  Export. You agree to abide by U.S. and other applicable export control laws and agree not to transfer the Software to a foreign national, or national destination, which is prohibited by such laws, without first obtaining, and then complying with, any requisite government authorization. You certify that you are not a person with whom EA is prohibited from transacting business under applicable law.
+
+13.  Entire Agreement.  This License constitutes the entire agreement between you and EA with respect to the Software and supersedes all prior or contemporaneous understandings regarding such subject matter. No amendment to or modification of this License will be binding unless made in writing and signed by EA.  No failure to exercise, and no delay in exercising, on the part of either party, any right or any power hereunder shall operate as a waiver thereof, nor shall any single or partial exercise of any right or power hereunder preclude further exercise of any other right hereunder.  In the event of a conflict between this License and any applicable purchase or other terms, the terms of this License shall govern.
+
+14.  Dispute Resolution By Binding Arbitration.
+PLEASE READ THIS CAREFULLY. IT AFFECTS YOUR RIGHTS. 
+A.	Most of your concerns can be resolved quickly and to your satisfaction by logging into the EA customer support interface with your Account at http://support.ea.com/.  In the unlikely event that EA cannot resolve a concern to your satisfaction (or if EA cannot resolve a concern it has with you after attempting to do so informally), then you and EA agree to be bound by the following procedure to resolve any and all disputes between us.  This provision applies to all consumers to the fullest extent allowable by law, but expressly excludes residents of Quebec, Russia and the Member States of the European Union.  This agreement is intended to be interpreted broadly.  It covers any and all disputes between us (“Disputes”), including without limitation:
+(a)	claims arising out of or relating to any aspect of the relationship between us, whether based in contract, tort, statute, fraud, misrepresentation or any other legal theory; 
+(b)	claims that arose before this Agreement or any prior agreement (including, but not limited to, claims relating to advertising); 
+(c)	claims that are currently the subject of purported class action litigation in which you are not a member of a certified class; and
+(d)	claims that may arise after the termination of this Agreement. 
+The only disputes that are not covered by this Section are the following:  
+1)	a claim to enforce or protect, or concerning the validity of, any of your or EA’s (or any of EA’s licensors’) intellectual property rights; 
+2)	a claim related to, or arising from, allegations of theft, piracy, or unauthorized use;
+3)	In addition, nothing in this Agreement shall prevent either party from initiating a small claims court action.
+By entering into this Agreement, you and EA expressly waive the right to a trial by jury or to participate in a class action.  With respect to this Section 16, References to "EA," "you," and "us" include our respective subsidiaries, affiliates, agents, employees, predecessors in interest, successors, and assigns, as well as all authorized or unauthorized users or beneficiaries of services or Software under this or prior agreements between us.  This EULA evidences a transaction in interstate commerce, and thus the Federal Arbitration Act governs the interpretation and enforcement of this Section.  This arbitration provision shall survive termination of this EULA.
+B.	Informal Negotiations/Notice of Dispute.  You and EA agree to first attempt to resolve any Dispute informally before initiating arbitration.  Such negotiations commence upon receipt of written notice from one person to the other (“Notice of Dispute”).  Notices of Dispute must: (a) include the full name and contact information of the complaining party; (b) describe the nature and basis of the claim or dispute; and (c) set forth the specific relief sought ("Demand").  EA will send its Notice of Dispute to your billing address (if you provided it to us) or to the email address you provided to us.  You will send your Notice of Dispute to: Electronic Arts Inc., 209 Redwood Shores Parkway, Redwood City CA 94065, ATTENTION: Legal Department.
+C.	Binding Arbitration.  If you and EA are unable to resolve a Dispute through informal negotiations within 30 days after receipt of the Notice of Dispute, either you or EA may elect to have the Dispute finally and exclusively resolved by binding arbitration.  Any election to arbitrate by one party shall be final and binding on the other.  YOU UNDERSTAND THAT ABSENT THIS PROVISION, YOU WOULD HAVE THE RIGHT TO SUE IN COURT AND HAVE A JURY TRIAL.  The arbitration shall be commenced and conducted under the Commercial Arbitration Rules of the American Arbitration Association (“AAA”) and, where appropriate, the AAA’s Supplementary Procedures for Consumer Related Disputes (“AAA Consumer Rules”), both of which are available at the AAA website www.adr.org.  Your arbitration fees and your share of arbitrator compensation shall be governed by the AAA Rules and, where appropriate, limited by the AAA Consumer Rules.  If such costs are determined by the arbitrator to be excessive, or if you send EA a notice to the Notice of Dispute address above indicating that you are unable to pay the fees required to initiate an arbitration, then EA will promptly pay all arbitration fees and expenses.  The arbitration may be conducted in person, through the submission of documents, by phone or online.  The arbitrator shall make a decision in writing, and shall provide a statement of reasons if requested by either party.  The arbitrator must follow applicable law, and any award may be challenged if the arbitrator fails to do so.  You and EA may litigate in court to compel arbitration, to stay proceeding pending arbitration, or to confirm, modify, vacate or enter judgment on the award entered by the arbitrator.
+D.	Restrictions.  You and EA agree that any arbitration shall be limited to the Dispute between EA and you individually.  To the full extent permitted by law:  (a) no arbitration shall be joined with any other arbitration proceeding; (b) there is no right or authority for any Dispute to be arbitrated on a class action-basis or to utilize class action procedures; and (c) there is no right or authority for any Dispute to be brought in a purported representative capacity on behalf of the general public or any other persons. YOU AND EA AGREE THAT EACH MAY BRING CLAIMS AGAINST THE OTHER ONLY IN YOUR OR ITS INDIVIDUAL CAPACITY,  AND NOT AS A PLAINTIFF OR CLASS MEMBER IN ANY PURPORTED CLASS OR REPRESENTATIVE PROCEEDING. Further, unless both you and EA agree otherwise, the arbitrator may not consolidate more than one person's claims, and may not otherwise preside over any form of a representative or class proceeding.  If this specific provision is found to be unenforceable, then the entirety of this dispute resolution/arbitration provision shall be null and void.
+E.         Location.  If you are a resident of the United States, arbitration will take place at any reasonable location convenient for you.  For residents outside the United States, arbitration shall be initiated in the County of San Mateo, State of California, United States of America, and you and EA agree to submit to the personal jurisdiction of that court, in order to compel arbitration, to stay proceeding pending arbitration, or to confirm, modify, vacate or enter judgment on the award entered by the arbitrator.
+F.	Recovery and Attorneys’ Fees.  If the arbitrator rules in your favor on the merits of any claim you bring against EA and issues you an award that is greater in monetary value than EA's last written settlement offer made before final written submissions are made to the arbitrator, then EA will: 
+(a)	Pay you 150% of your arbitration award, up to $5,000 over and above your arbitration award; and 
+(b)	Pay your attorney, if any, the amount of attorneys' fees, and reimburse any expenses (including expert witness fees and costs) that you or your attorney reasonably accrues for investigating, preparing, and pursuing your claim in arbitration ("the attorney premium"). 
+The arbitrator may make rulings and resolve disputes as to the payment and reimbursement of fees, expenses, and the alternative payment and the attorney premium at any time during the proceeding and upon request from either party made within fourteen (14) days of the arbitrator's ruling on the merits.
+The right to attorneys' fees and expenses discussed above supplements any right to attorneys' fees and expenses you may have under applicable law, although you may not recover duplicative awards of attorneys' fees or costs.  EA waives any right it may have to seek an award of attorneys’ fees and expenses in connection with any arbitration between us.
+G.	Limitation on Arbitrator’s Authority.  The arbitrator may award declaratory or injunctive relief only in favor of the individual party seeking relief and only to the extent necessary to provide relief warranted by that party's individual claim.  
+H.	Changes to Agreement.  Notwithstanding any provision in this Agreement to the contrary, we agree that if EA makes any future change to this arbitration provision (other than a change to the Notice of Dispute address), you may reject any such change by sending us written notice within thirty (30) days of the change to the Notice of Dispute address provided above.  By rejecting any future change, you are agreeing that you will arbitrate any dispute between us in accordance with the language of this provision.
+
+
+========================================
+== GOG.com End-User License Agreement ==
+========================================
+
+Your use of this product/service is subject to the GOG User Agreement. Copy and paste this link to your browser to check it out: http://www.gog.com/support/policies/gog_user_agreement
+
+========================================
+======= Inno Setup License Terms =======
+========================================
+
+Except where otherwise noted, all of the documentation and software included
+in the Inno Setup package is copyrighted by Jordan Russell.
+
+Copyright (C) 1997-2008 Jordan Russell. All rights reserved.
+
+This software is provided "as-is," without any express or implied warranty.
+In no event shall the author be held liable for any damages arising from the
+use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter and redistribute it,
+provided that the following conditions are met:
+
+1. All redistributions of source code files must retain all copyright
+   notices that are currently in place, and this list of conditions without
+   modification.
+
+2. All redistributions in binary form must retain all occurrences of the
+   above copyright notice and web site addresses that are currently in
+   place (for example, in the About boxes).
+
+3. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software to
+   distribute a product, an acknowledgment in the product documentation
+   would be appreciated but is not required.
+
+4. Modified versions in source or binary form must be plainly marked as
+   such, and must not be misrepresented as being the original software.
+
+
+Jordan Russell
+jr-2008 AT jrsoftware.org
+http://www.jrsoftware.org/
+
+
+========================================
+=== MICROSOFT SOFTWARE LICENSE TERMS ===
+========================================
+
+MICROSOFT SOFTWARE LICENSE TERMS
+MICROSOFT VISUAL C++ 2005 RUNTIME LIBRARIES
+These license terms are an agreement between Microsoft Corporation (or based on where you live, one of its affiliates) and you.  Please read them.  They apply to the software named above, which includes the media on which you received it, if any.  The terms also apply to any Microsoft
+* updates,
+* supplements,
+* Internet-based services, and 
+* support services
+for this software, unless other terms accompany those items.  If so, those terms apply.
+By using the software, you accept these terms.  If you do not accept them, do not use the software.
+If you comply with these license terms, you have the rights below.
+1. INSTALLATION AND USE RIGHTS.  You may install and use any number of copies of the software on your devices.
+2. SCOPE OF LICENSE.  The software is licensed, not sold. This agreement only gives you some rights to use the software.  Microsoft reserves all other rights.  Unless applicable law gives you more rights despite this limitation, you may use the software only as expressly permitted in this agreement.  In doing so, you must comply with any technical limitations in the software that only allow you to use it in certain ways.    You may not
+* disclose the results of any benchmark tests of the software to any third party without Microsoft’s prior written approval;
+* work around any technical limitations in the software;
+* reverse engineer, decompile or disassemble the software, except and only to the extent that applicable law expressly permits, despite this limitation;
+* make more copies of the software than specified in this agreement or allowed by applicable law, despite this limitation;
+* publish the software for others to copy;
+* rent, lease or lend the software;
+* transfer the software or this agreement to any third party; or
+* use the software for commercial software hosting services.
+3. BACKUP COPY.  You may make one backup copy of the software.  You may use it only to reinstall the software.
+4. DOCUMENTATION.  Any person that has valid access to your computer or internal network may copy and use the documentation for your internal, reference purposes.
+5. EXPORT RESTRICTIONS.  The software is subject to United States export laws and regulations.  You must comply with all domestic and international export laws and regulations that apply to the software.  These laws include restrictions on destinations, end users and end use.  For additional information, see www.microsoft.com/exporting.
+6. SUPPORT SERVICES. Because this software is “as is,” we may not provide support services for it.
+7. ENTIRE AGREEMENT.  This agreement, and the terms for supplements, updates, Internet-based services and support services that you use, are the entire agreement for the software and support services.
+8. APPLICABLE LAW.
+a. United States.  If you acquired the software in the United States, Washington state law governs the interpretation of this agreement and applies to claims for breach of it, regardless of conflict of laws principles.  The laws of the state where you live govern all other claims, including claims under state consumer protection laws, unfair competition laws, and in tort.
+b. Outside the United States.  If you acquired the software in any other country, the laws of that country apply.
+9. LEGAL EFFECT.  This agreement describes certain legal rights.  You may have other rights under the laws of your country.  You may also have rights with respect to the party from whom you acquired the software.  This agreement does not change your rights under the laws of your country if the laws of your country do not permit it to do so.
+10. DISCLAIMER OF WARRANTY.   The software is licensed “as-is.”  You bear the risk of using it.  Microsoft gives no express warranties, guarantees or conditions.  You may have additional consumer rights under your local laws which this agreement cannot change.  To the extent permitted under your local laws, Microsoft excludes the implied warranties of merchantability, fitness for a particular purpose and non-infringement.
+11. LIMITATION ON AND EXCLUSION OF REMEDIES AND DAMAGES.   You can recover from Microsoft and its suppliers only direct damages up to U.S. $5.00.  You cannot recover any other damages, including consequential, lost profits, special, indirect or incidental damages.
+This limitation applies to
+* anything related to the software, services, content (including code) on third party Internet sites, or third party programs; and
+* claims for breach of contract, breach of warranty, guarantee or condition, strict liability, negligence, or other tort to the extent permitted by applicable law.
+It also applies even if Microsoft knew or should have known about the possibility of the damages.  The above limitation or exclusion may not apply to you because your country may not allow the exclusion or limitation of incidental, consequential or other damages.
+
+
+========================================
+=== MICROSOFT SOFTWARE LICENSE TERMS ===
+========================================
+
+MICROSOFT SOFTWARE LICENSE TERMS
+MICROSOFT DIRECTX SOFTWARE DEVELOPMENT KIT (SDK)
+These license terms are an agreement between Microsoft Corporation (or based on where you live, one of its affiliates) and you.  Please read them.  They apply to the software named above, which includes the media on which you received it, if any.  The terms also apply to any Microsoft
+•	updates,
+•	supplements,
+•	Internet-based services, and 
+•	support services
+for this software, unless other terms accompany those items.  If so, those terms apply.
+BY USING THE SOFTWARE, YOU ACCEPT THESE TERMS.  IF YOU DO NOT ACCEPT THEM, DO NOT USE THE SOFTWARE.
+If you comply with these license terms, you have the rights below.
+1.	INSTALLATION AND USE RIGHTS.  
+a.	Installation and Use.  You may install and use any number of copies of the software on your devices.
+b.	Included Microsoft Programs.  The software contains other Microsoft programs.  The license terms with those programs apply to your use of them.
+2.	ADDITIONAL LICENSING REQUIREMENTS AND/OR USE RIGHTS.
+a.	Media Elements and Templates.  You may copy and use images, clip art, animations, sounds, music, shapes, video clips and templates provided with the software and identified for such use in documents and projects that you create.  You may distribute those documents and projects non-commercially.  If you wish to use these media elements or templates for any other purpose, go to www.microsoft.com/permission to learn whether that use is allowed.
+b.	Distributable Code.  The software contains code that you are permitted to distribute in programs you develop if you comply with the terms below.
+i.	Right to Use and Distribute.  The code and text files listed below are “Distributable Code.”
+•	DIRECTX REDIST.TXT Files.  You may copy and distribute the object code form of code listed in DIRECTX REDIST.TXT files.
+•	Sample Code.  You may modify, copy, and distribute the source and object code form of code marked as “sample”, as well as those marked as follows:
+\Utilities\bin\x86\dxerr
+\Utilities\bin\x64\dxerr
+\Utilities\bin\x86\dxtex
+\Utilities\bin\x64\dxtex
+\Utilities\bin\x86\DxViewer
+\Utilities\bin\x64\DxViewer
+\Utilities\bin\x86\GDFTrace
+\Utilities\bin\x64\GDFTrace
+\Utilities\bin\x86\MeshConvert
+\Utilities\bin\x64\MeshConvert
+\Utilities\Source\Sas
+\Utilities\Source\Effects11
+•	Third Party Distribution.  You may permit distributors of your programs to copy and distribute the Distributable Code as part of those programs.
+ii.	Distribution Requirements.  For any Distributable Code you distribute, you must
+•	add significant primary functionality to it in your programs;
+•	require distributors and external end users to agree to terms that protect it at least as much as this agreement; 
+•	display your valid copyright notice on your programs; and
+•	indemnify, defend, and hold harmless Microsoft from any claims, including attorneys’ fees, related to the distribution or use of your programs.
+iii.	Distribution Restrictions.  You may not
+•	alter any copyright, trademark or patent notice in the Distributable Code; 
+•	use Microsoft’s trademarks in your programs’ names or in a way that suggests your programs come from or are endorsed by Microsoft; 
+•	distribute Distributable Code to run on a platform other than the Windows, Xbox and Windows Mobile platforms;
+•	include Distributable Code in malicious, deceptive or unlawful programs; or
+•	modify or distribute the source code of any Distributable Code so that any part of it becomes subject to an Excluded License.  An Excluded License is one that requires, as a condition of use, modification or distribution, that
+•	the code be disclosed or distributed in source code form; or 
+•	others have the right to modify it.
+3.	SCOPE OF LICENSE.  The software is licensed, not sold. This agreement only gives you some rights to use the software.  Microsoft reserves all other rights.  Unless applicable law gives you more rights despite this limitation, you may use the software only as expressly permitted in this agreement.  In doing so, you must comply with any technical limitations in the software that only allow you to use it in certain ways.    You may not
+•	disclose the results of any benchmark tests of the software to any third party without Microsoft’s prior written approval;
+•	work around any technical limitations in the software;
+•	reverse engineer, decompile or disassemble the software, except and only to the extent that applicable law expressly permits, despite this limitation;
+•	make more copies of the software than specified in this agreement or allowed by applicable law, despite this limitation;
+•	publish the software for others to copy;
+•	rent, lease or lend the software; or
+•	use the software for commercial software hosting services.
+4.	BACKUP COPY.  You may make one backup copy of the software.  You may use it only to reinstall the software.
+5.	DOCUMENTATION.  Any person that has valid access to your computer or internal network may copy and use the documentation for your internal, reference purposes.
+6.	EXPORT RESTRICTIONS.  The software is subject to United States export laws and regulations.  You must comply with all domestic and international export laws and regulations that apply to the software.  These laws include restrictions on destinations, end users and end use.  For additional information, see www.microsoft.com/exporting.
+7.	SUPPORT SERVICES. Because this software is “as is,” we may not provide support services for it.
+8.	ENTIRE AGREEMENT.  This agreement, and the terms for supplements, updates, Internet-based services and support services that you use, are the entire agreement for the software and support services.
+9.	APPLICABLE LAW.
+a.	United States.  If you acquired the software in the United States, Washington state law governs the interpretation of this agreement and applies to claims for breach of it, regardless of conflict of laws principles.  The laws of the state where you live govern all other claims, including claims under state consumer protection laws, unfair competition laws, and in tort.
+b.	Outside the United States.  If you acquired the software in any other country, the laws of that country apply.
+10.	LEGAL EFFECT.  This agreement describes certain legal rights.  You may have other rights under the laws of your country.  You may also have rights with respect to the party from whom you acquired the software.  This agreement does not change your rights under the laws of your country if the laws of your country do not permit it to do so.
+11.	DISCLAIMER OF WARRANTY.   THE SOFTWARE IS LICENSED “AS-IS.”  YOU BEAR THE RISK OF USING IT.  MICROSOFT GIVES NO EXPRESS WARRANTIES, GUARANTEES OR CONDITIONS.  YOU MAY HAVE ADDITIONAL CONSUMER RIGHTS UNDER YOUR LOCAL LAWS WHICH THIS AGREEMENT CANNOT CHANGE.  TO THE EXTENT PERMITTED UNDER YOUR LOCAL LAWS, MICROSOFT EXCLUDES THE IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+12.	LIMITATION ON AND EXCLUSION OF REMEDIES AND DAMAGES.  YOU CAN RECOVER FROM MICROSOFT AND ITS SUPPLIERS ONLY DIRECT DAMAGES UP TO U.S. $5.00.  YOU CANNOT RECOVER ANY OTHER DAMAGES, INCLUDING CONSEQUENTIAL, LOST PROFITS, SPECIAL, INDIRECT OR INCIDENTAL DAMAGES.
+This limitation applies to
+•	anything related to the software, services, content (including code) on third party Internet sites, or third party programs; and
+•	claims for breach of contract, breach of warranty, guarantee or condition, strict liability, negligence, or other tort to the extent permitted by applicable law.
+It also applies even if Microsoft knew or should have known about the possibility of the damages.  The above limitation or exclusion may not apply to you because your country may not allow the exclusion or limitation of incidental, consequential or other damages.
+Please note: As this software is distributed in Quebec, Canada, some of the clauses in this agreement are provided below in French.
+Remarque : Ce logiciel étant distribué au Québec, Canada, certaines des clauses dans ce contrat sont fournies ci-dessous en français.
+EXONÉRATION DE GARANTIE. Le logiciel visé par une licence est offert « tel quel ». Toute utilisation de ce logiciel est à votre seule risque et péril. Microsoft n’accorde aucune autre garantie expresse. Vous pouvez bénéficier de droits additionnels en vertu du droit local sur la protection des consommateurs, que ce contrat ne peut modifier. La ou elles sont permises par le droit locale, les garanties implicites de qualité marchande, d’adéquation à un usage particulier et d’absence de contrefaçon sont exclues.
+LIMITATION DES DOMMAGES-INTÉRÊTS ET EXCLUSION DE RESPONSABILITÉ POUR LES DOMMAGES.  Vous pouvez obtenir de Microsoft et de ses fournisseurs une indemnisation en cas de dommages directs uniquement à hauteur de 5,00 $ US. Vous ne pouvez prétendre à aucune indemnisation pour les autres dommages, y compris les dommages spéciaux, indirects ou accessoires et pertes de bénéfices.
+Cette limitation concerne :
+•	tout  ce qui est relié au logiciel, aux services ou au contenu (y compris le code) figurant sur des sites Internet tiers ou dans des programmes tiers ; et
+•	les réclamations au titre de violation de contrat ou de garantie, ou au titre de responsabilité stricte, de négligence ou d’une autre faute dans la limite autorisée par la loi en vigueur.
+Elle s’applique également, même si Microsoft connaissait ou devrait connaître l’éventualité d’un tel dommage.  Si votre pays n’autorise pas l’exclusion ou la limitation de responsabilité pour les dommages indirects, accessoires ou de quelque nature que ce soit, il se peut que la limitation ou l’exclusion ci-dessus ne s’appliquera pas à votre égard.
+EFFET JURIDIQUE.  Le présent contrat décrit certains droits juridiques. Vous pourriez avoir d’autres droits prévus par les lois de votre pays.  Le présent contrat ne modifie pas les droits que vous confèrent les lois de votre pays si celles-ci ne le permettent pas.
+
+========================================
+=========== QT License Terms ===========
+========================================
+
+Software included in this download uses unmodified QT Libraries (Libraries), released under the terms of the GNU Lesser General Public License version 2.1. (LGPL)
+More information about QT licensing can be found at: http://qt.nokia.com/products/licensing/
+Copy of the LGPL is included in this End User License Agreement, or can be found at: http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+The Software is distributed as "work containing portions of the Library", under terms of Section 6 of LGPL.
+The Software includes "work that uses the Library" and the Libraries, linked to produce a single executable.
+The Software is hereby provided with a written offer, valid for three years to give the user materials specified in Subsection 6a of LGPL for a charge no more than performing this distribution. 
+These materials include:
+-Complete corresponding machine-readable source code for the Library including whatever changes were used in the work
+-The complete machine-readable "work that uses the Library", as object code
+-Data and utility programs needed for reproducing the executable from "work that uses the Library"
+The materials can be obtained by contacting GOG Support.
+
+
+                  GNU LESSER GENERAL PUBLIC LICENSE
+                       Version 2.1, February 1999
+
+ Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+ 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+ Everyone is permitted to copy and distribute verbatim copies
+ of this license document, but changing it is not allowed.
+
+[This is the first released version of the Lesser GPL.  It also counts
+ as the successor of the GNU Library Public License, version 2, hence
+ the version number 2.1.]
+
+                            Preamble
+
+  The licenses for most software are designed to take away your
+freedom to share and change it.  By contrast, the GNU General Public
+Licenses are intended to guarantee your freedom to share and change
+free software--to make sure the software is free for all its users.
+
+  This license, the Lesser General Public License, applies to some
+specially designated software packages--typically libraries--of the
+Free Software Foundation and other authors who decide to use it.  You
+can use it too, but we suggest you first think carefully about whether
+this license or the ordinary General Public License is the better
+strategy to use in any particular case, based on the explanations below.
+
+  When we speak of free software, we are referring to freedom of use,
+not price.  Our General Public Licenses are designed to make sure that
+you have the freedom to distribute copies of free software (and charge
+for this service if you wish); that you receive source code or can get
+it if you want it; that you can change the software and use pieces of
+it in new free programs; and that you are informed that you can do
+these things.
+
+  To protect your rights, we need to make restrictions that forbid
+distributors to deny you these rights or to ask you to surrender these
+rights.  These restrictions translate to certain responsibilities for
+you if you distribute copies of the library or if you modify it.
+
+  For example, if you distribute copies of the library, whether gratis
+or for a fee, you must give the recipients all the rights that we gave
+you.  You must make sure that they, too, receive or can get the source
+code.  If you link other code with the library, you must provide
+complete object files to the recipients, so that they can relink them
+with the library after making changes to the library and recompiling
+it.  And you must show them these terms so they know their rights.
+
+  We protect your rights with a two-step method: (1) we copyright the
+library, and (2) we offer you this license, which gives you legal
+permission to copy, distribute and/or modify the library.
+
+  To protect each distributor, we want to make it very clear that
+there is no warranty for the free library.  Also, if the library is
+modified by someone else and passed on, the recipients should know
+that what they have is not the original version, so that the original
+author's reputation will not be affected by problems that might be
+introduced by others.
+
+  Finally, software patents pose a constant threat to the existence of
+any free program.  We wish to make sure that a company cannot
+effectively restrict the users of a free program by obtaining a
+restrictive license from a patent holder.  Therefore, we insist that
+any patent license obtained for a version of the library must be
+consistent with the full freedom of use specified in this license.
+
+  Most GNU software, including some libraries, is covered by the
+ordinary GNU General Public License.  This license, the GNU Lesser
+General Public License, applies to certain designated libraries, and
+is quite different from the ordinary General Public License.  We use
+this license for certain libraries in order to permit linking those
+libraries into non-free programs.
+
+  When a program is linked with a library, whether statically or using
+a shared library, the combination of the two is legally speaking a
+combined work, a derivative of the original library.  The ordinary
+General Public License therefore permits such linking only if the
+entire combination fits its criteria of freedom.  The Lesser General
+Public License permits more lax criteria for linking other code with
+the library.
+
+  We call this license the "Lesser" General Public License because it
+does Less to protect the user's freedom than the ordinary General
+Public License.  It also provides other free software developers Less
+of an advantage over competing non-free programs.  These disadvantages
+are the reason we use the ordinary General Public License for many
+libraries.  However, the Lesser license provides advantages in certain
+special circumstances.
+
+  For example, on rare occasions, there may be a special need to
+encourage the widest possible use of a certain library, so that it becomes
+a de-facto standard.  To achieve this, non-free programs must be
+allowed to use the library.  A more frequent case is that a free
+library does the same job as widely used non-free libraries.  In this
+case, there is little to gain by limiting the free library to free
+software only, so we use the Lesser General Public License.
+
+  In other cases, permission to use a particular library in non-free
+programs enables a greater number of people to use a large body of
+free software.  For example, permission to use the GNU C Library in
+non-free programs enables many more people to use the whole GNU
+operating system, as well as its variant, the GNU/Linux operating
+system.
+
+  Although the Lesser General Public License is Less protective of the
+users' freedom, it does ensure that the user of a program that is
+linked with the Library has the freedom and the wherewithal to run
+that program using a modified version of the Library.
+
+  The precise terms and conditions for copying, distribution and
+modification follow.  Pay close attention to the difference between a
+"work based on the library" and a "work that uses the library".  The
+former contains code derived from the library, whereas the latter must
+be combined with the library in order to run.
+
+                  GNU LESSER GENERAL PUBLIC LICENSE
+   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+
+  0. This License Agreement applies to any software library or other
+program which contains a notice placed by the copyright holder or
+other authorized party saying it may be distributed under the terms of
+this Lesser General Public License (also called "this License").
+Each licensee is addressed as "you".
+
+  A "library" means a collection of software functions and/or data
+prepared so as to be conveniently linked with application programs
+(which use some of those functions and data) to form executables.
+
+  The "Library", below, refers to any such software library or work
+which has been distributed under these terms.  A "work based on the
+Library" means either the Library or any derivative work under
+copyright law: that is to say, a work containing the Library or a
+portion of it, either verbatim or with modifications and/or translated
+straightforwardly into another language.  (Hereinafter, translation is
+included without limitation in the term "modification".)
+
+  "Source code" for a work means the preferred form of the work for
+making modifications to it.  For a library, complete source code means
+all the source code for all modules it contains, plus any associated
+interface definition files, plus the scripts used to control compilation
+and installation of the library.
+
+  Activities other than copying, distribution and modification are not
+covered by this License; they are outside its scope.  The act of
+running a program using the Library is not restricted, and output from
+such a program is covered only if its contents constitute a work based
+on the Library (independent of the use of the Library in a tool for
+writing it).  Whether that is true depends on what the Library does
+and what the program that uses the Library does.
+
+  1. You may copy and distribute verbatim copies of the Library's
+complete source code as you receive it, in any medium, provided that
+you conspicuously and appropriately publish on each copy an
+appropriate copyright notice and disclaimer of warranty; keep intact
+all the notices that refer to this License and to the absence of any
+warranty; and distribute a copy of this License along with the
+Library.
+
+  You may charge a fee for the physical act of transferring a copy,
+and you may at your option offer warranty protection in exchange for a
+fee.
+
+  2. You may modify your copy or copies of the Library or any portion
+of it, thus forming a work based on the Library, and copy and
+distribute such modifications or work under the terms of Section 1
+above, provided that you also meet all of these conditions:
+
+    a) The modified work must itself be a software library.
+
+    b) You must cause the files modified to carry prominent notices
+    stating that you changed the files and the date of any change.
+
+    c) You must cause the whole of the work to be licensed at no
+    charge to all third parties under the terms of this License.
+
+    d) If a facility in the modified Library refers to a function or a
+    table of data to be supplied by an application program that uses
+    the facility, other than as an argument passed when the facility
+    is invoked, then you must make a good faith effort to ensure that,
+    in the event an application does not supply such function or
+    table, the facility still operates, and performs whatever part of
+    its purpose remains meaningful.
+
+    (For example, a function in a library to compute square roots has
+    a purpose that is entirely well-defined independent of the
+    application.  Therefore, Subsection 2d requires that any
+    application-supplied function or table used by this function must
+    be optional: if the application does not supply it, the square
+    root function must still compute square roots.)
+
+These requirements apply to the modified work as a whole.  If
+identifiable sections of that work are not derived from the Library,
+and can be reasonably considered independent and separate works in
+themselves, then this License, and its terms, do not apply to those
+sections when you distribute them as separate works.  But when you
+distribute the same sections as part of a whole which is a work based
+on the Library, the distribution of the whole must be on the terms of
+this License, whose permissions for other licensees extend to the
+entire whole, and thus to each and every part regardless of who wrote
+it.
+
+Thus, it is not the intent of this section to claim rights or contest
+your rights to work written entirely by you; rather, the intent is to
+exercise the right to control the distribution of derivative or
+collective works based on the Library.
+
+In addition, mere aggregation of another work not based on the Library
+with the Library (or with a work based on the Library) on a volume of
+a storage or distribution medium does not bring the other work under
+the scope of this License.
+
+  3. You may opt to apply the terms of the ordinary GNU General Public
+License instead of this License to a given copy of the Library.  To do
+this, you must alter all the notices that refer to this License, so
+that they refer to the ordinary GNU General Public License, version 2,
+instead of to this License.  (If a newer version than version 2 of the
+ordinary GNU General Public License has appeared, then you can specify
+that version instead if you wish.)  Do not make any other change in
+these notices.
+
+  Once this change is made in a given copy, it is irreversible for
+that copy, so the ordinary GNU General Public License applies to all
+subsequent copies and derivative works made from that copy.
+
+  This option is useful when you wish to copy part of the code of
+the Library into a program that is not a library.
+
+  4. You may copy and distribute the Library (or a portion or
+derivative of it, under Section 2) in object code or executable form
+under the terms of Sections 1 and 2 above provided that you accompany
+it with the complete corresponding machine-readable source code, which
+must be distributed under the terms of Sections 1 and 2 above on a
+medium customarily used for software interchange.
+
+  If distribution of object code is made by offering access to copy
+from a designated place, then offering equivalent access to copy the
+source code from the same place satisfies the requirement to
+distribute the source code, even though third parties are not
+compelled to copy the source along with the object code.
+
+  5. A program that contains no derivative of any portion of the
+Library, but is designed to work with the Library by being compiled or
+linked with it, is called a "work that uses the Library".  Such a
+work, in isolation, is not a derivative work of the Library, and
+therefore falls outside the scope of this License.
+
+  However, linking a "work that uses the Library" with the Library
+creates an executable that is a derivative of the Library (because it
+contains portions of the Library), rather than a "work that uses the
+library".  The executable is therefore covered by this License.
+Section 6 states terms for distribution of such executables.
+
+  When a "work that uses the Library" uses material from a header file
+that is part of the Library, the object code for the work may be a
+derivative work of the Library even though the source code is not.
+Whether this is true is especially significant if the work can be
+linked without the Library, or if the work is itself a library.  The
+threshold for this to be true is not precisely defined by law.
+
+  If such an object file uses only numerical parameters, data
+structure layouts and accessors, and small macros and small inline
+functions (ten lines or less in length), then the use of the object
+file is unrestricted, regardless of whether it is legally a derivative
+work.  (Executables containing this object code plus portions of the
+Library will still fall under Section 6.)
+
+  Otherwise, if the work is a derivative of the Library, you may
+distribute the object code for the work under the terms of Section 6.
+Any executables containing that work also fall under Section 6,
+whether or not they are linked directly with the Library itself.
+
+  6. As an exception to the Sections above, you may also combine or
+link a "work that uses the Library" with the Library to produce a
+work containing portions of the Library, and distribute that work
+under terms of your choice, provided that the terms permit
+modification of the work for the customer's own use and reverse
+engineering for debugging such modifications.
+
+  You must give prominent notice with each copy of the work that the
+Library is used in it and that the Library and its use are covered by
+this License.  You must supply a copy of this License.  If the work
+during execution displays copyright notices, you must include the
+copyright notice for the Library among them, as well as a reference
+directing the user to the copy of this License.  Also, you must do one
+of these things:
+
+    a) Accompany the work with the complete corresponding
+    machine-readable source code for the Library including whatever
+    changes were used in the work (which must be distributed under
+    Sections 1 and 2 above); and, if the work is an executable linked
+    with the Library, with the complete machine-readable "work that
+    uses the Library", as object code and/or source code, so that the
+    user can modify the Library and then relink to produce a modified
+    executable containing the modified Library.  (It is understood
+    that the user who changes the contents of definitions files in the
+    Library will not necessarily be able to recompile the application
+    to use the modified definitions.)
+
+    b) Use a suitable shared library mechanism for linking with the
+    Library.  A suitable mechanism is one that (1) uses at run time a
+    copy of the library already present on the user's computer system,
+    rather than copying library functions into the executable, and (2)
+    will operate properly with a modified version of the library, if
+    the user installs one, as long as the modified version is
+    interface-compatible with the version that the work was made with.
+
+    c) Accompany the work with a written offer, valid for at
+    least three years, to give the same user the materials
+    specified in Subsection 6a, above, for a charge no more
+    than the cost of performing this distribution.
+
+    d) If distribution of the work is made by offering access to copy
+    from a designated place, offer equivalent access to copy the above
+    specified materials from the same place.
+
+    e) Verify that the user has already received a copy of these
+    materials or that you have already sent this user a copy.
+
+  For an executable, the required form of the "work that uses the
+Library" must include any data and utility programs needed for
+reproducing the executable from it.  However, as a special exception,
+the materials to be distributed need not include anything that is
+normally distributed (in either source or binary form) with the major
+components (compiler, kernel, and so on) of the operating system on
+which the executable runs, unless that component itself accompanies
+the executable.
+
+  It may happen that this requirement contradicts the license
+restrictions of other proprietary libraries that do not normally
+accompany the operating system.  Such a contradiction means you cannot
+use both them and the Library together in an executable that you
+distribute.
+
+  7. You may place library facilities that are a work based on the
+Library side-by-side in a single library together with other library
+facilities not covered by this License, and distribute such a combined
+library, provided that the separate distribution of the work based on
+the Library and of the other library facilities is otherwise
+permitted, and provided that you do these two things:
+
+    a) Accompany the combined library with a copy of the same work
+    based on the Library, uncombined with any other library
+    facilities.  This must be distributed under the terms of the
+    Sections above.
+
+    b) Give prominent notice with the combined library of the fact
+    that part of it is a work based on the Library, and explaining
+    where to find the accompanying uncombined form of the same work.
+
+  8. You may not copy, modify, sublicense, link with, or distribute
+the Library except as expressly provided under this License.  Any
+attempt otherwise to copy, modify, sublicense, link with, or
+distribute the Library is void, and will automatically terminate your
+rights under this License.  However, parties who have received copies,
+or rights, from you under this License will not have their licenses
+terminated so long as such parties remain in full compliance.
+
+  9. You are not required to accept this License, since you have not
+signed it.  However, nothing else grants you permission to modify or
+distribute the Library or its derivative works.  These actions are
+prohibited by law if you do not accept this License.  Therefore, by
+modifying or distributing the Library (or any work based on the
+Library), you indicate your acceptance of this License to do so, and
+all its terms and conditions for copying, distributing or modifying
+the Library or works based on it.
+
+  10. Each time you redistribute the Library (or any work based on the
+Library), the recipient automatically receives a license from the
+original licensor to copy, distribute, link with or modify the Library
+subject to these terms and conditions.  You may not impose any further
+restrictions on the recipients' exercise of the rights granted herein.
+You are not responsible for enforcing compliance by third parties with
+this License.
+
+  11. If, as a consequence of a court judgment or allegation of patent
+infringement or for any other reason (not limited to patent issues),
+conditions are imposed on you (whether by court order, agreement or
+otherwise) that contradict the conditions of this License, they do not
+excuse you from the conditions of this License.  If you cannot
+distribute so as to satisfy simultaneously your obligations under this
+License and any other pertinent obligations, then as a consequence you
+may not distribute the Library at all.  For example, if a patent
+license would not permit royalty-free redistribution of the Library by
+all those who receive copies directly or indirectly through you, then
+the only way you could satisfy both it and this License would be to
+refrain entirely from distribution of the Library.
+
+If any portion of this section is held invalid or unenforceable under any
+particular circumstance, the balance of the section is intended to apply,
+and the section as a whole is intended to apply in other circumstances.
+
+It is not the purpose of this section to induce you to infringe any
+patents or other property right claims or to contest validity of any
+such claims; this section has the sole purpose of protecting the
+integrity of the free software distribution system which is
+implemented by public license practices.  Many people have made
+generous contributions to the wide range of software distributed
+through that system in reliance on consistent application of that
+system; it is up to the author/donor to decide if he or she is willing
+to distribute software through any other system and a licensee cannot
+impose that choice.
+
+This section is intended to make thoroughly clear what is believed to
+be a consequence of the rest of this License.
+
+  12. If the distribution and/or use of the Library is restricted in
+certain countries either by patents or by copyrighted interfaces, the
+original copyright holder who places the Library under this License may add
+an explicit geographical distribution limitation excluding those countries,
+so that distribution is permitted only in or among countries not thus
+excluded.  In such case, this License incorporates the limitation as if
+written in the body of this License.
+
+  13. The Free Software Foundation may publish revised and/or new
+versions of the Lesser General Public License from time to time.
+Such new versions will be similar in spirit to the present version,
+but may differ in detail to address new problems or concerns.
+
+Each version is given a distinguishing version number.  If the Library
+specifies a version number of this License which applies to it and
+"any later version", you have the option of following the terms and
+conditions either of that version or of any later version published by
+the Free Software Foundation.  If the Library does not specify a
+license version number, you may choose any version ever published by
+the Free Software Foundation.
+
+  14. If you wish to incorporate parts of the Library into other free
+programs whose distribution conditions are incompatible with these,
+write to the author to ask for permission.  For software which is
+copyrighted by the Free Software Foundation, write to the Free
+Software Foundation; we sometimes make exceptions for this.  Our
+decision will be guided by the two goals of preserving the free status
+of all derivatives of our free software and of promoting the sharing
+and reuse of software generally.
+
+                            NO WARRANTY
+
+  15. BECAUSE THE LIBRARY IS LICENSED FREE OF CHARGE, THERE IS NO
+WARRANTY FOR THE LIBRARY, TO THE EXTENT PERMITTED BY APPLICABLE LAW.
+EXCEPT WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR
+OTHER PARTIES PROVIDE THE LIBRARY "AS IS" WITHOUT WARRANTY OF ANY
+KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE.  THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
+LIBRARY IS WITH YOU.  SHOULD THE LIBRARY PROVE DEFECTIVE, YOU ASSUME
+THE COST OF ALL NECESSARY SERVICING, REPAIR OR CORRECTION.
+
+  16. IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN
+WRITING WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY
+AND/OR REDISTRIBUTE THE LIBRARY AS PERMITTED ABOVE, BE LIABLE TO YOU
+FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL OR
+CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE
+LIBRARY (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
+RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
+FAILURE OF THE LIBRARY TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
+SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
+DAMAGES.
+
+                     END OF TERMS AND CONDITIONS
+
+           How to Apply These Terms to Your New Libraries
+
+  If you develop a new library, and you want it to be of the greatest
+possible use to the public, we recommend making it free software that
+everyone can redistribute and change.  You can do so by permitting
+redistribution under these terms (or, alternatively, under the terms of the
+ordinary General Public License).
+
+  To apply these terms, attach the following notices to the library.  It is
+safest to attach them to the start of each source file to most effectively
+convey the exclusion of warranty; and each file should have at least the
+"copyright" line and a pointer to where the full notice is found.
+
+    <one line to give the library's name and a brief idea of what it does.>
+    Copyright (C) <year>  <name of author>
+
+    This library is free software; you can redistribute it and/or
+    modify it under the terms of the GNU Lesser General Public
+    License as published by the Free Software Foundation; either
+    version 2.1 of the License, or (at your option) any later version.
+
+    This library is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+    Lesser General Public License for more details.
+
+    You should have received a copy of the GNU Lesser General Public
+    License along with this library; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+Also add information on how to contact you by electronic and paper mail.
+
+You should also get your employer (if you work as a programmer) or your
+school, if any, to sign a "copyright disclaimer" for the library, if
+necessary.  Here is a sample; alter the names:
+
+  Yoyodyne, Inc., hereby disclaims all copyright interest in the
+  library `Frob' (a library for tweaking knobs) written by James Random Hacker.
+
+  <signature of Ty Coon>, 1 April 1990
+  Ty Coon, President of Vice
+
+That's all there is to it!
+'
+    [Pane] ''
+
+=== 'Dead Space Setup' ===
+    [Pane] ''
+    [Pane] ''
+    [Pane] ''
+
+=== 'Setup' ===
+    [Pane] 'OK'
+    [Pane] ''
+    [Pane] 'Installation failed with code: -3
+
+It is likely that some installer files are damaged - please restart the installer and enable "Check file integrity before installation" in the Options menu before proceeding.
+
+If the problem persists after file integrity has been verified, please contact GOG.com Support.'
+
+=== 'Setup' ===
+    [Pane] 'OK'
+    [Pane] ''
+    [Pane] 'Unable to execute file:
+C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\MSVC2005\vcredist_x86.exe
+
+ShellExecuteEx failed; code 2.
+The system cannot find the file specified.'
+
+=== 'Setup' ===
+    [Pane] 'OK'
+    [Pane] ''
+    [Pane] 'Unable to execute file:
+C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\MSVC2005\vcredist_x64.exe
+
+ShellExecuteEx failed; code 2.
+The system cannot find the file specified.'
+
+=== 'Setup' ===
+    [Pane] 'OK'
+    [Pane] ''
+    [Pane] 'Unable to execute file:
+C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\directx_Jun2010_redist.exe
+
+ShellExecuteEx failed; code 2.
+The system cannot find the file specified.'
+
+=== 'Setup' ===
+    [Pane] 'OK'
+    [Pane] ''
+    [Pane] 'Unable to execute file:
+C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\dx_unp\DXSETUP.exe
+
+ShellExecuteEx failed; code 2.
+The system cannot find the file specified.'

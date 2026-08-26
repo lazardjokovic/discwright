@@ -1,0 +1,144 @@
+﻿2026-08-23 23:26:18.699   Log opened. (Time zone: UTC+02:00)
+2026-08-23 23:26:18.699   Setup version: Inno Setup version 5.5.5 (u)
+2026-08-23 23:26:18.699   Original Setup EXE: C:\dwspan\disc1\setup_dead_space_2.0.0.2.exe
+2026-08-23 23:26:18.699   Setup command line: /SL5="$4D0A1E,28730101,242688,C:\dwspan\disc1\setup_dead_space_2.0.0.2.exe" /VERYSILENT /DIR="C:\dwspan\install" /LOG="C:\dwspan\inno.log" /NORESTART 
+2026-08-23 23:26:18.699   Windows version: 6.3.9600  (NT platform: Yes)
+2026-08-23 23:26:18.699   64-bit Windows: Yes
+2026-08-23 23:26:18.699   Processor architecture: x64
+2026-08-23 23:26:18.699   User privileges: Administrative
+2026-08-23 23:26:18.708   64-bit install mode: No
+2026-08-23 23:26:18.713   Created temporary directory: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp
+2026-08-23 23:26:18.719   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\get_hw_caps.dll
+2026-08-23 23:26:18.743   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\innocallback.dll
+2026-08-23 23:26:18.754   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\GameuxInstallHelper.dll
+2026-08-23 23:26:18.783   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\crcdll.dll
+2026-08-23 23:26:18.786   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\unrar.dll
+2026-08-23 23:26:18.858   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\MSVC2005EULA.txt
+2026-08-23 23:26:18.859   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\DirectXEULA.txt
+2026-08-23 23:26:18.860   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\QTEULA.txt
+2026-08-23 23:26:18.875   Current Page: 
+2026-08-23 23:26:18.876   Current Page: 
+2026-08-23 23:26:18.876   Current Page: 
+2026-08-23 23:26:18.883   Current Page: 
+2026-08-23 23:26:18.883   Current Page: 
+2026-08-23 23:26:18.889   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\GameuxInstallHelper_temp.dll
+2026-08-23 23:26:18.894   MaxPBPos 95
+2026-08-23 23:26:18.894   MaxPBPos 85
+2026-08-23 23:26:18.910   Installing DirectX
+2026-08-23 23:26:18.914   Installing Visual Studio redists
+2026-08-23 23:26:58.241   Current Page: 
+2026-08-23 23:26:58.241   Current Page: 
+2026-08-23 23:26:58.241   Current Page: 
+2026-08-23 23:26:58.241   Starting the installation process.
+2026-08-23 23:26:58.247   Setting permissions on directory: C:\dwspan\install
+2026-08-23 23:26:58.347   Creating directory: C:\Users\lazar\OneDrive\Documents\Electronic Arts
+2026-08-23 23:26:58.347   Creating directory: C:\Users\lazar\AppData\Local\Electronic Arts
+2026-08-23 23:26:58.348   Directory for uninstall files: C:\dwspan\install
+2026-08-23 23:26:58.348   Creating new uninstall log: C:\dwspan\install\unins000.dat
+2026-08-23 23:26:58.350   -- File entry --
+2026-08-23 23:26:58.350   Dest filename: C:\dwspan\install\unins000.exe
+2026-08-23 23:26:58.352   Time stamp of our file: 2026-08-23 23:26:18.588
+2026-08-23 23:26:58.352   Installing the file.
+2026-08-23 23:26:58.355   Uninstaller requires administrator: Yes
+2026-08-23 23:26:58.355   Successfully installed the file.
+2026-08-23 23:26:58.355   -- File entry --
+2026-08-23 23:26:58.355   Dest filename: C:\Users\lazar\OneDrive\Documents\Electronic Arts\Dead Space\joypad_example.txt
+2026-08-23 23:26:58.356   Time stamp of our file: 2016-05-30 16:31:00.000
+2026-08-23 23:26:58.356   Installing the file.
+2026-08-23 23:26:58.356   Creating directory: C:\Users\lazar\OneDrive\Documents\Electronic Arts\Dead Space
+2026-08-23 23:26:58.357   Successfully installed the file.
+2026-08-23 23:26:58.357   -- File entry --
+2026-08-23 23:26:58.357   Dest filename: C:\dwspan\install\GameuxInstallHelper.dll
+2026-08-23 23:26:58.357   Time stamp of our file: 2012-09-14 13:56:08.000
+2026-08-23 23:26:58.357   Dest file exists.
+2026-08-23 23:26:58.357   Time stamp of existing file: 2012-09-14 13:56:08.000
+2026-08-23 23:26:58.357   Version of our file: 1.0.0.0
+2026-08-23 23:26:58.357   Version of existing file: 1.0.0.0
+2026-08-23 23:26:58.357   Same version. Skipping.
+2026-08-23 23:26:58.358   -- Icon entry --
+2026-08-23 23:26:58.358   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Dead Space.lnk
+2026-08-23 23:26:58.358   Creating directory: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]
+2026-08-23 23:26:58.371   Creating the icon.
+2026-08-23 23:26:58.418   Successfully created the icon.
+2026-08-23 23:26:58.431   -- Icon entry --
+2026-08-23 23:26:58.431   Dest filename: C:\dwspan\install\Launch Dead Space.lnk
+2026-08-23 23:26:58.431   Creating the icon.
+2026-08-23 23:26:58.434   Successfully created the icon.
+2026-08-23 23:26:58.441   -- Icon entry --
+2026-08-23 23:26:58.441   Dest filename: C:\Users\Public\Desktop\Dead Space.lnk
+2026-08-23 23:26:58.442   Creating the icon.
+2026-08-23 23:26:58.444   Successfully created the icon.
+2026-08-23 23:26:58.454   -- Icon entry --
+2026-08-23 23:26:58.454   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Language Setup.lnk
+2026-08-23 23:26:58.454   Creating the icon.
+2026-08-23 23:26:58.456   Successfully created the icon.
+2026-08-23 23:26:58.463   -- Icon entry --
+2026-08-23 23:26:58.463   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Uninstall Dead Space.lnk
+2026-08-23 23:26:58.463   Creating the icon.
+2026-08-23 23:26:58.469   Successfully created the icon.
+2026-08-23 23:26:58.476   -- Icon entry --
+2026-08-23 23:26:58.476   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Documents\Support.url
+2026-08-23 23:26:58.477   Creating directory: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Documents
+2026-08-23 23:26:58.506   Creating the icon.
+2026-08-23 23:26:58.507   Successfully created the icon.
+2026-08-23 23:26:58.523   Installation process succeeded.
+2026-08-23 23:26:58.523   Installing Visual Studio redists
+2026-08-23 23:26:58.527   -- Run entry --
+2026-08-23 23:26:58.527   Run as: Current user
+2026-08-23 23:26:58.527   Type: ShellExec
+2026-08-23 23:26:58.527   Filename: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\MSVC2005\vcredist_x86.exe
+2026-08-23 23:26:58.527   Parameters: /Q
+2026-08-23 23:26:58.532   Exception message:
+2026-08-23 23:26:58.532   Message box (OK):
+                          Unable to execute file:
+                          C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\MSVC2005\vcredist_x86.exe
+                          
+                          ShellExecuteEx failed; code 2.
+                          The system cannot find the file specified.
+2026-08-24 00:05:37.121   User chose OK.
+2026-08-24 00:05:37.122   Installing Visual Studio redists
+2026-08-24 00:05:37.122   -- Run entry --
+2026-08-24 00:05:37.122   Run as: Current user
+2026-08-24 00:05:37.122   Type: ShellExec
+2026-08-24 00:05:37.122   Filename: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\MSVC2005\vcredist_x64.exe
+2026-08-24 00:05:37.122   Parameters: /Q
+2026-08-24 00:05:37.126   Exception message:
+2026-08-24 00:05:37.126   Message box (OK):
+                          Unable to execute file:
+                          C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\MSVC2005\vcredist_x64.exe
+                          
+                          ShellExecuteEx failed; code 2.
+                          The system cannot find the file specified.
+2026-08-24 00:05:38.019   User chose OK.
+2026-08-24 00:05:38.019   Installing DirectX
+2026-08-24 00:05:38.019   -- Run entry --
+2026-08-24 00:05:38.019   Run as: Current user
+2026-08-24 00:05:38.019   Type: ShellExec
+2026-08-24 00:05:38.019   Filename: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\directx_Jun2010_redist.exe
+2026-08-24 00:05:38.019   Parameters: /q /t:C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\dx_unp
+2026-08-24 00:05:38.021   Exception message:
+2026-08-24 00:05:38.021   Message box (OK):
+                          Unable to execute file:
+                          C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\directx_Jun2010_redist.exe
+                          
+                          ShellExecuteEx failed; code 2.
+                          The system cannot find the file specified.
+2026-08-24 00:05:38.658   User chose OK.
+2026-08-24 00:05:38.658   Installing DirectX
+2026-08-24 00:05:38.658   -- Run entry --
+2026-08-24 00:05:38.658   Run as: Current user
+2026-08-24 00:05:38.658   Type: ShellExec
+2026-08-24 00:05:38.658   Filename: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\dx_unp\DXSETUP.exe
+2026-08-24 00:05:38.658   Parameters: /silent
+2026-08-24 00:05:38.660   Exception message:
+2026-08-24 00:05:38.660   Message box (OK):
+                          Unable to execute file:
+                          C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\dx_unp\DXSETUP.exe
+                          
+                          ShellExecuteEx failed; code 2.
+                          The system cannot find the file specified.
+2026-08-24 00:05:39.219   User chose OK.
+2026-08-24 00:05:39.358   Need to restart Windows? No
+2026-08-24 00:05:39.362   Current Page: 
+2026-08-24 00:05:39.362   Deinitializing Setup.
+2026-08-24 00:05:39.376   Log closed.
