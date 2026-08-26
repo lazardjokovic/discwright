@@ -1323,10 +1323,15 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
             throw "unbalanced braces in $name"
         }
 
-        # A stand-in for Star Wars: Empire at War Gold Pack - one installer, two
-        # games. Nobody here owns that game, so this is a reconstruction; what
-        # makes it worth trusting is that its SHAPE is copied from the four real
-        # .info files on hand rather than invented:
+        # A synthetic .info in the shape of a file that DOES use categories -
+        # which is what Hollow Knight, Resident Evil 0 and The Witcher all look
+        # like. It was written as a stand-in for Star Wars: Empire at War Gold
+        # Pack before anyone had that game's real file; the real one has since
+        # arrived and turned out to use no categories at all, so it now has a
+        # fixture of its own further down and this one keeps the job it is
+        # actually good at: covering category, isHidden and missing-file
+        # filtering. Its shape is copied from the four real .info files on hand
+        # rather than invented:
         #
         #   - pretty-printed, one key per line, a space after every colon. GOG
         #     never writes compact JSON, and an earlier version of this fixture
@@ -1348,12 +1353,17 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
         # Empire At War Gold", and the whole depot holds exactly one .info file.
         # EAWX is not a folder name anybody would invent.
         #
-        # What that manifest cannot give is the CONTENTS of the .info: it ships
-        # inside the depot, and the depot answers 403 without an ownership token.
-        # So the playTasks below are still the reconstructed part, and one thing
-        # is still unconfirmed - whether the real file marks Forces of Corruption
-        # with category "game". If it does not, playTasks drops it and Play goes
-        # on launching only the base game.
+        # What that manifest could not give was the CONTENTS of the .info: it
+        # ships inside the depot, and the depot answers 403 without an ownership
+        # token. So the playTasks below were the reconstructed part, and this
+        # comment used to close by naming the one thing still unconfirmed -
+        # whether the real file marks Forces of Corruption with category "game",
+        # because if it did not, playTasks would drop it and Play would go on
+        # launching only the base game.
+        #
+        # That is exactly what was happening. The reporter sent the real file on
+        # 2026-08-26: not one of its eight tasks carries a category. See the
+        # "no categories at all" fixture below, which is that file verbatim.
         $script:TaskDir = Join-Path $script:Sandbox 'installed-bundle'
         New-Item -ItemType Directory -Force -Path (Join-Path $script:TaskDir 'GameData') | Out-Null
         New-Item -ItemType Directory -Force -Path (Join-Path $script:TaskDir 'EAWX') | Out-Null
@@ -1450,6 +1460,105 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
         [IO.File]::WriteAllText((Join-Path $script:TaskDir 'goggame-1421404887.info'),
                                 $info, (New-Object Text.UTF8Encoding($false)))
 
+        # The REAL Star Wars: Empire at War Gold Pack .info, pasted verbatim by
+        # the person who reported that Play never offers Forces of Corruption.
+        # Not reconstructed, not reformatted - the \u escapes and the spacing are
+        # as GOG wrote them.
+        #
+        # What matters about it: not one of its eight tasks carries a "category",
+        # so the category test dropped all eight, playTasks returned nothing, and
+        # Play fell back to the registry exe - the base game. Five of the eight
+        # are manuals, which is why the fallback cannot simply be "keep
+        # everything" and tests for the .pdf and .rtf entries staying out.
+        #
+        # Its first task has no "name" either, which is its own small bug: the
+        # filename stood in and the button read "Launch Star Wars - Empire At
+        # War.lnk", extension and all.
+        $script:RealBundleDir = Join-Path $script:Sandbox 'installed-eaw'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:RealBundleDir 'EAWX') | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:RealBundleDir 'Manuals') | Out-Null
+        foreach ($f in @(
+            'Launch Star Wars - Empire At War.lnk'
+            'EAWX\swfoc.exe'
+            'Language.exe'
+            'Manuals\Star_Wars_Empire_at_War_Trouble.rtf'
+            'Manuals\Star Wars - Empire at War - reference_card.pdf'
+            'Manuals\Star Wars - Empire at War - tech tree.pdf'
+            'Manuals\Star_Wars_Empire_at_War_Manual.pdf'
+            'Manuals\Star Wars Empire At War - Forces of Corruption - Manual.pdf')) {
+            Set-Content -LiteralPath (Join-Path $script:RealBundleDir $f) -Value 'x' -Encoding Ascii
+        }
+        $realInfo = @'
+{
+    "gameId" : "1421404887",
+    "rootGameId" : "1421404887",
+    "standalone" : true,
+    "dependencyGameId" : "",
+    "language"         : "english",
+    "name"             : "STAR WARS\u00AE: Empire At War\u2122 Gold",
+    "playTasks"        : [
+        {
+            "isPrimary" : true,
+            "type"      : "FileTask",
+            "path"      : "Launch Star Wars - Empire At War.lnk",
+            "workingDir" : ""
+        },
+        {
+            "name" : "Star Wars - Empire At War - Forces of Corruption",
+            "type" : "FileTask",
+            "path" : "EAWX\\swfoc.exe",
+            "workingDir" : "EAWX",
+            "arguments"  : "LANGUAGE=ENGLISH"
+        },
+        {
+            "name" : "Language Settings",
+            "type" : "FileTask",
+            "path" : "Language.exe",
+            "workingDir" : ""
+        },
+        {
+            "name" : "Troubleshooting Guide",
+            "type" : "FileTask",
+            "path" : "Manuals\\Star_Wars_Empire_at_War_Trouble.rtf",
+            "workingDir" : "Manuals"
+        },
+        {
+            "name" : "Reference Card",
+            "type" : "FileTask",
+            "path" : "Manuals\\Star Wars - Empire at War - reference_card.pdf",
+            "workingDir" : "Manuals"
+        },
+        {
+            "name" : "Tech Tree",
+            "type" : "FileTask",
+            "path" : "Manuals\\Star Wars - Empire at War - tech tree.pdf",
+            "workingDir" : "Manuals"
+        },
+        {
+            "name" : "Star Wars - Empire at War Manual",
+            "type" : "FileTask",
+            "path" : "Manuals\\Star_Wars_Empire_at_War_Manual.pdf",
+            "workingDir" : "Manuals"
+        },
+        {
+            "name" : "Star Wars - Empire at War - Forces of Corruption Manual",
+            "type" : "FileTask",
+            "path" : "Manuals\\Star Wars Empire At War - Forces of Corruption - Manual.pdf",
+            "workingDir" : "Manuals"
+        }
+    ],
+    "supportTasks"     : [
+        {
+            "name" : "Support",
+            "type" : "URLTask",
+            "link" : "http://www.gog.com/en/support/star_wars_empire_at_war_gold_pack"
+        }
+    ]
+}
+'@
+        [IO.File]::WriteAllText((Join-Path $script:RealBundleDir 'goggame-1421404887.info'),
+                                $realInfo, (New-Object Text.UTF8Encoding($false)))
+
         $script:PlainDir = Join-Path $script:Sandbox 'installed-plain'
         New-Item -ItemType Directory -Force -Path $script:PlainDir | Out-Null
 
@@ -1501,6 +1610,56 @@ Describe "Reading GOG's play tasks out of an installed game" -Tag 'Unit' {
         # Fewer than two tasks means doPlay uses the registry exe exactly as it
         # always has. Every disc built before this keeps behaving identically.
         (Invoke-PlayTasks $script:PlainDir).Count | Should -Be 0
+    }
+
+    It 'reaches Forces of Corruption in the real Empire at War file' -Skip:(-not $script:HaveCScript) {
+        # The reported bug, in one assertion. Every task in that file is missing
+        # its "category", so before the fallback this returned nothing at all and
+        # Play launched the base game with no chooser.
+        $t = Invoke-PlayTasks $script:RealBundleDir
+        @($t | Where-Object { $_.Name -eq 'Star Wars - Empire At War - Forces of Corruption' }).Count |
+            Should -Be 1
+    }
+
+    It 'offers a chooser rather than one target for the real Empire at War file' -Skip:(-not $script:HaveCScript) {
+        # doPlay shows the chooser on t.length > 1 and otherwise launches the
+        # registry exe, so the count is what decides whether the fix is visible.
+        (Invoke-PlayTasks $script:RealBundleDir).Count | Should -BeGreaterThan 1
+    }
+
+    It 'keeps the manuals out even with no category to go on' -Skip:(-not $script:HaveCScript) {
+        # Five of the eight tasks are a .rtf or a .pdf. Nothing but the extension
+        # distinguishes them here, which is why the fallback tests it.
+        $t = Invoke-PlayTasks $script:RealBundleDir
+        @($t | Where-Object { $_.Path -match '\.(pdf|rtf)$' }).Count | Should -Be 0
+        @($t | Where-Object { $_.Name -in @('Tech Tree','Reference Card','Troubleshooting Guide') }).Count |
+            Should -Be 0
+    }
+
+    It 'names the unnamed primary task without its extension' -Skip:(-not $script:HaveCScript) {
+        # That task carries no "name", so the filename stands in - and a button
+        # reading "Launch Star Wars - Empire At War.lnk" looks like a bug.
+        $t = Invoke-PlayTasks $script:RealBundleDir
+        @($t | Where-Object { $_.Name -eq 'Launch Star Wars - Empire At War' }).Count | Should -Be 1
+        @($t | Where-Object { $_.Name -match '\.lnk$' }).Count | Should -Be 0
+    }
+
+    It 'passes the arguments and working directory the real file asks for' -Skip:(-not $script:HaveCScript) {
+        $t = @(Invoke-PlayTasks $script:RealBundleDir |
+               Where-Object { $_.Name -eq 'Star Wars - Empire At War - Forces of Corruption' })
+        $t[0].Args    | Should -Be 'LANGUAGE=ENGLISH'
+        $t[0].WorkDir | Should -Be (Join-Path $script:RealBundleDir 'EAWX')
+    }
+
+    It 'still trusts categories when the file uses them' -Skip:(-not $script:HaveCScript) {
+        # The guard that keeps the fallback from spreading. The Witcher's file
+        # names categories on five tasks and omits it on exactly one - Safe Mode -
+        # so there the omission means something and the extension test must not
+        # run. Without this guard Safe Mode returns as a second copy of the same
+        # game, and a single-game disc grows a chooser it never had.
+        $t = Invoke-PlayTasks $script:TaskDir
+        $t.Count | Should -Be 2
+        @($t | Where-Object { $_.Name -eq 'Safe Mode' }).Count | Should -Be 0
     }
 }
 

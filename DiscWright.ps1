@@ -1301,10 +1301,19 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // One string out of a JSON object, unescaped. Picked apart with a regular
   // expression rather than JSON.parse, which the quirks-mode engine an HTA gets
   // does not have.
+  //
+  // Unescaping is one pass, not a chain of replaces, because a chain has to pick
+  // an order and every order is wrong for something: run \uXXXX first and a path
+  // like "Manuals\\u..." loses its backslash, run it last and a name that really
+  // did escape a backslash can be read as an escape. GOG writes \u escapes for
+  // real - Empire at War's own title is "STAR WARS(R): Empire At War(TM)".
   function jsonStr(block,key){
     var m=block.match(new RegExp('"'+key+'"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'));
     if(!m) return "";
-    return m[1].replace(/\\\\/g,"\\").replace(/\\"/g,'"').replace(/\\\//g,"/");
+    return m[1].replace(/\\u([0-9a-fA-F]{4})|\\(.)/g, function(s,h,c){
+      if(h) return String.fromCharCode(parseInt(h,16));
+      return c=="n" ? "\n" : c=="t" ? "\t" : c;
+    });
   }
   // Real .info files contain both "System\\witcher.exe" and "System//witcher.exe".
   function relPath(s){ return String(s).replace(/\//g,"\\").replace(/\\+/g,"\\"); }
@@ -1321,6 +1330,20 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // else. Only the ones that start the game count - "document" is the manual and the
   // readme, which this menu already has its own buttons for, and a hidden task is the
   // raw exe GOG keeps behind its own launcher.
+  //
+  // "category" is how a task says which of those it is, but it is optional and
+  // Empire at War's real file leaves it off ALL EIGHT of its tasks - so the test
+  // below dropped every one of them, this function returned nothing, and Play went
+  // on launching the base game. That was the whole reported bug.
+  //
+  // So: trust categories when the file names any, and fall back to what the task
+  // points AT when it names none. The fallback has to be conditional rather than
+  // universal. The Witcher's file names categories on five tasks and omits it on
+  // exactly one - Safe Mode, which runs the same exe as the real entry with an
+  // extra argument - so there the omission carries meaning and Safe Mode stays out.
+  // A file with no categories anywhere carries no such meaning, and an extension
+  // separates the two kinds perfectly well: .exe and .lnk start something, .pdf
+  // and .rtf are the manual.
   function playTasks(dir){
     var out=[];
     try{
@@ -1329,18 +1352,25 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       for(;!en.atEnd();en.moveNext()){ if(/^goggame-\d+\.info$/i.test(en.item().Name)){ info=en.item().Path; break; } }
       if(!info) return out;
       var st=fso.OpenTextFile(info,1), txt=st.ReadAll(); st.Close();
+      var usesCat=/"category"\s*:/.test(txt);
       var re=/\{[^{}]*\}/g, m;
       while((m=re.exec(txt))!=null){
         var b=m[0];
         if(!/"type"\s*:\s*"FileTask"/.test(b)) continue;
         if(/"isHidden"\s*:\s*true/.test(b)) continue;
-        var cat=jsonStr(b,"category");
-        if(cat!="game" && cat!="launcher") continue;
         var rel=jsonStr(b,"path"); if(!rel) continue;
+        if(usesCat){
+          var cat=jsonStr(b,"category");
+          if(cat!="game" && cat!="launcher") continue;
+        } else if(!/\.(exe|lnk|bat|cmd)$/i.test(rel)) continue;
         var full=fso.BuildPath(dir,relPath(rel));
         if(!fso.FileExists(full)) continue;
+        // Empire at War's primary task carries no "name" either, so the filename
+        // stands in - without its extension, or the button reads "... War.lnk".
+        var nm=jsonStr(b,"name");
+        if(!nm) nm=fso.GetFileName(full).replace(/\.[^.]*$/,"");
         var wd=jsonStr(b,"workingDir");
-        out[out.length]={ n:(jsonStr(b,"name")||fso.GetFileName(full)), p:full,
+        out[out.length]={ n:nm, p:full,
                           a:jsonStr(b,"arguments"),
                           w:(wd ? fso.BuildPath(dir,relPath(wd)) : fso.GetParentFolderName(full)) };
       }
