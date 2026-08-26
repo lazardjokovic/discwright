@@ -1,0 +1,63 @@
+﻿SPAN HARNESS  2026-08-23 23:26:17
+elevated: True
+
+staging 3 discs from F:\DWdemo\Dead Space
+  disc 1: setup_dead_space_2.0.0.2-1.bin  (3.91 GB)  + setup_dead_space_2.0.0.2.exe
+  disc 2: setup_dead_space_2.0.0.2-2.bin  (3.91 GB)
+  disc 3: setup_dead_space_2.0.0.2-3.bin  (0.29 GB)
+
+launching: setup_dead_space_2.0.0.2.exe /VERYSILENT /DIR=C:\dwspan\install
+
+installer exited, code 0
+
+=== ANSWERS ===
+prompts handled     : 0
+slices asked for    : (none)
+asked twice for one : no
+installed files     : 796  (4.45 GB)
+=> resumed across discs: YES
+
+=== last 40 lines of the Inno log ===
+  2026-08-24 00:05:37.126   Exception message:
+  2026-08-24 00:05:37.126   Message box (OK):
+                            Unable to execute file:
+                            C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\MSVC2005\vcredist_x64.exe
+                            
+                            ShellExecuteEx failed; code 2.
+                            The system cannot find the file specified.
+  2026-08-24 00:05:38.019   User chose OK.
+  2026-08-24 00:05:38.019   Installing DirectX
+  2026-08-24 00:05:38.019   -- Run entry --
+  2026-08-24 00:05:38.019   Run as: Current user
+  2026-08-24 00:05:38.019   Type: ShellExec
+  2026-08-24 00:05:38.019   Filename: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\directx_Jun2010_redist.exe
+  2026-08-24 00:05:38.019   Parameters: /q /t:C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\dx_unp
+  2026-08-24 00:05:38.021   Exception message:
+  2026-08-24 00:05:38.021   Message box (OK):
+                            Unable to execute file:
+                            C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\directx_Jun2010_redist.exe
+                            
+                            ShellExecuteEx failed; code 2.
+                            The system cannot find the file specified.
+  2026-08-24 00:05:38.658   User chose OK.
+  2026-08-24 00:05:38.658   Installing DirectX
+  2026-08-24 00:05:38.658   -- Run entry --
+  2026-08-24 00:05:38.658   Run as: Current user
+  2026-08-24 00:05:38.658   Type: ShellExec
+  2026-08-24 00:05:38.658   Filename: C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\dx_unp\DXSETUP.exe
+  2026-08-24 00:05:38.658   Parameters: /silent
+  2026-08-24 00:05:38.660   Exception message:
+  2026-08-24 00:05:38.660   Message box (OK):
+                            Unable to execute file:
+                            C:\Users\lazar\AppData\Local\Temp\is-U8P5D.tmp\dx_unp\DXSETUP.exe
+                            
+                            ShellExecuteEx failed; code 2.
+                            The system cannot find the file specified.
+  2026-08-24 00:05:39.219   User chose OK.
+  2026-08-24 00:05:39.358   Need to restart Windows? No
+  2026-08-24 00:05:39.362   Current Page: 
+  2026-08-24 00:05:39.362   Deinitializing Setup.
+  2026-08-24 00:05:39.376   Log closed.
+
+cleaning up C:\dwspan\install
+DONE

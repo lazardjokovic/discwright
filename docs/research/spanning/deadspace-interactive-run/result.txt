@@ -1,0 +1,99 @@
+﻿SPAN HARNESS 3 (interactive)  2026-08-24 18:47:05
+elevated: True
+
+payload format : RAR multi-volume
+
+staging 3 discs from F:\DWdemo\Dead Space
+  disc 1: setup_dead_space_2.0.0.2-1.bin  (3.91 GB)  + setup_dead_space_2.0.0.2.exe
+  disc 2: setup_dead_space_2.0.0.2-2.bin  (3.91 GB)
+  disc 3: setup_dead_space_2.0.0.2-3.bin  (0.29 GB)
+
+launching interactively: setup_dead_space_2.0.0.2.exe /DIR=C:\dwspan\install
+
+WINDOW 'Select Setup Language'
+  text : Select the language to use during the installation: | English | OK | Cancel
+  clicked 'OK'
+
+WINDOW 'Dead Space Setup'
+  text : Options | Install
+  clicked 'Install'
+
+WINDOW 'EULA'
+  text : Save as .txt | Close | ELECTRONIC ARTS SOFTWARE END USER LICENSE AGREEMENT This End User License Agreement (“License”) is an agreement between you and Electronic Arts Inc., its subsidiaries and affiliates (“EA”). This License governs your use of this software product and all related documentation, and updates and upgrades that replace or supplement the software in any respect and which are not dis
+  clicked 'Close'
+
+WINDOW 'Dead Space Setup'
+  text : 
+  rule matched but none of [Install, Next, Finish, OK] present - left alone
+
+WINDOW 'Setup'
+  text : OK | Installation failed with code: -3 It is likely that some installer files are damaged - please restart the installer and enable "Check file integrity before installation" in the Options menu before proceeding. If the problem persists after file integrity has been verified, please contact GOG.com Support.
+  clicked 'OK'
+
+>>> unpacking has begun at 18:49:56
+
+WINDOW 'Setup'
+  text : OK | Unable to execute file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\MSVC2005\vcredist_x86.exe ShellExecuteEx failed; code 2. The system cannot find the file specified.
+  clicked 'OK'
+
+WINDOW 'Setup'
+  text : OK | Unable to execute file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\MSVC2005\vcredist_x64.exe ShellExecuteEx failed; code 2. The system cannot find the file specified.
+  clicked 'OK'
+
+WINDOW 'Setup'
+  text : OK | Unable to execute file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\directx_Jun2010_redist.exe ShellExecuteEx failed; code 2. The system cannot find the file specified.
+  clicked 'OK'
+
+WINDOW 'Setup'
+  text : OK | Unable to execute file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\dx_unp\DXSETUP.exe ShellExecuteEx failed; code 2. The system cannot find the file specified.
+  clicked 'OK'
+
+no installer processes left
+
+=== ANSWERS ===
+payload format         : RAR multi-volume
+wizard clicks          : 8
+disc prompts seen      : 0
+installed              : 9 files, 0.00 GB
+archive says complete  : 4297 files, 9.59 GB
+Inno log claims success: True
+ACTUALLY COMPLETE      : False   (0.2% of files)
+
+*** SILENT PARTIAL INSTALL ***
+    Setup reported success and wrote 9 of 4297 files, with every
+    wizard page visible and 0 prompt(s) shown.
+
+=== last 30 lines of the Inno log ===
+  2026-08-24 18:50:00.726   Type: ShellExec
+  2026-08-24 18:50:00.726   Filename: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\directx_Jun2010_redist.exe
+  2026-08-24 18:50:00.726   Parameters: /q /t:C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\dx_unp
+  2026-08-24 18:50:00.728   Exception message:
+  2026-08-24 18:50:00.728   Message box (OK):
+                            Unable to execute file:
+                            C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\directx_Jun2010_redist.exe
+                            
+                            ShellExecuteEx failed; code 2.
+                            The system cannot find the file specified.
+  2026-08-24 18:50:05.177   User chose OK.
+  2026-08-24 18:50:05.177   Installing DirectX
+  2026-08-24 18:50:05.177   -- Run entry --
+  2026-08-24 18:50:05.177   Run as: Current user
+  2026-08-24 18:50:05.177   Type: ShellExec
+  2026-08-24 18:50:05.177   Filename: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\dx_unp\DXSETUP.exe
+  2026-08-24 18:50:05.177   Parameters: /silent
+  2026-08-24 18:50:05.178   Exception message:
+  2026-08-24 18:50:05.178   Message box (OK):
+                            Unable to execute file:
+                            C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\dx_unp\DXSETUP.exe
+                            
+                            ShellExecuteEx failed; code 2.
+                            The system cannot find the file specified.
+  2026-08-24 18:50:09.626   User chose OK.
+  2026-08-24 18:50:09.833   Notify launcher: C:\Program Files (x86)\GOG Galaxy\GalaxyClient.exe /gameId=1312818781 /command=installed /path="C:\dwspan\install"
+  2026-08-24 18:50:09.859   Need to restart Windows? No
+  2026-08-24 18:50:09.876   Current Page: Finished
+  2026-08-24 18:50:09.876   Deinitializing Setup.
+  2026-08-24 18:50:10.061   Log closed.
+
+cleaning up C:\dwspan\install
+DONE - now run spancleanup.ps1 and spanshortcuts.ps1

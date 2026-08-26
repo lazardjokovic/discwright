@@ -1,0 +1,247 @@
+﻿2026-08-24 18:47:06.168   Log opened. (Time zone: UTC+02:00)
+2026-08-24 18:47:06.168   Setup version: Inno Setup version 5.5.5 (u)
+2026-08-24 18:47:06.169   Original Setup EXE: C:\dwspan\disc1\setup_dead_space_2.0.0.2.exe
+2026-08-24 18:47:06.169   Setup command line: /SL5="$A08A2,28730101,242688,C:\dwspan\disc1\setup_dead_space_2.0.0.2.exe" /DIR="C:\dwspan\install" /LOG="C:\dwspan\inno.log" /NORESTART 
+2026-08-24 18:47:06.169   Windows version: 6.3.9600  (NT platform: Yes)
+2026-08-24 18:47:06.169   64-bit Windows: Yes
+2026-08-24 18:47:06.169   Processor architecture: x64
+2026-08-24 18:47:06.169   User privileges: Administrative
+2026-08-24 18:47:06.177   64-bit install mode: No
+2026-08-24 18:47:08.238   Created temporary directory: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp
+2026-08-24 18:47:08.246   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\get_hw_caps.dll
+2026-08-24 18:47:08.266   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\innocallback.dll
+2026-08-24 18:47:08.277   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\GameuxInstallHelper.dll
+2026-08-24 18:47:08.305   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\botva2.dll
+2026-08-24 18:47:08.306   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\crcdll.dll
+2026-08-24 18:47:08.309   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\unrar.dll
+2026-08-24 18:47:08.327   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\EULA.txt
+2026-08-24 18:47:08.328   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\GOG_EULA.txt
+2026-08-24 18:47:08.329   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\OpenSans-Regular.ttf
+2026-08-24 18:47:08.335   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\OpenSans-Semibold.ttf
+2026-08-24 18:47:08.538   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\gog_background.jpg
+2026-08-24 18:47:08.542   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\md5log.ini
+2026-08-24 18:47:08.542   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\BigOK.png
+2026-08-24 18:47:08.543   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\BigFail.png
+2026-08-24 18:47:08.543   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\BigWarn.png
+2026-08-24 18:47:08.543   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\bottombar.png
+2026-08-24 18:47:08.544   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_browse.png
+2026-08-24 18:47:08.544   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_skip.png
+2026-08-24 18:47:08.545   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_continue.png
+2026-08-24 18:47:08.545   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_close.png
+2026-08-24 18:47:08.546   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_exit.png
+2026-08-24 18:47:08.546   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_launch.png
+2026-08-24 18:47:08.547   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_options.png
+2026-08-24 18:47:08.548   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_md5.png
+2026-08-24 18:47:08.550   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_save_as.png
+2026-08-24 18:47:08.551   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\btn_start.png
+2026-08-24 18:47:08.551   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\error.png
+2026-08-24 18:47:08.552   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\error_icon.png
+2026-08-24 18:47:08.552   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\EULAAccepted.png
+2026-08-24 18:47:08.553   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\EULAShow.png
+2026-08-24 18:47:08.554   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\GOG_new.png
+2026-08-24 18:47:08.554   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\ok.png
+2026-08-24 18:47:08.555   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\progress_center.png
+2026-08-24 18:47:08.555   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\progress_left.png
+2026-08-24 18:47:08.556   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\progress_right.png
+2026-08-24 18:47:08.556   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\track_center.png
+2026-08-24 18:47:08.557   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\track_left.png
+2026-08-24 18:47:08.557   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\track_right.png
+2026-08-24 18:47:08.557   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\trackbar_btn.png
+2026-08-24 18:47:08.558   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\trackbar_back.png
+2026-08-24 18:47:08.652   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\1312818781.ini
+2026-08-24 18:47:08.653   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\01.Duke-Nukem-3D-Atomic-Edition.png
+2026-08-24 18:47:08.735   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\03.Postal-2-Complete.png
+2026-08-24 18:47:08.842   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\04.Unreal-GOTY.png
+2026-08-24 18:47:08.935   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\05.Painkiller-Black-Edition.png
+2026-08-24 18:47:09.000   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\06.Raptor-Call-of-The-Shadows-2010-Edition.png
+2026-08-24 18:47:09.069   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\15.Rise-of-The-Triad.png
+2026-08-24 18:47:09.182   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\08.Blood-(One-Unit-Whole-Blood).png
+2026-08-24 18:47:09.247   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\09.Redneck-Rampage-Collection.png
+2026-08-24 18:47:09.347   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\10.Bloodrayne.png
+2026-08-24 18:47:09.435   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\02.Far-Cry.png
+2026-08-24 18:47:09.555   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\12.Symphony.png
+2026-08-24 18:47:09.636   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\14.Wing-Commander-Privateer.png
+2026-08-24 18:47:09.728   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\03.Comanche-vs.-Hokum.png
+2026-08-24 18:47:09.811   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\04.Beyond-Good-&-Evil.png
+2026-08-24 18:47:09.895   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\05.Another-World-15th-Anniversary-Edition.png
+2026-08-24 18:47:09.984   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\06.Driver-Parallel-Lines.png
+2026-08-24 18:47:10.077   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\08.Alone-in-The-Dark-1+2+3.png
+2026-08-24 18:47:10.190   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\09.Alan-Wake.png
+2026-08-24 18:47:10.276   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\11.Age-of-Wonders.png
+2026-08-24 18:47:10.359   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\12.Oddworld-Abe's-Exoddus.png
+2026-08-24 18:47:10.464   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\13.Cannon-Fodder.png
+2026-08-24 18:47:10.545   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\14.Fahrenheit-(Indigo-Prophecy).png
+2026-08-24 18:47:10.645   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\15.Crusader-No-Regret.png
+2026-08-24 18:47:10.747   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\07.ArmA-II.png
+2026-08-24 18:47:10.854   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\MSVC2005EULA.txt
+2026-08-24 18:47:10.855   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\DirectXEULA.txt
+2026-08-24 18:47:10.856   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\QTEULA.txt
+2026-08-24 18:47:10.924   Current Page: Welcome
+2026-08-24 18:49:13.551   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\GameuxInstallHelper_temp.dll
+2026-08-24 18:49:13.557   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\Support.ico
+2026-08-24 18:49:13.561   Extracting temporary file: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\gog.ico
+2026-08-24 18:49:13.565   MaxPBPos 95
+2026-08-24 18:49:13.565   MaxPBPos 85
+2026-08-24 18:49:13.583   Installing DirectX
+2026-08-24 18:49:13.584   Installing Visual Studio redists
+2026-08-24 18:49:13.586   Current Page: PostUnpackPage
+2026-08-24 18:49:13.586   Current Page: PostUnpackPage
+2026-08-24 18:49:14.580   PBPos INSTALLER_1312818781_PROGRESS_  1
+2026-08-24 18:49:15.580   PBPos INSTALLER_1312818781_PROGRESS_  2
+2026-08-24 18:49:16.580   PBPos INSTALLER_1312818781_PROGRESS_  3
+2026-08-24 18:49:17.579   PBPos INSTALLER_1312818781_PROGRESS_  4
+2026-08-24 18:49:18.595   PBPos INSTALLER_1312818781_PROGRESS_  5
+2026-08-24 18:49:19.596   PBPos INSTALLER_1312818781_PROGRESS_  6
+2026-08-24 18:49:20.595   PBPos INSTALLER_1312818781_PROGRESS_  8
+2026-08-24 18:49:21.595   PBPos INSTALLER_1312818781_PROGRESS_  9
+2026-08-24 18:49:22.595   PBPos INSTALLER_1312818781_PROGRESS_ 10
+2026-08-24 18:49:23.595   PBPos INSTALLER_1312818781_PROGRESS_ 11
+2026-08-24 18:49:24.595   PBPos INSTALLER_1312818781_PROGRESS_ 12
+2026-08-24 18:49:25.596   PBPos INSTALLER_1312818781_PROGRESS_ 13
+2026-08-24 18:49:26.595   PBPos INSTALLER_1312818781_PROGRESS_ 15
+2026-08-24 18:49:27.595   PBPos INSTALLER_1312818781_PROGRESS_ 16
+2026-08-24 18:49:28.609   PBPos INSTALLER_1312818781_PROGRESS_ 17
+2026-08-24 18:49:29.610   PBPos INSTALLER_1312818781_PROGRESS_ 18
+2026-08-24 18:49:30.610   PBPos INSTALLER_1312818781_PROGRESS_ 20
+2026-08-24 18:49:31.611   PBPos INSTALLER_1312818781_PROGRESS_ 21
+2026-08-24 18:49:32.610   PBPos INSTALLER_1312818781_PROGRESS_ 23
+2026-08-24 18:49:33.610   PBPos INSTALLER_1312818781_PROGRESS_ 24
+2026-08-24 18:49:34.610   PBPos INSTALLER_1312818781_PROGRESS_ 25
+2026-08-24 18:49:35.626   PBPos INSTALLER_1312818781_PROGRESS_ 26
+2026-08-24 18:49:36.627   PBPos INSTALLER_1312818781_PROGRESS_ 28
+2026-08-24 18:49:37.627   PBPos INSTALLER_1312818781_PROGRESS_ 29
+2026-08-24 18:49:38.626   PBPos INSTALLER_1312818781_PROGRESS_ 30
+2026-08-24 18:49:39.626   PBPos INSTALLER_1312818781_PROGRESS_ 31
+2026-08-24 18:49:40.627   PBPos INSTALLER_1312818781_PROGRESS_ 33
+2026-08-24 18:49:41.626   PBPos INSTALLER_1312818781_PROGRESS_ 34
+2026-08-24 18:49:42.627   PBPos INSTALLER_1312818781_PROGRESS_ 35
+2026-08-24 18:49:43.626   PBPos INSTALLER_1312818781_PROGRESS_ 37
+2026-08-24 18:49:44.627   PBPos INSTALLER_1312818781_PROGRESS_ 38
+2026-08-24 18:49:45.641   PBPos INSTALLER_1312818781_PROGRESS_ 39
+2026-08-24 18:49:46.641   PBPos INSTALLER_1312818781_PROGRESS_ 40
+2026-08-24 18:49:47.642   PBPos INSTALLER_1312818781_PROGRESS_ 41
+2026-08-24 18:49:48.642   PBPos INSTALLER_1312818781_PROGRESS_ 43
+2026-08-24 18:49:49.642   PBPos INSTALLER_1312818781_PROGRESS_ 44
+2026-08-24 18:49:50.641   PBPos INSTALLER_1312818781_PROGRESS_ 45
+2026-08-24 18:49:51.656   Message box (OK):
+                          Installation failed with code: -3
+                          
+                          It is likely that some installer files are damaged - please restart the installer and enable "Check file integrity before installation" in the Options menu before proceeding.
+                          
+                          If the problem persists after file integrity has been verified, please contact GOG.com Support.
+2026-08-24 18:49:51.778   User chose OK.
+2026-08-24 18:49:52.519   Current Page: PostUnpackPage
+2026-08-24 18:49:52.533   Current Page: Installing
+2026-08-24 18:49:52.536   Starting the installation process.
+2026-08-24 18:49:52.543   Setting permissions on directory: C:\dwspan\install
+2026-08-24 18:49:52.554   Creating directory: C:\Users\lazar\OneDrive\Documents\Electronic Arts
+2026-08-24 18:49:52.556   Directory for uninstall files: C:\dwspan\install
+2026-08-24 18:49:52.556   Creating new uninstall log: C:\dwspan\install\unins000.dat
+2026-08-24 18:49:52.559   -- File entry --
+2026-08-24 18:49:52.559   Dest filename: C:\dwspan\install\unins000.exe
+2026-08-24 18:49:52.565   Time stamp of our file: 2026-08-24 18:47:06.065
+2026-08-24 18:49:52.565   Installing the file.
+2026-08-24 18:49:52.568   Uninstaller requires administrator: Yes
+2026-08-24 18:49:52.569   Successfully installed the file.
+2026-08-24 18:49:52.569   -- File entry --
+2026-08-24 18:49:52.569   Dest filename: C:\Users\lazar\OneDrive\Documents\Electronic Arts\Dead Space\joypad_example.txt
+2026-08-24 18:49:52.570   Time stamp of our file: 2016-05-30 16:31:00.000
+2026-08-24 18:49:52.570   Installing the file.
+2026-08-24 18:49:52.570   Creating directory: C:\Users\lazar\OneDrive\Documents\Electronic Arts\Dead Space
+2026-08-24 18:49:52.572   Successfully installed the file.
+2026-08-24 18:49:52.573   -- File entry --
+2026-08-24 18:49:52.573   Dest filename: C:\dwspan\install\GameuxInstallHelper.dll
+2026-08-24 18:49:52.574   Time stamp of our file: 2012-09-14 13:56:08.000
+2026-08-24 18:49:52.574   Dest file exists.
+2026-08-24 18:49:52.574   Time stamp of existing file: 2012-09-14 13:56:08.000
+2026-08-24 18:49:52.574   Version of our file: 1.0.0.0
+2026-08-24 18:49:52.575   Version of existing file: 1.0.0.0
+2026-08-24 18:49:52.575   Same version. Skipping.
+2026-08-24 18:49:52.575   -- Icon entry --
+2026-08-24 18:49:52.575   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Dead Space.lnk
+2026-08-24 18:49:52.575   Creating directory: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]
+2026-08-24 18:49:52.589   Creating the icon.
+2026-08-24 18:49:52.602   Successfully created the icon.
+2026-08-24 18:49:52.630   -- Icon entry --
+2026-08-24 18:49:52.630   Dest filename: C:\dwspan\install\Launch Dead Space.lnk
+2026-08-24 18:49:52.630   Creating the icon.
+2026-08-24 18:49:52.632   Successfully created the icon.
+2026-08-24 18:49:52.637   -- Icon entry --
+2026-08-24 18:49:52.637   Dest filename: C:\Users\Public\Desktop\Dead Space.lnk
+2026-08-24 18:49:52.638   Creating the icon.
+2026-08-24 18:49:52.639   Successfully created the icon.
+2026-08-24 18:49:52.652   -- Icon entry --
+2026-08-24 18:49:52.652   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Language Setup.lnk
+2026-08-24 18:49:52.652   Creating the icon.
+2026-08-24 18:49:52.654   Successfully created the icon.
+2026-08-24 18:49:52.662   -- Icon entry --
+2026-08-24 18:49:52.662   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Uninstall Dead Space.lnk
+2026-08-24 18:49:52.662   Creating the icon.
+2026-08-24 18:49:52.697   Successfully created the icon.
+2026-08-24 18:49:52.705   -- Icon entry --
+2026-08-24 18:49:52.705   Dest filename: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Documents\Support.url
+2026-08-24 18:49:52.705   Creating directory: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Dead Space [GOG.com]\Documents
+2026-08-24 18:49:52.712   Creating the icon.
+2026-08-24 18:49:52.713   Successfully created the icon.
+2026-08-24 18:49:52.778   Installation process succeeded.
+2026-08-24 18:49:52.781   Installing Visual Studio redists
+2026-08-24 18:49:52.786   -- Run entry --
+2026-08-24 18:49:52.786   Run as: Current user
+2026-08-24 18:49:52.786   Type: ShellExec
+2026-08-24 18:49:52.786   Filename: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\MSVC2005\vcredist_x86.exe
+2026-08-24 18:49:52.786   Parameters: /Q
+2026-08-24 18:49:52.790   Exception message:
+2026-08-24 18:49:52.790   Message box (OK):
+                          Unable to execute file:
+                          C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\MSVC2005\vcredist_x86.exe
+                          
+                          ShellExecuteEx failed; code 2.
+                          The system cannot find the file specified.
+2026-08-24 18:49:56.259   User chose OK.
+2026-08-24 18:49:56.259   Installing Visual Studio redists
+2026-08-24 18:49:56.259   -- Run entry --
+2026-08-24 18:49:56.259   Run as: Current user
+2026-08-24 18:49:56.259   Type: ShellExec
+2026-08-24 18:49:56.259   Filename: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\MSVC2005\vcredist_x64.exe
+2026-08-24 18:49:56.259   Parameters: /Q
+2026-08-24 18:49:56.262   Exception message:
+2026-08-24 18:49:56.262   Message box (OK):
+                          Unable to execute file:
+                          C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\MSVC2005\vcredist_x64.exe
+                          
+                          ShellExecuteEx failed; code 2.
+                          The system cannot find the file specified.
+2026-08-24 18:50:00.726   User chose OK.
+2026-08-24 18:50:00.726   Installing DirectX
+2026-08-24 18:50:00.726   -- Run entry --
+2026-08-24 18:50:00.726   Run as: Current user
+2026-08-24 18:50:00.726   Type: ShellExec
+2026-08-24 18:50:00.726   Filename: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\directx_Jun2010_redist.exe
+2026-08-24 18:50:00.726   Parameters: /q /t:C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\dx_unp
+2026-08-24 18:50:00.728   Exception message:
+2026-08-24 18:50:00.728   Message box (OK):
+                          Unable to execute file:
+                          C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\directx_Jun2010_redist.exe
+                          
+                          ShellExecuteEx failed; code 2.
+                          The system cannot find the file specified.
+2026-08-24 18:50:05.177   User chose OK.
+2026-08-24 18:50:05.177   Installing DirectX
+2026-08-24 18:50:05.177   -- Run entry --
+2026-08-24 18:50:05.177   Run as: Current user
+2026-08-24 18:50:05.177   Type: ShellExec
+2026-08-24 18:50:05.177   Filename: C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\dx_unp\DXSETUP.exe
+2026-08-24 18:50:05.177   Parameters: /silent
+2026-08-24 18:50:05.178   Exception message:
+2026-08-24 18:50:05.178   Message box (OK):
+                          Unable to execute file:
+                          C:\Users\lazar\AppData\Local\Temp\is-3CBC5.tmp\dx_unp\DXSETUP.exe
+                          
+                          ShellExecuteEx failed; code 2.
+                          The system cannot find the file specified.
+2026-08-24 18:50:09.626   User chose OK.
+2026-08-24 18:50:09.833   Notify launcher: C:\Program Files (x86)\GOG Galaxy\GalaxyClient.exe /gameId=1312818781 /command=installed /path="C:\dwspan\install"
+2026-08-24 18:50:09.859   Need to restart Windows? No
+2026-08-24 18:50:09.876   Current Page: Finished
+2026-08-24 18:50:09.876   Deinitializing Setup.
+2026-08-24 18:50:10.061   Log closed.
