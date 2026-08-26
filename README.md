@@ -60,8 +60,9 @@ The launchers run the script with `-ExecutionPolicy Bypass`, the flag Windows re
 
    **Add-ons** — DLC, expansions, GOG patches, mods — are added the same way, except you pick the **installer file** rather than a folder, and it can be **any `.exe`**: the `setup_*.exe` rule is how a GOG *game* folder is recognised, and GOG ships patches as `patch_*.exe` while a mod installer is named whatever its author chose. You say which game each one belongs to. Names come from the filename and can be edited, because every GOG patch reports the game's own name as its product name — all four Hollow Knight patches call themselves "Hollow Knight".
 2. **Set the disc label** — what This PC will call the drive. **Target disc** next
-   to it is where you say which discs you actually own; leave it on *Fit on one
-   disc* and DiscWright recommends a size and builds one ISO, as it always has.
+   to it is where you say which blank you are going to burn, so DiscWright can tell
+   you whether it fits; leave it on *Recommend a disc for me* and it picks a size
+   instead.
 3. **Choose an icon** — a `.ico`, or any PNG/JPG and it builds a proper multi-size icon for you.
 4. **Set up the menu** — background artwork, which side the buttons sit on, which buttons you want, optional music, optional title text over the artwork.
 5. **Add extra content** — a manual, an Extras folder, or any loose files and folders to drop at the disc root. Each game can also have a manual and an Extras folder **of its own**, set when you add it; a game with none of its own falls back to the disc-wide ones.
@@ -86,34 +87,22 @@ The patches sit on Hollow Knight's own screen rather than in the chooser, and th
 ### When it does not fit on one disc
 
 Pick the disc you are going to burn from **Target disc** in step 2 and the line under
-the installer list stops recommending a size and starts telling you how many discs it
-will take: *3 discs of DVD5 4.7 GB*.
+the installer list says whether it fits: *fits DVD5 4.7 GB*, or *1.17 GB too big for a
+DVD9 8.5 GB*. The dropdown annotates every row the same way, so you can see at a glance
+which blank you need.
 
-Each disc in the set is a whole disc. Own icon, own menu, own label — `BOXED SET D1`,
-`BOXED SET D2` — and its own ISO. There is no disc 2 that is useless without disc 1.
+If it does not fit, remove an entry or pick a larger disc. **DiscWright will not split
+the list across several discs for you.** It used to, and that was a mistake: it packed
+in whatever order the rows happened to sit in, which made a curation decision — which
+games belong together on a disc — that is yours to make, and labelled the results `D1`
+and `D2` as though one continued the other when neither ever needed the other.
 
-Three rules decide what lands where, and all three exist because the alternative
-produces a set that looks fine and behaves badly:
+To make a second disc, reopen the project, swap the games and rebuild. The icon,
+background, music and buttons all carry over, so only the list and the label change.
 
-- **The order on the form is the order on the discs.** Repacking to save a disc would
-  put the game you listed first on disc 2.
-- **A game and its add-ons stay together.** A patch knows its game by that game's
-  position in the list, so one left on the next disc would show up as a game of its own.
-- **The disc-wide manual and extras go on disc 1 only.** Otherwise a 2 GB extras folder
-  costs 2 GB on every disc in the set. Anything you attached to a *particular* game
-  travels with that game. Tick **Also put the manual and extras on every disc of a set**
-  in step 5 if you would rather pay that — worth it for a small manual, not for a
-  making-of video.
-
-**A single game bigger than the disc is still refused**, by name, rather than split. That
-one needs the game's own installer to ask for the next disc, which is the next thing on
-the roadmap.
-
-### Where to get artwork
-
-The disc icon wants something square-ish and at least 256px. The menu background wants something around 760×480 or larger — it gets cropped to fill.
-
-GOG's own store pages, [SteamGridDB](https://www.steamgriddb.com/), and the wallpapers that ship in a lot of GOG extras all work well. Cover art usually already has the game's logo on it, which is why the title overlay is off by default.
+**A single game bigger than the disc is refused by name.** Spreading one game's `.bin`
+parts across several discs was tested and deliberately not built — see the
+[roadmap](ROADMAP.md) under *Not planned*.
 
 ## What ends up on the disc
 
