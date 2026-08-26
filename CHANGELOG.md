@@ -104,6 +104,32 @@ between minor versions.
 - The project file is at schema 5, which records the target disc. Anything older
   reads back as *Fit on one disc*, which is what those projects always were.
 
+### Fixed
+
+- **Play now offers Forces of Corruption on the Empire at War Gold Pack.** The
+  0.4.1 fix that asks which game to launch reads GOG's `goggame-<id>.info` and
+  keeps the tasks marked `category` `game` or `launcher`. That key is optional,
+  and Empire at War's real file leaves it off all eight of its tasks — so every
+  one was discarded, the list came back empty, and Play went on launching the
+  base game with no chooser at all. The bundle the whole feature was built for
+  was the one bundle it did not work on.
+
+  A file that names no categories anywhere is now sorted by what each task points
+  at: `.exe` and `.lnk` start something, `.pdf` and `.rtf` are the manual. The
+  fallback only applies when the file names no categories at all. The Witcher's
+  file names them on five tasks and omits the key on exactly one — Safe Mode,
+  which runs the same executable as the real entry with an extra argument — so
+  there the omission is deliberate and is still honoured.
+
+- **A launch button could read `... War.lnk`.** Empire at War's primary task
+  carries no `name` either, and the filename that stood in for it kept its
+  extension.
+
+- **`\u` escapes in a task name came out raw.** GOG writes them — that game's own
+  title is `STAR WARS®: Empire At War™ Gold`. Unescaping is now one
+  pass over the string rather than a chain of replacements, which also removes
+  the question of which order the chain should have run in.
+
 ### Still not handled
 
 - **One game bigger than one disc.** Spreading a single installer's `.bin` parts
