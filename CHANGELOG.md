@@ -7,7 +7,7 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
-## [Unreleased]
+## [0.4.2] — 2026-08-26
 
 ### Changed
 
