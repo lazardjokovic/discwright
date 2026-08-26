@@ -174,10 +174,14 @@ Stated up front rather than discovered later.
 - **One music track** per disc, by design. Manuals are per game.
 - **One game bigger than one disc cannot be split.** Several games are packed across a
   set happily, but a single installer larger than the disc you picked is refused by
-  name. Spreading one game's `.bin` parts across a set is next on the [roadmap](ROADMAP.md).
+  name. Spreading one game's `.bin` parts across a set was tested and deliberately not
+  built: the installer asks for parts out of order, a different number of times each run,
+  and keeps going back to discs it has already read — which is not the disc swap it looks
+  like. The [roadmap](ROADMAP.md) records the evidence under *Not planned*. Use a larger
+  blank instead.
 - **Disc labels are limited to what Windows can encode.** AutoRun reads `autorun.inf` in the system ANSI codepage and has no Unicode mode at all, so accented Latin characters are fine but Cyrillic, Greek and CJK are not. DiscWright shows you exactly what This PC will display and asks before building one it cannot represent.
 
-Not all of these are permanent — splitting one game across a set in particular is on the [roadmap](ROADMAP.md). [Issues](../../issues) is the place to ask for something, and [CHANGELOG.md](CHANGELOG.md) records what has changed between releases.
+Not all of these are permanent — the [roadmap](ROADMAP.md) says which are being worked on and which are settled. [Issues](../../issues) is the place to ask for something, and [CHANGELOG.md](CHANGELOG.md) records what has changed between releases.
 
 ## Media sizes
 

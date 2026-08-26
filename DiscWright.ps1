@@ -3534,7 +3534,11 @@ $btnBuild.Add_Click({
         $why   = switch ($plan.Reason) {
             'entry'  { ("{0} on its own is {1:N2} GB, and a {2} holds {3:N2} GB." -f $plan.TooBigName,
                         ([double]$plan.TooBigBytes/1GB), $mName, ($plan.Room/1GB)) +
-                       "`r`n`r`nSpreading one game's installer across several discs is not something DiscWright can do yet. Choose a larger disc in step 2, or leave that game off this set." }
+                       # Not "cannot do yet" - it was tested and deliberately dropped,
+                       # and a dialog promising a feature that is not coming is worse
+                       # than one that says plainly what to do instead. ROADMAP.md
+                       # carries the evidence.
+                       "`r`n`r`nDiscWright does not spread one game's installer across several discs: GOG's installer asks for its parts out of order, and a different number of times each run, so it never becomes a clean disc swap.`r`n`r`nChoose a larger disc in step 2, or leave that game off this set." }
             'extras' { "The extra content in step 5 is bigger than one $mName on its own, before any game is added.`r`n`r`nRemove some of it, or choose a larger disc." }
             default  { "This set cannot be planned for a $mName." }
         }

@@ -15,55 +15,6 @@ feature only creates pressure to cram things in to justify it.
 
 ## Next
 
-**Splitting one game across a set.** Half of multi-disc splitting shipped: several games
-are now packed onto as many discs as they need. What is left is the harder and better
-half — a single installer larger than one disc.
-
-This turns out to be more promising than expected. GOG's installers are Inno Setup with
-disk spanning switched on: run one without a `.bin` part beside it and it raises
-*"Installer needs the next part (.BIN) file"* with a path box, rather than failing. It
-also runs from a temp copy of itself, so ejecting disc 1 mid-install is safe, and it
-defaults the path to the installer's own folder — so a set that keeps the same layout on
-every disc may need nothing more than a disc swap and OK.
-
-Needs: parts distributed across the set, a menu that explains the swap, Install disabled
-on the continuation discs, and a check that the default path really does resolve after a
-swap. That last one is testable by mounting two ISOs to the same drive letter in turn, no
-burning required.
-
-**What this depends on, and it is worth stating plainly.** DiscWright would not cut
-anything up — GOG already ships a large game as numbered `.bin` parts, and all this
-feature does is put different existing parts on different discs. Nothing is sliced,
-joined or modified. So the whole idea rests on GOG continuing to split its installers
-the way it does today. Were they ever to switch to a single enormous file per game,
-there would be nothing left to distribute and the feature would stop applying to new
-downloads.
-
-That looks safe rather than lucky. Measured across six games from four publishers,
-1 GB to 137 GB, every one slices at about 4 GB:
-
-```
-Baldur's Gate 3   137.0 GB   33 parts   4.15 GB each
-Cyberpunk 2077    113.1 GB   28 parts   4.04 GB each
-The Witcher         9.48 GB   3 parts   4.00 / 4.00 / 1.48
-Dead Space          8.13 GB   3 parts   3.91 / 3.91 / 0.29
-Alan Wake           7.79 GB   2 parts   4.00 / 3.79
-Hollow Knight       1.16 GB   1 file    nothing to split
-```
-
-There is a reason it holds. 4 GiB is the largest file FAT32 can store, Inno Setup has
-`DiskSliceSize` precisely for that, and GOG sets it just under the line. It is a
-deliberate constraint rather than a habit, which makes it unlikely to change quietly.
-
-The practical consequence is that **one slice is the smallest thing that can move**.
-A 100 GB game is roughly 25 pieces, so two BD-R XLs or six BD-Rs. Whether a disc takes
-one piece or two depends on the exact slice size rather than the tier: two of Dead
-Space's 3.91 GB parts fit a DVD9's 7.95 GB, two 4.00 GB parts do not.
-
-If a game ever did arrive as one indivisible file, nothing breaks - the planner treats a
-slice as an atom, so it would refuse by name exactly as it refuses The Witcher on a DVD5
-today.
-
 **File a game's add-ons under the game, not beside it.** Requested by someone building a
 multi-game disc. On the disc today every entry gets its own numbered folder, so a game
 and its DLC sit as siblings:
@@ -101,10 +52,14 @@ release note rather than riding along with something else.
 
 ## Delivered
 
-**Several games across a disc set** — the first half of multi-disc splitting, requested
-twice within hours of the first release. Say which disc you own and the games are packed
-onto as many as it takes, in the order they sit on the form, with each game's add-ons
-kept alongside it and every disc standing on its own.
+**Several games across a disc set** — requested twice within hours of the first release.
+Say which disc you own and the games are packed onto as many as it takes, in the order
+they sit on the form, with each game's add-ons kept alongside it and every disc standing
+on its own.
+
+This was once described here as the first half of multi-disc splitting. It is now the
+whole of it: splitting a *single* game across a set was tested and dropped — see *Not
+planned*. A game larger than the disc you picked is refused by name.
 
 **More than one installer on a disc** — shipped in 0.3.0, and it was the most-asked-for
 thing on this page. Several games on one disc with a chooser in the menu; DLC, expansions,
@@ -133,9 +88,10 @@ into bin packing with heterogeneous bins, it needs a real inventory in the inter
 on the cases tried it changes which disc things land on without changing how many discs
 or which blanks get used. Advice gets nearly all of the benefit for almost none of it.
 
-Worth doing after splitting one game across a set, not before: a single game sliced at
-4 GB is where the waste becomes routine. One 4.00 GB slice on a DVD9 leaves 3.95 GB
-unused on every disc in the set, and a DVD5 would have been the right blank throughout.
+This used to be held until one game could be split across a set, on the grounds that a
+game sliced at 4 GB is where the waste becomes routine. That is not coming, so this no
+longer waits on anything — but it also loses most of its urgency, since the waste in a
+set of whole games is mild compared with what a set of 4 GB slices would have produced.
 
 **Artwork without the detour through an image editor.** Two requests that meet in the
 middle. One: fetch the game's icon and cover art automatically rather than making you hunt
@@ -180,6 +136,63 @@ Stated plainly because these come up.
   into Windows all do the rest well, and there is no reason to write a worse one.
 - **Anything that removes DRM.** GOG installers are DRM-free by design — that is the only
   reason a tool like this can exist. DiscWright circumvents nothing and never will.
+
+### Splitting one game across a set
+
+This sat under *Next* for a while and was dropped in August 2026 after the research came
+back. It was tested properly rather than abandoned on a guess, so here is what was found
+and why the answer is no.
+
+**It works, for some games.** GOG ships two packaging formats, and the first eight bytes
+of the first `.bin` tell them apart: `idska32` is Inno Setup's own disk slices, `Rar!` is
+a RAR multi-volume archive that GOG's install script unpacks with `unrar.dll`. Inno
+slices span — The Witcher was installed twice from three separate discs, once from
+folders and once from real UDF ISOs mounted one at a time on a single drive letter, and
+both runs produced an identical 2685 files / 13.97 GB. The swap is as simple as it could
+be: the dialog offers a stale path that happens to still be right, so it is eject, insert
+the next disc, click OK. Ten times out of ten, no typing, no Browse.
+
+**But that is not the experience the disc is meant to recreate.** A real multi-disc game
+asked for disc 2 once, at a defined moment, in order. This asks ten times for three
+discs, out of order, and goes back for discs it has already used:
+
+```
+prompts          : 10
+slices asked for : 3 -> 1 -> 2 -> 1 -> 2 -> 3 -> 2 -> 3 -> 2 -> 3
+```
+
+Note prompts 2 and 4 both want slice 1 — the disc the install started from — so no disc
+can be set aside once used. Inno does not read slices front to back; it installs files in
+its own order and a compressed chunk can straddle a slice boundary, so it fetches
+whichever part holds the bytes it needs next. That is Inno's internals showing through,
+not a disc swap.
+
+**And the count cannot be promised.** The folder run of the same game with the same three
+slices asked seven times in a different order. Same input, different number. There is no
+honest thing to put on screen.
+
+**For RAR-packed games it cannot be built at all.** There is no prompt and no mechanism.
+A missing volume produces `Installation failed with code: -3` and tells the user their
+download is damaged — and Inno then logs `Installation process succeeded`, writes the
+shortcuts and registers the game, so the failure is silent as well as misleading. Three
+runs, zero prompts; a control run with every volume present completed at 100% with no
+dialogs, which is what makes the other two mean anything. How much of the catalogue is
+RAR is **unknown** — it cannot be determined from GOG's public metadata, which reports
+that game's own part sizes wrongly. So per game it would be a coin flip that cannot be
+sized in advance.
+
+**What refusing costs is small.** The fallback is a bigger blank. BD-R XL holds 100 GB;
+of the games measured only Baldur's Gate 3 at 137 GB exceeds it. DiscWright already
+refuses a set by naming the game that will not fit, which stays the behaviour.
+
+**What it saves is the interface.** Spanning would have added format detection surfaced
+per game, a continuation-disc menu mode with Install and Play disabled, a screen
+explaining the swap, and format-specific refusal messaging. That is a lot of new surface
+for a feature that applies to few games and works poorly on those. Keeping the app simple
+was the original idea and it outranks this.
+
+This would be reconsidered if GOG's installers ever asked for slices in order, or if the
+number of swaps became something that could be stated up front.
 
 (Two entries used to sit here. **PowerShell 7** was ruled out because the ISO builder
 needed `Add-Type -CompilerParameters` with `/unsafe`, which PowerShell 6 removed; that

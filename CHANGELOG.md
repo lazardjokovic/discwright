@@ -132,11 +132,17 @@ between minor versions.
 
 ### Still not handled
 
-- **One game bigger than one disc.** Spreading a single installer's `.bin` parts
-  across a set is a different problem: GOG's installer asks for the next part
-  itself, which makes a real "insert disc 2" possible, and that is worth doing
-  properly rather than bolting on. Until then, a set is refused with the name of
-  the game that will not fit.
+- **One game bigger than one disc.** A set is refused with the name of the game
+  that will not fit, and will stay that way. Spreading a single installer's
+  `.bin` parts across a set looked promising — GOG's installer asks for the next
+  part itself, which makes a real "insert disc 2" possible — so it was built as a
+  test harness and run against real mounted discs. It works, and it is still not
+  worth shipping: the installer asks for parts out of order, keeps returning to
+  discs it has already read, and asked seven times in one run and ten in another
+  for the same three-disc game. That is not a disc swap, and the count cannot be
+  stated up front. For the RAR-packed installers GOG also ships there is no
+  mechanism at all — a missing part reports a corrupt download. ROADMAP.md records
+  the full evidence under *Not planned*. Use a larger blank.
 
 ## [0.4.1] — 2026-08-23
 
