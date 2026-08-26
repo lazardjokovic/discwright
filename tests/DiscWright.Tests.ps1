@@ -1841,7 +1841,7 @@ Describe 'The comma-return convention is not undone at the call sites' -Tag 'Uni
 
     BeforeAll {
         $script:CommaReturners = @(
-            'Get-Games', 'Get-MenuGames', 'Remove-GameEntry',
+            'Get-Games', 'Get-MenuGames', 'Remove-GameEntry', 'Get-EntryAddOns',
             'Set-GameEntries', 'Set-GameFolders', 'Set-GameFolder'
         )
         $appFile = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
@@ -1909,6 +1909,77 @@ Describe 'Removing an entry the way the button does it' -Tag 'Unit' {
         $after = Remove-GameEntry $script:Five 0
         @($after | Where-Object { $_.Kind -eq 'Game' }).Count | Should -Be 4
         @($after | Where-Object { $_.ParentIndex -ne -1 }).Count | Should -Be 0
+    }
+
+    # Each of these builds its own list. Remove-GameEntry rewrites Kind and
+    # ParentIndex on the entries it is handed rather than on copies, so a shared
+    # fixture arrives at the second test already promoted - which is exactly how
+    # the first draft of these tests "passed" while proving nothing.
+    It 'takes the add-ons with the game when asked to' {
+        $five = @(
+            (New-E 'Hollow Knight'),
+            (New-E 'Update A' 'AddOn' 0), (New-E 'Update B' 'AddOn' 0),
+            (New-E 'Update C' 'AddOn' 0), (New-E 'Update D' 'AddOn' 0)
+        )
+        $after = Remove-GameEntry $five 0 $true
+        @($after).Count | Should -Be 0
+    }
+
+    It 'takes only that game''s add-ons, not somebody else''s' {
+        $two = @(
+            (New-E 'Alan Wake'), (New-E 'Hollow Knight'),
+            (New-E 'AW patch' 'AddOn' 0), (New-E 'HK patch' 'AddOn' 1)
+        )
+        $after = Remove-GameEntry $two 0 $true
+        @($after).Count      | Should -Be 2
+        $after[0].GameName   | Should -Be 'Hollow Knight'
+        $after[1].GameName   | Should -Be 'HK patch'
+    }
+
+    It 'repoints the survivors after several rows go at once' {
+        # The reason removal builds an old-to-new index map. With one row going,
+        # "subtract one if the parent sat after it" holds. With a game and its two
+        # add-ons going, it does not - and a stale ParentIndex silently reattaches
+        # a patch to whatever game slid into the gap.
+        $mix = @(
+            (New-E 'Alan Wake'), (New-E 'AW patch 1' 'AddOn' 0), (New-E 'AW patch 2' 'AddOn' 0),
+            (New-E 'Hollow Knight'), (New-E 'HK patch' 'AddOn' 3)
+        )
+        $after = Remove-GameEntry $mix 0 $true
+        @($after).Count       | Should -Be 2
+        $after[0].GameName    | Should -Be 'Hollow Knight'
+        $after[1].GameName    | Should -Be 'HK patch'
+        $after[1].ParentIndex | Should -Be 0 -Because 'Hollow Knight is index 0 now, not 3'
+        $after[1].Kind        | Should -Be 'AddOn'
+    }
+
+    It 'still promotes when not asked to take them' {
+        $five = @(
+            (New-E 'Hollow Knight'),
+            (New-E 'Update A' 'AddOn' 0), (New-E 'Update B' 'AddOn' 0)
+        )
+        $after = Remove-GameEntry $five 0
+        @($after).Count | Should -Be 2
+        @($after | Where-Object { $_.Kind -eq 'Game' }).Count | Should -Be 2
+    }
+
+    It 'finds the add-ons belonging to one entry' {
+        $five = @(
+            (New-E 'Hollow Knight'),
+            (New-E 'Update A' 'AddOn' 0), (New-E 'Update B' 'AddOn' 0)
+        )
+        $kids = Get-EntryAddOns $five 0
+        $kids -join ',' | Should -Be '1,2'
+        $none = Get-EntryAddOns $five 1
+        @($none).Count  | Should -Be 0
+    }
+
+    It 'leaves the list alone for an index that is not there' {
+        $five = @((New-E 'Hollow Knight'), (New-E 'Update A' 'AddOn' 0))
+        $a = Remove-GameEntry $five 99 $true
+        $b = Remove-GameEntry $five -1 $true
+        @($a).Count | Should -Be 2
+        @($b).Count | Should -Be 2
     }
 }
 

@@ -570,15 +570,48 @@ function Get-MenuGames([array]$entries) {
 # An add-on whose own parent is the entry being removed becomes a game of its
 # own. The alternative is deleting it too, which throws away an installer the
 # user chose, without asking.
-function Remove-GameEntry([array]$entries,[int]$index) {
+# The add-ons belonging to one entry, as indices into the list it was given.
+function Get-EntryAddOns([array]$entries,[int]$index) {
+    $out = @()
+    for ($i = 0; $i -lt @($entries).Count; $i++) {
+        if ([int]$entries[$i].ParentIndex -eq $index) { $out += $i }
+    }
+    return ,@($out)
+}
+
+# Remove one entry, and optionally the add-ons hanging off it.
+#
+# $withAddOns defaults false, which is the behaviour this has always had:
+# an orphaned add-on is promoted to a game of its own rather than deleted.
+# That is the wrong default on a disc - a promoted patch shows in the menu
+# as a top-level game, and installing it runs a patch against a game that
+# is not there - so the Remove button asks. The choice lives with the
+# caller because only the caller can ask.
+function Remove-GameEntry([array]$entries,[int]$index,[bool]$withAddOns=$false) {
     if ($index -lt 0 -or $index -ge $entries.Count) { return ,@($entries) }
+
+    $drop = @{ $index = $true }
+    if ($withAddOns) { foreach ($k in (Get-EntryAddOns $entries $index)) { $drop[$k] = $true } }
+
+    # Old index -> new index, for the entries that survive. Built before anything
+    # is rewritten: with more than one entry going, "subtract one if the parent
+    # sat after the removed row" no longer holds.
+    $map = @{}
+    $n = 0
+    for ($i = 0; $i -lt $entries.Count; $i++) {
+        if ($drop.ContainsKey($i)) { continue }
+        $map[$i] = $n; $n++
+    }
+
     $kept = @()
     for ($i = 0; $i -lt $entries.Count; $i++) {
-        if ($i -eq $index) { continue }
+        if ($drop.ContainsKey($i)) { continue }
         $e = $entries[$i]
         $p = [int]$e.ParentIndex
-        if ($p -eq $index)   { $e.Kind = 'Game'; $e.ParentIndex = -1 }
-        elseif ($p -gt $index) { $e.ParentIndex = $p - 1 }
+        if ($p -ge 0) {
+            if ($drop.ContainsKey($p)) { $e.Kind = 'Game'; $e.ParentIndex = -1 }
+            else                       { $e.ParentIndex = $map[$p] }
+        }
         $kept += $e
     }
     return ,@($kept)
@@ -2333,6 +2366,15 @@ function Show-Confirm([string]$msg,[string]$title='DiscWright') {
         [System.Windows.Forms.MessageBoxIcon]::Warning) -eq [System.Windows.Forms.DialogResult]::Yes)
 }
 
+# Yes / No / Cancel, for a question where "no" and "not now" are different
+# answers. Show-Confirm cannot express that - its No and its close button both
+# mean the same thing.
+function Show-Choice([string]$msg,[string]$title='DiscWright') {
+    return [System.Windows.Forms.MessageBox]::Show($msg,$title,
+        [System.Windows.Forms.MessageBoxButtons]::YesNoCancel,
+        [System.Windows.Forms.MessageBoxIcon]::Warning)
+}
+
 # A build that refuses to start is an error, and errors get a window - the log line
 # alone is easy to miss, which makes the BUILD button look like it did nothing.
 function Deny-Build([string]$logMsg,[string]$dlgMsg) { & $log "ERROR: $logMsg"; Show-Warn $dlgMsg }
@@ -3166,7 +3208,30 @@ $btnGameDel.Add_Click({
     # again gives a one-element array holding that list - so removing one of five
     # entries left a single row whose name was all four remaining names run
     # together. Same trap as Get-Games and Get-FirstGame.
-    $state.Games = Remove-GameEntry @($state.Games) $lvGames.SelectedIndices[0]
+    $gi   = $lvGames.SelectedIndices[0]
+    $ent  = @($state.Games)[$gi]
+    # NOT @(Get-EntryAddOns ...). It already returns a list, and wrapping it again
+    # gives a one-element array holding that list - so a game with no add-ons at
+    # all would count as one and raise the dialog with nothing in it. Same trap as
+    # Remove-GameEntry directly below, and Get-Games, and Get-FirstGame.
+    $kids = Get-EntryAddOns @($state.Games) $gi
+    # Removing a game used to promote its add-ons to games of their own, silently.
+    # On the disc that means a patch listed in the menu as a game, whose Install
+    # runs it against a game that is not there - GOG's installer then errors
+    # several clicks later. Deleting them silently would be no better, so ask.
+    $withKids = $false
+    if ($ent -and $ent.Kind -ne 'AddOn' -and $kids.Count) {
+        $names = (@($kids | ForEach-Object { '  - ' + @($state.Games)[$_].GameName }) -join "`r`n")
+        $r = Show-Choice (("{0} has {1} add-on{2} on this disc:`r`n`r`n{3}`r`n`r`n" -f
+                            $ent.GameName, $kids.Count, $(if($kids.Count -eq 1){''}else{'s'}), $names) +
+                          "Yes  - remove them as well`r`n" +
+                          "No   - keep them, each as a game of its own`r`n`r`n" +
+                          "An add-on kept on its own installs a patch for a game that is not on the disc.") `
+                         'Remove add-ons too?'
+        if ($r -eq [System.Windows.Forms.DialogResult]::Cancel) { return }
+        $withKids = ($r -eq [System.Windows.Forms.DialogResult]::Yes)
+    }
+    $state.Games = Remove-GameEntry @($state.Games) $gi $withKids
     # Take back the label DiscWright typed, but only that one. Adding a game to an
     # empty form seeds the label from its name; removing that game used to leave
     # the name behind, and because seeding only fires into an EMPTY box, the next

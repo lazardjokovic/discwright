@@ -7,6 +7,29 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Fixed
+
+- **The form is locked while a build runs.** Only the BUILD button was disabled,
+  and the progress callback pumps the message loop to keep the window responsive
+  - so every other control stayed live along with it. The copy itself was never
+  at risk, because a build works from a snapshot taken before it starts. What was
+  at risk was everything after: remove a game mid-build and the project file
+  still saved the snapshot, so the form and `discproject.json` quietly disagreed.
+  Press *New disc* and the form emptied while the build carried on writing the
+  disc it used to describe. The log, the progress bar and the elapsed time stay
+  readable.
+
+### Changed
+
+- **Removing a game asks what to do with its add-ons.** It used to promote them
+  to games of their own, silently. On the disc that means a patch listed in the
+  menu as a game, and installing it runs a patch against a game that is not there
+  - GOG's installer then errors several clicks later, a long way from the cause.
+  Silently deleting them would be no better, so the Remove button now names them
+  and offers both: take them along, or keep them as entries of their own.
+
 ## [0.4.2] — 2026-08-26
 
 ### Changed
