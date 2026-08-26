@@ -3251,6 +3251,39 @@ $chkMenu.Add_CheckedChanged({
     Update-ActionButtons   # re-applies the as-is rules on top
 })
 
+# Lock the form while a build runs.
+#
+# Only the BUILD button used to be disabled, and the progress callback pumps the
+# message loop with Application::DoEvents so the window stays responsive - which
+# meant every other control stayed live too. A build works from $s, a snapshot
+# taken before it starts, so the copy itself was never at risk; what was at risk
+# was everything downstream of it. Remove a game mid-build and Save-Project still
+# writes the snapshot, so the form and the saved project quietly disagree. Press
+# New disc and the form empties while a build carries on writing the disc it
+# describes.
+#
+# The log, the progress bar and the elapsed label stay enabled - they are the
+# only things worth looking at while it runs, and a disabled multiline TextBox
+# cannot be scrolled.
+$script:BuildFrozen = $null
+function Set-FormBusy([bool]$busy) {
+    $live = @($txtLog, $pbBuild, $lblElapsed)
+    if ($busy) {
+        # Remember what was enabled rather than enabling everything afterwards:
+        # most of these are greyed by Update-ActionButtons for reasons that have
+        # not changed just because a build happened.
+        $script:BuildFrozen = @{}
+        foreach ($c in $form.Controls) {
+            if ($live -contains $c) { continue }
+            $script:BuildFrozen[$c] = $c.Enabled
+            $c.Enabled = $false
+        }
+    } elseif ($script:BuildFrozen) {
+        foreach ($c in $script:BuildFrozen.Keys) { $c.Enabled = $script:BuildFrozen[$c] }
+        $script:BuildFrozen = $null
+    }
+}
+
 $btnBuild.Add_Click({
     $txtLog.Clear()
     if ((Get-Games).Count -eq 0) { Deny-Build 'no valid GOG game folder.' 'Pick a valid GOG game folder first (step 1).'; return }
@@ -3405,6 +3438,7 @@ $btnBuild.Add_Click({
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
          ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey }
     $btnBuild.Enabled=$false
+    Set-FormBusy $true
     $script:BuildDiscTag = ''
     $pbBuild.Value=0; $pbBuild.Visible=$true
     $buildWatch.Restart()
@@ -3426,6 +3460,7 @@ $btnBuild.Add_Click({
     finally {
         if ($buildWatch.IsRunning) { $buildWatch.Stop() }
         $pbBuild.Visible=$false
+        Set-FormBusy $false
         $btnBuild.Enabled=$true; Update-ActionButtons
     }
 })
