@@ -130,7 +130,7 @@ BeforeAll {
     } $script:BigOutSet
     # Stand-ins for a set that has already been built into this folder. Sparse, so
     # two "ISOs" cost nothing - only their names matter to the button.
-    foreach ($n in 'Big Set D1.iso','Big Set D2.iso') {
+    foreach ($n in 'Big Set.iso') {
         $fs = [IO.File]::Create((Join-Path $script:BigOutSet $n)); $fs.SetLength(1024); $fs.Close()
     }
 
@@ -652,7 +652,7 @@ Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script
     AfterAll { Stop-DiscWright $script:App; $script:App = $null }
 
     It 'opens on the setting that behaves the way it always has' {
-        Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
+        Get-MediaTargetText $script:Win | Should -BeLike 'Recommend a disc*'
     }
 
     It 'recommends a size until it is told which disc you own' {
@@ -660,43 +660,36 @@ Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script
         Get-StatusText $script:Win | Should -Match 'Disc: '
     }
 
-    It 'turns the advice line into a plan once a disc is chosen' {
+    It 'turns the advice line into a verdict once a disc is chosen' {
         # Index 1 is CD-R, the first real medium. A gigabyte of games does not
-        # fit one, so this is a genuine set and not a relabelled single disc.
+        # fit one, so this is a real refusal and not a relabelled success.
         Set-MediaTarget -Win $script:Win -Index 1
         # The row carries its own answer now, so match the tier it names.
         Get-MediaTargetText $script:Win | Should -BeLike 'CD-R 700 MB*'
         $s = Get-StatusText $script:Win
-        $s | Should -Match 'discs of CD-R 700 MB'
+        $s | Should -Match 'too big for a CD-R 700 MB'
         $s | Should -Not -Match 'Disc: '
     }
 
-    It 'greys the every-disc option until there is something to put on every disc' {
-        # This project has no manual, no Extras folder and no loose files, so the
-        # option governs nothing and must not look as though it does.
-        Test-CtlEnabled $script:Win 'Also put the manual*' | Should -BeFalse
-    }
-
-    It 'says on the row itself how many discs that disc would take' {
+    It 'says on the row itself whether that disc would hold it' {
         # The dropdown is where "which disc should I use" gets asked, so the
-        # count belongs in the list rather than only on the line underneath.
+        # answer belongs in the list rather than only on the line underneath.
         Set-MediaTarget -Win $script:Win -Index 1
-        Get-MediaTargetText $script:Win | Should -Be 'CD-R 700 MB  -  2 discs'
+        Get-MediaTargetText $script:Win | Should -Be 'CD-R 700 MB  -  will not fit'
         Set-MediaTarget -Win $script:Win -Index 2
-        Get-MediaTargetText $script:Win | Should -Be 'DVD5 4.7 GB  -  1 disc'
+        Get-MediaTargetText $script:Win | Should -Be 'DVD5 4.7 GB  -  fits'
     }
 
-    It 'needs fewer discs when a bigger one is chosen' {
-        # Index 2 is DVD5. The same games now fit on one, and a single disc is
-        # not called a set.
+    It 'fits once a bigger disc is chosen' {
+        # Index 2 is DVD5. The same games fit on one of those.
         Set-MediaTarget -Win $script:Win -Index 2
         Get-MediaTargetText $script:Win | Should -BeLike 'DVD5 4.7 GB*'
-        Get-StatusText $script:Win | Should -Match '1 disc, DVD5 4\.7 GB'
+        Get-StatusText $script:Win | Should -Match 'fits DVD5 4\.7 GB'
     }
 
     It 'goes back to recommending when the automatic setting is chosen again' {
         Set-MediaTarget -Win $script:Win -Index 0
-        Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
+        Get-MediaTargetText $script:Win | Should -BeLike 'Recommend a disc*'
         Get-StatusText $script:Win | Should -Match 'Disc: '
     }
 
@@ -706,15 +699,15 @@ Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script
         Invoke-CtlNamed $script:Win 'New disc' | Out-Null
         Read-MessageBox -Win $script:Win -TitleLike 'New disc' -Button 'Yes' | Out-Null
         Start-Sleep -Seconds 1
-        Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
+        Get-MediaTargetText $script:Win | Should -BeLike 'Recommend a disc*'
     }
 }
 
-Describe 'Reopening a project that was planned as a set' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+Describe 'Reopening a project that named a target disc' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     # The bug this block exists for: Save-Project wrote the target disc correctly
     # and Import-Project never copied it into what it hands back, so every reopen
-    # silently fell back to "Fit on one disc". Writing the file had a test.
+    # silently fell back to the recommendation. Writing the file had a test.
     # Reading it back did not, and the round trip only shows up from the window.
 
     BeforeAll {
@@ -731,15 +724,8 @@ Describe 'Reopening a project that was planned as a set' -Tag 'UI' -Skip:(-not $
         Get-MediaTargetText $script:Win | Should -BeLike 'CD-R 700 MB*'
     }
 
-    It 'plans the set again straight away, without touching the dropdown' {
-        Get-StatusText $script:Win | Should -Match 'discs of CD-R 700 MB'
-    }
-
-    It 'offers to REBUILD, having noticed the set is already there' {
-        # The button used to ask whether "Big Set.iso" existed - a name a set never
-        # writes - so a folder holding the whole set still read BUILD ISO.
-        Find-Ctl $script:Win 'REBUILD ISO' -TimeoutSec 4 | Should -Not -BeNullOrEmpty
-        Find-Ctl $script:Win 'BUILD ISO'   -TimeoutSec 1 | Should -BeNullOrEmpty
+    It 'weighs it against that disc straight away, without touching the dropdown' {
+        Get-StatusText $script:Win | Should -Match 'too big for a CD-R 700 MB'
     }
 
     It 'still reopens an older project as no target at all' {
@@ -749,39 +735,7 @@ Describe 'Reopening a project that was planned as a set' -Tag 'UI' -Skip:(-not $
         Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
         Complete-FolderDialog -Win $script:Win | Out-Null
         Start-Sleep -Seconds 2
-        Get-MediaTargetText $script:Win | Should -BeLike 'Fit on one disc*'
+        Get-MediaTargetText $script:Win | Should -BeLike 'Recommend a disc*'
         Get-StatusText $script:Win | Should -Match 'Disc: '
-    }
-}
-
-Describe 'Choosing an extras folder wakes the every-disc option' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
-
-    # The bug: the Browse handlers for the disc-wide manual and Extras folder
-    # refreshed the advice line but not the buttons, and the rule deciding whether
-    # "put them on every disc" has anything to govern lives with the buttons. So
-    # the checkbox stayed greyed out with a folder chosen directly above it.
-    # Add-ExtraItem had called both since 0.3.0; these two never did.
-
-    BeforeAll {
-        $script:App = Start-DiscWright -AppPath $script:AppPath
-        $script:Win = $script:App.Window
-        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:BigOutEx
-        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
-        Complete-FolderDialog -Win $script:Win | Out-Null
-        Start-Sleep -Seconds 2
-    }
-    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
-
-    It 'starts greyed, because there is no disc-wide content yet' {
-        Test-CtlEnabled $script:Win 'Also put the manual*' | Should -BeFalse
-    }
-
-    It 'wakes as soon as a folder is chosen, without touching anything else' {
-        $b = Find-RowButton -Win $script:Win -LabelLike 'Extras folder*'
-        $b | Should -Not -BeNullOrEmpty
-        Invoke-Ctl -Ctl $b -SettleMs 700
-        Complete-FolderDialog -Win $script:Win | Out-Null
-        Start-Sleep -Seconds 1
-        Test-CtlEnabled $script:Win 'Also put the manual*' | Should -BeTrue
     }
 }

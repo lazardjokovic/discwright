@@ -29,8 +29,7 @@ Games\04 - Ori and the Blind Forest\
 With two games carrying three patches each that is eight top-level folders and nothing
 saying what belongs to what. The menu already knows - an add-on shows as a second Install
 button on its game's screen, never in the chooser - so the disc layout is the only place
-they still look unrelated. Disc sets made that odder rather than better: a game and its
-add-ons now travel to the same disc together, and then land in folders that do not say so.
+they still look unrelated.
 
 The shape would be the game's own folder holding them, the way its manual and extras
 already are:
@@ -52,46 +51,17 @@ release note rather than riding along with something else.
 
 ## Delivered
 
-**Several games across a disc set** — requested twice within hours of the first release.
-Say which disc you own and the games are packed onto as many as it takes, in the order
-they sit on the form, with each game's add-ons kept alongside it and every disc standing
-on its own.
-
-This was once described here as the first half of multi-disc splitting. It is now the
-whole of it: splitting a *single* game across a set was tested and dropped — see *Not
-planned*. A game larger than the disc you picked is refused by name.
-
-**More than one installer on a disc** — shipped in 0.3.0, and it was the most-asked-for
-thing on this page. Several games on one disc with a chooser in the menu; DLC, expansions,
-patches and mods as their own Install button on the game they belong to; and each game's
-manual and extras filed with that game rather than with the disc.
+**More than one installer on a disc** — shipped in 0.3.0, and the most-asked-for thing
+on this page: three separate requests, more than anything else. Several games on one disc
+with a chooser in the menu; DLC, expansions, patches and mods as their own Install button
+on the game they belong to; and each game's manual and extras filed with that game rather
+than with the disc.
 
 The one thing it does not cover is a mod or an installer from somewhere other than GOG
 being the *game* on a disc. Add-ons accept any `.exe`, but detecting a game still means
 finding a `setup_*.exe` — see *Installers that are not from GOG* under Considering.
 
 ## Later
-
-**Say which blank each disc in a set actually needs.** A set is planned against one
-medium, so every disc is assumed to be the same size — and the last disc of a set is
-usually nowhere near full. Building Hollow Knight and Alan Wake for DVD9 today gives a
-1.8 GB disc and a 7.8 GB one, and the first of those wastes most of an expensive blank
-for no reason.
-
-DiscWright already knows each disc's payload, so it can simply say: *disc 1, 1.8 GB, a
-DVD5 will do; disc 2, 7.8 GB, needs a DVD9*. Nothing about the packing changes. It is a
-line of advice, and it costs one pass over a plan that has already been computed.
-
-The bigger version of this — telling DiscWright how many blanks of each size you own and
-letting it pack accordingly — is deliberately **not** the plan. It turns a simple problem
-into bin packing with heterogeneous bins, it needs a real inventory in the interface, and
-on the cases tried it changes which disc things land on without changing how many discs
-or which blanks get used. Advice gets nearly all of the benefit for almost none of it.
-
-This used to be held until one game could be split across a set, on the grounds that a
-game sliced at 4 GB is where the waste becomes routine. That is not coming, so this no
-longer waits on anything — but it also loses most of its urgency, since the waste in a
-set of whole games is mild compared with what a set of 4 GB slices would have produced.
 
 **Artwork without the detour through an image editor.** Two requests that meet in the
 middle. One: fetch the game's icon and cover art automatically rather than making you hunt
