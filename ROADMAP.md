@@ -49,6 +49,24 @@ folder or just use their names is a real choice rather than a detail.
 Small, and worth doing. It changes where files land on a disc, so it wants its own
 release note rather than riding along with something else.
 
+**Let a game be renamed for the menu.** Asked for by the same person who found the
+question marks, once the characters were arriving intact and the name was worth
+reading. The name today is the installer's own `ProductName`, which is what GOG put
+in the file rather than what anyone would choose - full of trademark symbols,
+subtitles and edition suffixes, and sometimes just wrong.
+
+The groundwork is already there. An entry carries a display name and a match name
+separately, because the menu needs the registered name to find an installed game and
+should never have been using the caption for that. So a rename can change what is
+shown without touching what is matched - which is the part that would otherwise make
+this risky.
+
+What still has to be decided is how far the new name reaches. The disc's folder names
+are built from it (`Games\01 - Hollow Knight`), and so is the volume label on a
+single-game disc. Renaming the menu but not the folders would leave a disc whose two
+halves disagree; renaming both means a rename after a build produces a different disc
+layout from the same games. Neither is obviously right yet.
+
 ## Delivered
 
 **More than one installer on a disc** — shipped in 0.3.0, and the most-asked-for thing
