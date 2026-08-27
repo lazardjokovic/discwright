@@ -122,6 +122,42 @@ function Format-Size([double]$bytes) {
     return ('{0:N0} bytes' -f $bytes)
 }
 
+# menu.hta is written as pure ASCII (see New-MenuHta), so anything above 7-bit
+# has to leave here as an escape. Written as itself it does not survive the file:
+# Set-Content turns it into a literal "?", which is how a disc built from the Star
+# Wars pack came out offering "Star Wars?: Empire at War?".
+#
+# Escaped, not transliterated. The escape rebuilds the exact same character when
+# the menu runs, and the menu matches these strings against real names - MatchName
+# against what the installer registered, the setup paths against folders on the
+# disc. A "(TM)" that merely looked right would break both.
+
+# For HTML markup: numeric entities, counted in code points rather than in UTF-16
+# units, since half a surrogate pair is not a character an entity can name.
+function ConvertTo-AsciiEntity([string]$s) {
+    $sb = New-Object System.Text.StringBuilder
+    for ($i = 0; $i -lt $s.Length; $i++) {
+        $cp = [int]$s[$i]
+        if ([char]::IsHighSurrogate($s[$i]) -and ($i + 1) -lt $s.Length -and [char]::IsLowSurrogate($s[$i+1])) {
+            $cp = [char]::ConvertToUtf32($s[$i],$s[$i+1]); $i++
+        }
+        if ($cp -gt 0x7F) { [void]$sb.Append('&#').Append($cp).Append(';') }
+        else { [void]$sb.Append([char]$cp) }
+    }
+    return $sb.ToString()
+}
+
+# For JS string literals: \uXXXX per UTF-16 unit, which is how JScript spells a
+# surrogate pair anyway, so no code-point walk is needed here.
+function ConvertTo-AsciiEscape([string]$s) {
+    $sb = New-Object System.Text.StringBuilder
+    foreach ($ch in $s.ToCharArray()) {
+        if ([int]$ch -gt 0x7F) { [void]$sb.Append('\u').Append(('{0:x4}' -f [int]$ch)) }
+        else { [void]$sb.Append($ch) }
+    }
+    return $sb.ToString()
+}
+
 # For text that lands in HTML markup (title, button captions).
 function ConvertTo-HtmlText([string]$s) {
     if ([string]::IsNullOrEmpty($s)) { return '' }
@@ -130,7 +166,8 @@ function ConvertTo-HtmlText([string]$s) {
     # is a rule somebody has to remember.
     $s = Remove-ControlChars $s
     if ([string]::IsNullOrEmpty($s)) { return '' }
-    return ($s -replace '&','&amp;' -replace '<','&lt;' -replace '>','&gt;' -replace '"','&quot;')
+    $s = $s -replace '&','&amp;' -replace '<','&lt;' -replace '>','&gt;' -replace '"','&quot;'
+    return (ConvertTo-AsciiEntity $s)
 }
 
 # For text that lands inside a JS string literal. HTML entities are NOT decoded
@@ -144,7 +181,8 @@ function ConvertTo-JsString([string]$s) {
     # needs them.
     $s = Remove-ControlChars $s
     if ([string]::IsNullOrEmpty($s)) { return '' }
-    return ($s -replace '\\','\\' -replace '"','\"' -replace '<','\x3c' -replace '>','\x3e')
+    $s = $s -replace '\\','\\' -replace '"','\"' -replace '<','\x3c' -replace '>','\x3e'
+    return (ConvertTo-AsciiEscape $s)
 }
 
 # =================== BUILD PIPELINE ===================
@@ -2447,7 +2485,6 @@ function Update-ActionButtons {
     # exact file is going to be overwritten" rather than "there is something in that
     # folder somewhere".
     $bt     = Get-BuildTargets $t $txtLabel.Text.Trim()
-    $isoNow = $(if (@($bt.Isos).Count) { $bt.Isos[0] } else { '' })
     $names  = ($bt.Isos | Where-Object { $_ } | ForEach-Object { Split-Path $_ -Leaf }) -join ', '
     if ($bt.Existing -gt 0) {
         $btnBuild.Text = 'REBUILD ISO'
@@ -2482,9 +2519,6 @@ function Update-ActionButtons {
     $tips.SetToolTip($txtTitle, $(if(-not $composites){$whyOff}
                                   elseif(-not $chkTitle.Checked){'Tick "Show title" first'}
                                   else{'Leave blank to use the disc label from step 2'}))
-
-    # Nothing disc-wide to carry means nothing for this to decide about.
-    $hasWide = ($cbMan.Checked -and $state.ManualPath) -or ($cbExtra.Checked -and $state.ExtrasPath) -or ($lstExtra.Items.Count -gt 0)
 }
 
 # Renders the CURRENT settings into a temp folder so look changes can be checked

@@ -2230,6 +2230,21 @@ Describe 'Control characters cannot escape into what a disc carries' -Tag 'Unit'
         ConvertTo-JsString 'He said "hi" \ <script>' | Should -Be 'He said \"hi\" \\ \x3cscript\x3e'
         ConvertTo-HtmlText '<b>&"'                   | Should -Be '&lt;b&gt;&amp;&quot;'
     }
+
+    It 'escapes what is above ASCII rather than letting the file eat it' {
+        # menu.hta is written as an ASCII file, so an unescaped character above
+        # 7-bit does not reach the menu at all - Set-Content replaces it with a
+        # literal "?". Built from code points because this file has to stay pure
+        # ASCII itself.
+        $tm = [char]0x2122
+        ConvertTo-JsString ('Empire at War' + $tm) | Should -Be 'Empire at War\u2122'
+        ConvertTo-HtmlText ('Empire at War' + $tm) | Should -Be 'Empire at War&#8482;'
+        # A surrogate pair is one character to an HTML entity, which names a code
+        # point, and two escapes to JavaScript, which counts UTF-16 units.
+        $astral = [string][char]0xD83D + [char]0xDE00
+        ConvertTo-HtmlText $astral | Should -Be '&#128512;'
+        ConvertTo-JsString $astral | Should -Be '\ud83d\ude00'
+    }
 }
 
 Describe 'Which disc sizes DiscWright knows about' {
@@ -2432,5 +2447,86 @@ catch (e) { WScript.Echo("SYNTAX ERROR: " + e.message); }
         foreach ($dead in 'DISCNUM','DISCOF','discLine','capd') {
             $script:MenuJs | Should -Not -Match $dead
         }
+    }
+}
+
+Describe 'A game name with characters outside plain ASCII' {
+
+    # Reported against 0.4.2 by someone who built the Star Wars pack: the menu
+    # offered "Star Wars?: Empire at War?". menu.hta is written with
+    # Set-Content -Encoding ASCII, so the name was destroyed by the file rather
+    # than by the menu - every character above 7-bit became a literal "?".
+    #
+    # Escaping, not transliterating, is what the fix does, and the last test
+    # here is the reason: the menu compares these strings against real names,
+    # MatchName against what the installer registered and Setup against a folder
+    # on the disc. A "(TM)" that only looked right would break both.
+    #
+    # The name is built from code points because this test file has to stay pure
+    # ASCII itself - the repo is BOM-less, so PowerShell 5.1 would read a
+    # non-ASCII byte in the ANSI codepage, and CI rejects one.
+
+    BeforeDiscovery {
+        $script:HaveCScriptFancy = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:CScriptFancy = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        $script:Fancy = 'Star Wars' + [char]0x2122 + ': Empire at War' + [char]0x00AE
+        $script:FancyHta = Join-Path $script:Sandbox 'fancy-menu.hta'
+        New-MenuHta @{
+            GameName = $script:Fancy
+            Games    = @(@{ Name=$script:Fancy; MatchName=$script:Fancy
+                            Setup=('Games\01 - ' + $script:Fancy + '\setup.exe'); AddOns=@() })
+            Buttons  = @('Play','Install','Exit')
+            MusicFile = ''; ManualFile = ''; PanelSide = 'Right'; IconName = 'disc.ico'
+            WindowBorder = $true; ButtonStyle = 'Minimal'
+        } $script:FancyHta
+        $script:FancyText = Get-Content -LiteralPath $script:FancyHta -Raw
+    }
+
+    It 'writes a menu with nothing left for an ASCII file to destroy' {
+        $bytes = [IO.File]::ReadAllBytes($script:FancyHta)
+        @($bytes | Where-Object { $_ -gt 127 }).Count | Should -Be 0
+        # The reported symptom, named directly. Checked here rather than by
+        # looking for "?" anywhere, because the menu's JavaScript is full of
+        # ternaries and always has been.
+        $script:FancyText | Should -Not -Match 'Star Wars\?'
+        $script:FancyText | Should -Not -Match 'Empire at War\?'
+    }
+
+    It 'escapes for markup and for JavaScript in their own syntaxes' {
+        # HTML entities are not decoded inside <script>, so one escape cannot
+        # serve both places the name lands.
+        $script:FancyText | Should -Match '<title>Star Wars&#8482;: Empire at War&#174;</title>'
+        $script:FancyText | Should -Match 'n:"Star Wars\\u2122: Empire at War\\u00ae"'
+    }
+
+    It 'rebuilds the original characters exactly when the menu runs' -Skip:(-not $script:HaveCScriptFancy) {
+        # The assertion that matters. Compared as code points rather than as
+        # text, so nothing is riding on how a console pipe encodes its output -
+        # which is the very thing that caused the bug.
+        $m = [regex]::Match($script:FancyText, '(?m)^\s*var GAMES=(.+?);\s')
+        $m.Success | Should -BeTrue -Because 'the GAMES array has to be findable to be evaluated'
+        $probe = @'
+var GAMES = eval(WScript.StdIn.ReadAll());
+var s = GAMES[0].n, out = [];
+for (var i = 0; i < s.length; i++) out.push(s.charCodeAt(i));
+WScript.Echo(out.join(","));
+'@
+        $pf = Join-Path $script:Sandbox 'fancyparse.js'
+        $bf = Join-Path $script:Sandbox 'fancygames.js'
+        Set-Content -LiteralPath $pf -Value $probe -Encoding Ascii
+        Set-Content -LiteralPath $bf -Value $m.Groups[1].Value -Encoding Ascii
+        $out = (cmd /c "`"$script:CScriptFancy`" //Nologo //E:JScript `"$pf`" < `"$bf`"" 2>&1) -join ' '
+        $want = ($script:Fancy.ToCharArray() | ForEach-Object { [int]$_ }) -join ','
+        $out.Trim() | Should -Be $want
     }
 }

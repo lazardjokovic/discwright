@@ -11,6 +11,17 @@ between minor versions.
 
 ### Fixed
 
+- **Game names keep their special characters in the menu.** `menu.hta` is written
+  as an ASCII file and nothing escaped what would not fit, so every character
+  above 7-bit was replaced with a literal `?` on the way out: a disc built from
+  the Star Wars pack offered *Star Wars?: Empire at War?*. Names are now escaped
+  before they go in - `&#8482;` where the name lands in markup, `\u2122` where it
+  lands in the menu's JavaScript - so the file stays ASCII and the characters
+  arrive whole. Escaped rather than rewritten as `(TM)`, because the menu matches
+  these strings against the game the installer registered and against folder names
+  on the disc; a name that only looked right would stop Play from finding
+  anything.
+
 - **The form is locked while a build runs.** Only the BUILD button was disabled,
   and the progress callback pumps the message loop to keep the window responsive
   - so every other control stayed live along with it. The copy itself was never

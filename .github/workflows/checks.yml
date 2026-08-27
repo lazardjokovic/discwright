@@ -18,6 +18,10 @@ concurrency:
 jobs:
   powershell:
     runs-on: windows-latest
+    # A hung job is not a failed job: without this it holds a runner until the
+    # six-hour default. Pester 6 hangs this suite (see the Pester step below),
+    # which is exactly the shape of failure a timeout has to cover.
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
@@ -51,11 +55,23 @@ jobs:
       - name: Pester
         shell: powershell
         run: |
-          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version.Major -ge 5 })) {
+          # Pester 5, deliberately, and not merely "5 or later" - the same
+          # pin tests/Invoke-Tests.ps1 makes, for the reason written out there:
+          # under 6.1.0 every file in this suite hangs in BeforeAll. Hosted
+          # runners ship 5.x today, so -MinimumVersion 5.0 happens to import 5.x
+          # today. It would import 6.x the day that changes, and a hung job just
+          # runs until the timeout above rather than telling anybody why.
+          $p5 = Get-Module -ListAvailable Pester |
+                Where-Object { $_.Version.Major -eq 5 } |
+                Sort-Object Version -Descending | Select-Object -First 1
+          if (-not $p5) {
               Set-PSRepository PSGallery -InstallationPolicy Trusted
-              Install-Module Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0
+              Install-Module Pester -Force -SkipPublisherCheck -Scope CurrentUser -MinimumVersion 5.0 -MaximumVersion 5.999.999
+              $p5 = Get-Module -ListAvailable Pester |
+                    Where-Object { $_.Version.Major -eq 5 } |
+                    Sort-Object Version -Descending | Select-Object -First 1
           }
-          Import-Module Pester -MinimumVersion 5.0 -Force
+          Import-Module $p5.Path -Force
           Write-Host "Pester $((Get-Module Pester).Version)"
 
           $cfg = New-PesterConfiguration
