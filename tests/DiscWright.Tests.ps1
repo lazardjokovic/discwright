@@ -219,6 +219,105 @@ Describe 'Get-VolumeLabel' -Tag 'Unit' {
     }
 }
 
+Describe 'Locking the form while a build runs' -Tag 'Unit' {
+
+    # Added in 0.4.3 and shipped without ever running a build from the window.
+    # It cannot be tested through the window either, which is worth writing down
+    # so nobody spends an afternoon rediscovering it: the only moment the form is
+    # observably frozen is while the "Build complete" box is up, and a modal box
+    # makes UI Automation report every control on the owner as disabled anyway.
+    # A window test written that way passes with the lock removed entirely.
+    #
+    # So it is tested here, on real WinForms controls, plus the wiring check
+    # below that the build handler still calls it.
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Windows.Forms
+
+        # Script scope for the same reason as PROJECT_FILE above: Set-FormBusy
+        # looks these up dynamically from wherever it is called.
+        $script:form       = New-Object System.Windows.Forms.Form
+        $script:txtLog     = New-Object System.Windows.Forms.TextBox
+        $script:pbBuild    = New-Object System.Windows.Forms.ProgressBar
+        $script:lblElapsed = New-Object System.Windows.Forms.Label
+        $script:btnOne     = New-Object System.Windows.Forms.Button
+        # Greyed before the build for a reason of its own - nothing is selected.
+        # This is the control the restore has to leave alone.
+        $script:btnGreyed  = New-Object System.Windows.Forms.Button
+        $script:btnGreyed.Enabled = $false
+        $script:form.Controls.AddRange(@(
+            $script:txtLog, $script:pbBuild, $script:lblElapsed,
+            $script:btnOne, $script:btnGreyed))
+        $script:BuildFrozen = $null
+    }
+
+    AfterAll {
+        if ($script:form) { $script:form.Dispose(); $script:form = $null }
+    }
+
+    It 'disables the controls a person could otherwise touch mid-build' {
+        Set-FormBusy $true
+        $script:btnOne.Enabled | Should -BeFalse
+    }
+
+    It 'leaves the log, the progress bar and the elapsed label alive' {
+        # They are the only things worth looking at while it runs, and a disabled
+        # multiline TextBox cannot even be scrolled.
+        $script:txtLog.Enabled     | Should -BeTrue
+        $script:pbBuild.Enabled    | Should -BeTrue
+        $script:lblElapsed.Enabled | Should -BeTrue
+    }
+
+    It 'gives back exactly what was enabled before, not everything' {
+        # The bug this shape avoids: re-enabling the form wholesale would wake
+        # controls that were greyed for reasons that have not changed just
+        # because a build happened.
+        Set-FormBusy $false
+        $script:btnOne.Enabled    | Should -BeTrue
+        $script:btnGreyed.Enabled | Should -BeFalse
+    }
+
+    It 'is safe to unlock a form that was never locked' {
+        # The unlock lives in a finally, so it runs even on a path that threw
+        # before the lock was taken.
+        $script:BuildFrozen = $null
+        { Set-FormBusy $false } | Should -Not -Throw
+    }
+
+    Context 'wired into the build' {
+
+        BeforeAll {
+            $src = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
+            $tree = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$null, [ref]$null)
+            $script:BusyCalls = @($tree.FindAll({ param($n)
+                $n -is [System.Management.Automation.Language.CommandAst] -and
+                $n.GetCommandName() -eq 'Set-FormBusy' }, $true))
+
+            function Test-InFinally($node) {
+                $n = $node.Parent
+                while ($n) {
+                    if ($n -is [System.Management.Automation.Language.TryStatementAst] -and $n.Finally -and
+                        $n.Finally.Extent.StartOffset -le $node.Extent.StartOffset -and
+                        $n.Finally.Extent.EndOffset   -ge $node.Extent.EndOffset) { return $true }
+                    $n = $n.Parent
+                }
+                return $false
+            }
+        }
+
+        It 'locks the form when a build starts' {
+            @($script:BusyCalls | Where-Object { $_.CommandElements[1].Extent.Text -eq '$true' }).Count |
+                Should -Be 1
+        }
+
+        It 'unlocks it in a finally, so a failed build cannot leave it dead' {
+            $unlock = @($script:BusyCalls | Where-Object { $_.CommandElements[1].Extent.Text -eq '$false' })
+            $unlock.Count | Should -Be 1
+            Test-InFinally $unlock[0] | Should -BeTrue
+        }
+    }
+}
+
 Describe 'Test-ReservedDiscName' -Tag 'Unit' {
 
     It 'reserves <Name>' -ForEach @(
@@ -685,6 +784,170 @@ Describe 'Project file' -Tag 'Unit' {
         }
     }
 
+    Context 'a project written by v0.2.0' {
+
+        BeforeAll {
+            # Schema 2 introduced the Games array and nothing else: no Kind, no
+            # Parent, no Setup, no Manual, no Extras. Written by hand for the
+            # same reason as the v1 file above - a round-trip of our own output
+            # proves we can read what we just wrote, not what somebody's older
+            # DiscWright wrote two schemas ago.
+            $script:V2Out = Join-Path $script:Sandbox 'proj-v2-old'
+            New-Item -ItemType Directory -Force -Path $script:V2Out | Out-Null
+            @{ Version=2; SavedUtc='2026-08-17T10:00:00'
+               SourceFolder=$script:PGames[0].Folder; GameName='Game One'; Label='Trilogy'
+               Games=@(
+                   @{ Folder=$script:PGames[0].Folder; GameName='Game One' }
+                   @{ Folder=$script:PGames[1].Folder; GameName='Game Two' }
+                   @{ Folder=$script:PGames[2].Folder; GameName='Game Three' }
+               )
+               IconPath=$script:Art; IconIsIco=$false; Menu=$true; BgPath=$script:Bg; BgAsIs=$false
+               PanelSide='Right'; Divider=$false; ShowTitle=$false; TitleText=''
+               WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+               Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
+               OutDir=$script:V2Out } | ConvertTo-Json -Depth 4 |
+                Set-Content (Join-Path $script:V2Out 'discproject.json') -Encoding UTF8
+            $script:V2Back = Import-Project (Join-Path $script:V2Out 'discproject.json')
+        }
+
+        It 'still opens' {
+            $script:V2Back | Should -Not -BeNullOrEmpty
+        }
+
+        It 'returns every game in the array, not just the v1 SourceFolder' {
+            @($script:V2Back.GameFolders).Count | Should -Be 3
+        }
+
+        It 'reads entries with no Kind as all games and no add-ons' {
+            # Which is exactly what a version 2 disc was: add-ons did not exist.
+            @($script:V2Back.GameEntries | Where-Object { $_.Kind -eq 'Game' }).Count    | Should -Be 3
+            @($script:V2Back.GameEntries | Where-Object { $_.ParentIndex -ne -1 }).Count | Should -Be 0
+        }
+
+        It 'leaves Setup unset so the installer is detected again' {
+            # v2 recorded only the folder. Inventing a Setup here would be worse
+            # than leaving it blank - re-detection finds the real one.
+            @($script:V2Back.GameEntries | Where-Object { $_.Setup }).Count | Should -Be 0
+        }
+    }
+
+    Context 'a project written by v0.3.x' {
+
+        BeforeAll {
+            # Schema 3 added Kind, Parent and Setup. Manual and Extras arrived in
+            # 4, so an add-on parented correctly but nothing had media of its own.
+            $script:V3Out = Join-Path $script:Sandbox 'proj-v3-old'
+            New-Item -ItemType Directory -Force -Path $script:V3Out | Out-Null
+            @{ Version=3; SavedUtc='2026-08-18T10:00:00'
+               SourceFolder=$script:PGames[0].Folder; GameName='Game One'; Label='Trilogy'
+               Games=@(
+                   @{ Folder=$script:PGames[0].Folder; GameName='Game One'
+                      Setup=$script:PGames[0].SetupExe.FullName; Kind='Game'; Parent=-1 }
+                   @{ Folder=$script:PGames[0].Folder; GameName='Patch 1.1'
+                      Setup=$script:PGames[0].SetupExe.FullName; Kind='AddOn'; Parent=0 }
+                   @{ Folder=$script:PGames[1].Folder; GameName='Game Two'
+                      Setup=$script:PGames[1].SetupExe.FullName; Kind='Game'; Parent=-1 }
+               )
+               IconPath=$script:Art; IconIsIco=$false; Menu=$true; BgPath=$script:Bg; BgAsIs=$false
+               PanelSide='Right'; Divider=$false; ShowTitle=$false; TitleText=''
+               WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+               Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
+               OutDir=$script:V3Out } | ConvertTo-Json -Depth 4 |
+                Set-Content (Join-Path $script:V3Out 'discproject.json') -Encoding UTF8
+            $script:V3Back = Import-Project (Join-Path $script:V3Out 'discproject.json')
+        }
+
+        It 'still opens' {
+            $script:V3Back | Should -Not -BeNullOrEmpty
+        }
+
+        It 'keeps the add-on attached to the game it belongs to' {
+            $addOns = @($script:V3Back.GameEntries | Where-Object { $_.Kind -eq 'AddOn' })
+            $addOns.Count          | Should -Be 1
+            $addOns[0].ParentIndex | Should -Be 0
+        }
+
+        It 'reads an entry from before per-entry media as having none of its own' {
+            # Version 4 added Manual and Extras. Absent here, which has to read
+            # back as blank rather than as a path that was never written.
+            @($script:V3Back.GameEntries | Where-Object { $_.Manual }).Count | Should -Be 0
+            @($script:V3Back.GameEntries | Where-Object { $_.Extras }).Count | Should -Be 0
+        }
+    }
+
+    It 'ignores ExtrasEveryDisc left behind by the disc-sets feature' {
+        # Disc sets were removed in 0.4.2. Projects written while they existed
+        # carry a key nothing reads any more; the only requirement is that its
+        # presence is not an error. Save-Project writes a fixed set of keys, so
+        # this has to be injected into the file afterwards - passing it in the
+        # settings hashtable never reaches the JSON, and a test that did that
+        # would pass while proving nothing.
+        $out = Join-Path $script:POut 'extraseverydisc'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        Save-Project (New-BuildSettings -Games $script:PGames -Label 'Trilogy' -OutDir $out) $out
+        $f = Join-Path $out 'discproject.json'
+        $j = Get-Content -Raw $f | ConvertFrom-Json
+        $j | Add-Member -NotePropertyName 'ExtrasEveryDisc' -NotePropertyValue $true
+        $j | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $f -Encoding UTF8
+        $back = Import-Project $f
+        $back                      | Should -Not -BeNullOrEmpty
+        @($back.GameFolders).Count | Should -Be 3
+        $back.Label                | Should -Be 'Trilogy'
+    }
+
+    Context 'a real project file written by 0.4.2' {
+
+        BeforeAll {
+            # Not a reconstruction. This is the file 0.4.2 actually wrote for a
+            # five-entry disc, kept in the repo so that "does an old project still
+            # open" has an answer which does not depend on what happens to be left
+            # on somebody's machine. Its paths point at folders that no longer
+            # exist, which is the normal state of an old project and is why
+            # Import-Project does not check them.
+            $script:RealPath = Join-Path $PSScriptRoot 'fixtures\discproject-0.4.2.json'
+            $script:RealBack = Import-Project $script:RealPath
+        }
+
+        It 'is still in the repo' {
+            Test-Path $script:RealPath | Should -BeTrue
+        }
+
+        It 'opens' {
+            $script:RealBack | Should -Not -BeNullOrEmpty
+        }
+
+        It 'reads through the UTF-8 BOM every project file carries' {
+            # PowerShell 5.1 writes a BOM for -Encoding UTF8, so every project
+            # file in the wild has one. A reader that chokes on it opens nothing,
+            # and this fixture is only evidence if it still has its BOM.
+            ([IO.File]::ReadAllBytes($script:RealPath)[0..2] -join ',') | Should -Be '239,187,191'
+        }
+
+        It 'returns all five entries' {
+            @($script:RealBack.GameEntries).Count | Should -Be 5
+        }
+
+        It 'keeps the two updates filed under their games rather than beside them' {
+            $addOns = @($script:RealBack.GameEntries | Where-Object { $_.Kind -eq 'AddOn' })
+            $addOns.Count | Should -Be 2
+            (@($addOns | ForEach-Object { $_.ParentIndex }) -join ',') | Should -Be '0,2'
+        }
+
+        It 'brings back the label, the icon, the background and the music' {
+            $script:RealBack.Label     | Should -Be 'Alan Wake'
+            $script:RealBack.IconPath  | Should -Match 'alanwake-icon\.ico$'
+            $script:RealBack.BgPath    | Should -Match 'alanwake-background\.jpg$'
+            $script:RealBack.MusicFile | Should -Match '\.mp3$'
+        }
+
+        It 'reads its empty MediaKey as the automatic setting' {
+            # The disc this file describes was built without picking a target
+            # disc, so reopening it has to land on "recommend a disc for me" -
+            # not on a medium nobody ever chose.
+            $script:RealBack.MediaKey | Should -Be ''
+        }
+    }
+
     It 'survives a project file that is not valid JSON' {
         $junk = Join-Path $script:Sandbox 'junk'
         New-Item -ItemType Directory -Force -Path $junk | Out-Null
@@ -943,6 +1206,127 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
 # ---------------------------------------------------------------------------
 # Multi-game chooser and add-ons
 # ---------------------------------------------------------------------------
+
+Describe 'The finished ISO as Windows itself reads it' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    # 7-Zip proves the image is well formed. It does not prove Windows will mount
+    # it, and mounting is the first thing anybody does with the file - right-click,
+    # Mount, look at This PC. Everything here goes through the real storage stack
+    # instead: the volume label Explorer shows, the autorun.inf it reads, the icon
+    # and the menu it is pointed at.
+    #
+    # Mounting needs no elevation - measured on Windows 11, not assumed. A machine
+    # that refuses anyway is not a DiscWright defect, so these skip with the reason
+    # rather than failing and blaming the code.
+
+    BeforeAll {
+        $script:MountLabel = 'THE WITCHER ENH EDITION'
+        $script:MountOut   = Join-Path $script:Sandbox 'build-mount'
+        New-Item -ItemType Directory -Force -Path $script:MountOut | Out-Null
+        $script:MountIso = Invoke-Build (New-BuildSettings `
+            -Games @((Get-GameInfo (New-FixtureGame -Slug 'mount_one' -ExeMb 2))) `
+            -Label $script:MountLabel -OutDir $script:MountOut) $script:LogSink
+
+        $script:MountVol = $null; $script:MountErr = $null; $script:MountRoot = $null
+        try {
+            $img = Mount-DiskImage -ImagePath $script:MountIso -StorageType ISO -PassThru -ErrorAction Stop
+            # The volume can trail the mount by a moment, so this waits for a
+            # drive letter rather than reading one that is not there yet and
+            # reporting it as a defect in the image.
+            for ($i = 0; $i -lt 20; $i++) {
+                $v = $img | Get-Volume -ErrorAction SilentlyContinue
+                if ($v -and $v.DriveLetter) { $script:MountVol = $v; break }
+                Start-Sleep -Milliseconds 250
+            }
+            if (-not $script:MountVol) { $script:MountErr = 'mounted, but no drive letter appeared' }
+            else { $script:MountRoot = "$($script:MountVol.DriveLetter):\" }
+        } catch { $script:MountErr = $_.Exception.Message }
+
+        function Test-Mounted {
+            if (-not $script:MountVol) {
+                Set-ItResult -Skipped -Because "this machine would not mount the image: $script:MountErr"
+            }
+        }
+
+        $script:MountInf = ''
+        if ($script:MountRoot) {
+            $p = Join-Path $script:MountRoot 'autorun.inf'
+            if (Test-Path $p) { $script:MountInf = Get-Content -Raw -LiteralPath $p }
+        }
+    }
+
+    AfterAll {
+        if ($script:MountIso) {
+            Dismount-DiskImage -ImagePath $script:MountIso -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    It 'mounts as a drive Windows will open' {
+        Test-Mounted
+        $script:MountVol.DriveLetter | Should -Not -BeNullOrEmpty
+    }
+
+    It 'is UDF to Windows, not only to 7-Zip' {
+        Test-Mounted
+        $script:MountVol.FileSystem | Should -Be 'UDF'
+    }
+
+    It 'carries the volume id the app computed for the label' {
+        # Ties Get-VolumeLabel to what the operating system actually reports,
+        # which is the only place the two could ever have disagreed.
+        Test-Mounted
+        $script:MountVol.FileSystemLabel | Should -Be (Get-VolumeLabel $script:MountLabel)
+    }
+
+    It 'does not show a truncation artefact in This PC' {
+        # The two failures the manual check told a person to look for: a stray
+        # trailing underscore, and a leftover _D fragment from disc sets.
+        Test-Mounted
+        $script:MountVol.FileSystemLabel | Should -Not -Match '_$'
+        $script:MountVol.FileSystemLabel | Should -Not -Match '_D\d?$'
+    }
+
+    It 'puts the full label in autorun.inf, which is what This PC really shows' {
+        # The 16-character cap is the volume id underneath. AutoRun overrides it
+        # with the label as typed, and that override is the whole reason a disc
+        # called THE WITCHER ENH EDITION does not read as THE_WITCHER_ENH.
+        Test-Mounted
+        $script:MountInf | Should -Match ('(?m)^label=' + [regex]::Escape($script:MountLabel) + '\s*$')
+    }
+
+    It 'names an icon that is really on the disc' {
+        Test-Mounted
+        $script:MountInf | Should -Match '(?m)^icon='
+        $icon = ([regex]::Match($script:MountInf, '(?m)^icon=(.+?)\s*$')).Groups[1].Value
+        $icon | Should -Be (Get-DiscIconName $script:MountLabel)
+        Test-Path (Join-Path $script:MountRoot $icon) | Should -BeTrue
+    }
+
+    It 'points AutoRun at a menu that is really on the disc' {
+        # A shellexecute naming a file that is not there is a disc that opens
+        # nothing when double-clicked, and no listing test can see it.
+        Test-Mounted
+        $script:MountInf | Should -Match '(?m)^shellexecute='
+        $target = ([regex]::Match($script:MountInf, '(?m)^shellexecute=(.+?)\s*$')).Groups[1].Value
+        Test-Path (Join-Path $script:MountRoot $target) | Should -BeTrue
+    }
+
+    It 'reaches the installer through the path the menu was given' {
+        # The menu builds its Setup path at build time from the disc layout. If
+        # that path and the files on the disc ever disagree, Install fails on a
+        # burned disc and nowhere else.
+        Test-Mounted
+        $games = @(Get-GameInfo (Join-Path $script:Sandbox 'src\mount_one'))
+        $rel = Get-DiscEntrySetup $games 0
+        Test-Path (Join-Path $script:MountRoot $rel) | Should -BeTrue
+    }
+
+    It 'opens read-only, the way a burned disc does' {
+        Test-Mounted
+        { New-Item -ItemType File -Path (Join-Path $script:MountRoot 'nope.txt') -ErrorAction Stop } |
+            Should -Throw
+    }
+}
 
 Describe 'Where an entry lands on the disc' {
 

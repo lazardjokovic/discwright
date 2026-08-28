@@ -1,0 +1,81 @@
+﻿{
+    "Version":  5,
+    "AppVersion":  "0.4.2",
+    "SavedUtc":  "2026-08-26T21:05:49",
+    "SourceFolder":  "F:\\DWdemo\\Alan Wake",
+    "GameName":  "Alan Wake",
+    "Games":  [
+                  {
+                      "Folder":  "F:\\DWdemo\\Alan Wake",
+                      "GameName":  "Alan Wake",
+                      "Setup":  "F:\\DWdemo\\Alan Wake\\setup_alan_wake_1.1_music_lang_fix_(80728).exe",
+                      "Kind":  "Game",
+                      "Parent":  -1,
+                      "Manual":  null,
+                      "Extras":  null
+                  },
+                  {
+                      "Folder":  "F:\\DWdemo\\Dead Space",
+                      "GameName":  "Dead Space",
+                      "Setup":  "F:\\DWdemo\\Dead Space\\setup_dead_space_2.0.0.2.exe",
+                      "Kind":  "Game",
+                      "Parent":  -1,
+                      "Manual":  null,
+                      "Extras":  null
+                  },
+                  {
+                      "Folder":  "F:\\DWdemo\\Hollow Knight",
+                      "GameName":  "Hollow Knight",
+                      "Setup":  "F:\\DWdemo\\Hollow Knight\\setup_hollow_knight_1.5.12620_(64bit)_(89718).exe",
+                      "Kind":  "Game",
+                      "Parent":  -1,
+                      "Manual":  null,
+                      "Extras":  null
+                  },
+                  {
+                      "Folder":  "F:\\DWdemo\\Alan Wake",
+                      "GameName":  "Update 1.1 music fixed (75607)",
+                      "Setup":  "F:\\DWdemo\\Alan Wake\\patch_alan_wake_1.0_Hotfix_(24778)_to_1.1_music_fixed_(75607).exe",
+                      "Kind":  "AddOn",
+                      "Parent":  0,
+                      "Manual":  null,
+                      "Extras":  null
+                  },
+                  {
+                      "Folder":  "F:\\DWdemo\\Hollow Knight",
+                      "GameName":  "Update 1.5.78.11833a (85515)",
+                      "Setup":  "F:\\DWdemo\\Hollow Knight\\patch_hollow_knight_1.5.78.11833_(50884)_to_1.5.78.11833a_(85515).exe",
+                      "Kind":  "AddOn",
+                      "Parent":  2,
+                      "Manual":  null,
+                      "Extras":  null
+                  }
+              ],
+    "Label":  "Alan Wake",
+    "IconPath":  "F:\\DWdemo\\artwork\\alanwake-icon.ico",
+    "IconIsIco":  true,
+    "Menu":  true,
+    "BgPath":  "F:\\DWdemo\\artwork\\alanwake-background.jpg",
+    "BgAsIs":  false,
+    "PanelSide":  "Right",
+    "Divider":  false,
+    "ShowTitle":  true,
+    "TitleText":  "Alan Wake",
+    "WindowBorder":  false,
+    "ButtonStyle":  "Minimal",
+    "MusicFile":  "F:\\DWdemo\\music\\Dusk of a Northern Kingdom.mp3",
+    "Buttons":  [
+                    "Play",
+                    "Install",
+                    "Manual",
+                    "Extras",
+                    "Exit"
+                ],
+    "ManualPath":  "F:\\DWdemo\\media\\AlanWake_manual\\alan_wake_manual\\Alan Wake manual.pdf",
+    "ExtrasPath":  "F:\\DWdemo\\media\\DiscExtras",
+    "ExtraItems":  [
+                       "F:\\DWdemo\\artwork"
+                   ],
+    "MediaKey":  "",
+    "OutDir":  "C:\\DWDemo2"
+}
