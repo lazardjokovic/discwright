@@ -179,6 +179,46 @@ Describe 'Get-GameFolderName' -Tag 'Unit' {
     }
 }
 
+Describe 'Get-VolumeLabel' -Tag 'Unit' {
+
+    # The ISO9660 volume identifier is 16 characters and New-Iso folds anything
+    # that is not alphanumeric to an underscore. This used to reserve room for a
+    # "_D2" suffix; disc sets are gone and so is the reservation, which is what
+    # made the truncation edge worth pinning down.
+
+    It 'keeps a label that already fits' {
+        Get-VolumeLabel 'Alan Wake' | Should -Be 'Alan_Wake'
+    }
+
+    It 'folds anything that is not alphanumeric to an underscore' {
+        # The colon and the space each fold, so this keeps both underscores.
+        Get-VolumeLabel 'Broken Sword: Shadow' | Should -Be 'Broken_Sword__Sh'
+    }
+
+    It 'caps the volume id at the 16 characters ISO9660 allows' {
+        (Get-VolumeLabel 'THE WITCHER ENHANCED EDITION').Length | Should -Be 16
+    }
+
+    It 'does not leave a trailing underscore when the cut lands on a word boundary' {
+        # 'THE WITCHER ENH EDITION' folds to THE_WITCHER_ENH_EDITION, and the
+        # first sixteen characters of that end on the separator. Trimming only
+        # before truncating left the disc named THE_WITCHER_ENH_ in This PC.
+        Get-VolumeLabel 'THE WITCHER ENH EDITION' | Should -Be 'THE_WITCHER_ENH'
+        Get-VolumeLabel 'A B C D E F G H I'       | Should -Not -Match '_$'
+    }
+
+    It 'never reserves room for a disc number that no longer exists' {
+        # Sets are gone. A leftover reservation would show up as a stray _D
+        # fragment on the end of a long label.
+        Get-VolumeLabel 'THE WITCHER ENHANCED EDITION' | Should -Not -Match '_D\d?$'
+    }
+
+    It 'falls back to DISC when nothing survives the fold' {
+        Get-VolumeLabel '!!!' | Should -Be 'DISC'
+        Get-VolumeLabel ''    | Should -Be 'DISC'
+    }
+}
+
 Describe 'Test-ReservedDiscName' -Tag 'Unit' {
 
     It 'reserves <Name>' -ForEach @(
