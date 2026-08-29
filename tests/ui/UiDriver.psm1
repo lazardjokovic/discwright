@@ -114,6 +114,27 @@ function Wait-WinForProcess {
     return $null
 }
 
+function Wait-AnyWinForProcess {
+    <#
+    .SYNOPSIS
+        First top-level window belonging to a process, whatever it is called.
+
+    .DESCRIPTION
+        Wait-WinForProcess only matches DiscWright's own title. The menu preview
+        is an HTA whose window is named after the disc, so it needs a search that
+        does not assume what the window will be called.
+    #>
+    param([int]$ProcessId, [int]$TimeoutSec = 20)
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        foreach ($k in $script:UiEl::RootElement.FindAll($script:UiScope::Children, $script:UiAny)) {
+            try { if ($k.Current.ProcessId -eq $ProcessId) { return $k } } catch {}
+        }
+        Start-Sleep -Milliseconds 300
+    }
+    return $null
+}
+
 function Stop-DiscWright {
     param($App)
     if (-not $App) { return }
@@ -569,7 +590,7 @@ function Clear-AllEntries {
     }
 }
 
-Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess,
+Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess, Wait-AnyWinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
     Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,

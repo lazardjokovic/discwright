@@ -148,6 +148,28 @@ BeforeAll {
         ExtraItems=@(); MediaKey='CD'; ExtrasEveryDisc=$false; OutDir=$script:BigOutEx
     } $script:BigOutEx
 
+    # A project whose disc label carries the characters that used to be eaten by
+    # the ASCII file the menu is written to. Saved rather than typed: SendKeys is
+    # not a reliable way to enter a trademark sign, and the point of the fixture
+    # is the menu, not the typing.
+    $script:FancyLabel = 'Star Wars' + [char]0x2122 + ' Empire at War' + [char]0x00AE
+    $script:FancyOut = Join-Path $script:Sandbox 'fancyproj'
+    New-Item -ItemType Directory -Force -Path $script:FancyOut | Out-Null
+    Save-Project @{
+        Games=@((Get-GameInfo $script:GameA)); Label=$script:FancyLabel
+        IconPath=$script:Art; IconIsIco=$false
+        Menu=$true; BgPath=$script:Art; BgAsIs=$false; PanelSide='Right'
+        Divider=$false; ShowTitle=$false; TitleText=''
+        WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+        Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
+        ExtraItems=@(); MediaKey=''; OutDir=$script:FancyOut
+    } $script:FancyOut
+
+    # Somewhere for the one build these tests actually run to land. Empty, so the
+    # button reads BUILD ISO rather than REBUILD ISO and nothing is overwritten.
+    $script:LockOut = Join-Path $script:Sandbox 'lockbuild'
+    New-Item -ItemType Directory -Force -Path $script:LockOut | Out-Null
+
     $script:App = $null
 }
 
@@ -649,6 +671,102 @@ Describe 'What the build refuses, and whether it says why' -Tag 'UI' -Skip:(-not
     }
 }
 
+
+Describe 'Previewing the menu' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The menu is ~23,000 characters of JScript that otherwise only ever runs on
+    # a finished disc. tests/DiscWright.Tests.ps1 proves it parses; parsing says
+    # nothing about an undefined reference, which throws only when the menu is
+    # opened. This opens it.
+    #
+    # How the script-error assertion was arrived at, rather than guessed: a menu
+    # deliberately broken with an undefined reference inside capFor puts a child
+    # called "Script Error" in the HTA window, and a healthy one does not. The
+    # window itself appears either way, so its presence alone proves nothing.
+    #
+    # What is still left for a person is layout - whether the caption sits where
+    # it should. UI Automation sees the HTA's window and its title and no more:
+    # the rendered document is not in the tree.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        $script:MshtaBefore = @(Get-Process mshta -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+
+        # Preview needs the menu ticked and a background chosen, and nothing else.
+        # Reopening the fixture supplies both, and puts a label on the disc that
+        # cannot survive being written to an ASCII file unescaped.
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:FancyOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+
+        $script:PreviewWin = $null
+        $script:PreviewProc = $null
+        if ((Test-CtlEnabled $script:Win 'Preview menu') -eq $true) {
+            Invoke-CtlNamed $script:Win 'Preview menu' | Out-Null
+            for ($i = 0; $i -lt 40; $i++) {
+                $new = @(Get-Process mshta -ErrorAction SilentlyContinue |
+                         Where-Object { $script:MshtaBefore -notcontains $_.Id })
+                if ($new.Count) { $script:PreviewProc = $new[0]; break }
+                Start-Sleep -Milliseconds 250
+            }
+            if ($script:PreviewProc) {
+                $script:PreviewWin = Wait-AnyWinForProcess -ProcessId $script:PreviewProc.Id -TimeoutSec 20
+            }
+        }
+        # Read once, after the menu has had time to run its init, so every test
+        # below is looking at the same settled window.
+        Start-Sleep -Seconds 2
+        $script:PreviewTitle = ''
+        $script:PreviewKids  = @()
+        if ($script:PreviewWin) {
+            try { $script:PreviewTitle = $script:PreviewWin.Current.Name } catch {}
+            $all = $script:PreviewWin.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.Condition]::TrueCondition)
+            for ($i = 0; $i -lt $all.Count; $i++) {
+                try { $n = $all.Item($i).Current.Name; if ($n) { $script:PreviewKids += $n } } catch {}
+            }
+        }
+    }
+
+    AfterAll {
+        # Only what this block started. Killing every mshta would take out
+        # whatever the person at the machine happened to have open.
+        Get-Process mshta -ErrorAction SilentlyContinue |
+            Where-Object { $script:MshtaBefore -notcontains $_.Id } |
+            ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+        Stop-DiscWright $script:App; $script:App = $null
+    }
+
+    It 'wakes Preview menu once the menu is on and a background is chosen' {
+        Test-CtlEnabled $script:Win 'Preview menu' | Should -BeTrue
+    }
+
+    It 'opens a window' {
+        # The parse test cannot catch a reference that is only undefined at run
+        # time. Nothing opening at all is what that looks like from outside.
+        $script:PreviewWin | Should -Not -BeNullOrEmpty
+    }
+
+    It 'runs its JavaScript without a script error' {
+        $script:PreviewKids | Should -Not -Contain 'Script Error'
+    }
+
+    It 'renders the trademark characters instead of question marks' {
+        # The whole 0.4.3 fix, end to end and through the real HTML engine
+        # rather than through cscript: the label is escaped to &#8482; on the way
+        # into an ASCII file and has to come back out as the character itself.
+        $script:PreviewTitle | Should -Be $script:FancyLabel
+    }
+
+    It 'does not leave the app stuck behind its own preview' {
+        # The preview is launched, not shown modally. A build has to still be
+        # reachable with the menu standing open.
+        Test-CtlEnabled $script:Win '*BUILD ISO' | Should -BeTrue
+    }
+}
 Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     BeforeAll {
@@ -747,5 +865,93 @@ Describe 'Reopening a project that named a target disc' -Tag 'UI' -Skip:(-not $s
         Start-Sleep -Seconds 2
         Get-MediaTargetText $script:Win | Should -BeLike 'Recommend a disc*'
         Get-StatusText $script:Win | Should -Match 'Disc: '
+    }
+}
+
+
+Describe 'The form while a real build runs' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # 0.4.3 locked the form for the duration of a build. It shipped without ever
+    # having run one from the window, because a build of these sparse fixtures
+    # finishes faster than UI Automation can sample it.
+    #
+    # It does not have to be sampled. The "Build complete" box is shown from
+    # inside the try, and Set-FormBusy $false runs in the finally after it - so
+    # while that box stands, the form is still frozen and can be read at leisure.
+    # That is also the case that matters: a form left disabled behind a dialog is
+    # an app that looks hung.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:ProjOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        # Somewhere empty, so this is a build rather than an overwrite.
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:LockOut
+        Start-Sleep -Seconds 1
+
+        $script:BeforeChange = Test-CtlEnabled $script:Win 'Change*'
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+
+        # The completion box, while it is still up. Found rather than waited out:
+        # a fixed sleep would be a guess in both directions.
+        $script:DoneBox = Find-Ctl -Root $script:Win -NameLike 'DiscWright' -TimeoutSec 120
+        $script:DoneText = ''
+        if ($script:DoneBox) {
+            $kids = $script:DoneBox.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.Condition]::TrueCondition)
+            for ($i = 0; $i -lt $kids.Count; $i++) {
+                try {
+                    $n = $kids.Item($i).Current.Name
+                    if ($n -and $n -notin @('OK','Cancel') -and $n.Length -gt $script:DoneText.Length) {
+                        $script:DoneText = $n
+                    }
+                } catch {}
+            }
+            $ok = Find-Ctl -Root $script:DoneBox -NameLike 'OK' -TimeoutSec 5
+            if ($ok) { Invoke-Ctl -Ctl $ok -SettleMs 800 }
+        }
+        Start-Sleep -Seconds 1
+        $script:ThawedAdd    = Test-CtlEnabled $script:Win 'Add game*'
+        $script:ThawedOpen   = Test-CtlEnabled $script:Win 'Open existing disc*'
+        $script:ThawedChange = Test-CtlEnabled $script:Win 'Change*'
+        Save-WindowShot $script:Win (Join-Path $script:ShotDir 'after-build.png')
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'finishes the build and says so' {
+        $script:DoneBox  | Should -Not -BeNullOrEmpty
+        $script:DoneText | Should -Match 'Build complete'
+    }
+
+    It 'writes the ISO where step 6 pointed' {
+        @(Get-ChildItem -Path $script:LockOut -Filter '*.iso').Count | Should -BeGreaterThan 0
+    }
+
+    It 'leaves a disc folder beside it' {
+        Test-Path (Join-Path $script:LockOut 'disc') | Should -BeTrue
+    }
+
+    # There used to be a test here asserting the form was disabled while the
+    # completion box stood. It passed with the lock removed entirely: a modal
+    # box makes UI Automation report every control on its owner as disabled,
+    # so it measured modality and not the lock. The lock is covered in
+    # tests/DiscWright.Tests.ps1 instead, on real controls.
+
+    It 'gives the form back once the box is dismissed' {
+        $script:ThawedAdd  | Should -BeTrue
+        $script:ThawedOpen | Should -BeTrue
+    }
+
+    It 'restores what was enabled rather than enabling everything' {
+        # Set-FormBusy remembers each control's state instead of switching the
+        # form back on wholesale. Change... is greyed with no row selected, and a
+        # build must not be a way to wake it.
+        $script:BeforeChange | Should -BeFalse
+        $script:ThawedChange | Should -BeFalse
     }
 }

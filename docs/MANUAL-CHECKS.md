@@ -1,100 +1,160 @@
 # Manual checks before a release
 
-The test suite covers a lot — 282 logic tests and 56 window tests — but three
-things it structurally cannot reach:
+The automated suite is 328 logic tests and 66 window tests, and it runs in about
+four minutes:
 
-- **whether a burned disc actually works.** Mounting an ISO, reading the drive
-  icon out of This PC and watching AutoRun fire is a different kind of test from
-  the ones in `tests/`.
-- **whether the menu looks right.** A test can prove the menu's JavaScript parses
-  (`tests/DiscWright.Tests.ps1`, *The menu's JavaScript is valid JavaScript*). It
-  cannot tell you the caption sits where it should.
-- **whether an old project file still opens.** Only real files written by older
-  versions prove that, and they live on your machine, not in the repo.
+```
+.\tests\Invoke-Tests.ps1
+```
 
-So: this list. Work down it, tick as you go. Each check says what to do, what you
-should see, and what a failure looks like — because "it looked fine" is not a
-result if you did not know what wrong would have looked like.
+It builds a real ISO, mounts it, and reads it back through Windows' own storage
+stack. It opens project files written by every older schema, including a real one
+0.4.2 wrote. It opens the menu and checks the characters in a game's name come
+out the other side. **Do not add a check to this page for anything in that list**
+— there is a table at the bottom saying where each of those lives.
+
+What is left here is the short list a machine cannot do: things only a person can
+judge, and things only a person can trigger.
 
 **Start DiscWright** by double-clicking `Run DiscWright.cmd` in the repo root, or
 the `DiscWright.lnk` shortcut.
 
+## Finding things in the window
+
+The window is one column of numbered steps, and the numbers are on screen — you
+never have to count controls to find one.
+
+| On screen | What it is |
+| --- | --- |
+| **1)  Installers on this disc** | the games list, with **Add game...** and **Add-on...** |
+| **2)  Disc label (shown in This PC)** | the label box, and **Target disc:** beside it |
+| **3)  Disc icon** | the `.ico` / `.png` / `.jpg` picker |
+| **4)  Autorun menu** | the menu on/off tick, background image, title, buttons |
+| **5)  Extra content** | files copied to the disc root as-is |
+| **6)  Output folder** | where the ISO and the `disc\` staging folder go |
+
+Across the top sit **New disc**, **Open existing disc...**, **Show disc folder**
+and **Preview menu**. **BUILD ISO** is at the bottom, beside the log box.
+
 ---
 
-## 1. The menu preview
+## 1. Does the menu look right?
 
-The most valuable check on this page. The menu is ~23,000 characters of
-JavaScript embedded in a PowerShell string; a test now proves it parses, but
-nothing automated can see it.
+A test opens the preview, proves the JavaScript ran without a script error, and
+reads the window title back to confirm the characters survived. UI Automation
+cannot see inside the rendered document, so **layout is the whole of this check**.
 
-- [ ] **Step 1** — *Add game...* and pick any GOG folder.
-- [ ] **Step 4** — make sure the **Autorun menu** checkbox is ticked, then
-      *Browse...* next to **Background image** and pick any PNG or JPG.
-- [ ] **Preview menu** (top right) is now enabled. Click it.
+- [ ] In **4)  Autorun menu**, tick **Autorun menu**.
+- [ ] Click **Browse...** beside **Background image** and pick any PNG or JPG.
+- [ ] Click **Preview menu**, top right. (It stays greyed until both of the above
+      are done — hover it and the tooltip says which is missing. You do not need
+      a game.)
 
-**Should see:** the menu window opens, with the game's name as the caption above
-the buttons.
+**Should see:** the caption sits above the buttons with the buttons evenly spaced
+under it, nothing overlapping the panel edge, nothing clipped, and the text
+readable against your background.
 
-**Failure looks like:** the window not opening at all (a JavaScript error the
-parse test could not catch — an undefined reference rather than a syntax error);
-or an **empty gap under the game's name**, which would mean the removed
-*"Disc 2 of 3"* caption left an empty element behind.
+**Failure looks like:** a caption running under the panel edge or off it; buttons
+crowded against the bottom; an empty gap under the caption; text the same tone as
+the background behind it.
 
-> Install and Manual do nothing in preview. That is expected — the log window
-> says so when the preview opens.
+> **Install** and **Manual** do nothing in preview. The log box says so when the
+> preview opens.
 
-## 2. A real disc, end to end
+The interesting case is a long name with many buttons — a game with four add-ons
+already needs eight buttons, and the menu shrinks them to fit. That shrink is
+arithmetic no test is watching the result of.
 
-This is the path where the multi-disc build function was removed and everything
-now goes through the single-disc one.
+## 2. Does This PC draw your icon and label?
 
-- [ ] Fill in steps 1–6 for one game and **BUILD ISO**.
-- [ ] Find the ISO in your output folder, right-click → **Mount**.
+A test mounts a built ISO and confirms `autorun.inf` names your icon, that the
+icon file is really on the disc, and that the volume label Windows reports is the
+one the app computed. Whether **Explorer draws it** is shell behaviour — and
+Explorer caches icon bitmaps per path, which is the whole reason the icon is
+named after the disc rather than `disc.ico`.
+
+- [ ] Build a disc, then right-click the ISO → **Mount**.
 - [ ] Open **This PC**.
 
-**Should see:** the mounted drive carries your disc icon and your disc label —
-not a generic drive icon, not the volume id.
+**Should see:** the drive carries your icon and your disc label, in full — not a
+generic drive icon, not the shortened volume id underneath.
 
-- [ ] Double-click the drive.
-
-**Should see:** the menu opens. **Install** launches GOG's installer.
+**Failure looks like:** a generic optical-drive icon; **the icon from a disc you
+mounted earlier** (the cache defeating the per-disc naming); the volume id
+(`THE_WITCHER_ENHA`) instead of the label you typed.
 
 - [ ] Right-click the drive → **Eject** when done.
 
-**Failure looks like:** a generic icon (the icon did not make it onto the disc),
-the wrong name in This PC, or the menu not opening on double-click.
+## 3. Does AutoRun fire?
 
-## 3. A long disc label
+Tests confirm `autorun.inf` is present and well formed and that everything it
+points at exists on the disc. Whether Windows *acts* on it depends on AutoPlay
+policy and a real double-click, neither of which a test can supply.
 
-`Get-VolumeLabel` was simplified — it used to reserve room for a `_D2` suffix and
-no longer does. The ISO9660 volume id is capped at 16 characters.
+- [ ] With the ISO still mounted, double-click the drive in This PC.
 
-- [ ] **Step 2** — type a label clearly longer than 16 characters, e.g.
-      `THE WITCHER ENHANCED EDITION`.
-- [ ] Build, mount, look at This PC.
+**Should see:** the menu opens.
 
-**Should see:** a sensibly truncated name. The full label is what This PC shows
-via AutoRun; the 16-character limit applies to the volume id underneath.
+**Failure looks like:** the drive opening as a folder, or nothing happening. Check
+AutoPlay is not switched off in Settings before blaming the disc.
 
-**Failure looks like:** a name cut mid-word in an ugly place, a trailing
-underscore, or a leftover `_D` fragment.
+## 4. Does a real GOG installer install?
 
-## 4. An old project file
+Every fixture in the suite is a sparse stub with a GOG-shaped filename. Nothing
+in the repo has ever been a real installer, so nothing automated has ever watched
+one run.
 
-Only if you have one written before this release.
+- [ ] From the mounted disc's menu, click **Install**.
 
-- [ ] **Step 6** — point the output folder at a folder holding an older
-      `discproject.json`.
-- [ ] **Open existing disc...**
+**Should see:** GOG's installer starts and completes against a real download.
 
-**Should see:** the games, label, icon and menu settings all come back. If that
-project named a target disc, **Target disc** in step 2 comes back on it.
+- [ ] If the game registers itself, reopen the menu and click **Play**.
 
-**Failure looks like:** an error on open, or Target disc falling back to
-*Recommend a disc for me* when the project named a real one.
+**Should see:** the game launches. Play finds an installed copy through the
+registry keys GOG's installer writes, matched on the game's registered name —
+which is why a game renamed for the menu must still match on its original name.
 
-> Old projects carry an `ExtrasEveryDisc` field from the disc-sets feature. It is
-> ignored now, which is correct — it should not cause an error either.
+**Failure looks like:** Install doing nothing (the path on the disc and the path
+in the menu disagree), or Play saying it cannot find the game after a successful
+install.
+
+## 5. A burned disc
+
+Only if you are burning one. Everything above is about an ISO; a burner is a
+different piece of hardware with its own failure modes.
+
+- [ ] Burn, put it in a drive, and work through checks 2 to 4 on the real disc.
+
+---
+
+## What is already automated, and where
+
+Do not re-add any of these as a manual check.
+
+| Covered | Where |
+| --- | --- |
+| ISO is real UDF 2.50 and passes an integrity read | *Building a disc* → `inside the finished ISO` |
+| ISO mounts; drive letter, filesystem, read-only | *The finished ISO as Windows itself reads it* |
+| Volume label Windows reports matches the app's own | same |
+| No trailing `_` or leftover `_D` in the volume id | same, and *Get-VolumeLabel* |
+| Full label survives into `autorun.inf` | same |
+| Icon and menu named in `autorun.inf` exist on the disc | same |
+| The installer is reachable at the path the menu was given | same |
+| Menu JavaScript parses, and defines what it calls | *The menu's JavaScript is valid JavaScript* |
+| Menu opens without a runtime script error | *Previewing the menu* |
+| `™` and `®` reach the screen intact | same, and *A game name with characters outside plain ASCII* |
+| Project files from v1, v2, v3 and a real 0.4.2 file | *Project file* |
+| `ExtrasEveryDisc` from the removed disc-sets feature | same |
+| Target disc saved and restored | same, and *Reopening a project that named a target disc* |
+| A build driven from the window, start to ISO on disk | *The form while a real build runs* |
+| The form locks during a build and restores what was enabled | *Locking the form while a build runs* |
+
+One thing deliberately has **no** test: whether the form *looks* frozen while a
+build runs. The only moment it is observable from outside is while the completion
+box is up, and a modal box makes UI Automation report every control on its owner
+as disabled anyway — a window test written that way passes with the lock removed
+entirely. The lock is tested on real controls instead, and the wiring is checked
+in the syntax tree.
 
 ---
 
