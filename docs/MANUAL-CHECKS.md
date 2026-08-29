@@ -104,9 +104,21 @@ Every fixture in the suite is a sparse stub with a GOG-shaped filename. Nothing
 in the repo has ever been a real installer, so nothing automated has ever watched
 one run.
 
+- [ ] Before you install anything, note what is already registered:
+
+```powershell
+.\extras\Show-RegisteredGames.ps1
+```
+
 - [ ] From the mounted disc's menu, click **Install**.
 
 **Should see:** GOG's installer starts and completes against a real download.
+
+- [ ] Run it again.
+
+**Should see:** the game you just installed is now in the list, with `ExeThere`
+true. **That is the whole of this check** - everything the menu does with those
+keys afterwards has a test.
 
 - [ ] If the game registers itself, reopen the menu and click **Play**.
 
@@ -116,6 +128,18 @@ registry keys GOG's installer writes, matched on the game's registered name.
 > A renamed game matching on its original name is covered by tests now, against
 > the menu's own matcher - so what is left for you here is whether a real
 > install registers itself at all, which no test can arrange.
+
+To ask the question the menu asks - would Play find this? - give the helper the
+name the entry matches on:
+
+```powershell
+.\extras\Show-RegisteredGames.ps1 -Match 'Alan Wake'
+```
+
+It runs the menu's own `nameHit`, lifted out of `DiscWright.ps1` and executed
+under cscript, so its answer cannot drift from the menu's. Useful for the rename
+case: rename a game to something **reworded** rather than shortened and the two
+names still have to agree.
 
 **Failure looks like:** Install doing nothing (the path on the disc and the path
 in the menu disagree), or Play saying it cannot find the game after a successful
