@@ -658,8 +658,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 5' {
-            $script:PJson.Version | Should -Be 5
+        It 'declares schema version 6' {
+            $script:PJson.Version | Should -Be 6
         }
 
         It 'records which disc the set was planned for' {
@@ -2952,5 +2952,273 @@ WScript.Echo(out.join(","));
         $out = (cmd /c "`"$script:CScriptFancy`" //Nologo //E:JScript `"$pf`" < `"$bf`"" 2>&1) -join ' '
         $want = ($script:Fancy.ToCharArray() | ForEach-Object { [int]$_ }) -join ','
         $out.Trim() | Should -Be $want
+    }
+}
+
+Describe 'Renaming a game for the menu' -Tag 'Unit' {
+
+    # Show-EntryKindDialog has offered "Name on the menu" since multi-game discs
+    # arrived, and the menu matched on whatever was typed into it. The GOG
+    # registry holds the name GOG registered, so a rename that reworded a title
+    # stopped Play finding the installed copy: Install still worked, Play stayed
+    # grey, and nothing on screen said why.
+    #
+    # Worth writing down because both ROADMAP.md and docs/MANUAL-CHECKS.md
+    # already described the split as though it existed - "a game renamed for the
+    # menu must still match on its original name". It did not. The name shown and
+    # the name matched are two fields now, and these tests are what makes those
+    # documents true.
+
+    BeforeAll {
+        # What GOG's own installer registers for The Witcher, and the string
+        # findGame reads back out of HKLM.
+        $script:RegName = 'The Witcher: Enhanced Edition'
+
+        # Omitting -Match leaves the key off the hashtable entirely, which is how
+        # an entry out of a pre-version-6 project arrives.
+        function New-RenameEntry {
+            param([string]$Shown, [string]$Match, [string]$Setup = 'setup_the_witcher_1.0.exe')
+            $e = @{ GameName=$Shown; Kind='Game'; ParentIndex=-1
+                    ManualPath=$null; ExtrasPath=$null
+                    SetupExe=[pscustomobject]@{ Name=$Setup } }
+            if ($PSBoundParameters.ContainsKey('Match')) { $e.MatchName = $Match }
+            return $e
+        }
+    }
+
+    It 'starts a freshly detected game with both names the same' {
+        $g = Get-GameInfo (New-FixtureGame -Slug 'rename_fresh')
+        $g.Ok        | Should -BeTrue
+        $g.MatchName | Should -Not -BeNullOrEmpty
+        $g.MatchName | Should -Be $g.GameName
+    }
+
+    It 'shows the chosen name and matches the registered one' {
+        $m = (Get-MenuGames @((New-RenameEntry -Shown 'The Witcher 1' -Match $script:RegName)))[0]
+        $m.Name      | Should -Be 'The Witcher 1'
+        $m.MatchName | Should -Be $script:RegName
+    }
+
+    It 'lets the folder on the disc follow the chosen name' {
+        # Deliberate, and the whole point of splitting the fields: the new name is
+        # the user's everywhere a person reads it - menu, folder, label - and only
+        # the string handed to the registry stays GOG's.
+        $entries = @(
+            (New-RenameEntry -Shown 'The Witcher 1' -Match $script:RegName),
+            (New-RenameEntry -Shown 'Hollow Knight' -Match 'Hollow Knight' -Setup 'setup_hk.exe'))
+        Get-DiscEntryFolder $entries 0 | Should -Be 'Games\01 - The Witcher 1'
+    }
+
+    It 'falls back to the shown name when an entry carries no match name' {
+        # A version 5 project whose source folder has since gone: there is no
+        # registered name left anywhere to recover, and the shown name is the best
+        # guess available. This is the old behaviour, kept for exactly that case
+        # and no other.
+        (Get-MenuGames @((New-RenameEntry -Shown 'The Witcher 1')))[0].MatchName |
+            Should -Be 'The Witcher 1'
+    }
+
+    It 'writes the two names into the menu as separate strings' {
+        $hta = Join-Path $script:Sandbox 'rename-menu.hta'
+        New-MenuHta @{
+            GameName = 'The Witcher 1'
+            Games    = @(Get-MenuGames @((New-RenameEntry -Shown 'The Witcher 1' -Match $script:RegName)))
+            Buttons  = @('Play','Install','Exit')
+            MusicFile = ''; ManualFile = ''; PanelSide = 'Right'; IconName = 'disc.ico'
+            WindowBorder = $true; ButtonStyle = 'Minimal'
+        } $hta
+        # The GAMES line only, not the whole file: a failure here should print
+        # one line of JavaScript rather than the entire menu.
+        $games = [regex]::Match((Get-Content -LiteralPath $hta -Raw), '(?m)^\s*var GAMES=(.+?);\s').Groups[1].Value
+        $games | Should -Match 'n:"The Witcher 1"'
+        $games | Should -Match 'm:"The Witcher: Enhanced Edition"'
+    }
+
+    Context 'against the matcher that ships in the menu' {
+
+        # norm and nameHit are lifted out of DiscWright.ps1 and run under cscript,
+        # so what is exercised is the code that reaches the disc rather than a
+        # transcription of it here. A transcription agrees with itself forever.
+
+        BeforeDiscovery {
+            $script:HaveCScriptRename = @(
+                "$env:SystemRoot\System32\cscript.exe"
+                (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+            ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        }
+
+        BeforeAll {
+            $script:CScriptRename = @(
+                "$env:SystemRoot\System32\cscript.exe"
+                (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+            ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+            function Get-JsFn([string]$text, [string]$name) {
+                $start = $text.IndexOf("function $name(")
+                if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+                $i = $text.IndexOf('{', $start); $depth = 0
+                for ($j = $i; $j -lt $text.Length; $j++) {
+                    if ($text[$j] -eq '{') { $depth++ }
+                    elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+                }
+                throw "unbalanced braces in $name"
+            }
+            $appText = Get-Content $appScript -Raw
+            $script:MatcherJs = (Get-JsFn $appText 'norm') + "`r`n" + (Get-JsFn $appText 'nameHit') + "`r`n"
+        }
+
+        It 'finds the installed copy by the registered name and not by the new one' -Skip:(-not $script:HaveCScriptRename) {
+            # 1,0 is the whole bug in two numbers. The first is what the menu asks
+            # now; the second is what it used to ask after a rename.
+            $probe = $script:MatcherJs +
+                'var reg = "The Witcher: Enhanced Edition";' + "`r`n" +
+                'WScript.Echo([nameHit(reg, "The Witcher: Enhanced Edition") ? 1 : 0,' + "`r`n" +
+                '              nameHit(reg, "The Witcher 1") ? 1 : 0].join(","));' + "`r`n"
+            $pf = Join-Path $script:Sandbox 'matcher.js'
+            Set-Content -LiteralPath $pf -Value $probe -Encoding Ascii
+            $out = (cmd /c "`"$script:CScriptRename`" //Nologo //E:JScript `"$pf`"" 2>&1) -join ' '
+            $out.Trim() | Should -Be '1,0'
+        }
+
+        It 'still finds a copy when the name was only trimmed' -Skip:(-not $script:HaveCScriptRename) {
+            # nameHit is a substring test in both directions, so shortening a title
+            # always worked and the bug only bit on a reword. Recorded so the
+            # fallback above is not mistaken for the thing that made trimming safe.
+            $probe = $script:MatcherJs +
+                'WScript.Echo(nameHit("The Witcher: Enhanced Edition", "The Witcher") ? 1 : 0);' + "`r`n"
+            $pf = Join-Path $script:Sandbox 'matcher-trim.js'
+            Set-Content -LiteralPath $pf -Value $probe -Encoding Ascii
+            $out = (cmd /c "`"$script:CScriptRename`" //Nologo //E:JScript `"$pf`"" 2>&1) -join ' '
+            $out.Trim() | Should -Be '1'
+        }
+    }
+
+    Context 'through the project file' {
+
+        BeforeAll {
+            $script:RenameOut = Join-Path $script:Sandbox 'renameproj'
+            New-Item -ItemType Directory -Force -Path $script:RenameOut | Out-Null
+            $script:RenameSrc = New-FixtureGame -Slug 'witcher_ee'
+            $g = Get-GameInfo $script:RenameSrc
+            $script:DetectedName = $g.GameName
+            # What Show-EntryKindDialog does when somebody types a new name: it
+            # writes GameName, and nothing else.
+            $g.GameName = 'The Witcher 1'
+            Save-Project (New-BuildSettings -Games @($g) -Label 'The Witcher 1' -OutDir $script:RenameOut) $script:RenameOut
+            $script:RenameJson = Join-Path $script:RenameOut 'discproject.json'
+            $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
+        }
+
+        It 'writes schema version 6' {
+            $script:RenameRaw.Version | Should -Be 6
+        }
+
+        It 'stores the registered name beside the chosen one' {
+            $script:RenameRaw.Games[0].GameName  | Should -Be 'The Witcher 1'
+            $script:RenameRaw.Games[0].MatchName | Should -Be $script:DetectedName
+            $script:DetectedName | Should -Not -Be 'The Witcher 1'
+        }
+
+        It 'gives both names back when the project is reopened' {
+            $e = @((Import-Project $script:RenameJson).GameEntries)[0]
+            $e.Name  | Should -Be 'The Witcher 1'
+            $e.Match | Should -Be $script:DetectedName
+        }
+
+        It 'reads a version 5 file as carrying no match name at all' {
+            # Not as carrying the edited one. That difference is what lets the
+            # reopen below tell "never had one" from "has one, use it".
+            $old = Join-Path $script:RenameOut 'v5.json'
+            ((Get-Content -Raw -LiteralPath $script:RenameJson) -replace
+                '"MatchName":\s*"[^"]*",?\s*', '') | Set-Content -LiteralPath $old -Encoding UTF8
+            $e = @((Import-Project $old).GameEntries)[0]
+            $e.Name  | Should -Be 'The Witcher 1'
+            $e.Match | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'a version 5 project that was renamed under the old code' {
+
+        # The repair. A file written before this fix carries no match name, but it
+        # still names the source folder - so re-detection on open reads the
+        # registered name straight off the installer again while the edited name
+        # stays the user's. Nobody has to know the file was ever wrong.
+        #
+        # Set-GameEntries writes to the list and the labels, so those are here as
+        # real controls and stand-ins, the same way 'Recovering from a bad folder
+        # choice' does it further up.
+
+        BeforeAll {
+            Add-Type -AssemblyName System.Windows.Forms
+            $script:lvGames = New-Object System.Windows.Forms.ListView
+            $script:lvGames.View = 'Details'
+            foreach ($c in @('#','Name','Type','Belongs to')) { [void]$script:lvGames.Columns.Add($c,80) }
+            $script:btnGameDel  = New-Object System.Windows.Forms.Button
+            $script:btnAddOn    = New-Object System.Windows.Forms.Button
+            $script:btnGameEdit = New-Object System.Windows.Forms.Button
+            $script:cmbMedia    = New-Object System.Windows.Forms.ComboBox
+            $script:chkXAll     = [pscustomobject]@{ Checked = $false }
+            $script:lblMan      = [pscustomobject]@{ Text = 'Manual file:' }
+            $script:lblEx       = [pscustomobject]@{ Text = 'Extras folder:' }
+            $script:grpX        = [pscustomobject]@{ Text = '5)  Extra content' }
+            $script:lblGame     = [pscustomobject]@{ Text = ''; ForeColor = $null }
+            $script:cbMan       = [pscustomobject]@{ Checked = $false }
+            $script:cbExtra     = [pscustomobject]@{ Checked = $false }
+            $script:chkMusic    = [pscustomobject]@{ Checked = $false }
+            $script:state       = @{ Games=@(); ExtraItems=@(); ManualPath=$null; ExtrasPath=$null; MusicFile=$null }
+
+            $src = New-FixtureGame -Slug 'witcher_v5'
+            $script:V5Detected = (Get-GameInfo $src).GameName
+            # Exactly what Import-Project hands back for a version 5 file: a name
+            # the user edited, and no Match key at all.
+            Set-GameEntries @(@{ Folder=$src; Kind='Game'; ParentIndex=-1; Setup=$null
+                                 Name='The Witcher 1'; Manual=$null; Extras=$null }) | Out-Null
+            $script:V5Entry = @($script:state.Games)[0]
+        }
+
+        It 'keeps the name the user chose' {
+            $script:V5Entry.GameName | Should -Be 'The Witcher 1'
+        }
+
+        It 'recovers the registered name off the installer' {
+            $script:V5Entry.MatchName | Should -Be $script:V5Detected
+            $script:V5Entry.MatchName | Should -Not -Be 'The Witcher 1'
+        }
+
+        It 'hands the menu the recovered name' {
+            (Get-MenuGames @($script:V5Entry))[0].MatchName | Should -Be $script:V5Detected
+        }
+    }
+
+    Context 'wired so a rename cannot reach the match name' {
+
+        BeforeAll {
+            $tree = [System.Management.Automation.Language.Parser]::ParseFile($appScript, [ref]$null, [ref]$null)
+            $assigns = @($tree.FindAll({ param($n)
+                $n -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+                $n.Left -is [System.Management.Automation.Language.MemberExpressionAst] -and
+                "$($n.Left.Member)" -eq 'MatchName' }, $true))
+
+            function Get-EnclosingFunction($node) {
+                $n = $node.Parent
+                while ($n) {
+                    if ($n -is [System.Management.Automation.Language.FunctionDefinitionAst]) { return $n.Name }
+                    $n = $n.Parent
+                }
+                return '<top level>'
+            }
+            $script:MatchWriters = @($assigns | ForEach-Object { Get-EnclosingFunction $_ } | Sort-Object -Unique)
+        }
+
+        It 'is written in exactly the two places that are allowed to write it' {
+            # Set-InstallerFacts reads it off the installer; Set-GameEntries
+            # restores one a project file carried. Anywhere else - and
+            # Show-EntryKindDialog above all - is the bug coming back.
+            $script:MatchWriters | Should -Be @('Set-GameEntries', 'Set-InstallerFacts')
+        }
+
+        It 'is never written by the dialog that renames a game' {
+            $script:MatchWriters | Should -Not -Contain 'Show-EntryKindDialog'
+        }
     }
 }

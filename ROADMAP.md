@@ -55,17 +55,20 @@ reading. The name today is the installer's own `ProductName`, which is what GOG 
 in the file rather than what anyone would choose - full of trademark symbols,
 subtitles and edition suffixes, and sometimes just wrong.
 
-The groundwork is already there. An entry carries a display name and a match name
-separately, because the menu needs the registered name to find an installed game and
-should never have been using the caption for that. So a rename can change what is
-shown without touching what is matched - which is the part that would otherwise make
-this risky.
+This turned out to be half built and half broken, so what is left is smaller and
+sharper than the entry above.
 
-What still has to be decided is how far the new name reaches. The disc's folder names
-are built from it (`Games\01 - Hollow Knight`), and so is the volume label on a
-single-game disc. Renaming the menu but not the folders would leave a disc whose two
-halves disagree; renaming both means a rename after a build produces a different disc
-layout from the same games. Neither is obviously right yet.
+The renaming itself has shipped since multi-game discs arrived: the entry dialog's
+**Name on the menu** box edits the name, the project file keeps it, and it already
+reaches the folder on the disc. What was missing is the separation this entry used to
+claim was already there. The menu matched on whatever was typed, so rewording a title
+stopped Play finding the installed copy - `Install` still worked, `Play` stayed grey,
+and nothing on screen said why. A match name that stays GOG's, fixed in 0.4.4, is what
+made the rest of this entry true.
+
+What is genuinely still open is smaller: the rename is only reachable through the entry
+dialog, which is two clicks away and named for something else, and there is no way to
+put a name back to what the installer said.
 
 ## Delivered
 

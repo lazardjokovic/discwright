@@ -11,6 +11,20 @@ between minor versions.
 
 ### Fixed
 
+- **Renaming a game no longer stops Play finding it.** The entry dialog's *Name on
+  the menu* box has always been free to type in, and the menu searched the GOG
+  registry for whatever was typed - but the registry holds the name GOG registered.
+  Rename *The Witcher: Enhanced Edition* to *The Witcher 1* and Install still
+  worked while Play stayed grey, with nothing on screen saying why. Shortening a
+  title happened to keep working, because the match is a substring test, so the
+  failure only appeared once somebody reworded one. An entry now carries the
+  registered name separately from the name it shows, and only the shown name is
+  editable: the new name still reaches the menu, the disc folder and the label,
+  while the search stays on GOG's. Project files gain a `MatchName` per entry
+  (schema 6); an older file has none and re-detection on open reads it back off
+  the installer, so a project renamed under the previous build repairs itself the
+  first time it is opened.
+
 - **A long disc label no longer ends in a stray underscore in This PC.** The
   ISO9660 volume identifier is 16 characters and everything that is not
   alphanumeric folds to an underscore. The fold was trimmed before truncating
