@@ -463,7 +463,9 @@ function Get-BuildTargets([string]$outDir, [string]$label) {
 # user typed is the only thing that has to fit.
 function Get-VolumeLabel([string]$label) {
     $base = (("$label" -replace '[^A-Za-z0-9_]','_')).Trim('_')
-    if ($base.Length -gt 16) { $base = $base.Substring(0, 16) }
+    # Trim again after truncating, not only before: cutting at 16 can land on a
+    # folded space and leave 'THE WITCHER ENH EDITION' as 'THE_WITCHER_ENH_'.
+    if ($base.Length -gt 16) { $base = $base.Substring(0, 16).TrimEnd('_') }
     if ([string]::IsNullOrEmpty($base)) { $base = 'DISC' }
     return $base
 }

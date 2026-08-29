@@ -7,6 +7,18 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Fixed
+
+- **A long disc label no longer ends in a stray underscore in This PC.** The
+  ISO9660 volume identifier is 16 characters and everything that is not
+  alphanumeric folds to an underscore. The fold was trimmed before truncating
+  but not after, so a label whose cut landed on a word boundary kept the
+  separator: *THE WITCHER ENH EDITION* reached the drive as `THE_WITCHER_ENH_`.
+  Cosmetic, and only on labels long enough to be cut, but it is the name the
+  disc carries.
+
 ## [0.4.3] — 2026-08-27
 
 ### Fixed
