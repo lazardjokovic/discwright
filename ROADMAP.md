@@ -15,40 +15,6 @@ feature only creates pressure to cram things in to justify it.
 
 ## Next
 
-**File a game's add-ons under the game, not beside it.** Requested by someone building a
-multi-game disc. On the disc today every entry gets its own numbered folder, so a game
-and its DLC sit as siblings:
-
-```
-Games\01 - Hollow Knight\
-Games\02 - Update 1.5.12459\
-Games\03 - Update 1.5.12618\
-Games\04 - Ori and the Blind Forest\
-```
-
-With two games carrying three patches each that is eight top-level folders and nothing
-saying what belongs to what. The menu already knows - an add-on shows as a second Install
-button on its game's screen, never in the chooser - so the disc layout is the only place
-they still look unrelated.
-
-The shape would be the game's own folder holding them, the way its manual and extras
-already are:
-
-```
-Games\01 - Hollow Knight\
-Games\01 - Hollow Knight\Add-ons\Update 1.5.12459\
-Games\02 - Ori and the Blind Forest\
-```
-
-Two things to settle first. **An orphan needs somewhere to go** - remove a game and its
-add-ons become entries in their own right, in the menu and so on the disc, which means
-moving back out to the top level. And **the numbering is the menu order**, so grouping
-changes what the numbers count; whether add-ons keep numbers of their own inside the
-folder or just use their names is a real choice rather than a detail.
-
-Small, and worth doing. It changes where files land on a disc, so it wants its own
-release note rather than riding along with something else.
-
 **Let a game be renamed for the menu.** Asked for by the same person who found the
 question marks, once the characters were arriving intact and the name was worth
 reading. The name today is the installer's own `ProductName`, which is what GOG put
@@ -56,7 +22,7 @@ in the file rather than what anyone would choose - full of trademark symbols,
 subtitles and edition suffixes, and sometimes just wrong.
 
 This turned out to be half built and half broken, so what is left is smaller and
-sharper than the entry above.
+sharper than it first looked.
 
 The renaming itself has shipped since multi-game discs arrived: the entry dialog's
 **Name on the menu** box edits the name, the project file keeps it, and it already
@@ -71,6 +37,20 @@ dialog, which is two clicks away and named for something else, and there is no w
 put a name back to what the installer said.
 
 ## Delivered
+
+**A game's add-ons filed under the game** — asked for by someone building a
+multi-game disc; merged, and in the next release. Every entry used to take its own
+numbered folder, so a game and its DLC sat as siblings and eight top-level folders
+said nothing about what belonged to what. An add-on now lives in `Add-ons\` inside
+its game's folder, beside the manual and extras that were already filed there.
+
+The two things this entry said had to be settled first were settled. Add-ons keep
+numbers of their own inside the folder, because the number is the menu order and
+that is the install order for a stack of patches. And an orphan — an add-on whose
+game was removed — was already promoted to a game of its own by the menu; the disc
+layout now asks the menu's own function which entries are games, so a promoted
+add-on moves back out to the top level in both at once rather than in one and not
+the other.
 
 **More than one installer on a disc** — shipped in 0.3.0, and the most-asked-for thing
 on this page: three separate requests, more than anything else. Several games on one disc

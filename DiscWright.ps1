@@ -534,7 +534,7 @@ function Get-DiscIconName([string]$label) {
 # discs built before the icon was named after the game.
 function Test-ReservedDiscName([string]$name,[string]$iconName='disc.ico') {
     if ($name -like 'setup_*') { return $true }
-    return (@('autorun.inf','disc.ico',$iconName,'AUTORUN','Extras','Games',$PROJECT_FILE) -contains $name)
+    return (@('autorun.inf','disc.ico',$iconName,'AUTORUN','Extras','Games','Add-ons',$PROJECT_FILE) -contains $name)
 }
 
 # Folder name for one game on a multi-game disc. Numbered, so the order in the
@@ -549,6 +549,37 @@ function Get-GameFolderName([int]$index,[string]$name) {
     return ('{0:D2} - {1}' -f $index, $n)
 }
 
+# The parent of an add-on, as an index into the same list, or -1 for an entry
+# the menu treats as a game in its own right.
+#
+# An entry marked AddOn whose parent is missing, points at itself, or points at
+# another add-on is promoted rather than dropped: a disc that shows an
+# unexpected entry is recoverable, one that silently omits an installer the
+# user paid for and burned is not.
+#
+# The menu and the disc layout both ask this, and they MUST get the same
+# answer. A promoted add-on takes a top-level folder AND a top-level place in
+# the chooser, or it takes neither. The rule was written out twice before, once
+# in each, which is exactly the arrangement that drifts.
+function Get-EntryParentIndex([array]$entries,[int]$index) {
+    $e = $entries[$index]
+    if ($e.Kind -ne 'AddOn') { return -1 }
+    $p = [int]$e.ParentIndex
+    if ($p -lt 0 -or $p -ge $entries.Count -or $p -eq $index) { return -1 }
+    if ($entries[$p].Kind -eq 'AddOn') { return -1 }
+    return $p
+}
+
+# The entries the menu shows as games, in menu order, as indices into the list.
+# This is what the folder numbering counts - see Get-DiscEntryFolder.
+function Get-DiscGameIndexes([array]$entries) {
+    $out = @()
+    for ($i = 0; $i -lt @($entries).Count; $i++) {
+        if ((Get-EntryParentIndex $entries $i) -lt 0) { $out += $i }
+    }
+    return ,@($out)
+}
+
 # Where an entry's installer sits on the finished disc, relative to the disc root.
 # Empty string means the disc root itself.
 #
@@ -558,14 +589,52 @@ function Get-GameFolderName([int]$index,[string]$name) {
 # points at another, and the disc burns with an Install button greyed out for a
 # reason nothing on screen explains. One function now, called by both.
 #
-# A disc with a single entry keeps the original flat layout, installer at the
-# root, exactly as every disc built before multi-game existed. Two or more and
-# every entry moves into Games\, add-ons included: their .bin parts are named
-# after their own installer, but a flat root full of a dozen setup files is
-# unreadable, and the numbering is what makes the disc browsable by hand.
+# A disc with a single game keeps the original flat layout, installer at the
+# root, exactly as every disc built before multi-game existed. Two or more games
+# and each one moves into a numbered folder under Games\: a flat root holding a
+# dozen setup files is unreadable, and the numbering is what makes the disc
+# browsable by hand.
+#
+# An add-on goes inside the folder of the game it belongs to, the way that
+# game's manual and extras already do. It used to take a top-level number of its
+# own, so two games carrying three patches each came out as eight sibling
+# folders with nothing saying what belonged to what - while the menu, which has
+# always shown an add-on as a second Install button on its game's screen, knew
+# perfectly well. The disc layout was the last place they still looked
+# unrelated.
+#
+# Two consequences, both chosen rather than fallen into. The numbers count GAMES
+# now, not entries, so they no longer skip every time a game carries a patch.
+# And a game with add-ons but no second game is still one game, so it keeps the
+# flat root that a single-game build has always produced - Add-ons\ beside the
+# installer, rather than a Games\ tree wrapped around one folder.
 function Get-DiscEntryFolder([array]$entries,[int]$index) {
-    if ($entries.Count -le 1) { return '' }
-    return (Join-Path 'Games' (Get-GameFolderName ($index+1) $entries[$index].GameName))
+    $parent = Get-EntryParentIndex $entries $index
+
+    if ($parent -lt 0) {
+        $games = Get-DiscGameIndexes $entries
+        if ($games.Count -le 1) { return '' }
+        $n = [array]::IndexOf($games, $index) + 1
+        return (Join-Path 'Games' (Get-GameFolderName $n $entries[$index].GameName))
+    }
+
+    # Numbered within the game that owns it, by the same rule the games use, so
+    # a stack of patches reads in the order the menu lists them for anyone
+    # working through the disc by hand. Counted here rather than taken from
+    # Get-EntryAddOns, which answers a different question - what Remove would
+    # take along with the parent - and counts entries the menu has promoted away.
+    $n = 0
+    for ($j = 0; $j -lt $entries.Count; $j++) {
+        if ((Get-EntryParentIndex $entries $j) -ne $parent) { continue }
+        $n++
+        if ($j -eq $index) { break }
+    }
+
+    # Join-Path refuses an empty first argument, and empty is exactly what the
+    # parent returns on a one-game disc.
+    $base  = Get-DiscEntryFolder $entries $parent
+    $under = if ($base) { Join-Path $base 'Add-ons' } else { 'Add-ons' }
+    return (Join-Path $under (Get-GameFolderName $n $entries[$index].GameName))
 }
 
 function Get-DiscEntrySetup([array]$entries,[int]$index) {
@@ -577,8 +646,9 @@ function Get-DiscEntrySetup([array]$entries,[int]$index) {
 
 # Where an entry's own manual and extras live on the disc. Beside its installer,
 # so a game and everything belonging to it sit together and can be found by hand
-# without the menu. A disc holding one entry keeps the flat Extras\ at the root,
-# which is where every disc built before this put them.
+# without the menu - which for an add-on now means inside the add-on's own
+# folder, under the game. A disc holding one game keeps the flat Extras\ at the
+# root, which is where every disc built before this put them.
 function Get-DiscEntryExtras([array]$entries,[int]$index) {
     $rel = Get-DiscEntryFolder $entries $index
     if ([string]::IsNullOrEmpty($rel)) { return 'Extras' }
@@ -586,24 +656,18 @@ function Get-DiscEntryExtras([array]$entries,[int]$index) {
 }
 
 # The menu's view of the disc: games in order, each carrying the add-ons that
-# point at it. An add-on whose parent is missing, or which points at another
-# add-on, is promoted to a game of its own rather than dropped - a disc that
-# shows an unexpected entry is recoverable, one that silently omits an installer
-# the user paid for and burned is not.
+# point at it. Which is which is Get-EntryParentIndex's decision rather than
+# this loop's, because Get-DiscEntryFolder asks it the same question when it
+# decides where on the disc the files land.
 function Get-MenuGames([array]$entries) {
     $out = @()
     for ($i = 0; $i -lt $entries.Count; $i++) {
         $e = $entries[$i]
-        $p = [int]$e.ParentIndex
-        $isAddOn = ($e.Kind -eq 'AddOn') -and $p -ge 0 -and $p -lt $entries.Count -and
-                   $p -ne $i -and $entries[$p].Kind -ne 'AddOn'
-        if ($isAddOn) { continue }
+        if ((Get-EntryParentIndex $entries $i) -ge 0) { continue }
         $addOns = @()
         for ($j = 0; $j -lt $entries.Count; $j++) {
-            $a = $entries[$j]
-            if ($j -eq $i -or $a.Kind -ne 'AddOn') { continue }
-            if ([int]$a.ParentIndex -ne $i) { continue }
-            $addOns += @{ Name=$a.GameName; Setup=(Get-DiscEntrySetup $entries $j) }
+            if ((Get-EntryParentIndex $entries $j) -ne $i) { continue }
+            $addOns += @{ Name=$entries[$j].GameName; Setup=(Get-DiscEntrySetup $entries $j) }
         }
         # An entry's own manual and extras, as paths on the finished disc. Empty
         # means it has none of its own and the menu should fall back to the
@@ -1722,8 +1786,9 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 
     $games = @($s.Games)
     # Rebuilding a disc folder in place: the payload already lives in the stage,
-    # so do NOT wipe it. Only ever true for a single game - several games live in
-    # Games\ subfolders, so their source folder is never the stage itself.
+    # so do NOT wipe it. One ENTRY, deliberately, not one game: a game carrying
+    # add-ons keeps the disc root for itself, but its add-ons still have to be
+    # copied into Add-ons\ and this branch is the one that copies nothing.
     $inPlace = ($games.Count -eq 1) -and (Test-SamePath $games[0].Folder $stage)
 
     if ($inPlace) {
@@ -3577,8 +3642,9 @@ $btnBuild.Add_Click({
     # named by THIS label, and the staging folder. A differently named ISO sitting
     # in the same folder is not touched and must not be described as if it were.
     if ($isoExists -or $stageExists) {
-        # Rebuilding in place only applies to a single game whose folder IS the
-        # stage. Several games always live in Games\ subfolders, never at the root.
+        # Rebuilding in place only applies to a disc of ONE entry whose folder IS
+        # the stage - the same test Invoke-Build makes, and for the same reason:
+        # anything else has files to copy in.
         $bGames  = Get-Games
         $inPlace = ($bGames.Count -eq 1) -and (Test-SamePath $bGames[0].Folder $stage)
         $isoName = if ($isoPath) { Split-Path $isoPath -Leaf } else { 'the ISO' }
