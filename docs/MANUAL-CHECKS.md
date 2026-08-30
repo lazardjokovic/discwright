@@ -1,6 +1,6 @@
 # Manual checks before a release
 
-The automated suite is 344 logic tests and 66 window tests, and it runs in about
+The automated suite is 356 logic tests and 66 window tests, and it runs in about
 four minutes:
 
 ```
@@ -175,6 +175,9 @@ Do not re-add any of these as a manual check.
 | A pre-schema-6 project recovers its match name on open | same |
 | `ExtrasEveryDisc` from the removed disc-sets feature | same |
 | Target disc saved and restored | same, and *Reopening a project that named a target disc* |
+| Rebuilding a disc whose own folder holds the installers | *Rebuilding a disc folder that the installers themselves live in* |
+| Assets and extra content picked from inside that folder | same, and *Rebuilding over a disc that is already there* |
+| A second build straight after the first still works | same |
 | A build driven from the window, start to ISO on disk | *The form while a real build runs* |
 | The form locks during a build and restores what was enabled | *Locking the form while a build runs* |
 

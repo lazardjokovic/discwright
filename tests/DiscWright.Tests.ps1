@@ -2250,6 +2250,139 @@ Describe 'A real game with its real patches' -Tag 'Real' -Skip:($script:GogFolde
     }
 }
 
+Describe 'Get-PathMovedAside' -Tag 'Unit' {
+
+    It 'moves the folder itself' {
+        Get-PathMovedAside 'C:\out\disc' 'C:\out\disc' 'C:\out\disc.previous-a1' |
+            Should -Be 'C:\out\disc.previous-a1'
+    }
+
+    It 'moves something inside it and keeps the rest of the path' {
+        Get-PathMovedAside 'C:\out\disc\Games\01 - Game\setup.exe' 'C:\out\disc' 'C:\out\disc.previous-a1' |
+            Should -Be 'C:\out\disc.previous-a1\Games\01 - Game\setup.exe'
+    }
+
+    It 'leaves a path that was never in there alone' {
+        Get-PathMovedAside 'D:\GOG\Hollow Knight\setup.exe' 'C:\out\disc' 'C:\out\disc.previous-a1' |
+            Should -Be 'D:\GOG\Hollow Knight\setup.exe'
+    }
+
+    It 'is not fooled by a folder whose name merely starts the same' {
+        # disc2 is not inside disc, and a prefix test without the separator says
+        # it is - which would repoint a path at a folder that does not exist.
+        Get-PathMovedAside 'C:\out\disc2\setup.exe' 'C:\out\disc' 'C:\out\disc.previous-a1' |
+            Should -Be 'C:\out\disc2\setup.exe'
+    }
+}
+
+Describe 'Rebuilding a disc folder that the installers themselves live in' {
+
+    BeforeAll {
+        # Open existing disc... leaves a game's folder pointing at disc\, which is
+        # also where the next build stages. Add anything else to that disc and the
+        # build takes the wipe-and-restage path - and the wipe used to go straight
+        # through the installers it was about to copy. The game was deleted, the
+        # copy then failed on files that were no longer there, and what the user
+        # had opened was gone.
+        $script:EatOut  = Join-Path $script:Sandbox 'out-opened'
+        $script:EatDisc = Join-Path $script:EatOut 'disc'
+        New-Item -ItemType Directory -Force -Path $script:EatDisc | Out-Null
+
+        $stem = 'setup_theopened_1.0_(90210)'
+        foreach ($n in @("$stem.exe", "$stem-1.bin")) {
+            $fs = [IO.File]::Create((Join-Path $script:EatDisc $n)); $fs.SetLength(2MB); $fs.Close()
+        }
+        # An asset and an extra item picked from inside the folder as well: the
+        # code this replaces rescued those by copying them to temp, and they have
+        # to keep arriving on the disc.
+        $script:EatIcon  = New-FixturePng (Join-Path $script:EatDisc 'cover.png') 256 256
+        $script:EatExtra = Join-Path $script:EatDisc 'readme.txt'
+        Set-Content -LiteralPath $script:EatExtra -Value 'kept' -Encoding Ascii
+
+        $script:EatOpened = Get-GameInfo $script:EatDisc
+        $script:EatSecond = Get-GameInfo (New-FixtureGame -Slug 'opened_second')
+        $script:EatAddOn  = Get-GameInfo (New-FixtureGame -Slug 'opened_patch')
+        $script:EatAddOn.Kind = 'AddOn'; $script:EatAddOn.ParentIndex = 0
+        $script:EatGames = @($script:EatOpened, $script:EatSecond, $script:EatAddOn)
+
+        # What the installer files were called before any of this ran, so a test
+        # can look for them by name wherever they ended up.
+        $script:EatNames = @($script:EatOpened.Files | ForEach-Object { $_.Name })
+
+        $script:EatIso = Invoke-Build @{
+            Games=$script:EatGames; Label='Opened Disc'
+            IconPath=$script:EatIcon; IconIsIco=$false; Menu=$true
+            BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'
+            Divider=$false; ShowTitle=$false; TitleText=''
+            WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+            Buttons=@('Install','Exit'); ManualPath=$null; ExtrasPath=$null
+            ExtraItems=@($script:EatExtra); OutDir=$script:EatOut } $script:LogSink
+
+        # And again, the way the window does it: a fresh settings hashtable each
+        # time, holding the same entry objects the list still holds.
+        $script:EatErr2 = $null
+        try {
+            $script:EatIso2 = Invoke-Build @{
+                Games=$script:EatGames; Label='Opened Disc'
+                IconPath=$script:Art; IconIsIco=$false; Menu=$true
+                BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'
+                Divider=$false; ShowTitle=$false; TitleText=''
+                WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+                Buttons=@('Install','Exit'); ManualPath=$null; ExtrasPath=$null
+                ExtraItems=@($script:EatExtra); OutDir=$script:EatOut } $script:LogSink
+        } catch { $script:EatErr2 = $_ }
+    }
+
+    It 'does not destroy the installers it is about to copy' {
+        # The one that matters. Before this, the exe and its .bin part were gone
+        # from the disk entirely and the build threw on the way to noticing.
+        foreach ($n in $script:EatNames) {
+            Test-Path (Join-Path $script:EatDisc (Join-Path (Get-DiscEntryFolder $script:EatGames 0) $n)) |
+                Should -BeTrue -Because "$n has to survive the rebuild"
+        }
+    }
+
+    It 'writes the ISO it was asked for' {
+        $script:EatIso | Should -Not -BeNullOrEmpty
+        Test-Path $script:EatIso | Should -BeTrue
+    }
+
+    It 'points the games list at where the files ended up' {
+        # The entry object belongs to the window's own list, so leaving it naming
+        # a path inside a folder that has just been deleted breaks the NEXT build
+        # rather than this one - the worst kind of delay between cause and effect.
+        Test-Path $script:EatOpened.SetupExe.FullName | Should -BeTrue
+        Test-SubPath $script:EatOpened.SetupExe.FullName $script:EatDisc | Should -BeTrue
+        foreach ($f in $script:EatOpened.Files) { Test-Path $f.FullName | Should -BeTrue }
+    }
+
+    It 'builds a second time, straight after the first' {
+        $script:EatErr2 | Should -BeNullOrEmpty
+        Test-Path $script:EatIso2 | Should -BeTrue
+    }
+
+    It 'clears the folder it set aside once the ISO is written' {
+        @(Get-ChildItem $script:EatOut -Directory -Filter 'disc.previous-*').Count | Should -Be 0
+    }
+
+    It 'still lands the icon that was picked from inside the folder' {
+        Test-Path (Join-Path $script:EatDisc (Get-DiscIconName 'Opened Disc')) | Should -BeTrue
+    }
+
+    It 'still lands the extra content that was picked from inside the folder' {
+        # Renaming the folder aside has to preserve everything the copy-to-temp
+        # rescue used to preserve, or this fix trades one kind of loss for another.
+        Test-Path (Join-Path $script:EatDisc 'readme.txt') | Should -BeTrue
+    }
+
+    It 'leaves the other two entries where they always went' {
+        foreach ($i in 1, 2) {
+            Test-Path (Join-Path $script:EatDisc (Get-DiscEntrySetup $script:EatGames $i)) |
+                Should -BeTrue
+        }
+    }
+}
+
 Describe 'The comma-return convention is not undone at the call sites' -Tag 'Unit' {
 
     # Several functions return ,@(...) so that a one-element result survives
