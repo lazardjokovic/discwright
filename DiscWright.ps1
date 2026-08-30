@@ -197,7 +197,7 @@ function Get-GameInfo([string]$folder) {
     # manual and an Extras folder for the whole disc; an entry that has none of
     # its own falls back to those, which is what keeps a single-game disc, and
     # every project written before this, behaving exactly as it did.
-    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; Msg=''; TotalBytes=0; Folder=$null
+    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; MatchName=$null; Msg=''; TotalBytes=0; Folder=$null
                Warning=''; MissingParts=@(); Kind='Game'; ParentIndex=-1
                ManualPath=$null; ExtrasPath=$null }
     if (-not (Test-Path $folder)) { $info.Msg='Folder not found.'; return $info }
@@ -272,6 +272,14 @@ function Set-InstallerFacts([hashtable]$info,[System.IO.FileInfo]$exe) {
         $name = $name.Trim()
     }
     $info.Ok=$true; $info.SetupExe=$exe; $info.Files=@($exe)+@($bins); $info.GameName=$name
+    # MatchName is the string the menu hands findGame to look for an installed
+    # copy, and it is a second field rather than a reuse of GameName on purpose.
+    # GameName is editable - the entry dialog offers it as 'Name on the menu' -
+    # while the registry holds whatever GOG registered. Sharing one field meant a
+    # rename changed what the menu searched for: rename 'The Witcher: Enhanced
+    # Edition' to 'The Witcher 1' and Install still worked while Play went dead,
+    # with nothing on screen saying why. Set here and never written again.
+    $info.MatchName=$name
     $info.Folder = $exe.DirectoryName
     $info.TotalBytes = ($info.Files | Measure-Object Length -Sum).Sum
     $plural = if ($info.Files.Count -eq 1) { 'file' } else { 'files' }
@@ -306,7 +314,7 @@ function Get-AddOnName([string]$fileName) {
 # comes from the list it is added to, not from its filename. That is what lets a
 # mod or an overhaul, which is never named setup_*, go on the disc at all.
 function Get-AddOnInfo([string]$exePath) {
-    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; Msg=''; TotalBytes=0; Folder=$null
+    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; MatchName=$null; Msg=''; TotalBytes=0; Folder=$null
                Warning=''; MissingParts=@(); Kind='AddOn'; ParentIndex=-1 }
     if (-not (Test-Path $exePath -PathType Leaf)) { $info.Msg='File not found.'; return $info }
     $exe = Get-Item -LiteralPath $exePath
@@ -594,7 +602,12 @@ function Get-MenuGames([array]$entries) {
             $ext = Get-DiscEntryExtras $entries $i
             if ($e.ManualPath) { $man = Join-Path $ext ([IO.Path]::GetFileName([string]$e.ManualPath)) }
         }
-        $out += @{ Name=$e.GameName; MatchName=$e.GameName
+        # The fallback is for an entry out of a project written before version 6,
+        # which had no MatchName. Re-detection from the folder fills it in, so the
+        # fallback only fires when the folder has gone - and then GameName is the
+        # best guess left.
+        $mn = if ($e.MatchName) { [string]$e.MatchName } else { [string]$e.GameName }
+        $out += @{ Name=$e.GameName; MatchName=$mn
                    Setup=(Get-DiscEntrySetup $entries $i); AddOns=@($addOns)
                    Manual=$man; Extras=$ext }
     }
@@ -1506,7 +1519,9 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # Version 5 adds MediaKey - which disc the set was planned for. Absent in
         # anything older, which reads back as the automatic setting and so builds
         # the single disc those projects always described.
-        Version      = 5
+        # Version 6 adds MatchName per entry. Absent in anything older, where the
+        # name re-detected from the folder on open supplies it.
+        Version      = 6
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -1526,6 +1541,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # GameName is stored because it can be edited, and the edit has to survive.
         Games        = @($games | ForEach-Object {
                             [ordered]@{ Folder=$_.Folder; GameName=$_.GameName
+                                        MatchName=$_.MatchName
                                         Setup=$(if($_.SetupExe){$_.SetupExe.FullName}else{$null})
                                         Kind=$(if($_.Kind -eq 'AddOn'){'AddOn'}else{'Game'})
                                         Parent=[int]$_.ParentIndex
@@ -1564,17 +1580,22 @@ function Import-Project([string]$jsonPath) {
         if ($j.PSObject.Properties.Name -contains 'Games' -and $j.Games) {
             foreach ($g in @($j.Games)) {
                 if (-not $g -or -not $g.Folder) { continue }
-                $kind = 'Game'; $parent = -1; $setup = $null; $nm = $null; $man = $null; $ext = $null
+                $kind = 'Game'; $parent = -1; $setup = $null; $nm = $null; $man = $null; $ext = $null; $mt = $null
                 if ($g.PSObject.Properties.Name -contains 'Kind' -and $g.Kind -eq 'AddOn') { $kind = 'AddOn' }
                 if ($g.PSObject.Properties.Name -contains 'Parent') { $parent = [int]$g.Parent }
                 if ($g.PSObject.Properties.Name -contains 'Setup')  { $setup = [string]$g.Setup }
                 if ($g.PSObject.Properties.Name -contains 'GameName') { $nm = [string]$g.GameName }
+                # Version 6. An older file has none, and $mt stays null - which
+                # leaves the freshly detected name in place, and that name is the
+                # registered one. So an old project renamed under the old code
+                # repairs itself on open, as long as its folder is still there.
+                if ($g.PSObject.Properties.Name -contains 'MatchName') { $mt = [string]$g.MatchName }
                 # Version 4. Absent in anything older, which reads back as an entry
                 # with none of its own - and the menu then falls back to the
                 # disc-wide manual and Extras, exactly as those discs behaved.
                 if ($g.PSObject.Properties.Name -contains 'Manual') { $man = [string]$g.Manual }
                 if ($g.PSObject.Properties.Name -contains 'Extras') { $ext = [string]$g.Extras }
-                $entries += ,@{ Folder=[string]$g.Folder; Kind=$kind; ParentIndex=$parent; Setup=$setup; Name=$nm
+                $entries += ,@{ Folder=[string]$g.Folder; Kind=$kind; ParentIndex=$parent; Setup=$setup; Name=$nm; Match=$mt
                                 Manual=$man; Extras=$ext }
             }
         }
@@ -2594,6 +2615,10 @@ function Set-GameEntries([array]$entries) {
         if ($e.Kind -eq 'AddOn') { $g.Kind = 'AddOn'; $g.ParentIndex = [int]$e.ParentIndex }
         # A name the user edited is theirs, not something to re-derive on open.
         if (-not [string]::IsNullOrWhiteSpace($e.Name)) { $g.GameName = [string]$e.Name }
+        # The match name is NOT taken from the edited name. It is only restored
+        # from the file when the file carried one; otherwise what Get-GameInfo
+        # just read off the installer stands.
+        if (-not [string]::IsNullOrWhiteSpace($e.Match)) { $g.MatchName = [string]$e.Match }
         # Only carried forward if the file is still where it was. A manual that
         # has been moved or deleted since the disc was built must not silently
         # become a menu button pointing at nothing.

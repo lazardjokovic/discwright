@@ -1,6 +1,6 @@
 # Manual checks before a release
 
-The automated suite is 328 logic tests and 66 window tests, and it runs in about
+The automated suite is 344 logic tests and 66 window tests, and it runs in about
 four minutes:
 
 ```
@@ -104,15 +104,42 @@ Every fixture in the suite is a sparse stub with a GOG-shaped filename. Nothing
 in the repo has ever been a real installer, so nothing automated has ever watched
 one run.
 
+- [ ] Before you install anything, note what is already registered:
+
+```powershell
+.\extras\Show-RegisteredGames.ps1
+```
+
 - [ ] From the mounted disc's menu, click **Install**.
 
 **Should see:** GOG's installer starts and completes against a real download.
 
+- [ ] Run it again.
+
+**Should see:** the game you just installed is now in the list, with `ExeThere`
+true. **That is the whole of this check** - everything the menu does with those
+keys afterwards has a test.
+
 - [ ] If the game registers itself, reopen the menu and click **Play**.
 
 **Should see:** the game launches. Play finds an installed copy through the
-registry keys GOG's installer writes, matched on the game's registered name —
-which is why a game renamed for the menu must still match on its original name.
+registry keys GOG's installer writes, matched on the game's registered name.
+
+> A renamed game matching on its original name is covered by tests now, against
+> the menu's own matcher - so what is left for you here is whether a real
+> install registers itself at all, which no test can arrange.
+
+To ask the question the menu asks - would Play find this? - give the helper the
+name the entry matches on:
+
+```powershell
+.\extras\Show-RegisteredGames.ps1 -Match 'Alan Wake'
+```
+
+It runs the menu's own `nameHit`, lifted out of `DiscWright.ps1` and executed
+under cscript, so its answer cannot drift from the menu's. Useful for the rename
+case: rename a game to something **reworded** rather than shortened and the two
+names still have to agree.
 
 **Failure looks like:** Install doing nothing (the path on the disc and the path
 in the menu disagree), or Play saying it cannot find the game after a successful
@@ -144,6 +171,8 @@ Do not re-add any of these as a manual check.
 | Menu opens without a runtime script error | *Previewing the menu* |
 | `™` and `®` reach the screen intact | same, and *A game name with characters outside plain ASCII* |
 | Project files from v1, v2, v3 and a real 0.4.2 file | *Project file* |
+| A renamed game still matches on the name GOG registered | *Renaming a game for the menu* |
+| A pre-schema-6 project recovers its match name on open | same |
 | `ExtrasEveryDisc` from the removed disc-sets feature | same |
 | Target disc saved and restored | same, and *Reopening a project that named a target disc* |
 | A build driven from the window, start to ISO on disk | *The form while a real build runs* |
