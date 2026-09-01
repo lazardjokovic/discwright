@@ -1328,6 +1328,67 @@ Describe 'The finished ISO as Windows itself reads it' -Tag 'Build' -Skip:(-not 
     }
 }
 
+Describe 'Building a two-game disc that has add-ons on it' {
+
+    BeforeAll {
+        # Two games, two patches on the first and one on the second - the shape
+        # from the roadmap, staged for real so the assertions are about folders
+        # that exist rather than about strings a function returned.
+        $script:GrpA  = Get-GameInfo (New-FixtureGame -Slug 'grp_a' -Parts 1)
+        $script:GrpA1 = Get-GameInfo (New-FixtureGame -Slug 'grp_a_patch1')
+        $script:GrpA2 = Get-GameInfo (New-FixtureGame -Slug 'grp_a_patch2')
+        $script:GrpB  = Get-GameInfo (New-FixtureGame -Slug 'grp_b')
+        $script:GrpB1 = Get-GameInfo (New-FixtureGame -Slug 'grp_b_patch1')
+        $script:GrpA1.Kind = 'AddOn'; $script:GrpA1.ParentIndex = 0
+        $script:GrpA2.Kind = 'AddOn'; $script:GrpA2.ParentIndex = 0
+        $script:GrpB1.Kind = 'AddOn'; $script:GrpB1.ParentIndex = 3
+
+        $script:GrpAll = @($script:GrpA, $script:GrpA1, $script:GrpA2, $script:GrpB, $script:GrpB1)
+
+        $script:GrpOut = Join-Path $script:Sandbox 'out-grouped'
+        New-Item -ItemType Directory -Force -Path $script:GrpOut | Out-Null
+        $null = Invoke-Build (New-BuildSettings -Games $script:GrpAll `
+                    -Label 'Grouped Disc' -OutDir $script:GrpOut) $script:LogSink
+        $script:GrpStage = Join-Path $script:GrpOut 'disc'
+    }
+
+    It 'puts one folder under Games for each game, and nothing else' {
+        # Five installers, two games. Before grouping this folder held five.
+        @(Get-ChildItem (Join-Path $script:GrpStage 'Games') -Directory).Count | Should -Be 2
+    }
+
+    It 'nests each game''s add-ons inside that game, numbered from 01' {
+        $gameA = Join-Path $script:GrpStage (Get-DiscEntryFolder $script:GrpAll 0)
+        $gameB = Join-Path $script:GrpStage (Get-DiscEntryFolder $script:GrpAll 3)
+        @(Get-ChildItem (Join-Path $gameA 'Add-ons') -Directory).Count | Should -Be 2
+        @(Get-ChildItem (Join-Path $gameB 'Add-ons') -Directory).Count | Should -Be 1
+        @(Get-ChildItem (Join-Path $gameA 'Add-ons') -Directory | ForEach-Object { $_.Name }) |
+            ForEach-Object { $_ | Should -Match '^0[12] - ' }
+        (Get-ChildItem (Join-Path $gameB 'Add-ons') -Directory)[0].Name | Should -BeLike '01 - *'
+    }
+
+    It 'writes every installer to the path the menu was given' {
+        # The one that matters on a burned disc. The menu's Install hands the
+        # shell this path; if the staging loop wrote anywhere else, the button
+        # fails and nothing on screen says why.
+        foreach ($g in (Get-MenuGames $script:GrpAll)) {
+            Test-Path (Join-Path $script:GrpStage $g.Setup) | Should -BeTrue -Because "the game's installer must be at $($g.Setup)"
+            foreach ($a in $g.AddOns) {
+                Test-Path (Join-Path $script:GrpStage $a.Setup) | Should -BeTrue -Because "the add-on's installer must be at $($a.Setup)"
+            }
+        }
+    }
+
+    It 'brings a game''s .bin parts along into its own folder' {
+        $gameA = Join-Path $script:GrpStage (Get-DiscEntryFolder $script:GrpAll 0)
+        @(Get-ChildItem $gameA -File -Filter '*.bin').Count | Should -Be 1
+    }
+
+    It 'leaves no installer at the disc root' {
+        @(Get-ChildItem $script:GrpStage -File -Filter 'setup_*').Count | Should -Be 0
+    }
+}
+
 Describe 'Where an entry lands on the disc' {
 
     BeforeAll {
@@ -1353,6 +1414,142 @@ Describe 'Where an entry lands on the disc' {
     It 'builds the setup path from that same folder' {
         $rel = Get-DiscEntrySetup $script:LayoutMany 1
         $rel | Should -Be (Join-Path (Get-DiscEntryFolder $script:LayoutMany 1) $script:LayoutMany[1].SetupExe.Name)
+    }
+}
+
+Describe 'Filing an add-on under the game it belongs to' -Tag 'Unit' {
+
+    BeforeAll {
+        function New-Ent {
+            param([string]$Name, [string]$Kind = 'Game', [int]$Parent = -1)
+            return @{ Ok=$true; GameName=$Name; Kind=$Kind; ParentIndex=$Parent
+                      SetupExe=@{ Name = "setup_$($Name -replace '\W','').exe" } }
+        }
+
+        # The example from the roadmap: two games, patches on each. Under the old
+        # layout this came out as five sibling folders numbered 01 to 05.
+        $script:Grp = @(
+            (New-Ent 'Hollow Knight')
+            (New-Ent 'Update 1.5.12459' 'AddOn' 0)
+            (New-Ent 'Update 1.5.12618' 'AddOn' 0)
+            (New-Ent 'Ori and the Blind Forest')
+            (New-Ent 'Definitive Edition Upgrade' 'AddOn' 3)
+        )
+
+        # One game carrying patches. Still one game, so still a flat disc.
+        $script:GrpOne = @(
+            (New-Ent 'Hollow Knight')
+            (New-Ent 'Update 1.5.12459' 'AddOn' 0)
+            (New-Ent 'Update 1.5.12618' 'AddOn' 0)
+        )
+    }
+
+    It 'puts an add-on inside its game''s folder rather than beside it' {
+        $game  = Get-DiscEntryFolder $script:Grp 0
+        $addOn = Get-DiscEntryFolder $script:Grp 1
+        $game  | Should -Be 'Games\01 - Hollow Knight'
+        $addOn | Should -Be 'Games\01 - Hollow Knight\Add-ons\01 - Update 1.5.12459'
+        # Stated twice on purpose: the string above is what a person reads on the
+        # disc, and this is the property that has to hold for any name at all.
+        $addOn.StartsWith($game + '\Add-ons\') | Should -BeTrue
+    }
+
+    It 'numbers the games by games, so the numbers stop skipping' {
+        # The second game is the fourth entry. Numbering by entry made it 04 and
+        # left 02 and 03 belonging to patches that no longer have a top-level
+        # folder at all - a listing that counts to five and shows two things.
+        Get-DiscEntryFolder $script:Grp 3 | Should -Be 'Games\02 - Ori and the Blind Forest'
+    }
+
+    It 'numbers add-ons within their own game, starting again at 01' {
+        Get-DiscEntryFolder $script:Grp 2 |
+            Should -Be 'Games\01 - Hollow Knight\Add-ons\02 - Update 1.5.12618'
+        Get-DiscEntryFolder $script:Grp 4 |
+            Should -Be 'Games\02 - Ori and the Blind Forest\Add-ons\01 - Definitive Edition Upgrade'
+    }
+
+    It 'keeps the flat root when the disc holds one game and its patches' {
+        # A game with add-ons but no second game is one game. Wrapping a Games\
+        # tree around a single folder buys nothing, and this is the disc every
+        # single-game build has produced since before add-ons existed.
+        Get-DiscEntryFolder $script:GrpOne 0 | Should -Be ''
+        Get-DiscEntryFolder $script:GrpOne 1 | Should -Be 'Add-ons\01 - Update 1.5.12459'
+        Get-DiscEntryFolder $script:GrpOne 2 | Should -Be 'Add-ons\02 - Update 1.5.12618'
+    }
+
+    It 'builds the installer path from wherever the folder turned out to be' {
+        Get-DiscEntrySetup $script:GrpOne 1 |
+            Should -Be 'Add-ons\01 - Update 1.5.12459\setup_Update1512459.exe'
+        Get-DiscEntrySetup $script:Grp 4 | Should -Be (Join-Path (Get-DiscEntryFolder $script:Grp 4) `
+                                                                $script:Grp[4].SetupExe.Name)
+    }
+
+    It 'files an add-on''s own manual and extras inside the add-on''s folder' {
+        Get-DiscEntryExtras $script:Grp 1 |
+            Should -Be 'Games\01 - Hollow Knight\Add-ons\01 - Update 1.5.12459\Extras'
+    }
+
+    It 'leaves a lone game and a pair of plain games exactly where they were' {
+        # The rule that changed is which entries count. For a disc with no add-ons
+        # on it, nothing may move - those discs have been burned already.
+        Get-DiscEntryFolder @( (New-Ent 'Solo') ) 0 | Should -Be ''
+        $two = @( (New-Ent 'One'), (New-Ent 'Two') )
+        Get-DiscEntryFolder $two 0 | Should -Be 'Games\01 - One'
+        Get-DiscEntryFolder $two 1 | Should -Be 'Games\02 - Two'
+    }
+
+    It 'gives an add-on whose game is missing a top-level folder of its own' {
+        # Promotion is the menu's rule for an orphan, and the disc has to follow
+        # it: an entry the chooser lists as a game cannot be buried inside one.
+        $e = @( (New-Ent 'Hollow Knight'), (New-Ent 'Stray Patch' 'AddOn' 7) )
+        Get-DiscEntryFolder $e 1 | Should -Be 'Games\02 - Stray Patch'
+        (Get-MenuGames $e).Count | Should -Be 2
+    }
+
+    It 'promotes an add-on hanging off another add-on, on the disc as in the menu' {
+        $e = @( (New-Ent 'Hollow Knight'), (New-Ent 'Update 1' 'AddOn' 0),
+                (New-Ent 'Patch of a patch' 'AddOn' 1) )
+        Get-DiscEntryFolder $e 2 | Should -Be 'Games\02 - Patch of a patch'
+        Get-DiscEntryFolder $e 1 | Should -Be 'Games\01 - Hollow Knight\Add-ons\01 - Update 1'
+    }
+
+    It 'hands the menu the same paths the layout decided' {
+        # The failure this guards against is silent and only visible on a burned
+        # disc: the files land in one place and the menu's Install points at
+        # another. Every path the menu emits, game and add-on alike, has to be
+        # the one Get-DiscEntrySetup gave for that entry.
+        $fromMenu = @()
+        foreach ($g in (Get-MenuGames $script:Grp)) {
+            $fromMenu += $g.Setup
+            foreach ($a in $g.AddOns) { $fromMenu += $a.Setup }
+        }
+        $fromLayout = @(0..($script:Grp.Count-1) | ForEach-Object { Get-DiscEntrySetup $script:Grp $_ })
+        @($fromMenu | Sort-Object) | Should -Be @($fromLayout | Sort-Object)
+    }
+
+    It 'never lands two entries in the same folder' {
+        $mixed = @(
+            (New-Ent 'A'), (New-Ent 'B' 'AddOn' 0), (New-Ent 'C' 'AddOn' 7)
+            (New-Ent 'D'), (New-Ent 'E' 'AddOn' 3), (New-Ent 'F' 'AddOn' 1) )
+        $folders = @(0..($mixed.Count-1) | ForEach-Object { Get-DiscEntryFolder $mixed $_ })
+        @($folders | Sort-Object -Unique).Count | Should -Be $mixed.Count
+    }
+
+    It 'counts the same entries as games that the menu does' {
+        $mixed = @(
+            (New-Ent 'A'), (New-Ent 'B' 'AddOn' 0), (New-Ent 'C' 'AddOn' 7)
+            (New-Ent 'D'), (New-Ent 'E' 'AddOn' 3), (New-Ent 'F' 'AddOn' 1) )
+        # No @() around the call: Get-DiscGameIndexes returns ,@(...) and
+        # wrapping it rebuilds the single-element array the comma prevents.
+        (Get-DiscGameIndexes $mixed).Count | Should -Be (Get-MenuGames $mixed).Count
+    }
+
+    It 'treats Add-ons as a folder the pipeline made, not as content someone added' {
+        # Reopening a built disc folder lists everything at the root that the
+        # pipeline does not generate as the user's own extra content. Without
+        # this, Add-ons\ on a single-game disc comes back as extra content and
+        # the next build copies the disc into itself.
+        Test-ReservedDiscName 'Add-ons' | Should -BeTrue
     }
 }
 
@@ -1438,8 +1635,13 @@ Describe 'Building a disc that has an add-on on it' {
         $script:AoHta   = Get-Content -Raw (Join-Path $script:AoStage 'AUTORUN\menu.hta')
     }
 
-    It 'stages both installers under Games' {
-        @(Get-ChildItem (Join-Path $script:AoStage 'Games') -Directory).Count | Should -Be 2
+    It 'keeps a single game flat and files its add-on underneath it' {
+        # One game, so the disc keeps the flat root it has always had - there is
+        # no Games\ tree to wrap around one folder. The add-on goes into Add-ons\
+        # beside the installer rather than becoming a second top-level entry.
+        Test-Path (Join-Path $script:AoStage 'Games') | Should -BeFalse
+        Test-Path (Join-Path $script:AoStage $script:AoGame.SetupExe.Name) | Should -BeTrue
+        @(Get-ChildItem (Join-Path $script:AoStage 'Add-ons') -Directory).Count | Should -Be 1
     }
 
     It 'copies the add-on installer too' {
@@ -2217,7 +2419,7 @@ Describe 'A real game with its real patches' -Tag 'Real' -Skip:($script:GogFolde
         }
     }
 
-    It 'finds the game and its patches side by side' -Skip:(-not (@($script:GogFolders | Where-Object { $_ -like '*hollow_knight*' }).Count)) {
+    It 'finds the game and its patches, and files them underneath it' -Skip:(-not (@($script:GogFolders | Where-Object { $_ -like '*hollow_knight*' }).Count)) {
         $game = Get-GameInfo $script:HkDir
         $game.GameName | Should -Be 'Hollow Knight'
 
@@ -2244,9 +2446,15 @@ Describe 'A real game with its real patches' -Tag 'Real' -Skip:($script:GogFolde
         @($names | Sort-Object -Unique).Count | Should -Be $patches.Count
         $names | ForEach-Object { $_ | Should -Not -Be 'Hollow Knight' }
 
-        # And every installer gets its own folder on the disc.
+        # And every installer gets its own folder on the disc, with the patches
+        # filed inside the game instead of beside it. One game, so the game
+        # itself keeps the disc root - real names, real patch count, real
+        # version info, which is the whole reason this block runs off a folder
+        # that GOG wrote rather than off a fixture.
         $folders = @(0..($entries.Count-1) | ForEach-Object { Get-DiscEntryFolder $entries $_ })
         @($folders | Sort-Object -Unique).Count | Should -Be $entries.Count
+        $folders[0] | Should -Be ''
+        $folders[1..($folders.Count-1)] | ForEach-Object { $_ | Should -BeLike 'Add-ons\*' }
     }
 }
 

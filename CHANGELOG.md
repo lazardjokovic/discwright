@@ -9,6 +9,22 @@ between minor versions.
 
 ## [Unreleased]
 
+### Changed
+
+- **A game's add-ons are filed under the game on the disc, not beside it.** Every
+  entry used to get its own numbered folder, so two games carrying three patches
+  each came out as eight top-level folders with nothing saying what belonged to
+  what - while the menu, which has always shown an add-on as a second Install
+  button on its game's screen, knew perfectly well. An add-on now lives in
+  `Add-ons\` inside its game's folder, the way that game's manual and extras
+  already do. Two consequences worth knowing before you build: the folder numbers
+  count games rather than entries, so they no longer skip every time a game
+  carries a patch; and a game with add-ons but no second game is still one game,
+  so it keeps the flat disc a single-game build has always produced, with
+  `Add-ons\` beside the installer instead of a `Games\` tree wrapped around one
+  folder. An add-on whose game is removed is still promoted to a game of its own,
+  and moves back out to the top level with it.
+
 ### Fixed
 
 - **Rebuilding a disc you opened no longer deletes the installers.** *Open existing
