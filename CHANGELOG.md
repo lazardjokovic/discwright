@@ -7,6 +7,23 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Fixed
+
+- **Rebuilding a disc you opened no longer deletes the installers.** *Open existing
+  disc...* leaves a game's folder pointing at `disc\`, which is also where the next
+  build stages. With only that one game on the disc the build knew to leave the
+  files alone - but add anything else, a patch or a second game, and it took the
+  other path: wipe the staging folder, then copy everything in. The wipe went
+  straight through the installers it was about to copy. The build then failed on
+  files that no longer existed, and the download it had been opened on was gone
+  from the disk. The staging folder is now renamed aside rather than deleted, and
+  everything that pointed into it is repointed at the new name - so the files are
+  still there to copy, and the copy is the same instant hardlink pass as always.
+  What is left of the old folder goes only once the ISO has been written: if a
+  build fails now, nothing has been lost, and the log says where it is.
+
 ## [0.4.4] — 2026-08-30
 
 ### Fixed

@@ -79,6 +79,17 @@ function Test-SubPath([string]$child,[string]$parent) {
     } catch { return $false }
 }
 
+# One path, translated from a folder that has just been renamed into its new
+# name. Returns the path untouched when it never pointed inside that folder, so
+# it can be run over every path a build holds without asking which is which.
+function Get-PathMovedAside([string]$path,[string]$from,[string]$to) {
+    if (-not (Test-SubPath $path $from)) { return $path }
+    $c = [IO.Path]::GetFullPath($path).TrimEnd('\\')
+    $p = [IO.Path]::GetFullPath($from).TrimEnd('\\')
+    if ($c.Length -eq $p.Length) { return $to }
+    return (Join-Path $to $c.Substring($p.Length + 1))
+}
+
 # Files copied off a mounted ISO or any read-only media keep the ReadOnly attribute.
 # Overwriting one later fails - and GDI+ reports that as "a generic error occurred
 # in GDI+" rather than access denied, which is impossible to diagnose from the message.
@@ -1719,48 +1730,63 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         & $log "Rebuilding in place - installer files left untouched."
         New-Item -ItemType Directory -Force -Path $stage,"$stage\AUTORUN" | Out-Null
     } else {
-        # Any asset the user picked from inside the old stage would be destroyed
-        # by the wipe - copy it out to temp first and repoint at the copy.
+        # Everything in the old staging folder is about to go, and the build reads
+        # out of it. An icon or a manual picked from inside it - and, after Open
+        # existing disc..., the game installers themselves, whose folder IS the
+        # stage. Wiping first and copying afterwards was a build that ate its own
+        # source: the installers went, the copy then failed on files that were no
+        # longer there, and what the user had opened was gone from the disk.
+        #
+        # So the folder is renamed rather than removed, and every path pointing
+        # inside it is repointed at the new name. A rename within one volume is
+        # instant however many gigabytes it holds, and the copy back is the same
+        # hardlink pass every other build uses, so nothing is written twice. The
+        # renamed folder goes at the very end, once the ISO exists - if the build
+        # fails, everything that was in it is still on the disk, under a name the
+        # log has already given.
         if (Test-Path $stage) {
-            foreach ($k in @('IconPath','BgPath','MusicFile','ManualPath')) {
-                $p = $s[$k]
-                if ($p -and (Test-Path $p) -and (Test-SubPath $p $stage)) {
-                    if (-not $tmpKeep) { $tmpKeep = Join-Path ([IO.Path]::GetTempPath()) ('discwright_'+[Guid]::NewGuid().ToString('N').Substring(0,8)); New-Item -ItemType Directory -Force -Path $tmpKeep | Out-Null }
-                    $n = Join-Path $tmpKeep ([IO.Path]::GetFileName($p)); Copy-Item -LiteralPath $p -Destination $n -Force
-                    $s[$k] = $n; & $log "  preserved $([IO.Path]::GetFileName($p))"
-                }
-            }
-            if ($s.ExtrasPath -and (Test-Path $s.ExtrasPath) -and (Test-SubPath $s.ExtrasPath $stage)) {
-                if (-not $tmpKeep) { $tmpKeep = Join-Path ([IO.Path]::GetTempPath()) ('discwright_'+[Guid]::NewGuid().ToString('N').Substring(0,8)); New-Item -ItemType Directory -Force -Path $tmpKeep | Out-Null }
-                $ne = Join-Path $tmpKeep 'Extras'; New-Item -ItemType Directory -Force -Path $ne | Out-Null
-                Copy-Item "$($s.ExtrasPath)\*" $ne -Recurse -Force -EA SilentlyContinue
-                $s.ExtrasPath = $ne; & $log "  preserved Extras folder"
-            }
-            $kept = @()
-            foreach ($it in @($s.ExtraItems)) {
-                if ($it -and (Test-Path $it) -and (Test-SubPath $it $stage)) {
-                    if (-not $tmpKeep) { $tmpKeep = Join-Path ([IO.Path]::GetTempPath()) ('discwright_'+[Guid]::NewGuid().ToString('N').Substring(0,8)); New-Item -ItemType Directory -Force -Path $tmpKeep | Out-Null }
-                    $nm = [IO.Path]::GetFileName($it.TrimEnd('\')); $np = Join-Path $tmpKeep $nm
-                    if (Test-Path $it -PathType Container) { New-Item -ItemType Directory -Force -Path $np | Out-Null; Copy-Item "$it\*" $np -Recurse -Force -EA SilentlyContinue }
-                    else { Copy-Item -LiteralPath $it -Destination $np -Force }
-                    $kept += $np; & $log "  preserved $nm"
-                } else { $kept += $it }
-            }
-            $s.ExtraItems = $kept
-        }
-        & $log "Preparing staging folder..."
-        # Mounting the ISO to check it and then rebuilding is the obvious workflow,
-        # and it leaves a handle on the folder. Raw exception text here reads as a
-        # crash; say which folder and what to do about it.
-        if (Test-Path $stage) {
-            try { Remove-Item $stage -Recurse -Force -ErrorAction Stop }
+            $aside = Join-Path $s.OutDir ('disc.previous-' + [Guid]::NewGuid().ToString('N').Substring(0,8))
+            # Mounting the ISO to check it and then rebuilding is the obvious
+            # workflow, and it leaves a handle on the folder. Raw exception text
+            # here reads as a crash; say which folder and what to do about it.
+            try { Rename-Item -LiteralPath $stage -NewName (Split-Path $aside -Leaf) -ErrorAction Stop }
             catch {
                 throw ("The old disc folder cannot be replaced - something is still using it:" +
                        "`r`n`r`n$stage`r`n`r`n" +
                        "Close any Explorer window showing that folder, eject the ISO if you have it mounted, " +
                        "then build again.`r`n`r`nWindows said: $($_.Exception.Message)")
             }
+            $tmpKeep = $aside
+            & $log "Set the old disc folder aside as $(Split-Path $aside -Leaf) - it goes once the ISO is written."
+
+            # Tested before rewriting rather than after: Get-PathMovedAside takes
+            # a [string], so an unset asset arrives as '' and would come back as
+            # '' rather than as the $null it went in as.
+            foreach ($k in @('IconPath','BgPath','MusicFile','ManualPath','ExtrasPath')) {
+                if (-not (Test-SubPath $s[$k] $stage)) { continue }
+                $s[$k] = Get-PathMovedAside $s[$k] $stage $aside
+                & $log "  kept $([IO.Path]::GetFileName($s[$k]))"
+            }
+            $s.ExtraItems = @(@($s.ExtraItems) | ForEach-Object {
+                if ($_) { Get-PathMovedAside $_ $stage $aside } else { $_ } })
+
+            # An entry whose own files were in there is repointed too, and marked
+            # so the copy below can put the interface's record straight once they
+            # have a new home. Without that the game list still names a path in a
+            # folder that is about to be deleted, and the NEXT build fails on a
+            # file nobody moved.
+            foreach ($g in $games) {
+                if (-not (Test-SubPath $g.Folder $stage)) { continue }
+                $g.Folder     = Get-PathMovedAside $g.Folder     $stage $aside
+                $g.ManualPath = Get-PathMovedAside $g.ManualPath $stage $aside
+                $g.ExtrasPath = Get-PathMovedAside $g.ExtrasPath $stage $aside
+                $g.SetupExe   = New-Object System.IO.FileInfo (Get-PathMovedAside $g.SetupExe.FullName $stage $aside)
+                $g.Files      = @(@($g.Files) | ForEach-Object { New-Object System.IO.FileInfo (Get-PathMovedAside $_.FullName $stage $aside) })
+                $g.Restaged   = $true
+                & $log "  kept the installer for $($g.GameName)"
+            }
         }
+        & $log "Preparing staging folder..."
         New-Item -ItemType Directory -Force -Path $stage,"$stage\AUTORUN" | Out-Null
 
         # Where each entry goes is Get-DiscEntryFolder's decision, not this loop's -
@@ -1804,6 +1830,22 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
                     Clear-ReadOnly $md; Copy-Item -LiteralPath $g.ManualPath -Destination $md -Force; Clear-ReadOnly $md
                     & $log "    manual for $($g.GameName): $([IO.Path]::GetFileName($g.ManualPath))"
                 }
+            }
+
+            # This entry came out of the folder that was set aside, so the copy
+            # just made is the only one that survives the cleanup at the end.
+            # Point the interface's own record at it, or the list still names a
+            # file that is about to stop existing.
+            if ($g.Restaged) {
+                $g.Folder   = $destDir
+                $g.SetupExe = New-Object System.IO.FileInfo (Join-Path $destDir $g.SetupExe.Name)
+                $g.Files    = @(@($g.Files) | ForEach-Object { New-Object System.IO.FileInfo (Join-Path $destDir $_.Name) })
+                if ($g.ManualPath -or $g.ExtrasPath) {
+                    $gx2 = Join-Path $stage (Get-DiscEntryExtras $games $gi)
+                    if ($g.ManualPath) { $g.ManualPath = Join-Path $gx2 ([IO.Path]::GetFileName($g.ManualPath)) }
+                    if ($g.ExtrasPath) { $g.ExtrasPath = $gx2 }
+                }
+                $g.Remove('Restaged')
             }
         }
     }
