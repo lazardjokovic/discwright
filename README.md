@@ -192,3 +192,5 @@ MIT. See [LICENSE](LICENSE).
 DiscWright is an independent hobby project. It is **not affiliated with, endorsed by, or connected to GOG.com, GOG sp. z o.o., or CD PROJEKT**. "GOG" is their trademark and is used here only to describe what the tool reads.
 
 It works with GOG offline installers because those installers are DRM-free by design — that is GOG's whole proposition, and it is the only reason a tool like this can exist. DiscWright circumvents nothing. Use it with games you own, to make copies for yourself.
+
+Game names, logos and artwork shown in this README are the property of their respective owners, and appear only to demonstrate what the tool does.
