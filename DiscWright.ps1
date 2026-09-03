@@ -2899,9 +2899,15 @@ function Update-GameList {
 function Update-GameButtons {
     $sel = ($lvGames.SelectedIndices.Count -gt 0)
     $btnGameDel.Enabled  = $sel
-    # Change... offers "make this an add-on of ___", which needs something to be
-    # an add-on of. With one entry on the disc there is no such thing.
-    $btnGameEdit.Enabled = $sel -and (@($state.Games).Count -gt 1)
+    # Change... used to want two entries, because its other question is "make this
+    # an add-on of ___" and with one entry there is nothing to be an add-on of.
+    # But the name on the menu is edited in the same dialog, and one game is the
+    # ordinary disc - so that guard made the only route to a name unreachable
+    # exactly when it was most likely to be wanted, and the disc label seeds from
+    # the name, so the installer's raw ProductName reached the drive with no way
+    # to correct it. The dialog greys the add-on choice by itself when there is
+    # no candidate parent, which is the part that actually needed a second entry.
+    $btnGameEdit.Enabled = $sel
     # An add-on has to belong to a game, so there is nothing to add one to until
     # a game is on the disc.
     $btnAddOn.Enabled    = (@($state.Games | Where-Object { $_ -and $_.Kind -ne 'AddOn' }).Count -gt 0)
@@ -2927,7 +2933,7 @@ function Show-EntryKindDialog([int]$index) {
     $dlg.Text='Entry on the disc'; $dlg.Font=$form.Font
     $dlg.FormBorderStyle='FixedDialog'; $dlg.MaximizeBox=$false; $dlg.MinimizeBox=$false
     $dlg.StartPosition='CenterParent'; $dlg.ShowInTaskbar=$false
-    $dlg.ClientSize=New-Object System.Drawing.Size(480,292)
+    $dlg.ClientSize=New-Object System.Drawing.Size(480,322)
 
     $l=New-Object System.Windows.Forms.Label
     $l.Text='How should this installer appear on the disc?'
@@ -2946,19 +2952,30 @@ function Show-EntryKindDialog([int]$index) {
     $txtName.Text=[string]$me.GameName
     $dlg.Controls.Add($txtName)
 
+    # The way back. Editing the name is the whole point of the box, but until now
+    # there was no undo for editing it badly - and nothing on the disc still shows
+    # what the installer originally said. MatchName is that string: set once when
+    # the entry is detected and never written again, so it is the installer's
+    # ProductName for a game and the name read off the filename for an add-on.
+    # It is blank only when the installer has gone missing since.
+    $detected = [string]$me.MatchName
+    $btnReset=New-Object System.Windows.Forms.Button; $btnReset.Text='Use the detected name'
+    $btnReset.Location=New-Object System.Drawing.Point(140,74); $btnReset.Size=New-Object System.Drawing.Size(170,24)
+    $dlg.Controls.Add($btnReset)
+
     $rbGame=New-Object System.Windows.Forms.RadioButton
     $rbGame.Text='A game of its own'
-    $rbGame.Location=New-Object System.Drawing.Point(20,85); $rbGame.Size=New-Object System.Drawing.Size(440,22)
+    $rbGame.Location=New-Object System.Drawing.Point(20,115); $rbGame.Size=New-Object System.Drawing.Size(440,22)
     $dlg.Controls.Add($rbGame)
 
     $rbAdd=New-Object System.Windows.Forms.RadioButton
     $rbAdd.Text='An add-on (DLC, expansion, patch, mod) for:'
-    $rbAdd.Location=New-Object System.Drawing.Point(20,113); $rbAdd.Size=New-Object System.Drawing.Size(440,22)
+    $rbAdd.Location=New-Object System.Drawing.Point(20,143); $rbAdd.Size=New-Object System.Drawing.Size(440,22)
     $dlg.Controls.Add($rbAdd)
 
     $cmb=New-Object System.Windows.Forms.ComboBox
     $cmb.DropDownStyle='DropDownList'
-    $cmb.Location=New-Object System.Drawing.Point(40,139); $cmb.Size=New-Object System.Drawing.Size(420,24)
+    $cmb.Location=New-Object System.Drawing.Point(40,169); $cmb.Size=New-Object System.Drawing.Size(420,24)
     foreach ($c in $candidates) { [void]$cmb.Items.Add($c.Name) }
     $dlg.Controls.Add($cmb)
 
@@ -2967,26 +2984,26 @@ function Show-EntryKindDialog([int]$index) {
     # built before this did for every game on it.
     $lblMan=New-Object System.Windows.Forms.Label
     $lblMan.Text='Its own manual:'
-    $lblMan.Location=New-Object System.Drawing.Point(20,175); $lblMan.Size=New-Object System.Drawing.Size(115,20)
+    $lblMan.Location=New-Object System.Drawing.Point(20,205); $lblMan.Size=New-Object System.Drawing.Size(115,20)
     $dlg.Controls.Add($lblMan)
     $txtMan=New-Object System.Windows.Forms.TextBox
-    $txtMan.Location=New-Object System.Drawing.Point(140,173); $txtMan.Size=New-Object System.Drawing.Size(200,24)
+    $txtMan.Location=New-Object System.Drawing.Point(140,203); $txtMan.Size=New-Object System.Drawing.Size(200,24)
     $txtMan.Text=[string]$me.ManualPath
     $dlg.Controls.Add($txtMan)
     $btnMan=New-Object System.Windows.Forms.Button; $btnMan.Text='Browse...'
-    $btnMan.Location=New-Object System.Drawing.Point(348,172); $btnMan.Size=New-Object System.Drawing.Size(100,24)
+    $btnMan.Location=New-Object System.Drawing.Point(348,202); $btnMan.Size=New-Object System.Drawing.Size(100,24)
     $dlg.Controls.Add($btnMan)
 
     $lblExt=New-Object System.Windows.Forms.Label
     $lblExt.Text='Its own extras:'
-    $lblExt.Location=New-Object System.Drawing.Point(20,205); $lblExt.Size=New-Object System.Drawing.Size(115,20)
+    $lblExt.Location=New-Object System.Drawing.Point(20,235); $lblExt.Size=New-Object System.Drawing.Size(115,20)
     $dlg.Controls.Add($lblExt)
     $txtExt=New-Object System.Windows.Forms.TextBox
-    $txtExt.Location=New-Object System.Drawing.Point(140,203); $txtExt.Size=New-Object System.Drawing.Size(200,24)
+    $txtExt.Location=New-Object System.Drawing.Point(140,233); $txtExt.Size=New-Object System.Drawing.Size(200,24)
     $txtExt.Text=[string]$me.ExtrasPath
     $dlg.Controls.Add($txtExt)
     $btnExt=New-Object System.Windows.Forms.Button; $btnExt.Text='Browse...'
-    $btnExt.Location=New-Object System.Drawing.Point(348,202); $btnExt.Size=New-Object System.Drawing.Size(100,24)
+    $btnExt.Location=New-Object System.Drawing.Point(348,232); $btnExt.Size=New-Object System.Drawing.Size(100,24)
     $dlg.Controls.Add($btnExt)
 
     $btnMan.Add_Click({
@@ -3009,16 +3026,18 @@ function Show-EntryKindDialog([int]$index) {
         if ($d.ShowDialog() -eq 'OK') { $txtExt.Text = $d.SelectedPath }
     }.GetNewClosure())
 
+    $btnReset.Add_Click({ $txtName.Text = $detected }.GetNewClosure())
+
     $note=New-Object System.Windows.Forms.Label
     $note.ForeColor=[System.Drawing.Color]::DimGray
-    $note.Location=New-Object System.Drawing.Point(20,233); $note.Size=New-Object System.Drawing.Size(440,20)
+    $note.Location=New-Object System.Drawing.Point(20,263); $note.Size=New-Object System.Drawing.Size(440,20)
     $dlg.Controls.Add($note)
 
     $ok=New-Object System.Windows.Forms.Button; $ok.Text='OK'
-    $ok.Location=New-Object System.Drawing.Point(295,258); $ok.Size=New-Object System.Drawing.Size(80,26)
+    $ok.Location=New-Object System.Drawing.Point(295,288); $ok.Size=New-Object System.Drawing.Size(80,26)
     $ok.DialogResult='OK'; $dlg.Controls.Add($ok)
     $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'
-    $cancel.Location=New-Object System.Drawing.Point(385,258); $cancel.Size=New-Object System.Drawing.Size(80,26)
+    $cancel.Location=New-Object System.Drawing.Point(385,288); $cancel.Size=New-Object System.Drawing.Size(80,26)
     $cancel.DialogResult='Cancel'; $dlg.Controls.Add($cancel)
     $dlg.AcceptButton=$ok; $dlg.CancelButton=$cancel
 
@@ -3029,6 +3048,9 @@ function Show-EntryKindDialog([int]$index) {
         $cmb.Enabled = $rbAdd.Checked
         $ok.Enabled  = ((-not $rbAdd.Checked) -or ($cmb.SelectedIndex -ge 0)) -and
                        (-not [string]::IsNullOrWhiteSpace($txtName.Text))
+        # Dead when there is nothing to go back to, or when the box already holds
+        # it - so the button itself says whether the name has been changed.
+        $btnReset.Enabled = $detected -and ($txtName.Text.Trim() -ne $detected)
     }.GetNewClosure()
     $rbGame.Add_CheckedChanged($sync); $rbAdd.Add_CheckedChanged($sync)
     $cmb.Add_SelectedIndexChanged($sync); $txtName.Add_TextChanged($sync)

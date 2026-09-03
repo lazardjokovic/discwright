@@ -361,6 +361,45 @@ function Get-BoxAfter {
     return $best
 }
 
+function Get-NameBox {
+    <#
+    .SYNOPSIS
+        The "Name on the menu" box in the entry dialog.
+
+    .DESCRIPTION
+        Found by where it sits rather than by its position in the enumeration,
+        for the reason Get-BoxAfter spells out: UI Automation enumerates by
+        layout, not by creation order, so "the child after the label" starts
+        returning something else the moment a control is added to the dialog.
+        Adding the reset button beside this box was exactly that change.
+
+        Unlike the numbered steps on the main form, whose input sits on the row
+        BELOW the label, this box sits on the same row to the right of it.
+
+        A WinForms text box reports its contents as its accessible name, so what
+        this returns can be read as well as typed into.
+    #>
+    param($Dlg)
+    $kids = $Dlg.FindAll($script:UiScope::Children, $script:UiAny)
+    $label = $null
+    for ($i = 0; $i -lt $kids.Count; $i++) {
+        try { if ($kids.Item($i).Current.Name -like 'Name on the menu*') { $label = $kids.Item($i); break } } catch {}
+    }
+    if (-not $label) { return $null }
+    $lr = $label.Current.BoundingRectangle
+    for ($i = 0; $i -lt $kids.Count; $i++) {
+        try {
+            $c = $kids.Item($i)
+            if ($c.Current.ClassName -notmatch '\.EDIT\.') { continue }
+            $r = $c.Current.BoundingRectangle
+            if ($r.Left -le $lr.Left) { continue }
+            if ([Math]::Abs($r.Top - $lr.Top) -gt 12) { continue }
+            return $c
+        } catch {}
+    }
+    return $null
+}
+
 function Get-StatusText {
     <#  .SYNOPSIS
         The line under the installer list. It is the only readable proof of what
@@ -592,6 +631,6 @@ function Clear-AllEntries {
 
 Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess, Wait-AnyWinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
-    Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
+    Send-Keys, Get-BoxAfter, Get-NameBox, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
     Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,
     Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton

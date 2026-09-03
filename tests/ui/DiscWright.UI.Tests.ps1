@@ -485,13 +485,7 @@ Describe 'Turning an entry into an add-on through the Change dialog' -Tag 'UI' -
 
     It 'renames the entry and closes' {
         $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
-        # The name box sits directly after its label in the dialog's child order.
-        $kids = $dlg.FindAll([System.Windows.Automation.TreeScope]::Children,
-                             [System.Windows.Automation.Condition]::TrueCondition)
-        $box = $null
-        for ($i = 0; $i -lt $kids.Count; $i++) {
-            try { if ($kids.Item($i).Current.Name -like 'Name on the menu*') { $box = $kids.Item($i + 1); break } } catch {}
-        }
+        $box = Get-NameBox $dlg
         $box | Should -Not -BeNullOrEmpty
         Set-CtlText -Ctl $box -Text 'Renamed By Test'
         Invoke-Ctl -Ctl (Find-Ctl $dlg 'OK' 5) -SettleMs 1200
@@ -501,6 +495,71 @@ Describe 'Turning an entry into an add-on through the Change dialog' -Tag 'UI' -
     It 'leaves the disc with the same number of entries' {
         # Renaming is not adding or removing.
         Get-EntryCount $script:Win | Should -Be 3
+    }
+}
+
+Describe 'Renaming the only game on a disc' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The one-game disc is the case the README leads with, and it was the one
+    # case where the name could not be reached: the dialog holding it is opened
+    # by Change..., and Change... wanted a second entry before it would light up.
+    # This project has a single game in it.
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:FancyOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        # What the installer reported, which is what the reset goes back to.
+        $script:Detected = (Get-GameInfo $script:GameA).GameName
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'holds one entry, which is the case that used to lock the dialog' {
+        Get-EntryCount $script:Win | Should -Be 1
+    }
+
+    It 'wakes Change... once that single row is selected' {
+        Select-ListRow -Win $script:Win -Index 0
+        Test-CtlEnabled $script:Win 'Change*' | Should -BeTrue
+    }
+
+    It 'opens, and greys the add-on choice for want of a game to attach to' {
+        # The half of the old rule that was right, enforced where it belongs:
+        # inside the dialog, on the one control it applies to.
+        Invoke-CtlNamed $script:Win 'Change*' | Out-Null
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 8
+        $dlg | Should -Not -BeNullOrEmpty
+        (Find-Ctl $dlg 'An add-on*' 5).Current.IsEnabled | Should -BeFalse
+        Save-WindowShot $script:Win (Join-Path $script:ShotDir 'change-dialog-one-game.png')
+    }
+
+    It 'starts with the reset greyed, the name being the detected one already' {
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        (Get-NameBox $dlg).Current.Name | Should -Be $script:Detected
+        (Find-Ctl $dlg 'Use the detected name' 5).Current.IsEnabled | Should -BeFalse
+    }
+
+    It 'wakes the reset as soon as the name is something else' {
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        Set-CtlText -Ctl (Get-NameBox $dlg) -Text 'Something Else Entirely'
+        (Find-Ctl $dlg 'Use the detected name' 5).Current.IsEnabled | Should -BeTrue
+    }
+
+    It 'puts the name back to what the installer reported' {
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        Invoke-Ctl -Ctl (Find-Ctl $dlg 'Use the detected name' 5) -SettleMs 600
+        (Get-NameBox $dlg).Current.Name | Should -Be $script:Detected
+        # And goes dead again, having nothing left to undo.
+        (Find-Ctl $dlg 'Use the detected name' 5).Current.IsEnabled | Should -BeFalse
+    }
+
+    It 'closes without having added or removed anything' {
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        Invoke-Ctl -Ctl (Find-Ctl $dlg 'Cancel' 5) -SettleMs 1000
+        (Find-Ctl $script:Win 'Entry on the disc' 2) | Should -BeNullOrEmpty
+        Get-EntryCount $script:Win | Should -Be 1
     }
 }
 

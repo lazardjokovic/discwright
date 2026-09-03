@@ -7,6 +7,35 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Added
+
+- **A way back to the name the installer reported.** *Name on the menu* invites you
+  to improve on what GOG put in the file, and until now there was no undo for
+  improving it wrongly - nothing on screen still showed what the installer had
+  said. A **Use the detected name** button beside the box puts it back: the
+  installer's own ProductName for a game, the name read off the filename for an
+  add-on. It is the string the menu already matches against, kept since the entry
+  was first read and never written over, so nothing new is stored and older
+  project files need no migration. The button is greyed while the box already
+  holds that name, so it also says whether the name has been changed at all.
+
+### Fixed
+
+- **The name on the menu can be edited on a disc with one game.** That dialog is
+  the only place a name can be changed, and it opens from **Change...** - which
+  wanted two entries on the disc before it would light up, because its other
+  question is which game an add-on belongs to and one entry has nothing to be an
+  add-on of. So on the ordinary disc, the one the whole tool is named for, the
+  name could not be reached at all: the way to fix a title was to add a game you
+  did not want, rename, then remove it again. Meanwhile the disc label seeds
+  itself from that name, so an installer's raw ProductName - trademark signs,
+  edition suffixes and all - went to the drive with nothing offering to correct
+  it. Change... now opens whenever a row is selected, and the half of the old
+  rule that was right is enforced where it belongs: the dialog greys its own
+  add-on choice when there is no other game to attach to, and says why.
+
 ## [0.5.0] — 2026-09-01
 
 ### Changed
