@@ -15,28 +15,34 @@ feature only creates pressure to cram things in to justify it.
 
 ## Next
 
-**Let a game be renamed for the menu.** Asked for by the same person who found the
-question marks, once the characters were arriving intact and the name was worth
-reading. The name today is the installer's own `ProductName`, which is what GOG put
-in the file rather than what anyone would choose - full of trademark symbols,
-subtitles and edition suffixes, and sometimes just wrong.
-
-This turned out to be half built and half broken, so what is left is smaller and
-sharper than it first looked.
-
-The renaming itself has shipped since multi-game discs arrived: the entry dialog's
-**Name on the menu** box edits the name, the project file keeps it, and it already
-reaches the folder on the disc. What was missing is the separation this entry used to
-claim was already there. The menu matched on whatever was typed, so rewording a title
-stopped Play finding the installed copy - `Install` still worked, `Play` stayed grey,
-and nothing on screen said why. A match name that stays GOG's, fixed in 0.4.4, is what
-made the rest of this entry true.
-
-What is genuinely still open is smaller: the rename is only reachable through the entry
-dialog, which is two clicks away and named for something else, and there is no way to
-put a name back to what the installer said.
+Nothing is queued. The entry that sat here has shipped, and everything below is
+either done or waiting for somebody to ask again - [Issues](../../issues) is where
+that happens, and a request other people turn up and agree with moves up.
 
 ## Delivered
+
+**A game renamed for the menu** — asked for by the same person who found the
+question marks, once the characters were arriving intact and the name was worth
+reading. The name a disc starts with is the installer's own `ProductName`, which is
+what GOG put in the file rather than what anyone would choose: trademark symbols,
+subtitles, edition suffixes, and sometimes simply wrong.
+
+It arrived in three pieces. The **Name on the menu** box came with multi-game discs
+and has always edited the name, kept it in the project file and carried it to the
+folder on the disc. 0.4.4 then gave an entry a match name of its own, because the
+menu had been searching the GOG registry for whatever was typed - so rewording a
+title left `Install` working and `Play` grey, with nothing on screen saying why.
+
+The last piece was worse than this entry used to admit. The box was not two clicks
+away, it was out of reach: **Change...** is the only thing that opens the dialog
+holding it, and it wanted a second entry on the disc before it would light up. On a
+one-game disc - the ordinary disc, the one the README leads with - a name could only
+be corrected by adding a game you did not want and removing it afterwards, while the
+disc label went on seeding itself from that name. The guard has gone, and the dialog
+greys its own add-on choice when there is nothing to attach to, which is the half of
+it that ever needed a second entry. **Use the detected name**, beside the box, is the
+undo that was never there: it reads the match name, which was already being kept and
+never written over, so nothing new is stored.
 
 **A game's add-ons filed under the game** — shipped in 0.5.0, asked for by someone
 building a multi-game disc. Every entry used to take its own numbered folder, so a
