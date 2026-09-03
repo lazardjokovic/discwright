@@ -38,11 +38,11 @@ put a name back to what the installer said.
 
 ## Delivered
 
-**A game's add-ons filed under the game** — asked for by someone building a
-multi-game disc; merged, and in the next release. Every entry used to take its own
-numbered folder, so a game and its DLC sat as siblings and eight top-level folders
-said nothing about what belonged to what. An add-on now lives in `Add-ons\` inside
-its game's folder, beside the manual and extras that were already filed there.
+**A game's add-ons filed under the game** — shipped in 0.5.0, asked for by someone
+building a multi-game disc. Every entry used to take its own numbered folder, so a
+game and its DLC sat as siblings and eight top-level folders said nothing about what
+belonged to what. An add-on now lives in `Add-ons\` inside its game's folder, beside
+the manual and extras that were already filed there.
 
 The two things this entry said had to be settled first were settled. Add-ons keep
 numbers of their own inside the folder, because the number is the menu order and
@@ -61,6 +61,11 @@ than with the disc.
 The one thing it does not cover is a mod or an installer from somewhere other than GOG
 being the *game* on a disc. Add-ons accept any `.exe`, but detecting a game still means
 finding a `setup_*.exe` — see *Installers that are not from GOG* under Considering.
+
+**A presentation site** — live at [discwright.com](https://discwright.com). Somewhere
+plainer than a README to read before deciding to run an unsigned script: what a disc
+does when you put it in, what the menu looks like, and where to get it. The README
+stays the technical one.
 
 ## Later
 
@@ -92,8 +97,6 @@ of the installer itself, may be the better trade.
   might justify the complexity. A music player will not.
 - **Menu themes.** The menu is one layout with configurable artwork. Named presets would
   let a disc look like its own era instead of looking like DiscWright.
-- **A presentation site.** Mainly to give people something plainer than a README to read
-  before deciding to run an unsigned script.
 - **PowerShell 7.** The one known blocker is gone: the ISO builder no longer compiles
   with `/unsafe`, so it no longer needs `Add-Type -CompilerParameters`. Whether anything
   else stops it — WinForms, the COM interop, apartment state — has not been tested, and
