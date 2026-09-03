@@ -35,6 +35,8 @@ No installation. No dependencies. It is a single PowerShell script.
 
 There is nothing to install. DiscWright is a folder of scripts that runs from wherever you put it.
 
+[**discwright.com**](https://discwright.com) is the same thing with pictures, if you would rather send someone a page than a repo.
+
 1. **Download it.** [Releases](../../releases) for a fixed version, or **Code → Download ZIP** for the latest.
 2. **Unblock the ZIP *before* extracting.** Right-click it → **Properties** → tick **Unblock** → OK. Windows tags everything that came from the internet, and its built-in extractor copies that tag onto every file inside. Clearing it on the ZIP clears the whole folder in one go; skip this and you get a security prompt on every launch, and some setups will refuse to run the script at all.
 3. **Extract it anywhere.** Desktop, Documents, a USB stick. The launchers use relative paths, so there is no fixed install location and nothing to add to PATH.
