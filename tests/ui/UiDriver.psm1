@@ -361,6 +361,55 @@ function Get-BoxAfter {
     return $best
 }
 
+function Get-CtlOverlaps {
+    <#
+    .SYNOPSIS
+        Sibling controls whose rectangles run through each other. Returns the
+        child count and a list of readable clashes, empty when the layout is
+        clean.
+
+    .DESCRIPTION
+        The form and the entry dialog are both laid out in absolute pixels, so
+        tightening one row can push a control through its neighbour and nothing
+        complains - a preview box was moved onto its own Browse button exactly
+        that way. Rectangles are what UI Automation reports accurately, so they
+        are what gets checked.
+
+        Containment is allowed: a group box legitimately contains other things,
+        and only siblings that merely collide are a fault. Tooltips are skipped -
+        a floating window whose whole job is to cover what the pointer rests on,
+        which shows up as a child all the same.
+    #>
+    param($Root)
+    $kids = $Root.FindAll($script:UiScope::Children, $script:UiAny)
+    $boxes = @()
+    for ($i = 0; $i -lt $kids.Count; $i++) {
+        try {
+            $c = $kids.Item($i); $r = $c.Current.BoundingRectangle
+            if ($c.Current.ClassName -match 'tooltips_class') { continue }
+            if ($r.Width -gt 0 -and $r.Height -gt 0) {
+                $boxes += [pscustomobject]@{ Name = $c.Current.Name; R = $r }
+            }
+        } catch {}
+    }
+    $clashes = @()
+    for ($i = 0; $i -lt $boxes.Count; $i++) {
+        for ($j = $i + 1; $j -lt $boxes.Count; $j++) {
+            $a = $boxes[$i].R; $b = $boxes[$j].R
+            $overlapW = [Math]::Min($a.Right, $b.Right) - [Math]::Max($a.Left, $b.Left)
+            $overlapH = [Math]::Min($a.Bottom, $b.Bottom) - [Math]::Max($a.Top, $b.Top)
+            if ($overlapW -le 2 -or $overlapH -le 2) { continue }
+            $aInB = ($a.Left -ge $b.Left - 1 -and $a.Right -le $b.Right + 1 -and
+                     $a.Top -ge $b.Top - 1 -and $a.Bottom -le $b.Bottom + 1)
+            $bInA = ($b.Left -ge $a.Left - 1 -and $b.Right -le $a.Right + 1 -and
+                     $b.Top -ge $a.Top - 1 -and $b.Bottom -le $a.Bottom + 1)
+            if ($aInB -or $bInA) { continue }
+            $clashes += "'$($boxes[$i].Name)' and '$($boxes[$j].Name)' overlap by ${overlapW}x${overlapH}px"
+        }
+    }
+    return [pscustomobject]@{ Count = $boxes.Count; Clashes = @($clashes) }
+}
+
 function Get-NameBox {
     <#
     .SYNOPSIS
@@ -631,6 +680,6 @@ function Clear-AllEntries {
 
 Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess, Wait-AnyWinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
-    Send-Keys, Get-BoxAfter, Get-NameBox, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
+    Send-Keys, Get-BoxAfter, Get-NameBox, Get-CtlOverlaps, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
     Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,
     Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton
