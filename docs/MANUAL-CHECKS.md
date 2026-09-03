@@ -1,6 +1,6 @@
 # Manual checks before a release
 
-The automated suite is 374 logic tests and 66 window tests, and it runs in about
+The automated suite is 374 logic tests and 76 window tests, and it runs in about
 four minutes:
 
 ```
@@ -182,6 +182,9 @@ Do not re-add any of these as a manual check.
 | Folder numbers count games, and add-ons renumber inside each | *Filing an add-on under the game it belongs to* |
 | A single game keeps the flat disc root, add-ons beside it | same |
 | A promoted orphan moves back out to the top level | same |
+| Change... opens on a one-game disc, which is where the name lives | *Renaming a game for the menu* |
+| The add-on choice greys itself when there is no game to attach to | same |
+| The name goes back to the one the installer reported | same |
 | A build driven from the window, start to ISO on disk | *The form while a real build runs* |
 | The form locks during a build and restores what was enabled | *Locking the form while a build runs* |
 

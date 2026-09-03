@@ -361,6 +361,94 @@ function Get-BoxAfter {
     return $best
 }
 
+function Get-CtlOverlaps {
+    <#
+    .SYNOPSIS
+        Sibling controls whose rectangles run through each other. Returns the
+        child count and a list of readable clashes, empty when the layout is
+        clean.
+
+    .DESCRIPTION
+        The form and the entry dialog are both laid out in absolute pixels, so
+        tightening one row can push a control through its neighbour and nothing
+        complains - a preview box was moved onto its own Browse button exactly
+        that way. Rectangles are what UI Automation reports accurately, so they
+        are what gets checked.
+
+        Containment is allowed: a group box legitimately contains other things,
+        and only siblings that merely collide are a fault. Tooltips are skipped -
+        a floating window whose whole job is to cover what the pointer rests on,
+        which shows up as a child all the same.
+    #>
+    param($Root)
+    $kids = $Root.FindAll($script:UiScope::Children, $script:UiAny)
+    $boxes = @()
+    for ($i = 0; $i -lt $kids.Count; $i++) {
+        try {
+            $c = $kids.Item($i); $r = $c.Current.BoundingRectangle
+            if ($c.Current.ClassName -match 'tooltips_class') { continue }
+            if ($r.Width -gt 0 -and $r.Height -gt 0) {
+                $boxes += [pscustomobject]@{ Name = $c.Current.Name; R = $r }
+            }
+        } catch {}
+    }
+    $clashes = @()
+    for ($i = 0; $i -lt $boxes.Count; $i++) {
+        for ($j = $i + 1; $j -lt $boxes.Count; $j++) {
+            $a = $boxes[$i].R; $b = $boxes[$j].R
+            $overlapW = [Math]::Min($a.Right, $b.Right) - [Math]::Max($a.Left, $b.Left)
+            $overlapH = [Math]::Min($a.Bottom, $b.Bottom) - [Math]::Max($a.Top, $b.Top)
+            if ($overlapW -le 2 -or $overlapH -le 2) { continue }
+            $aInB = ($a.Left -ge $b.Left - 1 -and $a.Right -le $b.Right + 1 -and
+                     $a.Top -ge $b.Top - 1 -and $a.Bottom -le $b.Bottom + 1)
+            $bInA = ($b.Left -ge $a.Left - 1 -and $b.Right -le $a.Right + 1 -and
+                     $b.Top -ge $a.Top - 1 -and $b.Bottom -le $a.Bottom + 1)
+            if ($aInB -or $bInA) { continue }
+            $clashes += "'$($boxes[$i].Name)' and '$($boxes[$j].Name)' overlap by ${overlapW}x${overlapH}px"
+        }
+    }
+    return [pscustomobject]@{ Count = $boxes.Count; Clashes = @($clashes) }
+}
+
+function Get-NameBox {
+    <#
+    .SYNOPSIS
+        The "Name on the menu" box in the entry dialog.
+
+    .DESCRIPTION
+        Found by where it sits rather than by its position in the enumeration,
+        for the reason Get-BoxAfter spells out: UI Automation enumerates by
+        layout, not by creation order, so "the child after the label" starts
+        returning something else the moment a control is added to the dialog.
+        Adding the reset button beside this box was exactly that change.
+
+        Unlike the numbered steps on the main form, whose input sits on the row
+        BELOW the label, this box sits on the same row to the right of it.
+
+        A WinForms text box reports its contents as its accessible name, so what
+        this returns can be read as well as typed into.
+    #>
+    param($Dlg)
+    $kids = $Dlg.FindAll($script:UiScope::Children, $script:UiAny)
+    $label = $null
+    for ($i = 0; $i -lt $kids.Count; $i++) {
+        try { if ($kids.Item($i).Current.Name -like 'Name on the menu*') { $label = $kids.Item($i); break } } catch {}
+    }
+    if (-not $label) { return $null }
+    $lr = $label.Current.BoundingRectangle
+    for ($i = 0; $i -lt $kids.Count; $i++) {
+        try {
+            $c = $kids.Item($i)
+            if ($c.Current.ClassName -notmatch '\.EDIT\.') { continue }
+            $r = $c.Current.BoundingRectangle
+            if ($r.Left -le $lr.Left) { continue }
+            if ([Math]::Abs($r.Top - $lr.Top) -gt 12) { continue }
+            return $c
+        } catch {}
+    }
+    return $null
+}
+
 function Get-StatusText {
     <#  .SYNOPSIS
         The line under the installer list. It is the only readable proof of what
@@ -592,6 +680,6 @@ function Clear-AllEntries {
 
 Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess, Wait-AnyWinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
-    Send-Keys, Get-BoxAfter, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
+    Send-Keys, Get-BoxAfter, Get-NameBox, Get-CtlOverlaps, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
     Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,
     Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton

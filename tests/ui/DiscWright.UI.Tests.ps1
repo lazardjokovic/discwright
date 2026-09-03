@@ -200,47 +200,12 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
     }
 
     It 'has no two controls sitting on top of each other' {
-        # The form is laid out in absolute pixels, so tightening one row can put
-        # a control through its neighbour and nothing complains - a preview box
-        # was moved onto its own Browse button exactly that way. Rectangles are
-        # what UI Automation reports accurately, so they are what gets checked.
-        $kids = $script:Win.FindAll([System.Windows.Automation.TreeScope]::Children,
-                                    [System.Windows.Automation.Condition]::TrueCondition)
-        $boxes = @()
-        for ($i = 0; $i -lt $kids.Count; $i++) {
-            try {
-                $c = $kids.Item($i); $r = $c.Current.BoundingRectangle
-                # A tooltip is a floating window that appears over whatever the
-                # pointer is resting on, and covering things is its entire job.
-                # It shows up as a child in the automation tree all the same, so
-                # if the mouse happens to be over BUILD ISO when this runs it
-                # reports a collision with the log box that is not a fault.
-                if ($c.Current.ClassName -match 'tooltips_class') { continue }
-                if ($r.Width -gt 0 -and $r.Height -gt 0) {
-                    $boxes += [pscustomobject]@{ Name = $c.Current.Name; R = $r }
-                }
-            } catch {}
-        }
-        $boxes.Count | Should -BeGreaterThan 10 -Because 'the window should have plenty of controls'
-
-        $clashes = @()
-        for ($i = 0; $i -lt $boxes.Count; $i++) {
-            for ($j = $i + 1; $j -lt $boxes.Count; $j++) {
-                $a = $boxes[$i].R; $b = $boxes[$j].R
-                # A group box legitimately contains other things; only siblings
-                # that merely collide are a fault, so containment is allowed.
-                $overlapW = [Math]::Min($a.Right, $b.Right) - [Math]::Max($a.Left, $b.Left)
-                $overlapH = [Math]::Min($a.Bottom, $b.Bottom) - [Math]::Max($a.Top, $b.Top)
-                if ($overlapW -le 2 -or $overlapH -le 2) { continue }
-                $aInB = ($a.Left -ge $b.Left - 1 -and $a.Right -le $b.Right + 1 -and
-                         $a.Top -ge $b.Top - 1 -and $a.Bottom -le $b.Bottom + 1)
-                $bInA = ($b.Left -ge $a.Left - 1 -and $b.Right -le $a.Right + 1 -and
-                         $b.Top -ge $a.Top - 1 -and $b.Bottom -le $a.Bottom + 1)
-                if ($aInB -or $bInA) { continue }
-                $clashes += "'$($boxes[$i].Name)' and '$($boxes[$j].Name)' overlap by ${overlapW}x${overlapH}px"
-            }
-        }
-        $clashes.Count | Should -Be 0 -Because ($clashes -join '; ')
+        # If the mouse happens to rest over BUILD ISO while this runs, the
+        # tooltip is a child of the window like anything else - the helper skips
+        # it, because covering what the pointer is on is its entire job.
+        $lay = Get-CtlOverlaps $script:Win
+        $lay.Count | Should -BeGreaterThan 10 -Because 'the window should have plenty of controls'
+        $lay.Clashes.Count | Should -Be 0 -Because ($lay.Clashes -join '; ')
     }
 
     It 'leaves <_> greyed until there is something for it to act on' -ForEach @(
@@ -483,15 +448,25 @@ Describe 'Turning an entry into an add-on through the Change dialog' -Tag 'UI' -
         (Get-UnnamedCombo $dlg).Current.IsEnabled | Should -BeTrue
     }
 
+    It 'offers an add-on its detected name back, which came off the filename' {
+        # Every GOG patch reports the ProductName of the game it patches - all
+        # four Hollow Knight patches call themselves "Hollow Knight" - so an
+        # add-on is named from its filename instead. The reset has to go back to
+        # that, not to the installer's own idea of what it is called.
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        $was = (Get-AddOnInfo (Join-Path $script:GameB 'setup_second_game_2.0.exe')).GameName
+        (Get-NameBox $dlg).Current.Name | Should -Be $was
+        (Find-Ctl $dlg 'Use the detected name' 5).Current.IsEnabled | Should -BeFalse
+
+        Set-CtlText -Ctl (Get-NameBox $dlg) -Text 'Not What It Was Called'
+        (Find-Ctl $dlg 'Use the detected name' 5).Current.IsEnabled | Should -BeTrue
+        Invoke-Ctl -Ctl (Find-Ctl $dlg 'Use the detected name' 5) -SettleMs 600
+        (Get-NameBox $dlg).Current.Name | Should -Be $was
+    }
+
     It 'renames the entry and closes' {
         $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
-        # The name box sits directly after its label in the dialog's child order.
-        $kids = $dlg.FindAll([System.Windows.Automation.TreeScope]::Children,
-                             [System.Windows.Automation.Condition]::TrueCondition)
-        $box = $null
-        for ($i = 0; $i -lt $kids.Count; $i++) {
-            try { if ($kids.Item($i).Current.Name -like 'Name on the menu*') { $box = $kids.Item($i + 1); break } } catch {}
-        }
+        $box = Get-NameBox $dlg
         $box | Should -Not -BeNullOrEmpty
         Set-CtlText -Ctl $box -Text 'Renamed By Test'
         Invoke-Ctl -Ctl (Find-Ctl $dlg 'OK' 5) -SettleMs 1200
@@ -501,6 +476,93 @@ Describe 'Turning an entry into an add-on through the Change dialog' -Tag 'UI' -
     It 'leaves the disc with the same number of entries' {
         # Renaming is not adding or removing.
         Get-EntryCount $script:Win | Should -Be 3
+    }
+}
+
+Describe 'Renaming the only game on a disc' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The one-game disc is the case the README leads with, and it was the one
+    # case where the name could not be reached: the dialog holding it is opened
+    # by Change..., and Change... wanted a second entry before it would light up.
+    # This project has a single game in it.
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:FancyOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        # What the installer reported, which is what the reset goes back to.
+        $script:Detected = (Get-GameInfo $script:GameA).GameName
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'holds one entry, which is the case that used to lock the dialog' {
+        Get-EntryCount $script:Win | Should -Be 1
+    }
+
+    It 'wakes Change... once that single row is selected' {
+        Select-ListRow -Win $script:Win -Index 0
+        Test-CtlEnabled $script:Win 'Change*' | Should -BeTrue
+    }
+
+    It 'opens, and greys the add-on choice for want of a game to attach to' {
+        # The half of the old rule that was right, enforced where it belongs:
+        # inside the dialog, on the one control it applies to.
+        Invoke-CtlNamed $script:Win 'Change*' | Out-Null
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 8
+        $dlg | Should -Not -BeNullOrEmpty
+        (Find-Ctl $dlg 'An add-on*' 5).Current.IsEnabled | Should -BeFalse
+        Save-WindowShot $script:Win (Join-Path $script:ShotDir 'change-dialog-one-game.png')
+    }
+
+    It 'has no two controls sitting on top of each other either' {
+        # Making room for the reset button moved every row below it down by hand,
+        # in a dialog laid out in the same absolute pixels as the form - which is
+        # how a preview box once ended up on top of its own Browse button.
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        $lay = Get-CtlOverlaps $dlg
+        $lay.Count | Should -BeGreaterThan 8 -Because 'the dialog should have its controls'
+        $lay.Clashes.Count | Should -Be 0 -Because ($lay.Clashes -join '; ')
+    }
+
+    It 'starts with the reset greyed, the name being the detected one already' {
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        (Get-NameBox $dlg).Current.Name | Should -Be $script:Detected
+        (Find-Ctl $dlg 'Use the detected name' 5).Current.IsEnabled | Should -BeFalse
+    }
+
+    It 'wakes the reset as soon as the name is something else' {
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        Set-CtlText -Ctl (Get-NameBox $dlg) -Text 'Something Else Entirely'
+        (Find-Ctl $dlg 'Use the detected name' 5).Current.IsEnabled | Should -BeTrue
+    }
+
+    It 'puts the name back to what the installer reported' {
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        Invoke-Ctl -Ctl (Find-Ctl $dlg 'Use the detected name' 5) -SettleMs 600
+        (Get-NameBox $dlg).Current.Name | Should -Be $script:Detected
+        # And goes dead again, having nothing left to undo.
+        (Find-Ctl $dlg 'Use the detected name' 5).Current.IsEnabled | Should -BeFalse
+    }
+
+    It 'keeps the restored name when the dialog is accepted' {
+        # Restoring it into the box proves nothing on its own: OK is what writes
+        # it back to the entry, and a reset that did not survive OK would look
+        # identical up to this point. So it goes through OK and the dialog is
+        # reopened to read what was actually kept.
+        $dlg = Find-Ctl $script:Win 'Entry on the disc' 5
+        Invoke-Ctl -Ctl (Find-Ctl $dlg 'OK' 5) -SettleMs 1200
+        (Find-Ctl $script:Win 'Entry on the disc' 2) | Should -BeNullOrEmpty -Because 'OK closes it'
+
+        Invoke-CtlNamed $script:Win 'Change*' | Out-Null
+        $again = Find-Ctl $script:Win 'Entry on the disc' 8
+        (Get-NameBox $again).Current.Name | Should -Be $script:Detected
+        Invoke-Ctl -Ctl (Find-Ctl $again 'Cancel' 5) -SettleMs 1000
+    }
+
+    It 'has added and removed nothing along the way' {
+        Get-EntryCount $script:Win | Should -Be 1
     }
 }
 

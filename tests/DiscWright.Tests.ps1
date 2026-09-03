@@ -1757,8 +1757,16 @@ Describe 'Adding and removing entries in the list' {
         $script:lvGames.Items[1].Text | Should -Be '2'
     }
 
-    It 'greys Change... until there is something to be an add-on of' {
+    It 'greys Change... and Remove while no row is selected to act on' {
         # The standing rule: an option that cannot be used is not left clickable.
+        #
+        # This says nothing about the entry COUNT any more. Change... used to
+        # want two entries on the disc, because its other question is which game
+        # an add-on belongs to - but the name on the menu is edited in the same
+        # dialog, and one game is the ordinary disc, so that rule made the name
+        # unreachable in the commonest case. What is left is a selection rule,
+        # and whether a real selection lights the button is a question about
+        # wiring, so it is asked of the running window instead.
         $script:lvGames.Items.Clear()
         $script:state.Games = @()
         Update-GameList
