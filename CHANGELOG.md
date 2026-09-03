@@ -7,7 +7,7 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
-## [Unreleased]
+## [0.5.1] — 2026-09-03
 
 ### Added
 
@@ -524,7 +524,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/lazardjokovic/discwright/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/lazardjokovic/discwright/compare/v0.4.4...v0.5.0
 [0.4.4]: https://github.com/lazardjokovic/discwright/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/lazardjokovic/discwright/compare/v0.4.2...v0.4.3
