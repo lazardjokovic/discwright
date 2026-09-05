@@ -13,3 +13,7 @@ discproject.json
 # Pester output
 pester-results.xml
 tests/ui/shots/
+
+# Release artifacts from packaging/Build-Release.ps1 - built on demand and
+# attached to a GitHub release, never committed.
+build/
