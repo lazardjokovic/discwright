@@ -112,8 +112,10 @@ One game, and the installer sits at the root:
 
 ```
 E:\
-├─ autorun.inf              drive icon, drive label, menu launcher
+├─ autorun.inf              drive icon, drive label, menu launcher  (Windows)
+├─ .xdg-volume-info         drive icon and label                    (Linux)
 ├─ HollowKnight.ico         named after the disc, not "disc.ico" (see below)
+├─ HollowKnight.png         the same icon again, for Linux
 ├─ setup_hollow_knight_....exe
 ├─ AUTORUN\
 │   ├─ menu.hta             the menu itself
@@ -128,7 +130,9 @@ Two or more, and every entry moves into a numbered folder of its own:
 ```
 E:\
 ├─ autorun.inf
+├─ .xdg-volume-info
 ├─ MetroidvaniaNight.ico
+├─ MetroidvaniaNight.png
 ├─ AUTORUN\                 as above
 ├─ Games\
 │   ├─ 01 - Hollow Knight\
@@ -146,6 +150,14 @@ An add-on gets its own numbered folder like anything else — its `.bin` parts a
 The numbering is what makes the disc browsable by hand: it puts the folders in the same order as the menu. Names are folded to plain ASCII for the same reason the disc label is — a disc that is legible in every file manager is worth more than an exact title.
 
 The icon is named after the disc rather than a fixed `disc.ico` for a specific reason: Explorer caches icons **by file path**, so `E:\disc.ico` is the same cache key for every disc that ever passes through that drive letter. Swap discs and Explorer will happily redraw the previous game's icon. Naming it after the disc gives each one its own key.
+
+### The disc on a Linux machine
+
+Put one of these discs in a Linux box and it knows its own name and wears its own cover art, the same as it does in This PC. That is what `.xdg-volume-info` and the `.png` are for. Windows never looks at them; Linux never looks at `autorun.inf`; each reads the one it understands and ignores the other, so nothing is given up to gain it.
+
+What does **not** happen there is the menu. Linux disabled autorun for removable media deliberately, and no desktop will run a program off a disc you inserted — so `menu.hta` sits on the disc unopened, and the games are installed from the folders by hand. The icon and the label are the half that carries over.
+
+The image is written twice because it has to be. `gvfs` turns the `IconFile=` line into a file icon and hands it to GdkPixbuf, whose `.ico` support is meant for favicons rather than for the seven-frame icon Windows wants. Both come from the same source picture, so they cannot end up disagreeing about what the game looks like.
 
 ## Burning the ISO
 

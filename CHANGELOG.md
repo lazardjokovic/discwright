@@ -7,6 +7,25 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Added
+
+- **The disc knows its own name on Linux.** Every disc now carries a
+  `.xdg-volume-info` file and a `.png` copy of its icon beside the `autorun.inf`
+  and the `.ico` it already had. Insert it in a Linux machine and the drive shows
+  the game's title and cover art instead of a volume id, exactly as it does in
+  This PC. Windows never reads the new files and Linux never read the old ones,
+  so the two sit side by side and nothing about the Windows disc changes.
+
+  The menu does not carry over, and cannot: Linux disabled autorun for removable
+  media on purpose, and no desktop will run a program off an inserted disc. The
+  icon and the label are the half that travels.
+
+  The icon is written twice because `gvfs` hands `IconFile=` to GdkPixbuf, whose
+  `.ico` support is for favicons rather than for the seven-frame icon Explorer
+  wants. Both are built from the same source image, so they cannot disagree.
+
 ## [0.5.1] — 2026-09-03
 
 ### Added
