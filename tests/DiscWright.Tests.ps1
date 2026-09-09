@@ -690,8 +690,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 6' {
-            $script:PJson.Version | Should -Be 6
+        It 'declares schema version 7' {
+            $script:PJson.Version | Should -Be 7
         }
 
         It 'records which disc the set was planned for' {
@@ -3536,8 +3536,8 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
         }
 
-        It 'writes schema version 6' {
-            $script:RenameRaw.Version | Should -Be 6
+        It 'writes schema version 7' {
+            $script:RenameRaw.Version | Should -Be 7
         }
 
         It 'stores the registered name beside the chosen one' {
