@@ -1683,7 +1683,11 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # the single disc those projects always described.
         # Version 6 adds MatchName per entry. Absent in anything older, where the
         # name re-detected from the folder on open supplies it.
-        Version      = 6
+        # Version 7 adds LinuxInfo - whether the disc also carries its name and
+        # icon for Linux. Absent in anything older, which reads back as off, so
+        # reopening an old project and rebuilding produces the disc it produced
+        # before rather than quietly adding files to it.
+        Version      = 7
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -1726,6 +1730,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         ExtrasPath   = $s.ExtrasPath
         ExtraItems   = @($s.ExtraItems)
         MediaKey     = [string]$s.MediaKey
+        LinuxInfo    = [bool]$s.LinuxInfo
         OutDir       = $outDir
     }
     $o | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outDir $PROJECT_FILE) -Encoding UTF8
@@ -1769,6 +1774,7 @@ function Import-Project([string]$jsonPath) {
         return @{
             SourceFolder=$j.SourceFolder; GameFolders=$folders; GameEntries=@($entries)
             Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
+            LinuxInfo=[bool]$j.LinuxInfo
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
             Divider=[bool]$j.Divider; ShowTitle=[bool]$j.ShowTitle; TitleText=[string]$j.TitleText
@@ -1799,6 +1805,7 @@ function Import-DiscFolder([string]$discDir) {
     $r = @{ SourceFolder=$discDir; GameFolders=@($discDir)
             GameEntries=@(@{ Folder=$discDir; Kind='Game'; ParentIndex=-1 })
             Label=$label; IconPath=(Join-Path $discDir $icon); IconIsIco=$true
+            LinuxInfo=(Test-Path (Join-Path $discDir '.xdg-volume-info'))
             Menu=$menu; BgPath=$null; BgAsIs=$true; PanelSide='Right'; MusicFile=$null
             Buttons=@(); ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
             Divider=$false; ShowTitle=$false; TitleText=''
@@ -2013,24 +2020,28 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     else { & $log "Building multi-size icon from image..."; Convert-ToIco $s.IconPath $icoOut }
     & $log "Disc icon: $icoName"
 
-    # The same icon as a PNG, for Linux file managers. Built from the original
-    # source when there is one, and from the .ico only when that is all there is.
-    $pngName = [IO.Path]::ChangeExtension($icoName,'png')
-    $pngOut  = Join-Path $stage $pngName
-    try {
-        Convert-ToPng $s.IconPath $pngOut
-        & $log "Linux disc icon: $pngName"
-    } catch {
-        # A disc that shows a generic icon on Linux is still a working disc, so
-        # this must never be what stops a build.
-        & $log "  could not write the Linux icon ($($_.Exception.Message)) - the disc will use a generic one there."
-        $pngName = $null
+    # The same icon as a PNG, for Linux file managers - only when asked for.
+    # Built from the original source when there is one, and from the .ico only
+    # when that is all there is.
+    $pngName = $null
+    if ($s.LinuxInfo) {
+        $pngName = [IO.Path]::ChangeExtension($icoName,'png')
+        $pngOut  = Join-Path $stage $pngName
+        try {
+            Convert-ToPng $s.IconPath $pngOut
+            & $log "Linux disc icon: $pngName"
+        } catch {
+            # A disc that shows a generic icon on Linux is still a working disc,
+            # so this must never be what stops a build.
+            & $log "  could not write the Linux icon ($($_.Exception.Message)) - the disc will use a generic one there."
+            $pngName = $null
+        }
     }
     # Rebuilding a disc whose label (or the icon naming rule) changed would
     # otherwise leave the previous icon behind as dead weight on the disc. Runs
     # AFTER the copy above, because the old icon is often the copy's source.
     foreach ($stale in @(Get-ChildItem $stage -Filter '*.png' -File -EA SilentlyContinue)) {
-        if ($pngName -and $stale.Name -ne $pngName) {
+        if ($stale.Name -ne $pngName) {
             Clear-ReadOnly $stale.FullName; Remove-Item -LiteralPath $stale.FullName -Force -EA SilentlyContinue
             & $log "  removed old Linux icon: $($stale.Name)"
         }
@@ -2125,9 +2136,16 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 
     # Windows never looks at this file and Linux never looks at autorun.inf, so
     # the two sit side by side and the disc introduces itself on either machine.
+    $xdg = Join-Path $stage '.xdg-volume-info'
     if ($pngName) {
         & $log "Writing .xdg-volume-info (the disc's name and icon on Linux)..."
-        New-XdgVolumeInfo $s.Label $pngName (Join-Path $stage '.xdg-volume-info')
+        New-XdgVolumeInfo $s.Label $pngName $xdg
+    }
+    elseif (Test-Path $xdg) {
+        # Rebuilt with the box unticked. Leaving it would point Linux at a .png
+        # the cleanup above has just removed.
+        Clear-ReadOnly $xdg; Remove-Item -LiteralPath $xdg -Force -EA SilentlyContinue
+        & $log "Removed .xdg-volume-info - this disc is no longer named for Linux."
     }
 
     & $log "Building ISO (UDF, this can take ~30-60s for a full game)..."
@@ -2359,6 +2377,15 @@ AddLabel '3)  Disc icon (.ico, or .png/.jpg to auto-convert):' 15 268 520 | Out-
 $txtIcon=AddText 15 290 520
 $btnIcon=AddBtn 'Browse...' 545 290 110
 $lblIcon=AddLabel '' 15 318 500; $lblIcon.ForeColor=[System.Drawing.Color]::DimGray
+# Off by default. The two files it adds are inert on Windows and cost about a
+# kilobyte, but a disc is a thing people keep, and changing what every disc
+# carries is not a decision to make on somebody's behalf. They ask for it.
+$chkLinux=New-Object System.Windows.Forms.CheckBox
+$chkLinux.Text='Also name the disc for Linux (adds two small files)'
+$chkLinux.Location=New-Object System.Drawing.Point(15,342)
+$chkLinux.Size=New-Object System.Drawing.Size(420,22)
+$chkLinux.Checked=$false
+$form.Controls.Add($chkLinux)
 # Below the Browse button, not beside it: at y=290 this 44px-tall preview sat on
 # top of a 24px-tall button in the same 110px column, and whichever Windows drew
 # last won. Nothing lines up on this row at x=560, and 318+44 clears the step 4
@@ -2662,6 +2689,12 @@ function Show-Choice([string]$msg,[string]$title='DiscWright') {
 function Deny-Build([string]$logMsg,[string]$dlgMsg) { & $log "ERROR: $logMsg"; Show-Warn $dlgMsg }
 
 $tips = New-Object System.Windows.Forms.ToolTip
+$tips.SetToolTip($chkLinux, (
+    "Writes .xdg-volume-info and a .png copy of the icon to the disc, so a Linux" + [Environment]::NewLine +
+    "file manager shows the game's name and cover art instead of a volume id." + [Environment]::NewLine +
+    [Environment]::NewLine +
+    "Windows never reads either file, so the disc behaves exactly the same there." + [Environment]::NewLine +
+    "The menu does not carry over: Linux does not run programs off an inserted disc."))
 
 # True when building now would overwrite the ISO this disc writes.
 #
@@ -3284,6 +3317,7 @@ function Reset-Form {
     if ($picIcon.Image) { $old = $picIcon.Image; $picIcon.Image = $null; $old.Dispose() }
 
     $chkMenu.Checked = $true
+    $chkLinux.Checked = $false
     $txtBg.Clear(); $state.BgPath = $null
     $chkBgAsIs.Checked = $false
     $cmbSide.SelectedIndex = 0
@@ -3375,6 +3409,7 @@ function Open-Project([string]$folder) {
     if ($p.IconPath -and (Test-Path $p.IconPath)) { Set-IconFile $p.IconPath } else { & $log "  icon missing - pick one again." }
 
     $chkMenu.Checked = $p.Menu
+    $chkLinux.Checked = [bool]$p.LinuxInfo
     if ($p.BgPath -and (Test-Path $p.BgPath)) { Set-BgFile $p.BgPath } else { $txtBg.Text=''; $state.BgPath=$null }
     $chkBgAsIs.Checked = [bool]$p.BgAsIs
     $cmbSide.SelectedItem = $(if($p.PanelSide -ieq 'Left'){'Left'}else{'Right'})
@@ -3806,7 +3841,8 @@ $btnBuild.Add_Click({
          WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem;
          MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null});
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
-         ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey }
+         ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey
+         LinuxInfo=$chkLinux.Checked }
     $btnBuild.Enabled=$false
     Set-FormBusy $true
     $script:BuildDiscTag = ''

@@ -112,10 +112,8 @@ One game, and the installer sits at the root:
 
 ```
 E:\
-├─ autorun.inf              drive icon, drive label, menu launcher  (Windows)
-├─ .xdg-volume-info         drive icon and label                    (Linux)
+├─ autorun.inf              drive icon, drive label, menu launcher
 ├─ HollowKnight.ico         named after the disc, not "disc.ico" (see below)
-├─ HollowKnight.png         the same icon again, for Linux
 ├─ setup_hollow_knight_....exe
 ├─ AUTORUN\
 │   ├─ menu.hta             the menu itself
@@ -130,9 +128,7 @@ Two or more, and every entry moves into a numbered folder of its own:
 ```
 E:\
 ├─ autorun.inf
-├─ .xdg-volume-info
 ├─ MetroidvaniaNight.ico
-├─ MetroidvaniaNight.png
 ├─ AUTORUN\                 as above
 ├─ Games\
 │   ├─ 01 - Hollow Knight\
@@ -153,11 +149,22 @@ The icon is named after the disc rather than a fixed `disc.ico` for a specific r
 
 ### The disc on a Linux machine
 
-Put one of these discs in a Linux box and it knows its own name and wears its own cover art, the same as it does in This PC. That is what `.xdg-volume-info` and the `.png` are for. Windows never looks at them; Linux never looks at `autorun.inf`; each reads the one it understands and ignores the other, so nothing is given up to gain it.
+There is a checkbox under the icon, **Also name the disc for Linux**, and it is **off by default**. Tick it and the disc gains two more files:
+
+```
+├─ .xdg-volume-info         drive icon and label, for Linux
+├─ HollowKnight.png         the same icon again, in a format Linux reads
+```
+
+Then the disc knows its own name and wears its own cover art on a Linux machine, the same as it does in This PC. Windows never looks at either file; Linux never looks at `autorun.inf`; each reads the one it understands and ignores the other, so a disc built with the box ticked behaves on Windows exactly as one built without it.
 
 What does **not** happen there is the menu. Linux disabled autorun for removable media deliberately, and no desktop will run a program off a disc you inserted — so `menu.hta` sits on the disc unopened, and the games are installed from the folders by hand. The icon and the label are the half that carries over.
 
 The image is written twice because it has to be. `gvfs` turns the `IconFile=` line into a file icon and hands it to GdkPixbuf, whose `.ico` support is meant for favicons rather than for the seven-frame icon Windows wants. Both come from the same source picture, so they cannot end up disagreeing about what the game looks like.
+
+Untick it and rebuild and both files are removed again — leaving the info file behind would point Linux at an icon that is no longer on the disc.
+
+None of this makes DiscWright run on Linux. It builds the ISO on Windows, as it always has; the box only changes what goes onto the disc.
 
 ## Burning the ISO
 

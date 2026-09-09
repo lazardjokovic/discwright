@@ -100,9 +100,9 @@ of the installer itself, may be the better trade.
   template; and even the portable third is PowerShell, so it would be retranslated rather
   than reused.
 
-  The disc itself no longer waits for that. Since the hybrid disc landed, what DiscWright
-  builds already carries its name and icon for Linux beside the Windows ones, so a disc
-  made on Windows is legible on either machine. What is still missing there is a menu and
+  The disc itself no longer waits for that. A checkbox under the icon - off by default -
+  adds the disc's name and icon for Linux beside the Windows ones, so a disc made on
+  Windows can be legible on either machine. What is still missing there is a menu and
   GOG's Linux `.sh` installers, which is the part that needs a tool to collect them.
   Intent only; nothing here is promised.
 - **More than one music track.** One per disc is currently deliberate. A short playlist
