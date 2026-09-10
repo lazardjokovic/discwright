@@ -534,7 +534,9 @@ function Get-DiscIconName([string]$label) {
 # discs built before the icon was named after the game.
 function Test-ReservedDiscName([string]$name,[string]$iconName='disc.ico') {
     if ($name -like 'setup_*') { return $true }
-    return (@('autorun.inf','disc.ico',$iconName,'AUTORUN','Extras','Games','Add-ons',$PROJECT_FILE) -contains $name)
+    $png = [IO.Path]::ChangeExtension($iconName,'png')
+    return (@('autorun.inf','.xdg-volume-info','disc.ico','disc.png',$iconName,$png,
+              'AUTORUN','Extras','Games','Add-ons',$PROJECT_FILE) -contains $name)
 }
 
 # Folder name for one game on a multi-game disc. Numbered, so the order in the
@@ -810,6 +812,48 @@ function Get-DibBytes([System.Drawing.Bitmap]$bmp) {
     $bw.Flush(); return $ms.ToArray()
 }
 
+# The same picture again, as a PNG, for Linux.
+#
+# Linux file managers cannot use the .ico: gvfs turns IconFile= into a GFileIcon
+# and hands it to GdkPixbuf, whose ICO support is for reading favicons rather
+# than for the 7-frame multi-size icons Convert-ToIco writes. A PNG is the
+# format every desktop reads without argument, so the disc carries both. They
+# come from the same source image, so they cannot disagree about what the game
+# looks like.
+#
+# 256 square: large enough for the biggest icon view any desktop offers, small
+# enough that it costs nothing on a disc measured in gigabytes.
+function Convert-ToPng([string]$imgPath, [string]$outPng) {
+    $src = $null
+    try {
+        # An .ico source has to be asked for its largest frame. Image.FromFile
+        # on an .ico silently picks a small one, which is how a 256px cover
+        # becomes a blurry 32px square nobody can explain.
+        if ([IO.Path]::GetExtension($imgPath) -eq '.ico') {
+            $ico = New-Object System.Drawing.Icon($imgPath, (New-Object System.Drawing.Size(256,256)))
+            $src = $ico.ToBitmap(); $ico.Dispose()
+        } else {
+            $src = [System.Drawing.Image]::FromFile($imgPath)
+        }
+
+        # Center-crop to a square first, exactly as Convert-ToIco does, so the
+        # two icons frame the artwork the same way.
+        $side = [math]::Min($src.Width, $src.Height)
+        $out  = New-Object System.Drawing.Bitmap(256, 256, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+        $g    = [System.Drawing.Graphics]::FromImage($out)
+        $g.InterpolationMode = 'HighQualityBicubic'
+        $g.DrawImage($src, (New-Object System.Drawing.Rectangle(0,0,256,256)),
+            (New-Object System.Drawing.Rectangle(
+                [int](($src.Width-$side)/2), [int](($src.Height-$side)/2), $side, $side)),
+            [System.Drawing.GraphicsUnit]::Pixel)
+        $g.Dispose()
+        Clear-ReadOnly $outPng
+        $out.Save($outPng, [System.Drawing.Imaging.ImageFormat]::Png)
+        $out.Dispose()
+    }
+    finally { if ($src) { $src.Dispose() } }
+}
+
 function Convert-ToIco([string]$imgPath, [string]$outIco) {
     $src=[System.Drawing.Image]::FromFile($imgPath)
     # square master (center-crop)
@@ -955,6 +999,49 @@ function New-AutorunInf([string]$label,[string]$iconName,[bool]$menu,[string]$ou
     # rather than as a question mark.
     # Not UTF8: PowerShell 5.1 writes a BOM, which AutoRun does not understand.
     Clear-ReadOnly $out; Set-Content -LiteralPath $out -Value ($lines -join "`r`n") -Encoding Default
+}
+
+# The Linux half of the disc's identity.
+#
+# autorun.inf is a Windows file and no Linux desktop reads it. The equivalent is
+# .xdg-volume-info, which gvfs looks for at the root of anything it mounts - so
+# the same disc can carry both and each system reads the one it understands
+# while ignoring the other. Nothing here changes what Windows sees.
+#
+# It cannot open a menu: Linux disabled autorun for removable media on purpose
+# and no desktop will run a program off an inserted disc. What it can do is the
+# other half of what autorun.inf does, and the half people actually notice - the
+# drive shows the game's own name and cover art instead of a volume id.
+#
+# Keys are gvfs's, read from common/gvfsmountinfo.c: group [Volume Info], Name
+# as a locale string, and IconFile resolved relative to this file's own folder,
+# which is why a bare filename is right here.
+function New-XdgVolumeInfo([string]$label,[string]$pngName,[string]$out) {
+    $label   = Remove-ControlChars $label
+    $pngName = Remove-ControlChars $pngName
+
+    # GKeyFile values escape with backslashes, so a literal backslash has to be
+    # doubled or it silently eats the character after it. Newlines and tabs are
+    # already gone above; this is the one that survives Remove-ControlChars.
+    #
+    # String.Replace and not -replace: in a .NET regex REPLACEMENT a backslash
+    # is an ordinary character, not an escape, so -replace with a doubled
+    # pattern and a quadrupled replacement writes four backslashes rather than
+    # two. Measured, after writing it the wrong way first.
+    $esc = { param($v) $v.Replace([string][char]92, [string][char]92 + [string][char]92) }
+
+    $lines = @(
+        '[Volume Info]'
+        "Name=$(& $esc $label)"
+        "IconFile=$(& $esc $pngName)"
+    )
+
+    # UTF-8 with no BOM, and LF. GKeyFile expects UTF-8 and treats a BOM as part
+    # of the first group name, so a BOM makes the whole file parse as nothing -
+    # which is exactly what PowerShell 5.1's -Encoding UTF8 would write.
+    Clear-ReadOnly $out
+    [IO.File]::WriteAllText($out, (($lines -join "`n") + "`n"),
+                            (New-Object System.Text.UTF8Encoding($false)))
 }
 
 function New-MenuHta([hashtable]$cfg,[string]$out) {
@@ -1596,7 +1683,11 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # the single disc those projects always described.
         # Version 6 adds MatchName per entry. Absent in anything older, where the
         # name re-detected from the folder on open supplies it.
-        Version      = 6
+        # Version 7 adds LinuxInfo - whether the disc also carries its name and
+        # icon for Linux. Absent in anything older, which reads back as off, so
+        # reopening an old project and rebuilding produces the disc it produced
+        # before rather than quietly adding files to it.
+        Version      = 7
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -1639,6 +1730,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         ExtrasPath   = $s.ExtrasPath
         ExtraItems   = @($s.ExtraItems)
         MediaKey     = [string]$s.MediaKey
+        LinuxInfo    = [bool]$s.LinuxInfo
         OutDir       = $outDir
     }
     $o | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outDir $PROJECT_FILE) -Encoding UTF8
@@ -1682,6 +1774,7 @@ function Import-Project([string]$jsonPath) {
         return @{
             SourceFolder=$j.SourceFolder; GameFolders=$folders; GameEntries=@($entries)
             Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
+            LinuxInfo=[bool]$j.LinuxInfo
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
             Divider=[bool]$j.Divider; ShowTitle=[bool]$j.ShowTitle; TitleText=[string]$j.TitleText
@@ -1712,6 +1805,7 @@ function Import-DiscFolder([string]$discDir) {
     $r = @{ SourceFolder=$discDir; GameFolders=@($discDir)
             GameEntries=@(@{ Folder=$discDir; Kind='Game'; ParentIndex=-1 })
             Label=$label; IconPath=(Join-Path $discDir $icon); IconIsIco=$true
+            LinuxInfo=(Test-Path (Join-Path $discDir '.xdg-volume-info'))
             Menu=$menu; BgPath=$null; BgAsIs=$true; PanelSide='Right'; MusicFile=$null
             Buttons=@(); ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
             Divider=$false; ShowTitle=$false; TitleText=''
@@ -1925,9 +2019,33 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     }
     else { & $log "Building multi-size icon from image..."; Convert-ToIco $s.IconPath $icoOut }
     & $log "Disc icon: $icoName"
+
+    # The same icon as a PNG, for Linux file managers - only when asked for.
+    # Built from the original source when there is one, and from the .ico only
+    # when that is all there is.
+    $pngName = $null
+    if ($s.LinuxInfo) {
+        $pngName = [IO.Path]::ChangeExtension($icoName,'png')
+        $pngOut  = Join-Path $stage $pngName
+        try {
+            Convert-ToPng $s.IconPath $pngOut
+            & $log "Linux disc icon: $pngName"
+        } catch {
+            # A disc that shows a generic icon on Linux is still a working disc,
+            # so this must never be what stops a build.
+            & $log "  could not write the Linux icon ($($_.Exception.Message)) - the disc will use a generic one there."
+            $pngName = $null
+        }
+    }
     # Rebuilding a disc whose label (or the icon naming rule) changed would
     # otherwise leave the previous icon behind as dead weight on the disc. Runs
     # AFTER the copy above, because the old icon is often the copy's source.
+    foreach ($stale in @(Get-ChildItem $stage -Filter '*.png' -File -EA SilentlyContinue)) {
+        if ($stale.Name -ne $pngName) {
+            Clear-ReadOnly $stale.FullName; Remove-Item -LiteralPath $stale.FullName -Force -EA SilentlyContinue
+            & $log "  removed old Linux icon: $($stale.Name)"
+        }
+    }
     foreach ($stale in @(Get-ChildItem $stage -Filter '*.ico' -File -EA SilentlyContinue)) {
         if ($stale.Name -ne $icoName) {
             Clear-ReadOnly $stale.FullName; Remove-Item -LiteralPath $stale.FullName -Force -EA SilentlyContinue
@@ -2015,6 +2133,20 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 
     & $log "Writing autorun.inf..."
     New-AutorunInf $s.Label $icoName $s.Menu (Join-Path $stage 'autorun.inf')
+
+    # Windows never looks at this file and Linux never looks at autorun.inf, so
+    # the two sit side by side and the disc introduces itself on either machine.
+    $xdg = Join-Path $stage '.xdg-volume-info'
+    if ($pngName) {
+        & $log "Writing .xdg-volume-info (the disc's name and icon on Linux)..."
+        New-XdgVolumeInfo $s.Label $pngName $xdg
+    }
+    elseif (Test-Path $xdg) {
+        # Rebuilt with the box unticked. Leaving it would point Linux at a .png
+        # the cleanup above has just removed.
+        Clear-ReadOnly $xdg; Remove-Item -LiteralPath $xdg -Force -EA SilentlyContinue
+        & $log "Removed .xdg-volume-info - this disc is no longer named for Linux."
+    }
 
     & $log "Building ISO (UDF, this can take ~30-60s for a full game)..."
     $iso = Get-IsoPath $s.OutDir $s.Label
@@ -2245,6 +2377,15 @@ AddLabel '3)  Disc icon (.ico, or .png/.jpg to auto-convert):' 15 268 520 | Out-
 $txtIcon=AddText 15 290 520
 $btnIcon=AddBtn 'Browse...' 545 290 110
 $lblIcon=AddLabel '' 15 318 500; $lblIcon.ForeColor=[System.Drawing.Color]::DimGray
+# Off by default. The two files it adds are inert on Windows and cost about a
+# kilobyte, but a disc is a thing people keep, and changing what every disc
+# carries is not a decision to make on somebody's behalf. They ask for it.
+$chkLinux=New-Object System.Windows.Forms.CheckBox
+$chkLinux.Text='Also name the disc for Linux (adds two small files)'
+$chkLinux.Location=New-Object System.Drawing.Point(15,342)
+$chkLinux.Size=New-Object System.Drawing.Size(420,22)
+$chkLinux.Checked=$false
+$form.Controls.Add($chkLinux)
 # Below the Browse button, not beside it: at y=290 this 44px-tall preview sat on
 # top of a 24px-tall button in the same 110px column, and whichever Windows drew
 # last won. Nothing lines up on this row at x=560, and 318+44 clears the step 4
@@ -2548,6 +2689,12 @@ function Show-Choice([string]$msg,[string]$title='DiscWright') {
 function Deny-Build([string]$logMsg,[string]$dlgMsg) { & $log "ERROR: $logMsg"; Show-Warn $dlgMsg }
 
 $tips = New-Object System.Windows.Forms.ToolTip
+$tips.SetToolTip($chkLinux, (
+    "Writes .xdg-volume-info and a .png copy of the icon to the disc, so a Linux" + [Environment]::NewLine +
+    "file manager shows the game's name and cover art instead of a volume id." + [Environment]::NewLine +
+    [Environment]::NewLine +
+    "Windows never reads either file, so the disc behaves exactly the same there." + [Environment]::NewLine +
+    "The menu does not carry over: Linux does not run programs off an inserted disc."))
 
 # True when building now would overwrite the ISO this disc writes.
 #
@@ -3170,6 +3317,7 @@ function Reset-Form {
     if ($picIcon.Image) { $old = $picIcon.Image; $picIcon.Image = $null; $old.Dispose() }
 
     $chkMenu.Checked = $true
+    $chkLinux.Checked = $false
     $txtBg.Clear(); $state.BgPath = $null
     $chkBgAsIs.Checked = $false
     $cmbSide.SelectedIndex = 0
@@ -3261,6 +3409,7 @@ function Open-Project([string]$folder) {
     if ($p.IconPath -and (Test-Path $p.IconPath)) { Set-IconFile $p.IconPath } else { & $log "  icon missing - pick one again." }
 
     $chkMenu.Checked = $p.Menu
+    $chkLinux.Checked = [bool]$p.LinuxInfo
     if ($p.BgPath -and (Test-Path $p.BgPath)) { Set-BgFile $p.BgPath } else { $txtBg.Text=''; $state.BgPath=$null }
     $chkBgAsIs.Checked = [bool]$p.BgAsIs
     $cmbSide.SelectedItem = $(if($p.PanelSide -ieq 'Left'){'Left'}else{'Right'})
@@ -3692,7 +3841,8 @@ $btnBuild.Add_Click({
          WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem;
          MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null});
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
-         ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey }
+         ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey
+         LinuxInfo=$chkLinux.Checked }
     $btnBuild.Enabled=$false
     Set-FormBusy $true
     $script:BuildDiscTag = ''

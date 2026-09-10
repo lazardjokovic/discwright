@@ -11,6 +11,28 @@ between minor versions.
 
 ### Added
 
+- **A disc can know its own name on Linux.** A new checkbox under the icon,
+  **Also name the disc for Linux**, adds a `.xdg-volume-info` file and a `.png`
+  copy of the icon beside the `autorun.inf` and the `.ico` a disc already had.
+  Insert that disc in a Linux machine and the drive shows the game's title and
+  cover art instead of a volume id, exactly as it does in This PC. Windows never
+  reads the new files and Linux never read the old ones, so the two sit side by
+  side and nothing about the Windows disc changes.
+
+  **It is off by default**, and a project saved before this existed reads back as
+  off, so reopening an older disc and rebuilding it produces the disc it produced
+  before. Unticking it and rebuilding removes both files again. Nothing here lets
+  DiscWright run on Linux - it still builds the ISO on Windows, and the box only
+  changes what goes onto the disc.
+
+  The menu does not carry over, and cannot: Linux disabled autorun for removable
+  media on purpose, and no desktop will run a program off an inserted disc. The
+  icon and the label are the half that travels.
+
+  The icon is written twice because `gvfs` hands `IconFile=` to GdkPixbuf, whose
+  `.ico` support is for favicons rather than for the seven-frame icon Explorer
+  wants. Both are built from the same source image, so they cannot disagree.
+
 - **An installer, so DiscWright can be installed with winget.** Releases now carry
   a `DiscWright-<version>-setup.exe` beside the zip. It installs per-user, so it
   asks for no administrator and shows no UAC prompt, and it leaves a Start menu

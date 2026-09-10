@@ -94,11 +94,17 @@ of the installer itself, may be the better trade.
   Someone asked about other DRM-free sources. Relaxing the filename filter is a small
   change; deciding what DiscWright claims to support is not, and the honest position today
   is that only GOG downloads have been tested.
-- **Linux.** Asked for twice. This is a rewrite rather than a port — the interface is
-  WinForms and the ISO builder is IMAPI2FS, both Windows-only — and the disc it produces
-  is an autorun menu for Windows, which is the half Linux has least use for. What would
-  carry over is the disc layout and a menu that is not an HTA. Intent only; nothing here
-  is promised.
+- **Linux.** Asked for twice. A Linux *tool* is still a rewrite rather than a port — the
+  interface is WinForms and the ISO builder is IMAPI2FS, both Windows-only. Measured, the
+  split is about 37% portable logic, 46% WinForms and the ISO helper, and 17% the menu
+  template; and even the portable third is PowerShell, so it would be retranslated rather
+  than reused.
+
+  The disc itself no longer waits for that. A checkbox under the icon - off by default -
+  adds the disc's name and icon for Linux beside the Windows ones, so a disc made on
+  Windows can be legible on either machine. What is still missing there is a menu and
+  GOG's Linux `.sh` installers, which is the part that needs a tool to collect them.
+  Intent only; nothing here is promised.
 - **More than one music track.** One per disc is currently deliberate. A short playlist
   might justify the complexity. A music player will not.
 - **Menu themes.** The menu is one layout with configurable artwork. Named presets would

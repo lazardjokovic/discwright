@@ -26,6 +26,15 @@ BeforeDiscovery {
         'C:\Program Files (x86)\7-Zip\7z.exe'
         (Get-Command 7z.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
     ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+    # A real GKeyFile parser to check .xdg-volume-info against. WSL is the only
+    # one likely to be on a Windows box; without it those tests skip rather than
+    # assert that the format is right because we said so.
+    $script:HasWsl = $false
+    try {
+        $null = & wsl.exe -- python3 -c "pass" 2>$null
+        $script:HasWsl = ($LASTEXITCODE -eq 0)
+    } catch { }
 }
 
 BeforeAll {
@@ -39,6 +48,15 @@ BeforeAll {
         'C:\Program Files (x86)\7-Zip\7z.exe'
         (Get-Command 7z.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
     ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+    # A real GKeyFile parser to check .xdg-volume-info against. WSL is the only
+    # one likely to be on a Windows box; without it those tests skip rather than
+    # assert that the format is right because we said so.
+    $script:HasWsl = $false
+    try {
+        $null = & wsl.exe -- python3 -c "pass" 2>$null
+        $script:HasWsl = ($LASTEXITCODE -eq 0)
+    } catch { }
 
     $appScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
     $parseErrors = $null
@@ -90,14 +108,17 @@ BeforeAll {
     $script:Art = New-FixturePng (Join-Path $script:Sandbox 'art.png') 512 512
 
     function New-BuildSettings {
-        param([array]$Games, [string]$Label, [string]$OutDir)
+        # LinuxInfo defaults to $false here for the same reason the checkbox does:
+        # every test written before it existed has to keep describing the disc it
+        # was written about.
+        param([array]$Games, [string]$Label, [string]$OutDir, [switch]$LinuxInfo)
         return @{
             Games=$Games; Label=$Label; IconPath=$script:Art; IconIsIco=$false
             Menu=$true; BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'
             Divider=$false; ShowTitle=$false; TitleText=''
             WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
             Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
-            ExtraItems=@(); OutDir=$OutDir
+            ExtraItems=@(); OutDir=$OutDir; LinuxInfo=[bool]$LinuxInfo
         }
     }
 
@@ -319,6 +340,17 @@ Describe 'Locking the form while a build runs' -Tag 'Unit' {
 }
 
 Describe 'Test-ReservedDiscName' -Tag 'Unit' {
+
+    It 'reserves the names the Linux half of the disc uses' {
+        # Extra content dropped at the disc root must not be able to overwrite the
+        # file that tells a Linux desktop what the disc is called, nor the icon it
+        # points at.
+        Test-ReservedDiscName '.xdg-volume-info' 'TheWitcher.ico' | Should -BeTrue
+        Test-ReservedDiscName 'TheWitcher.png'   'TheWitcher.ico' | Should -BeTrue
+        Test-ReservedDiscName 'disc.png'         'TheWitcher.ico' | Should -BeTrue
+        # Still not reserved: an unrelated picture is ordinary extra content.
+        Test-ReservedDiscName 'screenshot.png'   'TheWitcher.ico' | Should -BeFalse
+    }
 
     It 'reserves <Name>' -ForEach @(
         @{ Name = 'autorun.inf' }
@@ -658,8 +690,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 6' {
-            $script:PJson.Version | Should -Be 6
+        It 'declares schema version 7' {
+            $script:PJson.Version | Should -Be 7
         }
 
         It 'records which disc the set was planned for' {
@@ -1158,6 +1190,44 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
             $script:IsoFiles = Get-IsoEntries -IsoPath $script:IsoPath -SevenZip $script:SevenZip
         }
 
+        Context 'and again with the Linux files asked for' {
+
+            BeforeAll {
+                $script:LxOut = Join-Path $script:Sandbox 'build-iso-linux'
+                New-Item -ItemType Directory -Force -Path $script:LxOut | Out-Null
+                $script:LxIso = Invoke-Build (New-BuildSettings -Games $script:IsoGames -Label 'Iso Check' -OutDir $script:LxOut -LinuxInfo) $script:LogSink
+                $script:LxFiles = Get-IsoEntries -IsoPath $script:LxIso -SevenZip $script:SevenZip
+            }
+
+            It 'contains the Linux half beside the Windows one' {
+                # Asserted against the ISO rather than the staging folder on
+                # purpose: ISO 9660 forbids a leading dot, and a filesystem that
+                # quietly renamed .xdg-volume-info would leave the disc nameless
+                # on Linux with everything on Windows still perfect. DiscWright
+                # writes UDF only, which allows it - this proves that still holds.
+                $script:LxFiles | Should -Contain '.xdg-volume-info'
+                $expectedPng = [IO.Path]::ChangeExtension((Get-DiscIconName 'Iso Check'), 'png')
+                $script:LxFiles | Should -Contain $expectedPng
+            }
+
+            It 'still carries everything Windows needs' {
+                # The point of a hybrid disc: nothing is given up to gain it.
+                $script:LxFiles | Should -Contain 'autorun.inf'
+                $script:LxFiles | Should -Contain 'AUTORUN\menu.hta'
+            }
+
+            It 'gives the Linux icon a name that matches the file it points at' {
+                # IconFile= resolves relative to the disc root, so the name in the
+                # file and the name on the disc have to be the same string.
+                $tmp = Join-Path $script:Sandbox 'xdg-from-iso'
+                if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+                & $script:SevenZip e $script:LxIso ".xdg-volume-info" "-o$tmp" -y *> $null
+                $txt = [IO.File]::ReadAllText((Join-Path $tmp '.xdg-volume-info'))
+                $named = @($txt -split "`n" | Where-Object { $_ -like 'IconFile=*' }) -replace '^IconFile=',''
+                $script:LxFiles | Should -Contain $named
+            }
+        }
+
         It 'is a real UDF image, not just a file that exists' {
             $info = & $script:SevenZip l -slt $script:IsoPath 2>&1
             ($info | Where-Object { $_ -match '^Type = Udf' }) | Should -Not -BeNullOrEmpty
@@ -1174,6 +1244,14 @@ Describe 'Building a disc' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
 
         It 'contains autorun.inf at the root' {
             $script:IsoFiles | Should -Contain 'autorun.inf'
+        }
+
+        It 'carries nothing for Linux unless it was asked to' {
+            # The default. A disc built without ticking the box is the disc
+            # DiscWright has always built, and this is what says so.
+            $script:IsoFiles | Should -Not -Contain '.xdg-volume-info'
+            $expectedPng = [IO.Path]::ChangeExtension((Get-DiscIconName 'Iso Check'), 'png')
+            $script:IsoFiles | Should -Not -Contain $expectedPng
         }
 
         It 'contains the menu' {
@@ -3458,8 +3536,8 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
         }
 
-        It 'writes schema version 6' {
-            $script:RenameRaw.Version | Should -Be 6
+        It 'writes schema version 7' {
+            $script:RenameRaw.Version | Should -Be 7
         }
 
         It 'stores the registered name beside the chosen one' {
@@ -3569,5 +3647,226 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
         It 'is never written by the dialog that renames a game' {
             $script:MatchWriters | Should -Not -Contain 'Show-EntryKindDialog'
         }
+    }
+}
+
+Describe 'The disc introduces itself on Linux too' -Tag 'Unit' {
+
+    # autorun.inf is a Windows file and no Linux desktop reads it. .xdg-volume-info
+    # is what gvfs looks for at the root of anything it mounts, so the two sit side
+    # by side and each system reads the one it understands. These tests are about
+    # the file being one gvfs will actually accept - the format is a GKeyFile, and
+    # GKeyFile is unforgiving in two specific ways that are easy to get wrong and
+    # invisible when you do.
+
+    BeforeAll {
+        $script:XdgOut = Join-Path $script:Sandbox 'xdg-volume-info'
+    }
+
+    It 'writes the group and the two keys gvfs reads' {
+        New-XdgVolumeInfo 'The Witcher' 'TheWitcher.png' $script:XdgOut
+        $lines = @([IO.File]::ReadAllText($script:XdgOut) -split "`n")
+        $lines | Should -Contain '[Volume Info]'
+        $lines | Should -Contain 'Name=The Witcher'
+        $lines | Should -Contain 'IconFile=TheWitcher.png'
+    }
+
+    It 'writes no byte order mark' {
+        # PowerShell 5.1's -Encoding UTF8 writes one. GKeyFile reads the BOM as
+        # part of the first group name, so the group stops being "Volume Info",
+        # every key belongs to a group nothing looks for, and the file parses to
+        # nothing at all - with no error anywhere to say why the disc came up
+        # nameless.
+        New-XdgVolumeInfo 'The Witcher' 'TheWitcher.png' $script:XdgOut
+        $bytes = [IO.File]::ReadAllBytes($script:XdgOut)
+        @($bytes[0], $bytes[1], $bytes[2]) | Should -Not -Be @(0xEF, 0xBB, 0xBF)
+        $bytes[0] | Should -Be ([byte][char]'[')
+    }
+
+    It 'ends its lines the way a Unix file does' {
+        New-XdgVolumeInfo 'The Witcher' 'TheWitcher.png' $script:XdgOut
+        $raw = [IO.File]::ReadAllText($script:XdgOut)
+        $raw | Should -Not -Match "`r"
+        $raw | Should -Match "`n"
+    }
+
+    It 'doubles a backslash exactly once' {
+        # A GKeyFile value escapes with backslashes, so a lone one eats the
+        # character after it. The first attempt used -replace with a quadrupled
+        # replacement and wrote FOUR backslashes, because a backslash in a .NET
+        # regex replacement is an ordinary character rather than an escape. This
+        # is that bug, kept.
+        $bs = [char]92
+        New-XdgVolumeInfo ('a' + $bs + 'b') 'x.png' $script:XdgOut
+        $lines = @([IO.File]::ReadAllText($script:XdgOut) -split "`n")
+        $lines | Should -Contain ('Name=a' + $bs + $bs + 'b')
+    }
+
+    It 'keeps a label that carries a newline to one key' {
+        # The same hazard New-AutorunInf has: a newline in the label would start a
+        # line, and in a GKeyFile a line is a key.
+        New-XdgVolumeInfo ("My Game" + [char]13 + [char]10 + "Icon=evil.png") 'good.png' $script:XdgOut
+        $lines = @([IO.File]::ReadAllText($script:XdgOut) -split "`n")
+        @($lines | Where-Object { $_ -like 'Name=*' }).Count | Should -Be 1
+        @($lines | Where-Object { $_ -like 'Icon=*' }).Count | Should -Be 0
+        $lines | Should -Contain 'IconFile=good.png'
+    }
+
+    It 'is accepted by a real GKeyFile parser' -Skip:(-not $script:HasWsl) {
+        # The tests above assert what the format ought to be. This one asks
+        # something that actually implements it, because every claim above is a
+        # claim about somebody else's parser.
+        New-XdgVolumeInfo 'The Witcher' 'TheWitcher.png' $script:XdgOut
+        $wslPath = & wsl.exe wslpath -a ($script:XdgOut -replace '\\','/') 2>$null
+        # GLib's GKeyFile where it is available, because that is literally the
+        # parser gvfs calls - configparser only agrees with it by coincidence,
+        # and the two differ on exactly the escaping this file has to get right.
+        $py = @'
+import sys
+try:
+    from gi.repository import GLib
+    kf = GLib.KeyFile()
+    kf.load_from_file(sys.argv[1], GLib.KeyFileFlags.NONE)
+    name = kf.get_locale_string("Volume Info", "Name", None)
+    icon = kf.get_string("Volume Info", "IconFile")
+except ImportError:
+    import configparser
+    c = configparser.ConfigParser(interpolation=None)
+    c.read(sys.argv[1], encoding="utf-8")
+    name = c["Volume Info"]["Name"]
+    icon = c["Volume Info"]["IconFile"]
+print(name + "|" + icon)
+'@
+        $got = $py | & wsl.exe -- python3 - "$wslPath" 2>$null
+        "$got".Trim() | Should -Be 'The Witcher|TheWitcher.png'
+    }
+}
+
+Describe 'The PNG icon the Linux side needs' -Tag 'Unit' {
+
+    # gvfs turns IconFile= into a GFileIcon and hands it to GdkPixbuf, whose ICO
+    # support is for favicons rather than for the seven-frame icons Convert-ToIco
+    # writes. So the disc carries the same picture twice, in both formats.
+
+    BeforeAll {
+        $script:SrcImg = Join-Path $script:Sandbox 'source-art.png'
+        # Deliberately not square and not 256, so a center-crop and a resize both
+        # have to happen for the result to come out right.
+        $bmp = New-Object System.Drawing.Bitmap(600, 400)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.Clear([System.Drawing.Color]::DarkGoldenrod)
+        $g.Dispose()
+        $bmp.Save($script:SrcImg, [System.Drawing.Imaging.ImageFormat]::Png)
+        $bmp.Dispose()
+    }
+
+    It 'writes a real 256x256 PNG' {
+        $out = Join-Path $script:Sandbox 'icon-from-image.png'
+        Convert-ToPng $script:SrcImg $out
+        Test-Path $out | Should -BeTrue
+        $img = [System.Drawing.Image]::FromFile($out)
+        try {
+            $img.Width  | Should -Be 256
+            $img.Height | Should -Be 256
+            $img.RawFormat.Guid | Should -Be ([System.Drawing.Imaging.ImageFormat]::Png.Guid)
+        } finally { $img.Dispose() }
+    }
+
+    It 'can take its picture from an .ico when that is all the disc has' {
+        # Reopening a built disc gives back an .ico as the icon source, so this is
+        # the ordinary path on a rebuild, not an edge case.
+        $ico = Join-Path $script:Sandbox 'from-image.ico'
+        Convert-ToIco $script:SrcImg $ico
+        $out = Join-Path $script:Sandbox 'icon-from-ico.png'
+        Convert-ToPng $ico $out
+        $img = [System.Drawing.Image]::FromFile($out)
+        try {
+            $img.Width  | Should -Be 256
+            $img.Height | Should -Be 256
+        } finally { $img.Dispose() }
+    }
+}
+
+Describe 'Asking for the Linux files, and changing your mind' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    BeforeAll {
+        $script:TogGames = @((Get-GameInfo (New-FixtureGame -Slug 'tog_one' -ExeMb 2)))
+        $script:TogOut   = Join-Path $script:Sandbox 'build-toggle'
+        New-Item -ItemType Directory -Force -Path $script:TogOut | Out-Null
+        $script:TogStage = Join-Path $script:TogOut 'disc'
+        $script:TogPng   = [IO.Path]::ChangeExtension((Get-DiscIconName 'Toggle Disc'), 'png')
+    }
+
+    It 'writes neither file when it was not asked' {
+        $null = Invoke-Build (New-BuildSettings -Games $script:TogGames -Label 'Toggle Disc' -OutDir $script:TogOut) $script:LogSink
+        Test-Path (Join-Path $script:TogStage '.xdg-volume-info') | Should -BeFalse
+        Test-Path (Join-Path $script:TogStage $script:TogPng)     | Should -BeFalse
+    }
+
+    It 'writes both when it is asked' {
+        $null = Invoke-Build (New-BuildSettings -Games $script:TogGames -Label 'Toggle Disc' -OutDir $script:TogOut -LinuxInfo) $script:LogSink
+        Test-Path (Join-Path $script:TogStage '.xdg-volume-info') | Should -BeTrue
+        Test-Path (Join-Path $script:TogStage $script:TogPng)     | Should -BeTrue
+    }
+
+    It 'takes them both away again when the box is unticked and the disc rebuilt' {
+        # The half that is easy to forget. Leaving .xdg-volume-info behind would
+        # point a Linux desktop at a .png that the icon cleanup has just removed,
+        # which is worse than never having written either.
+        $null = Invoke-Build (New-BuildSettings -Games $script:TogGames -Label 'Toggle Disc' -OutDir $script:TogOut) $script:LogSink
+        Test-Path (Join-Path $script:TogStage '.xdg-volume-info') | Should -BeFalse
+        Test-Path (Join-Path $script:TogStage $script:TogPng)     | Should -BeFalse
+    }
+
+    It 'leaves the Windows disc untouched either way' {
+        Test-Path (Join-Path $script:TogStage 'autorun.inf') | Should -BeTrue
+        Test-Path (Join-Path $script:TogStage (Get-DiscIconName 'Toggle Disc')) | Should -BeTrue
+    }
+}
+
+Describe 'The Linux setting in a project file' -Tag 'Unit' {
+
+    BeforeAll {
+        $script:ProjDir = Join-Path $script:Sandbox 'linux-proj'
+        New-Item -ItemType Directory -Force -Path $script:ProjDir | Out-Null
+    }
+
+    It 'is written as schema 7 and comes back the way it went in' {
+        $s = @{ Games=@(); Label='Round Trip'; IconPath=$script:Art; IconIsIco=$false
+                Menu=$true; BgPath=$null; BgAsIs=$true; PanelSide='Right'
+                Divider=$false; ShowTitle=$false; TitleText=''
+                WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+                Buttons=@('Play'); ManualPath=$null; ExtrasPath=$null
+                ExtraItems=@(); MediaKey=''; LinuxInfo=$true }
+        Save-Project $s $script:ProjDir
+        $raw = Get-Content -Raw (Join-Path $script:ProjDir 'discproject.json') | ConvertFrom-Json
+        $raw.Version   | Should -Be 7
+        $raw.LinuxInfo | Should -BeTrue
+        (Import-Project (Join-Path $script:ProjDir 'discproject.json')).LinuxInfo | Should -BeTrue
+    }
+
+    It 'reads back as off from a project saved before it existed' {
+        # The compatibility promise. Reopening an older project and rebuilding has
+        # to produce the disc it produced before, not one with files added to it.
+        $old = Join-Path $script:ProjDir 'old.json'
+        @{ Version=6; Label='Older Disc'; Games=@(); Buttons=@('Play')
+           Menu=$true; BgAsIs=$true; PanelSide='Right'; ButtonStyle='Minimal'
+           WindowBorder=$true } | ConvertTo-Json -Depth 4 |
+            Set-Content -LiteralPath $old -Encoding UTF8
+        $p = Import-Project $old
+        $p | Should -Not -BeNullOrEmpty
+        [bool]$p.LinuxInfo | Should -BeFalse
+    }
+
+    It 'works out from the disc itself when there is no project file' {
+        # Import-DiscFolder rebuilds settings by looking at a built disc. Whether
+        # it was named for Linux is knowable by looking rather than by guessing.
+        $d = Join-Path $script:Sandbox 'bare-disc'
+        New-Item -ItemType Directory -Force -Path $d | Out-Null
+        New-AutorunInf 'Bare Disc' 'BareDisc.ico' $true (Join-Path $d 'autorun.inf')
+        (Import-DiscFolder $d).LinuxInfo | Should -BeFalse
+
+        New-XdgVolumeInfo 'Bare Disc' 'BareDisc.png' (Join-Path $d '.xdg-volume-info')
+        (Import-DiscFolder $d).LinuxInfo | Should -BeTrue
     }
 }
