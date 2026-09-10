@@ -33,6 +33,21 @@ between minor versions.
   `.ico` support is for favicons rather than for the seven-frame icon Explorer
   wants. Both are built from the same source image, so they cannot disagree.
 
+- **An installer, so DiscWright can be installed with winget.** Releases now carry
+  a `DiscWright-<version>-setup.exe` beside the zip. It installs per-user, so it
+  asks for no administrator and shows no UAC prompt, and it leaves a Start menu
+  entry and a real uninstall behind. The zip is unchanged and is still the way the
+  README tells you to get the app.
+
+  This exists because winget will not accept a folder of scripts: its only route
+  for a plain zip refuses every file type except `.exe` - `.cmd`, `.vbs`, `.ps1`
+  and `.bat` are all rejected by `winget validate` itself, not at run time. What
+  the installer does not do is make DiscWright an executable. The installed app is
+  the same scripts, and its shortcut starts them through `wscript.exe`, so the
+  Microsoft-signed chain that lets the app run under Smart App Control is intact.
+  Only the installer is an `.exe`, run once, and anyone whose machine refuses it
+  still has the zip.
+
 ## [0.5.1] — 2026-09-03
 
 ### Added
