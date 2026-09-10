@@ -177,6 +177,91 @@ jobs:
   #     .\tests\Invoke-Tests.ps1          both suites
   #     Invoke-Pester tests/ui            the window alone
   #
+  # Builds the two things a release is made of: the payload zip, and the Inno
+  # Setup installer that exists so winget has something it will accept.
+  #
+  # It runs on every PR and push, not only on tags, for the same reason
+  # version-matches-tag exists: a packaging file exercised only at release time
+  # is one that breaks at release time, when the tag is already pushed and the
+  # only way out is another tag.
+  #
+  # On a tag it also attaches both files to the release and prints the
+  # installer's SHA256 - the number packaging/winget/New-WingetManifest.ps1
+  # needs, and the one value that cannot be known before the artifact exists.
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    # Read everywhere except the upload, which has to write to the release it is
+    # attaching to. Scoped to this job so the rest of the workflow keeps the
+    # read-only token it has today.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Inno Setup ships with the windows-latest image (6.7.1 at the time of
+      # writing), so there is nothing to install. If a future image drops it,
+      # this fails loudly here rather than quietly producing a zip alone.
+      - name: Inno Setup must be on the runner
+        shell: powershell
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+              Write-Host "::error::ISCC.exe not found at $iscc - the runner image no longer ships Inno Setup"
+              exit 1
+          }
+          Write-Host "found $iscc"
+
+      - name: Build the zip and the installer
+        id: build
+        shell: powershell
+        run: |
+          $r = .\packaging\Build-Release.ps1 -Installer
+
+          # Step outputs so the upload below does not have to guess at
+          # filenames, and so the hash is readable from the run summary.
+          "version=$($r.Version)"   | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "zip=$($r.Zip)"           | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "setup=$($r.Setup)"       | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "setupsha=$($r.SetupSha)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          $tick = [char]0x60
+          $sum  = @(
+              "### DiscWright $($r.Version)"
+              ""
+              "| artifact | sha256 |"
+              "| --- | --- |"
+              "| $tick$(Split-Path $r.Zip -Leaf)$tick | $tick$($r.Sha256)$tick |"
+              "| $tick$(Split-Path $r.Setup -Leaf)$tick | $tick$($r.SetupSha)$tick |"
+          )
+          $sum | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      # A build nobody can look at proves less than one they can. On a PR this is
+      # how the installer gets tried on a real machine before it ever ships.
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: discwright-package
+          path: build/*.*
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ZIP:   ${{ steps.build.outputs.zip }}
+          SETUP: ${{ steps.build.outputs.setup }}
+          SHA:   ${{ steps.build.outputs.setupsha }}
+        run: |
+          # Paths arrive as environment variables rather than being pasted into
+          # the script, for the same reason GITHUB_REF_NAME is read that way in
+          # version-matches-tag below: they stay data instead of becoming code.
+          gh release upload $env:GITHUB_REF_NAME $env:ZIP $env:SETUP --clobber
+          Write-Host "installer sha256: $env:SHA"
+
   # A version constant maintained by hand drifts, because bumping it is a step
   # that gets forgotten. This runs only when a tag is pushed and fails the tag if
   # the app would report a version it is not.
