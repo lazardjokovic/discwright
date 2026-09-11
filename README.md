@@ -147,6 +147,18 @@ The numbering is what makes the disc browsable by hand: it puts the folders in t
 
 The icon is named after the disc rather than a fixed `disc.ico` for a specific reason: Explorer caches icons **by file path**, so `E:\disc.ico` is the same cache key for every disc that ever passes through that drive letter. Swap discs and Explorer will happily redraw the previous game's icon. Naming it after the disc gives each one its own key.
 
+### The disc on Windows XP and older
+
+DiscWright writes the ISO as UDF 2.50. Windows Vista was the first version that could read that, so **Windows XP, 2000, ME, 98 and 95 cannot mount one of these discs at all** — not a missing menu, the whole disc is unreadable there.
+
+The second checkbox on the **Extra compatibility** row, **Readable on Windows XP and older**, fixes that by writing ISO9660 and Joliet filesystems alongside the UDF one. Every system reads the newest one it understands and ignores the rest, so a disc built with it ticked behaves on Windows 11 exactly as one built without it. It is off by default, and it costs nothing measurable on the disc.
+
+Two things were supposed to make this impossible, and neither does in practice. Joliet holds filenames to 64 characters, but IMAPI writes long names into the ISO9660 tree regardless — a real 96-character GOG patch filename survives intact. And ISO9660 keeps a file's length in 32 bits, so it cannot describe a file of 4 GiB or more — but GOG already splits its installers a byte under that limit, because FAT32 has the same ceiling.
+
+When a file **is** too big, the checkbox greys itself and says why. If something added in step 5 slips past that, the build checks the finished disc folder again and quietly falls back to UDF alone rather than writing an image that has lost a file to a 32-bit field.
+
+Old DVD players and other appliances that only speak ISO9660 benefit from the same box.
+
 ### The disc on a Linux machine
 
 There is a checkbox under the icon, **Also name the disc for Linux**, and it is **off by default**. Tick it and the disc gains two more files:

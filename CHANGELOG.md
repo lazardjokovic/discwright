@@ -7,6 +7,39 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Added
+
+- **A disc can be made readable on Windows XP and older.** DiscWright writes the
+  ISO as UDF 2.50, and Windows Vista was the first version able to read that, so
+  until now a DiscWright disc could not be mounted at all on XP, 2000, ME, 98 or
+  95. A second checkbox on the new **Extra compatibility** row writes ISO9660 and
+  Joliet filesystems beside the UDF one, which those systems can read. Every
+  system takes the newest filesystem it understands and ignores the rest, so a
+  disc built with the box ticked behaves on Windows 11 exactly as one built
+  without it.
+
+  **Off by default**, and a project saved before this existed reads back as off.
+
+  Two things were supposed to rule this out and neither survived measurement.
+  Joliet holds filenames to 64 characters, but IMAPI writes long names into the
+  ISO9660 tree anyway - a real 96-character GOG patch filename comes through
+  intact. And ISO9660 keeps a file's length in 32 bits, so it cannot describe a
+  file of 4 GiB or more - but GOG already splits its installers one byte under
+  that, because FAT32 has the same ceiling.
+
+  Where a file really is too big the checkbox greys itself and says so, and the
+  build re-checks the finished disc folder and falls back to UDF alone rather
+  than write an image that has silently lost a file.
+
+### Changed
+
+- **The Linux and older-Windows options share one row**, labelled *Extra
+  compatibility*. The Linux checkbox was a full sentence on its own line; naming
+  what the two have in common says more than either sentence did, and keeps the
+  window the same height.
+
 ## [0.6.0] — 2026-09-10
 
 ### Added

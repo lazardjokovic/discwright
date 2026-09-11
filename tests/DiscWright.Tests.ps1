@@ -70,6 +70,9 @@ BeforeAll {
     # functions look these up dynamically from whichever It block calls them, and
     # a local here would not be on that chain.
     $script:PROJECT_FILE = 'discproject.json'
+    $script:ISO9660_MAX_FILE =
+        [double][regex]::Match((Get-Content $appScript -Raw),
+            '\$ISO9660_MAX_FILE\s*=\s*\[double\]([0-9]+)').Groups[1].Value
 
     # Read out of the app rather than hard-coded, so bumping the version does not
     # mean editing the tests - and so a test can assert the two agree.
@@ -111,7 +114,7 @@ BeforeAll {
         # LinuxInfo defaults to $false here for the same reason the checkbox does:
         # every test written before it existed has to keep describing the disc it
         # was written about.
-        param([array]$Games, [string]$Label, [string]$OutDir, [switch]$LinuxInfo)
+        param([array]$Games, [string]$Label, [string]$OutDir, [switch]$LinuxInfo, [switch]$LegacyFs)
         return @{
             Games=$Games; Label=$Label; IconPath=$script:Art; IconIsIco=$false
             Menu=$true; BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'
@@ -119,6 +122,7 @@ BeforeAll {
             WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
             Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
             ExtraItems=@(); OutDir=$OutDir; LinuxInfo=[bool]$LinuxInfo
+            LegacyFs=[bool]$LegacyFs
         }
     }
 
@@ -690,8 +694,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 7' {
-            $script:PJson.Version | Should -Be 7
+        It 'declares schema version 8' {
+            $script:PJson.Version | Should -Be 8
         }
 
         It 'records which disc the set was planned for' {
@@ -3536,8 +3540,8 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
         }
 
-        It 'writes schema version 7' {
-            $script:RenameRaw.Version | Should -Be 7
+        It 'writes schema version 8' {
+            $script:RenameRaw.Version | Should -Be 8
         }
 
         It 'stores the registered name beside the chosen one' {
@@ -3831,7 +3835,7 @@ Describe 'The Linux setting in a project file' -Tag 'Unit' {
         New-Item -ItemType Directory -Force -Path $script:ProjDir | Out-Null
     }
 
-    It 'is written as schema 7 and comes back the way it went in' {
+    It 'is saved and comes back the way it went in' {
         $s = @{ Games=@(); Label='Round Trip'; IconPath=$script:Art; IconIsIco=$false
                 Menu=$true; BgPath=$null; BgAsIs=$true; PanelSide='Right'
                 Divider=$false; ShowTitle=$false; TitleText=''
@@ -3840,7 +3844,6 @@ Describe 'The Linux setting in a project file' -Tag 'Unit' {
                 ExtraItems=@(); MediaKey=''; LinuxInfo=$true }
         Save-Project $s $script:ProjDir
         $raw = Get-Content -Raw (Join-Path $script:ProjDir 'discproject.json') | ConvertFrom-Json
-        $raw.Version   | Should -Be 7
         $raw.LinuxInfo | Should -BeTrue
         (Import-Project (Join-Path $script:ProjDir 'discproject.json')).LinuxInfo | Should -BeTrue
     }
@@ -3868,5 +3871,188 @@ Describe 'The Linux setting in a project file' -Tag 'Unit' {
 
         New-XdgVolumeInfo 'Bare Disc' 'BareDisc.png' (Join-Path $d '.xdg-volume-info')
         (Import-DiscFolder $d).LinuxInfo | Should -BeTrue
+    }
+}
+
+
+Describe 'Get-EntriesMaxFileBytes' -Tag 'Unit' {
+
+    # The decision behind the greying: does this disc clear the ISO9660 ceiling?
+    # Tested here rather than through the checkbox, because the checkbox half
+    # cannot run without a real form.
+
+    It 'is zero when there is nothing on the disc' {
+        $script:state = @{ Games = @() }
+        Get-EntriesMaxFileBytes | Should -Be 0
+    }
+
+    It 'is the largest single file across every entry, not the total' {
+        $script:state = @{ Games = @(
+            @{ Ok = $true; MaxFileBytes = 1000; TotalBytes = 9000; Kind = 'Game' }
+            @{ Ok = $true; MaxFileBytes = 7000; TotalBytes = 8000; Kind = 'Game' }
+            @{ Ok = $true; MaxFileBytes = 2000; TotalBytes = 2000; Kind = 'AddOn' }
+        ) }
+        Get-EntriesMaxFileBytes | Should -Be 7000
+    }
+
+    It 'counts an add-on like anything else' {
+        # A patch is as capable of holding a 4 GiB file as a game is.
+        $script:state = @{ Games = @(
+            @{ Ok = $true; MaxFileBytes = 10; TotalBytes = 10; Kind = 'Game' }
+            @{ Ok = $true; MaxFileBytes = 99; TotalBytes = 99; Kind = 'AddOn' }
+        ) }
+        Get-EntriesMaxFileBytes | Should -Be 99
+    }
+
+    It 'clears the ISO9660 ceiling for a real GOG part, by one byte' {
+        # GOG splits its installers at 4,294,967,294 bytes to stay under the
+        # identical FAT32 limit, which is why a GOG disc can take ISO9660 at all.
+        $script:state = @{ Games = @(@{ Ok = $true; MaxFileBytes = 4294967294; TotalBytes = 4294967294; Kind = 'Game' }) }
+        ((Get-EntriesMaxFileBytes) -le $script:ISO9660_MAX_FILE) | Should -BeTrue
+
+        $script:state = @{ Games = @(@{ Ok = $true; MaxFileBytes = 4294967296; TotalBytes = 4294967296; Kind = 'Game' }) }
+        ((Get-EntriesMaxFileBytes) -le $script:ISO9660_MAX_FILE) | Should -BeFalse
+    }
+}
+
+Describe 'Get-ItemsMaxFile' -Tag 'Unit' {
+
+    BeforeAll {
+        $script:MaxDir = Join-Path $script:Sandbox 'maxfile'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:MaxDir 'sub') | Out-Null
+        [IO.File]::WriteAllBytes((Join-Path $script:MaxDir 'small.bin'),        (New-Object byte[] 100))
+        [IO.File]::WriteAllBytes((Join-Path $script:MaxDir 'sub\bigger.bin'),   (New-Object byte[] 5000))
+        [IO.File]::WriteAllBytes((Join-Path $script:MaxDir 'sub\middling.bin'), (New-Object byte[] 900))
+    }
+
+    It 'finds the largest file anywhere under a folder' {
+        Get-ItemsMaxFile @($script:MaxDir) | Should -Be 5000
+    }
+
+    It 'takes a single file as itself' {
+        Get-ItemsMaxFile @((Join-Path $script:MaxDir 'small.bin')) | Should -Be 100
+    }
+
+    It 'is the maximum across several paths, not their sum' {
+        # The distinction that matters: Get-ItemsSize adds, this one does not.
+        Get-ItemsMaxFile @(
+            (Join-Path $script:MaxDir 'small.bin')
+            (Join-Path $script:MaxDir 'sub')
+        ) | Should -Be 5000
+    }
+
+    It 'reports nothing as zero rather than failing' {
+        Get-ItemsMaxFile @()                | Should -Be 0
+        Get-ItemsMaxFile @($null)           | Should -Be 0
+        Get-ItemsMaxFile @('X:\no\such\path') | Should -Be 0
+    }
+}
+
+Describe 'A disc that older Windows can read' -Tag 'Build' -Skip:(-not ($script:CanBuildIso -and $script:SevenZip)) {
+
+    # Everything before Windows Vista reads UDF 2.01 at best, and DiscWright writes
+    # UDF 2.50, so those systems cannot mount the disc at all. Adding ISO9660 and
+    # Joliet beside the UDF gives them something they can read. These tests assert
+    # against the finished image, because whether a filesystem is really in there
+    # is not something the staging folder can answer.
+
+    BeforeAll {
+        $script:LegGames = @((Get-GameInfo (New-FixtureGame -Slug 'legacy_one' -ExeMb 2)))
+        $script:LegOut   = Join-Path $script:Sandbox 'build-legacy'
+        New-Item -ItemType Directory -Force -Path $script:LegOut | Out-Null
+        $script:LegOff = Invoke-Build (New-BuildSettings -Games $script:LegGames -Label 'Legacy Off' -OutDir $script:LegOut) $script:LogSink
+
+        $script:LegOut2 = Join-Path $script:Sandbox 'build-legacy-on'
+        New-Item -ItemType Directory -Force -Path $script:LegOut2 | Out-Null
+        $script:LegOn = Invoke-Build (New-BuildSettings -Games $script:LegGames -Label 'Legacy On' -OutDir $script:LegOut2 -LegacyFs) $script:LogSink
+
+        function Test-ReadsAsIso9660 {
+            param([string]$IsoPath, [string]$SevenZip)
+            $null = & $SevenZip l -tiso $IsoPath 2>&1
+            return ($LASTEXITCODE -eq 0)
+        }
+    }
+
+    It 'is UDF only when the box is not ticked' {
+        # The default, and what every disc before this was.
+        Test-ReadsAsIso9660 -IsoPath $script:LegOff -SevenZip $script:SevenZip | Should -BeFalse
+    }
+
+    It 'reads as ISO9660 when the box is ticked' {
+        Test-ReadsAsIso9660 -IsoPath $script:LegOn -SevenZip $script:SevenZip | Should -BeTrue
+    }
+
+    It 'is still UDF 2.50 as well, so nothing is given up to gain it' {
+        # The point of the hybrid: Windows 11 keeps reading exactly what it read
+        # before, because 7-Zip and Windows both prefer the UDF tree.
+        $info = & $script:SevenZip l -slt $script:LegOn 2>&1
+        ($info | Where-Object { $_ -match '^Type = Udf' })     | Should -Not -BeNullOrEmpty
+        ($info | Where-Object { $_ -match '^Version = 2\.50' }) | Should -Not -BeNullOrEmpty
+    }
+
+    It 'keeps a long GOG filename intact in the ISO9660 tree' {
+        # The reason the other filesystems were left off originally was Joliet's
+        # 64-character limit. Measured against a real GOG name, it does not bite:
+        # IMAPI writes the long name into the ISO9660 tree regardless.
+        $long = 'patch_the_witcher_enhanced_edition_directors_cut_1.5_(A)_(10712)_to_1.5_(CS)_GOG_0.2_(77554).exe'
+        $long.Length | Should -BeGreaterThan 64
+        $dir = Join-Path $script:Sandbox 'legacy-longname'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        [IO.File]::WriteAllBytes((Join-Path $dir $long), (New-Object byte[] 2048))
+        $out = Join-Path $script:Sandbox 'build-legacy-long'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        $set = New-BuildSettings -Games $script:LegGames -Label 'Long Name' -OutDir $out -LegacyFs
+        $set.ExtraItems = @((Join-Path $dir $long))
+        $iso = Invoke-Build $set $script:LogSink
+        $names = @(& $script:SevenZip l -tiso $iso 2>&1)
+        ($names | Where-Object { $_ -match [regex]::Escape($long) }) | Should -Not -BeNullOrEmpty
+    }
+
+    It 'falls back to UDF alone when a file is too big for ISO9660' {
+        # ISO9660 keeps a file's length in 32 bits. Rather than stage 4 GiB to
+        # prove it, the ceiling is lowered for this one build - the code path
+        # under test is the real one, only the number it compares against moves.
+        $realMax = $script:ISO9660_MAX_FILE
+        try {
+            $script:ISO9660_MAX_FILE = [double]1024
+            $out = Join-Path $script:Sandbox 'build-legacy-toobig'
+            New-Item -ItemType Directory -Force -Path $out | Out-Null
+            $said = @()
+            $iso = Invoke-Build (New-BuildSettings -Games $script:LegGames -Label 'Too Big' -OutDir $out -LegacyFs) { param($m) $script:said += $m }
+            Test-ReadsAsIso9660 -IsoPath $iso -SevenZip $script:SevenZip | Should -BeFalse
+        } finally { $script:ISO9660_MAX_FILE = $realMax }
+    }
+}
+
+Describe 'The older-Windows setting in a project file' -Tag 'Unit' {
+
+    BeforeAll {
+        $script:LegProj = Join-Path $script:Sandbox 'legacy-proj'
+        New-Item -ItemType Directory -Force -Path $script:LegProj | Out-Null
+    }
+
+    It 'is written as schema 8 and comes back the way it went in' {
+        $s = @{ Games=@(); Label='Legacy Trip'; IconPath=$script:Art; IconIsIco=$false
+                Menu=$true; BgPath=$null; BgAsIs=$true; PanelSide='Right'
+                Divider=$false; ShowTitle=$false; TitleText=''
+                WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+                Buttons=@('Play'); ManualPath=$null; ExtrasPath=$null
+                ExtraItems=@(); MediaKey=''; LinuxInfo=$false; LegacyFs=$true }
+        Save-Project $s $script:LegProj
+        $raw = Get-Content -Raw (Join-Path $script:LegProj 'discproject.json') | ConvertFrom-Json
+        $raw.Version  | Should -Be 8
+        $raw.LegacyFs | Should -BeTrue
+        (Import-Project (Join-Path $script:LegProj 'discproject.json')).LegacyFs | Should -BeTrue
+    }
+
+    It 'reads back as off from a project saved before it existed' {
+        $old = Join-Path $script:LegProj 'older.json'
+        @{ Version=7; Label='Older'; Games=@(); Buttons=@('Play'); Menu=$true
+           BgAsIs=$true; PanelSide='Right'; ButtonStyle='Minimal'; WindowBorder=$true
+           LinuxInfo=$true } | ConvertTo-Json -Depth 4 |
+            Set-Content -LiteralPath $old -Encoding UTF8
+        $p = Import-Project $old
+        [bool]$p.LinuxInfo | Should -BeTrue      # still read, so the file is really v7
+        [bool]$p.LegacyFs  | Should -BeFalse
     }
 }

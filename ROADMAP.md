@@ -21,6 +21,23 @@ that happens, and a request other people turn up and agree with moves up.
 
 ## Delivered
 
+**A disc readable on Windows XP and older** — asked for on Reddit by somebody who
+runs Planescape Torment and Diablo on period hardware, and who had noticed the menu
+worked there but autoplay never fired. The autorun.inf turned out to be innocent:
+`shellexecute=` has worked since Windows 2000. The disc was the problem. DiscWright
+writes UDF 2.50 and Windows Vista was the first version that could read it, so every
+system older than that cannot mount the disc at all.
+
+The two reasons the other filesystems were left off both failed when measured.
+Joliet's 64-character limit does not bite, because IMAPI writes long names into the
+ISO9660 tree regardless - a real 96-character GOG patch name survives. And the
+ISO9660 4 GiB file ceiling does not bite either, because GOG splits its installers
+at 4,294,967,294 bytes, one byte under, to clear the identical FAT32 limit.
+
+So it is a checkbox, off by default, that asks for all three filesystems instead of
+one. It greys itself when a file is too big, and the build re-checks the staged disc
+and falls back rather than write an image missing a file.
+
 **A game renamed for the menu** — asked for by the same person who found the
 question marks, once the characters were arriving intact and the name was worth
 reading. The name a disc starts with is the installer's own `ProductName`, which is

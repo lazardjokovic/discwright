@@ -208,7 +208,7 @@ function Get-GameInfo([string]$folder) {
     # manual and an Extras folder for the whole disc; an entry that has none of
     # its own falls back to those, which is what keeps a single-game disc, and
     # every project written before this, behaving exactly as it did.
-    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; MatchName=$null; Msg=''; TotalBytes=0; Folder=$null
+    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; MatchName=$null; Msg=''; TotalBytes=0; MaxFileBytes=0; Folder=$null
                Warning=''; MissingParts=@(); Kind='Game'; ParentIndex=-1
                ManualPath=$null; ExtrasPath=$null }
     if (-not (Test-Path $folder)) { $info.Msg='Folder not found.'; return $info }
@@ -293,6 +293,10 @@ function Set-InstallerFacts([hashtable]$info,[System.IO.FileInfo]$exe) {
     $info.MatchName=$name
     $info.Folder = $exe.DirectoryName
     $info.TotalBytes = ($info.Files | Measure-Object Length -Sum).Sum
+    # The largest single file, for the ISO9660 ceiling. Measured here because the
+    # list is already in hand; walking the folder again on every UI refresh is the
+    # cost the comment on Get-PlanInputs is about.
+    $info.MaxFileBytes = [double](($info.Files | Measure-Object Length -Maximum).Maximum)
     $plural = if ($info.Files.Count -eq 1) { 'file' } else { 'files' }
     $info.Msg = "Detected: $name  ($($info.Files.Count) $plural, $(Format-Size $info.TotalBytes))"
 }
@@ -325,7 +329,7 @@ function Get-AddOnName([string]$fileName) {
 # comes from the list it is added to, not from its filename. That is what lets a
 # mod or an overhaul, which is never named setup_*, go on the disc at all.
 function Get-AddOnInfo([string]$exePath) {
-    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; MatchName=$null; Msg=''; TotalBytes=0; Folder=$null
+    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; MatchName=$null; Msg=''; TotalBytes=0; MaxFileBytes=0; Folder=$null
                Warning=''; MissingParts=@(); Kind='AddOn'; ParentIndex=-1 }
     if (-not (Test-Path $exePath -PathType Leaf)) { $info.Msg='File not found.'; return $info }
     $exe = Get-Item -LiteralPath $exePath
@@ -410,6 +414,33 @@ function Get-MediaRec([double]$bytes) {
 }
 
 # Total bytes of a mixed list of files and folders.
+# ISO9660 stores a file's length in 32 bits, so 4 GiB minus one byte is the most
+# a single file can be. UDF has no such limit, which is why the disc is UDF today.
+#
+# GOG already lives with this: its installers split into .bin parts at
+# 4,294,967,294 bytes - one byte under - because FAT32 has the same ceiling. So in
+# practice a GOG disc clears it, and this exists for what people add themselves in
+# step 5.
+$ISO9660_MAX_FILE = [double]4294967295
+
+# The largest single file under a set of paths. Mirrors Get-ItemsSize, which sums
+# the same walk - kept separate rather than folded in because the sum is wanted on
+# every keystroke in the disc label and this is not.
+function Get-ItemsMaxFile($items) {
+    $max = [double]0
+    foreach ($i in @($items)) {
+        if ([string]::IsNullOrWhiteSpace($i) -or -not (Test-Path $i)) { continue }
+        if (Test-Path $i -PathType Container) {
+            $m = (Get-ChildItem -Recurse -File -Force $i -EA SilentlyContinue | Measure-Object Length -Maximum).Maximum
+            if ($m -and $m -gt $max) { $max = [double]$m }
+        } else {
+            $len = [double](Get-Item -LiteralPath $i).Length
+            if ($len -gt $max) { $max = $len }
+        }
+    }
+    return $max
+}
+
 function Get-ItemsSize($items) {
     $sum = [double]0
     foreach ($i in @($items)) {
@@ -1554,7 +1585,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     Clear-ReadOnly $out; Set-Content -LiteralPath $out -Value $html -Encoding ASCII
 }
 
-function New-Iso([string]$stageDir,[string]$isoPath,[string]$volLabel,[scriptblock]$progress=$null) {
+# $fileSystems is the FsiFileSystems bitmask: ISO9660 = 1, Joliet = 2, UDF = 4.
+# 4 is what every disc before 0.7.0 was, and still the default.
+function New-Iso([string]$stageDir,[string]$isoPath,[string]$volLabel,[scriptblock]$progress=$null,[int]$fileSystems=4) {
     if (-not ([System.Management.Automation.PSTypeName]'ISOFile').Type) {
         $code=@'
 public class ISOFile {
@@ -1636,9 +1669,13 @@ public class ISOFile {
         if ($blocks -gt 2147483000) { $blocks = 2147483000 }
         $fsi.FreeMediaBlocks=[int]$blocks
 
-        # UDF only. GOG part filenames run past 64 chars, which Joliet cannot hold,
-        # and the .bin parts sit at the ISO9660 4 GiB ceiling.
-        $fsi.FileSystemsToCreate=4
+        # UDF by default. The reasons the others were left off were a Joliet name
+        # limit of 64 characters and the ISO9660 4 GiB ceiling - but IMAPI writes
+        # long names into the ISO9660 tree regardless (a real 96-character GOG
+        # patch name survives intact), and GOG's own parts clear the ceiling by a
+        # byte. So the caller may ask for all three, and the only thing that has
+        # to be checked first is the file size.
+        $fsi.FileSystemsToCreate=$fileSystems
         try { $fsi.UDFRevision=0x250 } catch {}
         $vn = ($volLabel -replace '[^A-Za-z0-9_]','_'); if($vn.Length -gt 16){$vn=$vn.Substring(0,16)}
         $fsi.VolumeName=$vn
@@ -1687,7 +1724,9 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # icon for Linux. Absent in anything older, which reads back as off, so
         # reopening an old project and rebuilding produces the disc it produced
         # before rather than quietly adding files to it.
-        Version      = 7
+        # Version 8 adds LegacyFs the same way - whether the disc also gets
+        # ISO9660 and Joliet so it reads on Windows XP and older.
+        Version      = 8
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -1731,6 +1770,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         ExtraItems   = @($s.ExtraItems)
         MediaKey     = [string]$s.MediaKey
         LinuxInfo    = [bool]$s.LinuxInfo
+        LegacyFs     = [bool]$s.LegacyFs
         OutDir       = $outDir
     }
     $o | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outDir $PROJECT_FILE) -Encoding UTF8
@@ -1775,6 +1815,7 @@ function Import-Project([string]$jsonPath) {
             SourceFolder=$j.SourceFolder; GameFolders=$folders; GameEntries=@($entries)
             Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
             LinuxInfo=[bool]$j.LinuxInfo
+            LegacyFs=[bool]$j.LegacyFs
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
             Divider=[bool]$j.Divider; ShowTitle=[bool]$j.ShowTitle; TitleText=[string]$j.TitleText
@@ -2153,7 +2194,26 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     # A disc in a set gets its volume id worked out with the disc number reserved,
     # so a long name cannot truncate away the one part that tells two discs apart.
     $vol = $(if ($s.VolumeLabel) { [string]$s.VolumeLabel } else { Get-VolumeLabel $s.Label })
-    New-Iso $stage $iso $vol $progress
+    # ISO9660 and Joliet alongside UDF, when asked for. Everything before Windows
+    # Vista reads UDF 2.01 at best and cannot mount this disc at all without them.
+    #
+    # Checked against the staged disc rather than trusting the form: the greying
+    # in the window only knows about the installers, and step 5 can drop anything
+    # at the disc root. A disc that quietly lost a file to a 32-bit length field
+    # would be far worse than one that is simply not readable on Windows XP.
+    $fsMask = 4
+    if ($s.LegacyFs) {
+        $big = @(Get-ChildItem -Recurse -File -Force $stage -EA SilentlyContinue |
+                 Where-Object { $_.Length -gt $ISO9660_MAX_FILE })
+        if ($big.Count) {
+            & $log ("Not adding the ISO9660 filesystem: {0} is {1}, and ISO9660 cannot hold a file of 4 GiB or more." -f $big[0].Name, (Format-Size $big[0].Length))
+            & $log "  The disc will be UDF only, so it needs Windows Vista or newer."
+        } else {
+            $fsMask = 7
+            & $log "Adding ISO9660 and Joliet beside UDF, so the disc reads on Windows XP and older."
+        }
+    }
+    New-Iso $stage $iso $vol $progress $fsMask
     & $log ("DONE.  ISO: {0}  ({1:N2} GB)" -f $iso, ((Get-Item $iso).Length/1GB))
 
     # One project file describes the whole set, so the caller saves it once after
@@ -2380,12 +2440,19 @@ $lblIcon=AddLabel '' 15 318 500; $lblIcon.ForeColor=[System.Drawing.Color]::DimG
 # Off by default. The two files it adds are inert on Windows and cost about a
 # kilobyte, but a disc is a thing people keep, and changing what every disc
 # carries is not a decision to make on somebody's behalf. They ask for it.
+AddLabel 'Extra compatibility:' 15 344 125 | Out-Null
 $chkLinux=New-Object System.Windows.Forms.CheckBox
-$chkLinux.Text='Also name the disc for Linux (adds two small files)'
-$chkLinux.Location=New-Object System.Drawing.Point(15,342)
-$chkLinux.Size=New-Object System.Drawing.Size(420,22)
+$chkLinux.Text='Name the disc on Linux'
+$chkLinux.Location=New-Object System.Drawing.Point(145,342)
+$chkLinux.Size=New-Object System.Drawing.Size(185,22)
 $chkLinux.Checked=$false
 $form.Controls.Add($chkLinux)
+$chkLegacy=New-Object System.Windows.Forms.CheckBox
+$chkLegacy.Text='Readable on Windows XP and older'
+$chkLegacy.Location=New-Object System.Drawing.Point(335,342)
+$chkLegacy.Size=New-Object System.Drawing.Size(300,22)
+$chkLegacy.Checked=$false
+$form.Controls.Add($chkLegacy)
 # Below the Browse button, not beside it: at y=290 this 44px-tall preview sat on
 # top of a 24px-tall button in the same 110px column, and whichever Windows drew
 # last won. Nothing lines up on this row at x=560, and 318+44 clears the step 4
@@ -2595,9 +2662,60 @@ function Get-CurrentFit([hashtable]$payload=$null) {
 }
 
 
+# The largest single file the entries will put on the disc. Each was measured
+# when its folder was read, so this adds no walk of its own.
+#
+# Kept apart from the greying below because that half cannot run under the logic
+# tests, and the question of whether a disc clears the ISO9660 ceiling is exactly
+# the half worth testing.
+function Get-EntriesMaxFileBytes {
+    # No @() around Get-Games. It returns ,@(...) so a one-element result survives
+    # being unrolled, and wrapping it again gives a one-element array holding the
+    # real array - so this loop ran once, over the whole list, and read
+    # MaxFileBytes off an array. Every disc measured as zero.
+    # Assigned first, not iterated straight off the call. Get-Games returns
+    # ,@(...) and plain assignment is what preserves that, exactly as the note on
+    # Get-FirstGame says - enumerating the call itself hands back the inner array
+    # as a single item on an empty disc.
+    $games = Get-Games
+    $biggest = [double]0
+    foreach ($g in $games) {
+        if ([double]$g.MaxFileBytes -gt $biggest) { $biggest = [double]$g.MaxFileBytes }
+    }
+    return $biggest
+}
+
+# ISO9660 cannot describe a file of 4 GiB or more, so the option that adds it
+# greys itself when the disc holds one. Only the installers are measured here;
+# the build checks the whole staged disc again before committing to a filesystem,
+# which is what covers anything dropped in at step 5.
+#
+# Guarded the way Set-StatusTip is, and for the same reason: the logic tests
+# reach Update-MediaLabel with stand-in controls, and a [pscustomobject] has no
+# Enabled property to set.
+function Update-LegacyFsBox {
+    if ($chkLegacy -isnot [System.Windows.Forms.CheckBox]) { return }
+    $biggest = Get-EntriesMaxFileBytes
+    $ok = ($biggest -le $ISO9660_MAX_FILE)
+    $chkLegacy.Enabled = $ok
+    if (-not $ok) {
+        # Unticking rather than leaving a ticked box greyed: a ticked box that the
+        # build is going to ignore says the disc will be readable when it will not.
+        $chkLegacy.Checked = $false
+        $tips.SetToolTip($chkLegacy, (
+            "Not possible for this disc: it holds a file of $(Format-Size $biggest)," + [Environment]::NewLine +
+            "and ISO9660 keeps a file's length in 32 bits, so 4 GiB minus one byte is" + [Environment]::NewLine +
+            "the most it can describe." + [Environment]::NewLine +
+            [Environment]::NewLine +
+            "GOG's own installers split below that, so this is usually something added" + [Environment]::NewLine +
+            "in step 5."))
+    }
+}
+
 function Update-MediaLabel {
     $games = Get-Games
     Update-MediaOptions
+    Update-LegacyFsBox
     if ($games.Count -eq 0) {
         # Removing the last entry has to clear this line, not leave it alone.
         # Returning early left the previous disc's summary sitting under an empty
@@ -2689,6 +2807,15 @@ function Show-Choice([string]$msg,[string]$title='DiscWright') {
 function Deny-Build([string]$logMsg,[string]$dlgMsg) { & $log "ERROR: $logMsg"; Show-Warn $dlgMsg }
 
 $tips = New-Object System.Windows.Forms.ToolTip
+$tips.SetToolTip($chkLegacy, (
+    "Writes ISO9660 and Joliet filesystems beside the UDF one, so the disc can be" + [Environment]::NewLine +
+    "read by Windows XP, 2000, ME, 98 and 95. They read UDF 2.01 at best and cannot" + [Environment]::NewLine +
+    "mount this disc at all without it. Vista and newer do not need it." + [Environment]::NewLine +
+    [Environment]::NewLine +
+    "Costs nothing on the disc and changes nothing Windows 11 sees." + [Environment]::NewLine +
+    [Environment]::NewLine +
+    "Unavailable when a file is 4 GiB or larger: ISO9660 keeps a file's length in" + [Environment]::NewLine +
+    "32 bits and cannot describe one that big."))
 $tips.SetToolTip($chkLinux, (
     "Writes .xdg-volume-info and a .png copy of the icon to the disc, so a Linux" + [Environment]::NewLine +
     "file manager shows the game's name and cover art instead of a volume id." + [Environment]::NewLine +
@@ -3318,6 +3445,7 @@ function Reset-Form {
 
     $chkMenu.Checked = $true
     $chkLinux.Checked = $false
+    $chkLegacy.Checked = $false; $chkLegacy.Enabled = $true
     $txtBg.Clear(); $state.BgPath = $null
     $chkBgAsIs.Checked = $false
     $cmbSide.SelectedIndex = 0
@@ -3410,6 +3538,7 @@ function Open-Project([string]$folder) {
 
     $chkMenu.Checked = $p.Menu
     $chkLinux.Checked = [bool]$p.LinuxInfo
+    $chkLegacy.Checked = [bool]$p.LegacyFs
     if ($p.BgPath -and (Test-Path $p.BgPath)) { Set-BgFile $p.BgPath } else { $txtBg.Text=''; $state.BgPath=$null }
     $chkBgAsIs.Checked = [bool]$p.BgAsIs
     $cmbSide.SelectedItem = $(if($p.PanelSide -ieq 'Left'){'Left'}else{'Right'})
@@ -3842,7 +3971,7 @@ $btnBuild.Add_Click({
          MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null});
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
          ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey
-         LinuxInfo=$chkLinux.Checked }
+         LinuxInfo=$chkLinux.Checked; LegacyFs=$chkLegacy.Checked }
     $btnBuild.Enabled=$false
     Set-FormBusy $true
     $script:BuildDiscTag = ''
