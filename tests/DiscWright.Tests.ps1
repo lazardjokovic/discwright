@@ -3966,26 +3966,43 @@ Describe 'A disc that older Windows can read' -Tag 'Build' -Skip:(-not ($script:
         New-Item -ItemType Directory -Force -Path $script:LegOut2 | Out-Null
         $script:LegOn = Invoke-Build (New-BuildSettings -Games $script:LegGames -Label 'Legacy On' -OutDir $script:LegOut2 -LegacyFs) $script:LogSink
 
-        # Decided on what the listing SAYS, not on $LASTEXITCODE. The exit code
-        # version passed alone and failed about one run in three inside the full
-        # suite - an intermittent test is worse than a failing one, because it
-        # teaches everybody to re-run instead of look. Every DiscWright disc has
-        # autorun.inf at its root, so seeing it named is positive evidence that
-        # the ISO9660 tree was opened and read; not seeing it is the absence.
-        function Test-ReadsAsIso9660 {
-            param([string]$IsoPath, [string]$SevenZip)
-            $out = (& $SevenZip l -tiso $IsoPath 2>&1 | Out-String)
-            return ($out -match 'autorun\.inf')
+        # Read out of the image itself rather than asked of a tool.
+        #
+        # Two earlier versions of this got it wrong. Deciding on $LASTEXITCODE
+        # from 7-Zip passed alone and failed about one run in three in the full
+        # suite. Deciding on whether the listing named autorun.inf passed on this
+        # machine and failed on the CI runner, because `7z -tiso` on a different
+        # 7-Zip version will happily fall back to the UDF tree and list the file
+        # anyway. Both were asking a tool to guess at a question the bytes answer.
+        #
+        # The Volume Recognition Sequence starts at sector 16 (byte 32768) and is
+        # a run of 2048-byte descriptors, each carrying a five-byte identifier at
+        # offset 1: CD001 for ISO 9660, BEA01 / NSR0x / TEA01 for UDF. A UDF-only
+        # image DiscWright builds reads "BEA01 NSR03 TEA01"; add ISO9660 and it
+        # reads "CD001 BEA01 NSR03 TEA01". No external tool, and the same answer
+        # on every machine.
+        function Test-HasIso9660 {
+            param([string]$IsoPath)
+            $fs = [IO.File]::OpenRead($IsoPath)
+            try {
+                [void]$fs.Seek(32768, [IO.SeekOrigin]::Begin)
+                $buf = New-Object byte[] 2048
+                for ($i = 0; $i -lt 16; $i++) {
+                    if ($fs.Read($buf, 0, 2048) -lt 7) { break }
+                    if ([Text.Encoding]::ASCII.GetString($buf, 1, 5) -eq 'CD001') { return $true }
+                }
+            } finally { $fs.Dispose() }
+            return $false
         }
     }
 
     It 'is UDF only when the box is not ticked' {
         # The default, and what every disc before this was.
-        Test-ReadsAsIso9660 -IsoPath $script:LegOff -SevenZip $script:SevenZip | Should -BeFalse
+        Test-HasIso9660 -IsoPath $script:LegOff | Should -BeFalse
     }
 
     It 'reads as ISO9660 when the box is ticked' {
-        Test-ReadsAsIso9660 -IsoPath $script:LegOn -SevenZip $script:SevenZip | Should -BeTrue
+        Test-HasIso9660 -IsoPath $script:LegOn | Should -BeTrue
     }
 
     It 'is still UDF 2.50 as well, so nothing is given up to gain it' {
@@ -4025,7 +4042,7 @@ Describe 'A disc that older Windows can read' -Tag 'Build' -Skip:(-not ($script:
             New-Item -ItemType Directory -Force -Path $out | Out-Null
             $said = @()
             $iso = Invoke-Build (New-BuildSettings -Games $script:LegGames -Label 'Too Big' -OutDir $out -LegacyFs) { param($m) $script:said += $m }
-            Test-ReadsAsIso9660 -IsoPath $iso -SevenZip $script:SevenZip | Should -BeFalse
+            Test-HasIso9660 -IsoPath $iso | Should -BeFalse
         } finally { $script:ISO9660_MAX_FILE = $realMax }
     }
 }
