@@ -182,7 +182,7 @@ None of this makes DiscWright run on Linux. It builds the ISO on Windows, as it 
 
 ### A patch for a machine the installer will not run on
 
-Extra content is not only for manuals. A GOG installer wants Windows 2000 or newer, so on a Windows 98 machine it will refuse — but an official patch from that era will not, and a disc is the easiest way to get one onto a machine that has no business being on the internet.
+Extra content is not only for manuals. A GOG installer will not run on Windows 98, as above — but an official patch from that era will, and a disc is the easiest way onto a machine that has no business being on the internet.
 
 Put the patch in **step 5** and it lands at the disc root beside the installer, untouched. On XP the installer runs normally; on 98 it will not, and the period patch is right there to run or to keep. That also works for anything else the menu was never going to launch — a `.txt` of serials, a scanned manual, a mod archive.
 
