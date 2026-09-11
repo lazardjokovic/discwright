@@ -33,6 +33,12 @@ between minor versions.
   build re-checks the finished disc folder and falls back to UDF alone rather
   than write an image that has silently lost a file.
 
+  Reading the disc is not the same as installing from it. Joliet long filenames
+  go back to Windows 95, but every GOG installer checked asks for Windows 2000 in
+  its own PE header, and Windows 9x will not load a program that wants 5.0. So on
+  98 and 95 the disc browses correctly and nothing on it installs; XP and 2000 are
+  the oldest versions where it is genuinely useful.
+
 ### Changed
 
 - **The Linux and older-Windows options share one row**, labelled *Extra

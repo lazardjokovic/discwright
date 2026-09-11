@@ -2814,6 +2814,10 @@ $tips.SetToolTip($chkLegacy, (
     [Environment]::NewLine +
     "Costs nothing on the disc and changes nothing Windows 11 sees." + [Environment]::NewLine +
     [Environment]::NewLine +
+    "Reading the disc is not the same as installing from it: GOG's installers ask" + [Environment]::NewLine +
+    "for Windows 2000 or newer in their own headers, so on 98 and 95 the disc can" + [Environment]::NewLine +
+    "be browsed but not installed from." + [Environment]::NewLine +
+    [Environment]::NewLine +
     "Unavailable when a file is 4 GiB or larger: ISO9660 keeps a file's length in" + [Environment]::NewLine +
     "32 bits and cannot describe one that big."))
 $tips.SetToolTip($chkLinux, (

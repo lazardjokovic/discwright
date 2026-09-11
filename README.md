@@ -159,6 +159,8 @@ When a file **is** too big, the checkbox greys itself and says why. If something
 
 Old DVD players and other appliances that only speak ISO9660 benefit from the same box.
 
+**Reading the disc is not the same as installing from it.** Joliet long filenames go back to Windows 95, and plain ISO9660 further still, so the disc itself is browsable a long way back. The games are not. Every GOG installer checked declares **Windows 2000** as its minimum in its own PE header, and Windows 9x refuses to load a program that asks for 5.0. So on Windows 98 and 95 one of these discs opens and reads correctly and nothing on it will install; XP and 2000 are the oldest versions where the disc is genuinely useful.
+
 ### The disc on a Linux machine
 
 There is a checkbox under the icon, **Also name the disc for Linux**, and it is **off by default**. Tick it and the disc gains two more files:
