@@ -2440,17 +2440,17 @@ $lblIcon=AddLabel '' 15 318 500; $lblIcon.ForeColor=[System.Drawing.Color]::DimG
 # Off by default. The two files it adds are inert on Windows and cost about a
 # kilobyte, but a disc is a thing people keep, and changing what every disc
 # carries is not a decision to make on somebody's behalf. They ask for it.
-AddLabel 'Extra compatibility:' 15 344 125 | Out-Null
+AddLabel 'Also make the disc:' 15 344 125 | Out-Null
 $chkLinux=New-Object System.Windows.Forms.CheckBox
-$chkLinux.Text='Name the disc on Linux'
+$chkLinux.Text='named on Linux'
 $chkLinux.Location=New-Object System.Drawing.Point(145,342)
-$chkLinux.Size=New-Object System.Drawing.Size(185,22)
+$chkLinux.Size=New-Object System.Drawing.Size(115,22)
 $chkLinux.Checked=$false
 $form.Controls.Add($chkLinux)
 $chkLegacy=New-Object System.Windows.Forms.CheckBox
-$chkLegacy.Text='Readable on Windows XP and older'
-$chkLegacy.Location=New-Object System.Drawing.Point(335,342)
-$chkLegacy.Size=New-Object System.Drawing.Size(300,22)
+$chkLegacy.Text='readable on Windows XP and older'
+$chkLegacy.Location=New-Object System.Drawing.Point(265,342)
+$chkLegacy.Size=New-Object System.Drawing.Size(240,22)
 $chkLegacy.Checked=$false
 $form.Controls.Add($chkLegacy)
 # Below the Browse button, not beside it: at y=290 this 44px-tall preview sat on

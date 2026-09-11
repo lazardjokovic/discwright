@@ -3966,10 +3966,16 @@ Describe 'A disc that older Windows can read' -Tag 'Build' -Skip:(-not ($script:
         New-Item -ItemType Directory -Force -Path $script:LegOut2 | Out-Null
         $script:LegOn = Invoke-Build (New-BuildSettings -Games $script:LegGames -Label 'Legacy On' -OutDir $script:LegOut2 -LegacyFs) $script:LogSink
 
+        # Decided on what the listing SAYS, not on $LASTEXITCODE. The exit code
+        # version passed alone and failed about one run in three inside the full
+        # suite - an intermittent test is worse than a failing one, because it
+        # teaches everybody to re-run instead of look. Every DiscWright disc has
+        # autorun.inf at its root, so seeing it named is positive evidence that
+        # the ISO9660 tree was opened and read; not seeing it is the absence.
         function Test-ReadsAsIso9660 {
             param([string]$IsoPath, [string]$SevenZip)
-            $null = & $SevenZip l -tiso $IsoPath 2>&1
-            return ($LASTEXITCODE -eq 0)
+            $out = (& $SevenZip l -tiso $IsoPath 2>&1 | Out-String)
+            return ($out -match 'autorun\.inf')
         }
     }
 
