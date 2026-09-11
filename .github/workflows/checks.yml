@@ -259,7 +259,27 @@ jobs:
           # Paths arrive as environment variables rather than being pasted into
           # the script, for the same reason GITHUB_REF_NAME is read that way in
           # version-matches-tag below: they stay data instead of becoming code.
-          gh release upload $env:GITHUB_REF_NAME $env:ZIP $env:SETUP --clobber
+          $tag = $env:GITHUB_REF_NAME
+
+          # Pushing a tag does not create a release, and `gh release upload` on a
+          # tag with no release fails with "release not found" - which is how
+          # 0.6.0 came out with both artifacts built and neither attached. So the
+          # release is created here when it is missing.
+          #
+          # As a DRAFT, deliberately. These notes are written by hand after
+          # looking at what actually shipped, and a tag push should not publish
+          # a release with no notes on it. The draft gives the artifacts
+          # somewhere to go; a person writes the notes and presses publish.
+          gh release view $tag --json tagName *> $null
+          if ($LASTEXITCODE -ne 0) {
+              Write-Host "No release for $tag yet - creating a draft to attach to."
+              gh release create $tag --draft --verify-tag --title $tag --notes "Draft - release notes not written yet."
+              if ($LASTEXITCODE -ne 0) { Write-Host "::error::could not create a draft release for $tag"; exit 1 }
+          }
+
+          gh release upload $tag $env:ZIP $env:SETUP --clobber
+          if ($LASTEXITCODE -ne 0) { Write-Host "::error::could not attach the artifacts to $tag"; exit 1 }
+
           Write-Host "installer sha256: $env:SHA"
 
   # A version constant maintained by hand drifts, because bumping it is a step

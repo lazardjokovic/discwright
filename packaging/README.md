@@ -42,7 +42,10 @@ user picks.
 
 1. Tag as usual. The `package` job in `.github/workflows/checks.yml` builds both
    artifacts, attaches them to the release, and prints the installer's SHA256 in
-   the run summary.
+   the run summary. If no release exists for the tag yet it creates one as a
+   **draft** first - pushing a tag does not create a release, and 0.6.0 shipped
+   with both artifacts built and neither attached because of it. Write the notes
+   on the draft and publish it.
 2. Build the manifests with that hash:
 
    ```powershell
