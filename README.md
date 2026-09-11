@@ -166,9 +166,32 @@ Untick it and rebuild and both files are removed again — leaving the info file
 
 None of this makes DiscWright run on Linux. It builds the ISO on Windows, as it always has; the box only changes what goes onto the disc.
 
+### A patch for a machine the installer will not run on
+
+Extra content is not only for manuals. A GOG installer wants Windows 2000 or newer, so on a Windows 98 machine it will refuse — but an official patch from that era will not, and a disc is the easiest way to get one onto a machine that has no business being on the internet.
+
+Put the patch in **step 5** and it lands at the disc root beside the installer, untouched. On XP the installer runs normally; on 98 it will not, and the period patch is right there to run or to keep. That also works for anything else the menu was never going to launch — a `.txt` of serials, a scanned manual, a mod archive.
+
+A `patch_*.exe` can also be added as an **add-on entry**, which files it in the menu under the game it patches. That is the better place when the patch is for the same Windows the disc is aimed at. For something the menu could never launch anyway, step 5 is simpler.
+
 ## Burning the ISO
 
-DiscWright does not burn. But two things are worth knowing, because both cost real discs to learn.
+DiscWright does not burn. But three things are worth knowing, because all of them cost real discs to learn.
+
+**Burn the ISO, or the disc folder's *contents* — never the folder itself.** DiscWright writes the finished image beside a staging folder called `disc`:
+
+```text
+The Witcher\
+├─ disc\                 the CONTENTS of this are what goes on the disc
+│   ├─ autorun.inf
+│   ├─ TheWitcher.ico
+│   └─ AUTORUN\
+└─ The Witcher.iso      burn this and the layout is already right
+```
+
+Burning the `disc` folder rather than what is inside it puts everything one level down, so the disc reads `E:\disc\autorun.inf` instead of `E:\autorun.inf`. **AutoRun only ever looks at the root**, so one level down it is an ordinary file nothing reads. The disc still opens, the menu still runs if you double-click it, and autorun is simply dead — on every version of Windows, which is what makes it confusing to diagnose.
+
+Most burning software asks which you meant. The answer is the contents. Burning the `.iso` avoids the question entirely, and is the reason it is there.
 
 **Burn slower than the maximum.** A disc rated 6× does not mean your setup can feed it at 6×. An external USB burner behind a USB 2.0 link has roughly 30 MB/s to work with, and 6× Blu-ray wants 27 MB/s of that, with a 4 MB buffer absorbing any hiccup. Dropping to 4× halves the demand and costs a few extra minutes. On a 25 GB BD-R, 6× failed 7.4 GB in with a write error; 4× wrote the whole 9.2 GB without complaint.
 
