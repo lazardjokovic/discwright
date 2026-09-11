@@ -266,11 +266,19 @@ jobs:
           # 0.6.0 came out with both artifacts built and neither attached. So the
           # release is created here when it is missing.
           #
+          # The probe piped to Out-Null rather than redirected with *> or 2>&1.
+          # GitHub's powershell shell runs with $ErrorActionPreference = 'Stop',
+          # and 5.1 wraps a native command's REDIRECTED stderr in a terminating
+          # NativeCommandError - so 0.7.0 failed exactly as 0.6.0 had, on the
+          # line written to prevent it, because gh says "release not found" on
+          # stderr and that became fatal. A pipe takes stdout only; stderr goes
+          # to the log unwrapped, and $LASTEXITCODE still answers the question.
+          #
           # As a DRAFT, deliberately. These notes are written by hand after
           # looking at what actually shipped, and a tag push should not publish
           # a release with no notes on it. The draft gives the artifacts
           # somewhere to go; a person writes the notes and presses publish.
-          gh release view $tag --json tagName *> $null
+          gh release view $tag --json tagName | Out-Null
           if ($LASTEXITCODE -ne 0) {
               Write-Host "No release for $tag yet - creating a draft to attach to."
               gh release create $tag --draft --verify-tag --title $tag --notes "Draft - release notes not written yet."
