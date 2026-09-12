@@ -22,7 +22,10 @@
 #endif
 
 #define AppName    "DiscWright"
-#define AppPublisher "Lazar Djokovic"
+// The project publishes itself. This is what Add/Remove Programs shows and what
+// the .exe's file properties carry, so it matches the winget publisher and the
+// DiscWright.DiscWright identifier rather than naming a person.
+#define AppPublisher "DiscWright"
 #define AppUrl     "https://discwright.com"
 
 [Setup]

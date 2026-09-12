@@ -42,7 +42,14 @@ if (-not $OutDir) {
 }
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }
 
-$id  = 'LazarDjokovic.DiscWright'
+# DiscWright.DiscWright rather than a person's name, the way Git.Git, 7zip.7zip
+# and calibre.calibre are filed: the publisher IS the project. The identifier
+# cannot be renamed once winget-pkgs has accepted it, only deprecated and
+# resubmitted, so this is the one field worth being sure about.
+#
+# A single segment is not allowed - `winget validate` rejects a bare
+# "DiscWright" against the schema, which wants Publisher.Package.
+$id  = 'DiscWright.DiscWright'
 $url = "https://github.com/lazardjokovic/discwright/releases/download/v$Version/DiscWright-$Version-setup.exe"
 
 # winget wants the hash upper-case and unbracketed.
@@ -104,8 +111,8 @@ ManifestVersion: 1.6.0
 PackageIdentifier: $id
 PackageVersion: $Version
 PackageLocale: en-US
-Publisher: Lazar Djokovic
-PublisherUrl: https://github.com/lazardjokovic
+Publisher: DiscWright
+PublisherUrl: https://discwright.com
 PublisherSupportUrl: https://github.com/lazardjokovic/discwright/issues
 PackageName: DiscWright
 PackageUrl: https://discwright.com
