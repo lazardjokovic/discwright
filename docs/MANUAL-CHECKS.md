@@ -200,8 +200,13 @@ which is accurate and cold, and had to be fixed afterwards.
 Link the handle and name the platform: `[u/name](url) on Reddit`, not a bare
 `u/name`. A release note outlives the habit of reading `u/` as a Reddit handle.
 
+**Every mention, not just the first.** A second mention further down is the one
+that gets typed as plain text, and it is the one somebody scrolling to the bottom
+sees first. 0.7.1 shipped with the opening mention linked and the closing one
+bare, and had to be fixed by hand.
+
 Where the notes later ask that person for more - and they usually do, because the
-thing they tested is the thing still unproven - thank them again there.
+thing they tested is the thing still unproven - thank them again there, linked.
 
 This is not manners. Two of the last three releases were shaped by somebody
 else's hardware: Windows XP autorunning was confirmed that way after this project
