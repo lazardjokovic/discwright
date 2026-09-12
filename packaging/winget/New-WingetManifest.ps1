@@ -50,6 +50,10 @@ if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Forc
 # A single segment is not allowed - `winget validate` rejects a bare
 # "DiscWright" against the schema, which wants Publisher.Package.
 $id  = 'DiscWright.DiscWright'
+
+# No provenance comment in the generated files. They are submitted into
+# microsoft/winget-pkgs, where a line pointing at a path in this repository is
+# noise to whoever reviews it.
 $url = "https://github.com/lazardjokovic/discwright/releases/download/v$Version/DiscWright-$Version-setup.exe"
 
 # winget wants the hash upper-case and unbracketed.
@@ -58,12 +62,12 @@ if ($sha.Length -ne 64) { throw "Sha256 does not look like a SHA256: '$Sha256'" 
 
 # ---------------------------------------------------------------- version --
 @"
-# Created for DiscWright $Version - see packaging/winget/New-WingetManifest.ps1
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
 PackageIdentifier: $id
 PackageVersion: $Version
 DefaultLocale: en-US
 ManifestType: version
-ManifestVersion: 1.6.0
+ManifestVersion: 1.12.0
 "@ | Set-Content -LiteralPath (Join-Path $OutDir "$id.yaml") -Encoding UTF8
 
 # -------------------------------------------------------------- installer --
@@ -81,7 +85,7 @@ ManifestVersion: 1.6.0
 # uninstall. Inno Setup registers its uninstall entry as "<AppId>_is1", so this
 # has to stay in step with AppId in packaging/DiscWright.iss.
 @"
-# Created for DiscWright $Version - see packaging/winget/New-WingetManifest.ps1
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
 PackageIdentifier: $id
 PackageVersion: $Version
 InstallerLocale: en-US
@@ -99,7 +103,7 @@ Installers:
   InstallerUrl: $url
   InstallerSha256: $sha
 ManifestType: installer
-ManifestVersion: 1.6.0
+ManifestVersion: 1.12.0
 "@ | Set-Content -LiteralPath (Join-Path $OutDir "$id.installer.yaml") -Encoding UTF8
 
 # ----------------------------------------------------------------- locale --
@@ -107,7 +111,7 @@ ManifestVersion: 1.6.0
 # ShortDescription is the line the store front and `winget search` show, so it
 # says what the tool does rather than what it is built with.
 @"
-# Created for DiscWright $Version - see packaging/winget/New-WingetManifest.ps1
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
 PackageIdentifier: $id
 PackageVersion: $Version
 PackageLocale: en-US
@@ -131,7 +135,7 @@ Description: |-
   add-ons live under the game they belong to, and a set too big for one disc can
   be split across several.
 
-  Burning is out of scope on purpose - DiscWright writes the ISO and leaves
+  Burning is out of scope on purpose. DiscWright writes the ISO and leaves
   burning to the tools that already do it well.
 Moniker: discwright
 Tags:
@@ -145,7 +149,7 @@ Tags:
 - backup
 ReleaseNotesUrl: https://github.com/lazardjokovic/discwright/releases/tag/v$Version
 ManifestType: defaultLocale
-ManifestVersion: 1.6.0
+ManifestVersion: 1.12.0
 "@ | Set-Content -LiteralPath (Join-Path $OutDir "$id.locale.en-US.yaml") -Encoding UTF8
 
 Write-Host "wrote three manifests to $OutDir"
