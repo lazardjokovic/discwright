@@ -188,9 +188,25 @@ a permanent public note is a different thing from a comment in a thread, and
 somebody who would happily say it in public may not want it attached to a project
 forever.
 
-Credit the finding, not just the thanks. *"Reported by X, who tested on real XP
-and 98 hardware"* tells a later reader where the knowledge came from and how
-solid it is; a thanks line at the bottom does not.
+**Thank them, and in the same breath say what they did.** *"Thanks to X, who
+tested on real XP and 98 hardware"* does both jobs at once: it thanks a person,
+and it tells a later reader where the knowledge came from and how solid it is.
+
+Neither half works alone. A thanks line at the bottom says nothing about what was
+found. Naming the finding without thanking anybody reads as bookkeeping - 0.7.1
+went out saying *"X went and tried it on real Windows 11, XP and 98 machines"*,
+which is accurate and cold, and had to be fixed afterwards.
+
+Link the handle and name the platform: `[u/name](url) on Reddit`, not a bare
+`u/name`. A release note outlives the habit of reading `u/` as a Reddit handle.
+
+**Every mention, not just the first.** A second mention further down is the one
+that gets typed as plain text, and it is the one somebody scrolling to the bottom
+sees first. 0.7.1 shipped with the opening mention linked and the closing one
+bare, and had to be fixed by hand.
+
+Where the notes later ask that person for more - and they usually do, because the
+thing they tested is the thing still unproven - thank them again there, linked.
 
 This is not manners. Two of the last three releases were shaped by somebody
 else's hardware: Windows XP autorunning was confirmed that way after this project
