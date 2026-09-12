@@ -43,20 +43,29 @@ user picks.
 1. Tag as usual. The `package` job in `.github/workflows/checks.yml` builds both
    artifacts, attaches them to the release, and prints the installer's SHA256 in
    the run summary. If no release exists for the tag yet it creates one as a
-   **draft** first - pushing a tag does not create a release, and 0.6.0 shipped
-   with both artifacts built and neither attached because of it. Write the notes
-   on the draft and publish it.
+   **draft** first, because pushing a tag does not create a release. Write the
+   notes on the draft and publish it.
+
+   It took three goes to get that right, which is worth knowing before trusting
+   it. 0.6.0 shipped with both artifacts built and neither attached, because
+   `gh release upload` on a tag with no release fails. The fix for that failed
+   the same way at 0.7.0: its probe used `*> $null`, and since GitHub's
+   `shell: powershell` runs with `$ErrorActionPreference = 'Stop'`, PowerShell
+   5.1 turned gh's stderr into a terminating `NativeCommandError` and killed the
+   script on the line written to prevent the problem. Both times the release was
+   published by hand, which is exactly why the second bug was not caught. 0.7.1
+   is the first release the job did on its own.
 2. Build the manifests with that hash:
 
    ```powershell
-   .\packaging\winget\New-WingetManifest.ps1 -Version 0.5.2 -Sha256 <hash>
+   .\packaging\winget\New-WingetManifest.ps1 -Version 0.7.1 -Sha256 <hash>
    ```
 
 3. Check them, on this machine, before they go anywhere:
 
    ```powershell
-   winget validate --manifest .\build\winget\0.5.2
-   winget install  --manifest .\build\winget\0.5.2   # really installs it
+   winget validate --manifest .\build\winget\0.7.1
+   winget install  --manifest .\build\winget\0.7.1   # really installs it
    winget uninstall DiscWright
    ```
 
