@@ -154,6 +154,51 @@ different piece of hardware with its own failure modes.
 
 ---
 
+## 6. Checks this machine cannot do at all
+
+Everything above assumes Windows 11 and a burner. Some of what DiscWright claims
+is about hardware nobody here has, and no amount of care at this desk will test
+it:
+
+- **Windows XP, 2000, ME, 98, 95** - whether the disc mounts, whether AutoRun
+  fires, whether the menu's buttons open anything.
+- **Old DVD players and other appliances** that read ISO9660 and nothing newer.
+
+There is no honest way to tick those off. What there is instead is people who own
+the hardware, and the only thing that turns their goodwill into a check is asking
+precisely and saying what you already know.
+
+- [ ] Say plainly in the release notes what has **not** been tested, and on what.
+      0.7.0 shipped saying it did not claim to fix AutoRun on Windows XP, because
+      nobody had tried it. Somebody then did, and said so. A claim nobody hedged
+      is a claim nobody thinks to check.
+- [ ] Ask for the specific observation, not a verdict. *"Does the drive show the
+      game's icon and title in My Computer?"* got a usable answer; *"does it work
+      on XP?"* would not have, because the disc was unreadable and there was
+      nothing to see.
+- [ ] Ask them to test a **clean** build. An edited disc confounded three
+      separate results at once, including on Windows 11, and cost a round trip to
+      untangle.
+
+### Credit the people who did it
+
+When somebody tests on hardware this project does not have, name them in the
+release notes - **with their permission, asked before it is written**. A handle in
+a permanent public note is a different thing from a comment in a thread, and
+somebody who would happily say it in public may not want it attached to a project
+forever.
+
+Credit the finding, not just the thanks. *"Reported by X, who tested on real XP
+and 98 hardware"* tells a later reader where the knowledge came from and how
+solid it is; a thanks line at the bottom does not.
+
+This is not manners. Two of the last three releases were shaped by somebody
+else's hardware: Windows XP autorunning was confirmed that way after this project
+had hedged it, and the Windows 98 button fix exists because of a report that said
+which half worked. Neither could have come from here.
+
+---
+
 ## What is already automated, and where
 
 Do not re-add any of these as a manual check.
