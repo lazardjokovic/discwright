@@ -2285,6 +2285,22 @@ $form=New-Object System.Windows.Forms.Form
 # The version belongs where it can be read off a screenshot without being asked
 # for, since that is how it arrives in a bug report.
 $form.Text="DiscWright $APP_VERSION"
+
+# The window's own icon: the title bar, the taskbar button and Alt-Tab all show
+# it. Unset, they show powershell.exe's icon, which is honest about what is
+# running and tells nobody what the program is.
+#
+# $PSScriptRoot rather than the working directory, because the .vbs launcher sets
+# the working directory and the .cmd does not, and a user can start either from
+# anywhere. Both launchers use -File, which is what populates it.
+#
+# Guarded twice. A missing .ico is survivable - the app looked like this until
+# now - and New-Object Icon throws on a file that is present but not an icon,
+# which would otherwise stop the window opening at all.
+$icoSelf = Join-Path $PSScriptRoot 'DiscWright.ico'
+if (Test-Path -LiteralPath $icoSelf) {
+    try { $form.Icon = New-Object System.Drawing.Icon($icoSelf) } catch { }
+}
 # 1054 is what the controls need. Opening at that height regardless is how a
 # window ends up with its Build button under the taskbar: 1080p leaves 1032
 # usable, and a 768px laptop far less. Open at whatever fits and let AutoScroll
