@@ -1156,6 +1156,31 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
 <script language="JScript">
   var fso=new ActiveXObject("Scripting.FileSystemObject");
   var shell=new ActiveXObject("Shell.Application");
+
+  // Shell.ShellExecute needs shell32.dll 5.0 and is documented as Windows 2000
+  // or newer. Windows 98 has the Shell.Application object and not that method,
+  // so on 98 every button on this menu threw and nothing opened - reported from
+  // a real machine, where the disc read fine and none of the buttons did
+  // anything.
+  //
+  // WScript.Shell has been there since Windows Scripting Host shipped with 98,
+  // and anything running this menu already has a scripting host. It takes a
+  // command line rather than a file and a verb, so a folder or a document is
+  // handed to explorer.exe, which is what ShellExecute would have done with it.
+  //
+  // Tried in the documented order: the modern call first, so Windows 2000 and
+  // everything after it behaves exactly as it did before this existed.
+  var wsh=null;
+  function openThing(p,args,wd){
+    try{ shell.ShellExecute(p,args||"",wd||"","open",1); return true; }catch(ex){}
+    try{
+      if(!wsh) wsh=new ActiveXObject("WScript.Shell");
+      var isExe=/\.(exe|com|bat|cmd|pif|lnk)$/i.test(p);
+      var cmd=isExe?('"'+p+'"'+(args?" "+args:"")):('explorer.exe "'+p+'"');
+      if(wd){ try{ wsh.CurrentDirectory=wd; }catch(e2){} }
+      wsh.Run(cmd,1,false); return true;
+    }catch(ex2){ alert(ex2.message); return false; }
+  }
   var root="";
   var GAMES=%%GAMES%%;       // [{n:name, m:registry match, s:setup, man:manual, ext:extras, a:[{n,s}]}]
   var BTNS=%%BTNS%%;         // which of Play/Install/Manual/Extras/Exit the disc was built with
@@ -1245,8 +1270,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   function openItem(p,isFolder){ try{
     if(!root){ alert("Could not work out the disc folder.\nRun the menu from the disc root."); return; }
     var f=fso.BuildPath(root,p);
-    if(isFolder){ if(fso.FolderExists(f)) shell.ShellExecute(f); else alert("Not found:\n"+f); }
-    else { if(fso.FileExists(f)) shell.ShellExecute(f); else alert("Not found:\n"+f); } }catch(e){alert(e.message);} }
+    if(isFolder){ if(fso.FolderExists(f)) openThing(f); else alert("Not found:\n"+f); }
+    else { if(fso.FileExists(f)) openThing(f); else alert("Not found:\n"+f); } }catch(e){alert(e.message);} }
   // Grey a button out rather than let it fail. Inline styles, not a CSS class:
   // this document runs in quirks mode, where compound selectors like .btn.off
   // are unreliable.
@@ -1520,8 +1545,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     return out;
   }
   function launchExe(p,args,wd){
-    try{ shell.ShellExecute(p,args||"",wd||fso.GetParentFolderName(p),"open",1); window.close(); }
-    catch(ex){ alert(ex.message); }
+    if(openThing(p,args,wd||fso.GetParentFolderName(p))) window.close();
   }
   function renderTasks(){
     var h="";

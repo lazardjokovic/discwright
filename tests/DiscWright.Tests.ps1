@@ -3273,6 +3273,45 @@ Describe "The menu's JavaScript is valid JavaScript" {
         $script:MenuLeftover | Should -BeNullOrEmpty
     }
 
+    Context 'opening things on a shell too old to have ShellExecute' {
+
+        # Shell.ShellExecute needs shell32.dll 5.0 and is documented as Windows
+        # 2000 or newer. Windows 98 has the Shell.Application object and not the
+        # method, so every button on the menu threw and nothing opened. Reported
+        # from a real 98 machine: the disc read fine and no button did anything.
+        #
+        # openThing tries ShellExecute and falls back to WScript.Shell, which has
+        # been present since Windows Scripting Host shipped with 98. These read
+        # the source rather than run it, because the fault they guard against is
+        # in the CALLER: a new button written next year that calls ShellExecute
+        # directly would work everywhere the author can test and break 98 again,
+        # silently, on a burned disc.
+
+        It 'routes every open through the one helper' {
+            # Exactly one mention, and it is the attempt inside openThing.
+            @([regex]::Matches($script:MenuJs, 'shell\.ShellExecute')).Count |
+                Should -Be 1 -Because 'buttons must call openThing, not ShellExecute'
+        }
+
+        It 'defines that helper' {
+            $script:MenuJs | Should -Match 'function openThing\s*\('
+        }
+
+        It 'falls back to something Windows 98 actually has' {
+            $script:MenuJs | Should -Match 'WScript\.Shell'
+        }
+
+        It 'tries the modern call first, so nothing newer changes behaviour' {
+            # Order matters: on Windows 2000 and later ShellExecute succeeds and
+            # the fallback is never reached, which is what keeps this invisible
+            # everywhere it is not needed.
+            $helper = [regex]::Match($script:MenuJs,
+                '(?s)function openThing\s*\(.*?\n  \}').Value
+            $helper | Should -Not -BeNullOrEmpty
+            $helper.IndexOf('ShellExecute') | Should -BeLessThan $helper.IndexOf('WScript.Shell')
+        }
+    }
+
     It 'parses' -Skip:(-not $script:HaveCScriptMenu) {
         $probe = @'
 var src = WScript.StdIn.ReadAll();

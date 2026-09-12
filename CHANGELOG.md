@@ -7,6 +7,31 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Fixed
+
+- **The menu's buttons work on Windows 98.** Every button opened whatever it
+  opened through `Shell.ShellExecute`, which needs shell32.dll 5.0 and is
+  documented as Windows 2000 or newer. Windows 98 has the `Shell.Application`
+  object and not that method, so on 98 every button threw and nothing happened.
+  Reported from a real machine, where the disc read and browsed correctly, the
+  menu opened, and no button did anything.
+
+  Opening now goes through one helper that tries `ShellExecute` first and falls
+  back to `WScript.Shell`, which has been there since Windows Scripting Host
+  shipped with 98. The modern call is tried first, so on Windows 2000 and
+  anything later the fallback is never reached and behaviour is unchanged.
+
+  What this is worth on 98 is the half of the disc that works there. A GOG
+  installer will not run - they declare Windows 2000 as their minimum - but
+  **Manual** and **Extras** open a folder of period patches, which is what a 98
+  machine wants from one of these discs.
+
+  **Play** will still not work there, for a different reason: it searches the
+  registry through WMI, which 98 did not install by default. Left alone, since a
+  GOG game cannot install on 98 for Play to find.
+
 ## [0.7.0] — 2026-09-11
 
 ### Added
