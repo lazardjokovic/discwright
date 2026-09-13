@@ -56,7 +56,7 @@ The launchers run the script with `-ExecutionPolicy Bypass`, the flag Windows re
 
 ## Making a disc
 
-![The whole build in one pass: add the game, set the label, icon and background, attach the manual and extras, preview the menu, then BUILD ISO through to the finished file](docs/demo.gif)
+![The whole build in one pass: add the game, set the label, icon and background, attach the manual and extras, name the disc on Linux, preview the menu, then BUILD ISO through to the finished file](docs/demo.gif)
 
 1. **Add the games** — each one a GOG folder holding `setup_*.exe` and any `.bin` parts. DiscWright reads the game's name out of the installer and tells you which disc size the lot of them needs. Add as many as fit.
 

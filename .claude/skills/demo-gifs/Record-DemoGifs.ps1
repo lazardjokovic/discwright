@@ -58,6 +58,11 @@ if (-not $PrimeFrom) { $PrimeFrom = Join-Path $D 'out-previous' }
 $DOWN_ALANWAKE     = 1
 $DOWN_HOLLOWKNIGHT = 4
 $DOWN_WITCHER      = 9
+# The game used off camera to teach the picker, and so the one neither recording
+# adds. Checked by name afterwards, because a wrong step count picks a folder
+# with no installer in it and the run should stop there rather than record it.
+$DOWN_PRIME        = 3
+$PrimeGame         = 'Dead Space'
 
 $capture = $null
 function Start-Capture([string]$Tag) {
@@ -103,6 +108,32 @@ try {
         Complete-FolderDialogShown -Win $win -Expand 0 -Down 0 -Paint 0.8
         Beat 2
         if ((Get-EntryCount $win) -lt 1) { throw "no game came out of the project in $PrimeFrom" }
+
+        # Opening the project is not enough on its own. It puts a game on the
+        # form, which makes the NEXT Add game open beside that game - but only a
+        # completed pick writes the folder down where it survives New disc and an
+        # emptied list. Without this the first recorded pick opens at GOG
+        # Galaxy's own download folder instead, and the step counts below are
+        # measured from the demo folder.
+        #
+        # Picked here: the game neither recording uses, so nothing is added twice.
+        #
+        # Checked by counting rather than by name. The status line names a game
+        # only while there is exactly one on the disc, and the project this primes
+        # from already has several - so the name is not there to read. What
+        # matters at this point is that the pick landed on a folder with an
+        # installer in it, which is what a rise in the count proves. Whether it
+        # landed on the RIGHT folder is checked where it matters, by the two
+        # recordings, which assert the game they each asked for.
+        $before = Get-EntryCount $win
+        Invoke-CtlNamed $win 'Add game*' | Out-Null
+        Complete-FolderDialogShown -Win $win -Expand 1 -Down $DOWN_PRIME -Paint 0.8
+        Beat 2
+        if ((Get-EntryCount $win) -le $before) {
+            throw ("priming added nothing - the step count probably missed $PrimeGame. Status reads: " +
+                   (Get-StatusText $win))
+        }
+
         Invoke-CtlNamed $win 'New disc' | Out-Null
         $yes = Find-Ctl -Root $win -NameLike 'Yes' -TimeoutSec 8
         if (-not $yes) { throw 'New disc did not ask before clearing' }
@@ -187,14 +218,25 @@ try {
         # remade at all.
         Invoke-Glide -Ctl (Find-Exact $win 'named on Linux')
         Beat 1.2
-        Invoke-Glide -Ctl (Find-Exact $win 'readable on Windows XP and older')
-        Beat 1.8
+
+        # The XP box is greyed for a game that came in parts, because the older
+        # filesystems stop at 2 GiB and GOG splits at twice that. Clicking a
+        # greyed box would record a click that does nothing, so rest on it
+        # instead and let its tooltip say why - which is the more useful shot.
+        $xp = Find-Exact $win 'readable on Windows XP and older'
+        if ($xp.Current.IsEnabled) {
+            Invoke-Glide -Ctl $xp
+            Beat 1.8
+        } else {
+            Move-ToCtl $xp
+            Beat 3.5
+        }
 
         # The menu, built from what is on the form.
         Invoke-Glide -Ctl (Find-Ctl -Root $win -NameLike 'Preview menu' -TimeoutSec 5) -SettleMs 1200
-        $hta = Wait-MenuWindow
-        if ($hta) {
-            Move-MenuTo -Proc $hta -X ([int]($wr.X + (700 - 760) / 2)) -Y ([int]($wr.Y + 250))
+        $menu = Wait-MenuWindow
+        if ($menu -ne [IntPtr]::Zero) {
+            Move-MenuTo -Menu $menu -X ([int]($wr.X + (700 - 760) / 2)) -Y ([int]($wr.Y + 250))
             Beat 1.2
             Move-To -X ([int]($wr.X + 460)) -Y ([int]($wr.Y + 330))
             Beat 3.5
@@ -227,6 +269,25 @@ try {
     # ============================================= GIF 2: several games =====
     # No build in this one, so it is quick.
     if ($Only -eq 'multi' -or $Only -eq 'both') {
+        # This recording opens by clearing the finished one-game disc, which is
+        # what the form is holding when it follows GIF 1. Run on its own it would
+        # open on an empty form, where New disc is greyed because there is
+        # nothing to clear and clicking it does nothing at all - so put the disc
+        # back first, off camera, out of what GIF 1 built.
+        if ((Get-EntryCount $win) -eq 0) {
+            $built = Join-Path $D 'out'
+            if (-not (Test-Path -LiteralPath (Join-Path $built 'discproject.json'))) {
+                throw ("nothing to open at $built - record the demo GIF first, or pass -Only both")
+            }
+            Write-Host '  putting the finished one-game disc back on the form'
+            Set-CtlText -Ctl (Get-BoxAfter $win '6)  Output folder*') -Text $built
+            Beat 0.4
+            Invoke-CtlNamed $win 'Open existing disc*' | Out-Null
+            Complete-FolderDialogShown -Win $win -Expand 0 -Down 0 -Paint 0.8
+            Beat 2
+            if ((Get-EntryCount $win) -lt 1) { throw "no game came out of the project in $built" }
+        }
+
         $capture = Start-Capture 'multi'
         Beat 1.5
 
@@ -291,26 +352,28 @@ try {
         Beat 2
 
         Invoke-Glide -Ctl (Find-Ctl -Root $win -NameLike 'Preview menu' -TimeoutSec 5) -SettleMs 1200
-        $hta = Wait-MenuWindow
-        if ($hta) {
-            Move-MenuTo -Proc $hta -X ([int]($wr.X + (700 - 760) / 2)) -Y ([int]($wr.Y + 250))
+        $menu = Wait-MenuWindow
+        if ($menu -ne [IntPtr]::Zero) {
+            Move-MenuTo -Menu $menu -X ([int]($wr.X + (700 - 760) / 2)) -Y ([int]($wr.Y + 250))
             Beat 2.5                                   # the chooser: two games and Exit
-            Invoke-MenuButton -Proc $hta -Index 1      # Hollow Knight
+            Invoke-MenuButton -Menu $menu -Index 1      # Hollow Knight
             Beat 3                                     # its two patches, greyed out
-            $rows = Get-MenuButtonRows $hta
+            $rows = Get-MenuButtonRows $menu
             Write-Host ('  game screen shows {0} buttons' -f $rows.Count)
-            Invoke-MenuButton -Proc $hta -Index ($rows.Count - 2)   # Back, above Exit
+            Invoke-MenuButton -Menu $menu -Index ($rows.Count - 2)   # Back, above Exit
             Beat 2.5
-            Invoke-MenuButton -Proc $hta -Index 0      # The Witcher
-            Beat 3.5
-            Close-Menu
+            Invoke-MenuButton -Menu $menu -Index 0      # The Witcher
+            Beat 4
         } else {
             Write-Host '  the preview never appeared'
         }
-        Beat 1.5
 
+        # Stopped while the menu is still up, so the recording ends on it the way
+        # the 0.4.0 one did. Closing first ends the GIF on the form with the menu
+        # gone, which is the least interesting frame of the lot.
         Stop-Capture $capture
         $capture = $null
+        Close-Menu
     }
 }
 catch {
