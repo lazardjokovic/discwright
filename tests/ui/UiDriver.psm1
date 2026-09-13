@@ -495,6 +495,32 @@ function Select-ListRow {
     Start-Sleep -Milliseconds 600
 }
 
+function Set-FolderTreeFocus {
+    <#  .SYNOPSIS
+        Give the folder dialog's tree the keyboard, which it does not start with.
+
+    .DESCRIPTION
+        Browse For Folder opens with the focus on its OK button. Arrow keys sent
+        at a freshly opened one therefore go to a button, and the selection never
+        moves - so Complete-FolderDialog's Expand and Down did nothing at all, in
+        silence, from the day they were written. Nothing caught it because every
+        caller until now picked the folder the app had already seeded and only
+        needed OK.
+
+        Tabbed rather than clicked. A click inside the tree lands on whichever
+        node happens to be under the pointer and selects it, which is a different
+        wrong answer rather than a fix.
+    #>
+    param($Dlg, [int]$MaxTabs = 6)
+    $tree = Find-Ctl -Root $Dlg -NameLike 'Navigation Pane' -TimeoutSec 5
+    if (-not $tree) { throw 'the folder dialog has no tree' }
+    for ($i = 0; $i -le $MaxTabs; $i++) {
+        if ($tree.Current.HasKeyboardFocus) { return $tree }
+        Send-Keys '{TAB}' 260
+    }
+    throw 'the folder tree never took the keyboard focus'
+}
+
 function Complete-FolderDialog {
     <#  .SYNOPSIS
         Finish a "Browse For Folder" that the app has opened.
@@ -506,6 +532,7 @@ function Complete-FolderDialog {
     param($Win, [int]$Expand = 0, [int]$Down = 0, [switch]$Cancel, [int]$TimeoutSec = 10)
     $dlg = Find-Ctl -Root $Win -NameLike 'Browse For Folder' -TimeoutSec $TimeoutSec
     if (-not $dlg) { throw 'no folder dialog appeared' }
+    if ($Expand -or $Down) { $null = Set-FolderTreeFocus $dlg }
     for ($i = 0; $i -lt $Expand; $i++) { Send-Keys '{RIGHT}' 400 }
     for ($i = 0; $i -lt $Down;   $i++) { Send-Keys '{DOWN}'  400 }
     $btn = if ($Cancel) { 'Cancel' } else { 'OK' }
@@ -599,6 +626,40 @@ function Find-RowButton {
     return $null
 }
 
+function Find-BoxRowButton {
+    <#  .SYNOPSIS
+        The button on the same row as a text box, for the steps whose label sits
+        on a line of its own.
+
+    .DESCRIPTION
+        Find-RowButton matches a button to its LABEL's vertical centre, which is
+        right for every row in the menu group. It is wrong for step 3 and step 6:
+        both put the label on one line and the box and its Browse on the next, so
+        matching on those labels finds nothing and the caller gets $null with no
+        hint as to why.
+
+        The box is on the button's row, so the box is what to measure from.
+    #>
+    param($Win, [string]$LabelLike, [string]$ButtonLike = 'Browse...', [int]$Tolerance = 30)
+    $box = Get-BoxAfter -Win $Win -LabelLike $LabelLike
+    if (-not $box) { throw "no box under '$LabelLike'" }
+    $br = $box.Current.BoundingRectangle
+    $by = $br.Y + ($br.Height / 2)
+    $all = $Win.FindAll($script:UiScope::Descendants, $script:UiAny)
+    $best = $null; $bestD = [double]::MaxValue
+    for ($i = 0; $i -lt $all.Count; $i++) {
+        $e = $all.Item($i)
+        try {
+            if ($e.Current.Name -notlike $ButtonLike) { continue }
+            $r = $e.Current.BoundingRectangle
+            $d = [Math]::Abs(($r.Y + $r.Height / 2) - $by)
+            if ($d -lt $bestD) { $bestD = $d; $best = $e }
+        } catch {}
+    }
+    if ($bestD -gt $Tolerance) { return $null }
+    return $best
+}
+
 function Find-MediaTarget {
     <#  .SYNOPSIS
         The Target disc dropdown, found by what it currently says.
@@ -682,4 +743,4 @@ Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWrigh
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-NameBox, Get-CtlOverlaps, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
     Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,
-    Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton
+    Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton, Find-BoxRowButton, Set-FolderTreeFocus
