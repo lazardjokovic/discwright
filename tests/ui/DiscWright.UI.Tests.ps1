@@ -219,6 +219,42 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
     }
 }
 
+Describe 'Walking the folder dialog with the keyboard' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # Both of these fail without Set-FolderTreeFocus and Find-BoxRowButton, and
+    # neither gap was noticed, because every other caller in this suite picks the
+    # folder the app had already seeded and so only ever needed OK.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        # Named so that the shell's own sort is not in question: one, three, two.
+        $script:TreeRoot = Join-Path $script:Sandbox 'tree'
+        foreach ($n in 'one', 'three', 'two') {
+            New-Item -ItemType Directory -Force -Path (Join-Path $script:TreeRoot $n) | Out-Null
+        }
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'finds the Browse button of a step whose label is on a line of its own' {
+        # Step 6 puts its label on one line and the box with its Browse on the
+        # next, so the label's row holds no button at all.
+        Find-RowButton -Win $script:Win -LabelLike '6)  Output folder*' | Should -BeNullOrEmpty
+        Find-BoxRowButton -Win $script:Win -LabelLike '6)  Output folder*' | Should -Not -BeNullOrEmpty
+    }
+
+    It 'opens the seeded folder and steps down to the child it was asked for' {
+        # Only true if the tree was given the keyboard first: the dialog opens
+        # with the focus on OK, where arrow keys do nothing.
+        $box = Get-BoxAfter -Win $script:Win -LabelLike '6)  Output folder*'
+        Set-CtlText -Ctl $box -Text $script:TreeRoot
+        Invoke-Ctl -Ctl (Find-BoxRowButton -Win $script:Win -LabelLike '6)  Output folder*') -SettleMs 1200
+        Complete-FolderDialog -Win $script:Win -Expand 1 -Down 2 | Out-Null
+        Start-Sleep -Milliseconds 600
+        $box.Current.Name | Should -Be (Join-Path $script:TreeRoot 'three')
+    }
+}
+
 Describe 'Opening a disc that was already built' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     BeforeAll {

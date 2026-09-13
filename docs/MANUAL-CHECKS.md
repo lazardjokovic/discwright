@@ -1,6 +1,6 @@
 # Manual checks before a release
 
-The automated suite is 413 logic tests and 76 window tests, and it runs in about
+The automated suite is 415 logic tests and 78 window tests, and it runs in about
 four minutes:
 
 ```
