@@ -19,8 +19,9 @@
       winget install --manifest .\build\winget\0.5.1   # really installs it
 
   Submitting is a separate, manual act: fork microsoft/winget-pkgs, copy the
-  folder to manifests\l\LazarDjokovic\DiscWright\<version>\ and open a PR. That
-  is deliberately not automated here - it publishes to somebody else's repo.
+  folder to manifests\d\DiscWright\DiscWright\<version>\ and open a PR. That is
+  deliberately not automated here - it publishes to somebody else's repo, and it
+  comes last, after the release has been shown to work on this machine.
 #>
 
 [CmdletBinding()]
