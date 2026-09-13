@@ -3943,14 +3943,33 @@ Describe 'Get-EntriesMaxFileBytes' -Tag 'Unit' {
         Get-EntriesMaxFileBytes | Should -Be 99
     }
 
-    It 'clears the ISO9660 ceiling for a real GOG part, by one byte' {
-        # GOG splits its installers at 4,294,967,294 bytes to stay under the
-        # identical FAT32 limit, which is why a GOG disc can take ISO9660 at all.
+    It 'puts a real GOG part over the ceiling, at twice it' {
+        # This assertion used to read the other way, on the reasoning the source
+        # carried: GOG splits its installers at 4,294,967,294 bytes to stay under
+        # the identical FAT32 limit, one byte under ISO9660's own 32-bit ceiling,
+        # so a GOG disc was thought to clear it.
+        #
+        # IMAPI stops at 2 GiB, half of that, so it does not. A build with the box
+        # ticked failed on a 4,294,040,574 byte Alan Wake part after copying
+        # 7.79 GB. tools\Measure-IsoFileCeiling.ps1 is where the number comes from.
         $script:state = @{ Games = @(@{ Ok = $true; MaxFileBytes = 4294967294; TotalBytes = 4294967294; Kind = 'Game' }) }
+        ((Get-EntriesMaxFileBytes) -le $script:ISO9660_MAX_FILE) | Should -BeFalse
+    }
+
+    It 'takes a file of exactly the ceiling and refuses one byte more' {
+        $script:state = @{ Games = @(@{ Ok = $true; MaxFileBytes = 2147483648; TotalBytes = 2147483648; Kind = 'Game' }) }
         ((Get-EntriesMaxFileBytes) -le $script:ISO9660_MAX_FILE) | Should -BeTrue
 
-        $script:state = @{ Games = @(@{ Ok = $true; MaxFileBytes = 4294967296; TotalBytes = 4294967296; Kind = 'Game' }) }
+        $script:state = @{ Games = @(@{ Ok = $true; MaxFileBytes = 2147483649; TotalBytes = 2147483649; Kind = 'Game' }) }
         ((Get-EntriesMaxFileBytes) -le $script:ISO9660_MAX_FILE) | Should -BeFalse
+    }
+
+    It 'holds the ceiling at the measured number' {
+        # Pinned deliberately. This constant is not a property of the ISO9660
+        # format, which would allow 4 GiB minus a byte. It is what the image
+        # writer accepts, so changing it should be a decision somebody made with
+        # the measuring script in front of them.
+        $script:ISO9660_MAX_FILE | Should -Be 2147483648
     }
 }
 

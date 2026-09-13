@@ -414,14 +414,27 @@ function Get-MediaRec([double]$bytes) {
 }
 
 # Total bytes of a mixed list of files and folders.
-# ISO9660 stores a file's length in 32 bits, so 4 GiB minus one byte is the most
-# a single file can be. UDF has no such limit, which is why the disc is UDF today.
+# The largest single file the ISO9660 and Joliet filesystems can be given here.
 #
-# GOG already lives with this: its installers split into .bin parts at
-# 4,294,967,294 bytes - one byte under - because FAT32 has the same ceiling. So in
-# practice a GOG disc clears it, and this exists for what people add themselves in
-# step 5.
-$ISO9660_MAX_FILE = [double]4294967295
+# It is 2 GiB, and that number is measured rather than reasoned about. ISO9660
+# keeps a length in 32 bits, so the format's own ceiling is 4 GiB minus a byte,
+# and this constant used to say exactly that. IMAPI - the Windows image writer
+# that builds every disc DiscWright produces - stops a full 2 GiB earlier. It
+# accepts a file of 2,147,483,648 bytes and refuses 2,147,483,649 with
+#
+#     Data file is too large for 'ISO9660/Joliet' file system.
+#
+# with or without Joliet, and Joliet cannot be asked for on its own. UDF takes
+# anything, which is why the disc is UDF by default and the rest is opt-in.
+#
+# What that costs: GOG splits its installers into .bin parts at 4,294,967,294
+# bytes, one under the identical FAT32 ceiling. That is twice this one, so no
+# multi-part GOG installer can carry the older filesystems at all. The option is
+# for discs whose biggest single file is 2 GiB or less. This comment used to claim
+# the opposite, and a real build died on it after copying 7.79 GB.
+#
+# tools\Measure-IsoFileCeiling.ps1 measures it again on any machine.
+$ISO9660_MAX_FILE = [double]2147483648
 
 # The largest single file under a set of paths. Mirrors Get-ItemsSize, which sums
 # the same walk - kept separate rather than folded in because the sum is wanted on
@@ -1694,11 +1707,13 @@ public class ISOFile {
         $fsi.FreeMediaBlocks=[int]$blocks
 
         # UDF by default. The reasons the others were left off were a Joliet name
-        # limit of 64 characters and the ISO9660 4 GiB ceiling - but IMAPI writes
-        # long names into the ISO9660 tree regardless (a real 96-character GOG
-        # patch name survives intact), and GOG's own parts clear the ceiling by a
-        # byte. So the caller may ask for all three, and the only thing that has
-        # to be checked first is the file size.
+        # limit of 64 characters and a file size ceiling. The name limit turned
+        # out not to bite - IMAPI writes long names into the ISO9660 tree
+        # regardless, and a real 96-character GOG patch name survives intact - but
+        # the size ceiling does, at 2 GiB rather than the 4 GiB the format itself
+        # allows. So the caller may ask for all three, and the size has to be
+        # checked first: see $ISO9660_MAX_FILE, and the caller in Invoke-Build
+        # that falls back to UDF alone when the staged disc is over it.
         $fsi.FileSystemsToCreate=$fileSystems
         try { $fsi.UDFRevision=0x250 } catch {}
         $vn = ($volLabel -replace '[^A-Za-z0-9_]','_'); if($vn.Length -gt 16){$vn=$vn.Substring(0,16)}
@@ -2230,7 +2245,7 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         $big = @(Get-ChildItem -Recurse -File -Force $stage -EA SilentlyContinue |
                  Where-Object { $_.Length -gt $ISO9660_MAX_FILE })
         if ($big.Count) {
-            & $log ("Not adding the ISO9660 filesystem: {0} is {1}, and ISO9660 cannot hold a file of 4 GiB or more." -f $big[0].Name, (Format-Size $big[0].Length))
+            & $log ("Not adding the ISO9660 filesystem: {0} is {1}, and it cannot hold a file above 2 GiB." -f $big[0].Name, (Format-Size $big[0].Length))
             & $log "  The disc will be UDF only, so it needs Windows Vista or newer."
         } else {
             $fsMask = 7
@@ -2725,10 +2740,10 @@ function Get-EntriesMaxFileBytes {
     return $biggest
 }
 
-# ISO9660 cannot describe a file of 4 GiB or more, so the option that adds it
-# greys itself when the disc holds one. Only the installers are measured here;
-# the build checks the whole staged disc again before committing to a filesystem,
-# which is what covers anything dropped in at step 5.
+# The older filesystems cannot take a file above $ISO9660_MAX_FILE, so the option
+# that adds them greys itself when the disc holds one. Only the installers are
+# measured here; the build checks the whole staged disc again before committing to
+# a filesystem, which is what covers anything dropped in at step 5.
 #
 # Guarded the way Set-StatusTip is, and for the same reason: the logic tests
 # reach Update-MediaLabel with stand-in controls, and a [pscustomobject] has no
@@ -2744,11 +2759,11 @@ function Update-LegacyFsBox {
         $chkLegacy.Checked = $false
         $tips.SetToolTip($chkLegacy, (
             "Not possible for this disc: it holds a file of $(Format-Size $biggest)," + [Environment]::NewLine +
-            "and ISO9660 keeps a file's length in 32 bits, so 4 GiB minus one byte is" + [Environment]::NewLine +
-            "the most it can describe." + [Environment]::NewLine +
+            "and the older filesystems cannot take a file above 2 GiB." + [Environment]::NewLine +
             [Environment]::NewLine +
-            "GOG's own installers split below that, so this is usually something added" + [Environment]::NewLine +
-            "in step 5."))
+            "GOG splits its installers into parts just under 4 GiB, which is twice" + [Environment]::NewLine +
+            "that, so most big games cannot have this. The disc still works" + [Environment]::NewLine +
+            "everywhere from Windows Vista onwards."))
     }
 }
 
@@ -2858,8 +2873,9 @@ $tips.SetToolTip($chkLegacy, (
     "for Windows 2000 or newer in their own headers, so on 98 and 95 the disc can" + [Environment]::NewLine +
     "be browsed but not installed from." + [Environment]::NewLine +
     [Environment]::NewLine +
-    "Unavailable when a file is 4 GiB or larger: ISO9660 keeps a file's length in" + [Environment]::NewLine +
-    "32 bits and cannot describe one that big."))
+    "Unavailable when a file is larger than 2 GiB, which the older filesystems" + [Environment]::NewLine +
+    "cannot take. GOG splits big games into parts twice that size, so most of" + [Environment]::NewLine +
+    "them cannot have this."))
 $tips.SetToolTip($chkLinux, (
     "Writes .xdg-volume-info and a .png copy of the icon to the disc, so a Linux" + [Environment]::NewLine +
     "file manager shows the game's name and cover art instead of a volume id." + [Environment]::NewLine +
