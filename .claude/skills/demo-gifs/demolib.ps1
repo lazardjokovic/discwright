@@ -111,11 +111,38 @@ if (-not ('DwWin' -as [type])) {
     Add-Type @"
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 public class DwWin {
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  delegate bool EnumProc(IntPtr h, IntPtr p);
   [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int ht, bool repaint);
   [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr p);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+
+  // The window the menu is drawn in, which is NOT Process.MainWindowHandle.
+  // mshta owns a dozen windows and .NET hands back a hidden zero-sized
+  // "Internet Explorer_Hidden" one: moving that reports success and moves
+  // nothing, UI Automation gives it an empty rectangle, and every click computed
+  // from it lands somewhere else entirely. The document is in a visible
+  // "HTML Application Host Window Class" of a sensible size.
+  public static IntPtr FindMenu(int pid) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((h, p) => {
+      uint wp; GetWindowThreadProcessId(h, out wp);
+      if (wp != (uint)pid || !IsWindowVisible(h)) return true;
+      var cls = new StringBuilder(256); GetClassName(h, cls, 256);
+      if (cls.ToString() != "HTML Application Host Window Class") return true;
+      RECT r; GetWindowRect(h, out r);
+      if (r.R - r.L < 200 || r.B - r.T < 200) return true;
+      found = h;
+      return false;
+    }, IntPtr.Zero);
+    return found;
+  }
 }
 "@
 }
@@ -132,31 +159,41 @@ $script:MenuW = 760
 $script:MenuH = 480
 
 function Wait-MenuWindow {
-    <#  .SYNOPSIS The preview window, once mshta has one. #>
-    param([int]$TimeoutSec = 20)
+    <#  .SYNOPSIS
+        The window the preview is drawn in, once mshta has drawn it.
+
+        Returns a window handle, not a process. Everything below needs the real
+        one; see DwWin.FindMenu for what is wrong with the obvious way.
+    #>
+    param([int]$TimeoutSec = 25)
     for ($i = 0; $i -lt $TimeoutSec * 4; $i++) {
-        $p = Get-Process mshta -ErrorAction SilentlyContinue |
-             Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-        if ($p) { return $p }
+        foreach ($p in @(Get-Process mshta -ErrorAction SilentlyContinue)) {
+            $h = [DwWin]::FindMenu($p.Id)
+            if ($h -ne [IntPtr]::Zero) { return $h }
+        }
         Start-Sleep -Milliseconds 250
     }
-    return $null
+    return [IntPtr]::Zero
 }
 
 function Move-MenuTo {
     <#  .SYNOPSIS
-        Put the preview where the recording can see it. mshta opens it wherever
-        it likes, which is usually half outside the captured region.
+        Put the preview where the recording can see it. mshta centres it on the
+        screen, which is not where the window being filmed is.
     #>
-    param($Proc, [int]$X, [int]$Y)
-    [void][DwWin]::MoveWindow($Proc.MainWindowHandle, $X, $Y, $script:MenuW, $script:MenuH, $true)
-    Start-Sleep -Milliseconds 700
+    param([IntPtr]$Menu, [int]$X, [int]$Y)
+    [void][DwWin]::MoveWindow($Menu, $X, $Y, $script:MenuW, $script:MenuH, $true)
+    Start-Sleep -Milliseconds 400
+    # Asked for, not assumed. A click on an inactive window is swallowed by the
+    # activation, so without this the first button press does nothing at all.
+    [void][DwWin]::SetForegroundWindow($Menu)
+    Start-Sleep -Milliseconds 500
 }
 
 function Get-MenuRect {
-    param($Proc)
+    param([IntPtr]$Menu)
     $r = New-Object DwWin+RECT
-    [void][DwWin]::GetWindowRect($Proc.MainWindowHandle, [ref]$r)
+    [void][DwWin]::GetWindowRect($Menu, [ref]$r)
     return $r
 }
 
@@ -171,9 +208,9 @@ function Get-MenuButtonRows {
         block 46px tall and the artwork behind it is a photograph, which is not
         flat on any three columns at once.
     #>
-    param($Proc)
+    param([IntPtr]$Menu)
     Add-Type -AssemblyName System.Drawing
-    $r = Get-MenuRect $Proc
+    $r = Get-MenuRect $Menu
     $bmp = New-Object System.Drawing.Bitmap($script:MenuW, $script:MenuH)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size)
@@ -214,12 +251,12 @@ function Get-MenuButtonRows {
 
 function Invoke-MenuButton {
     <#  .SYNOPSIS Click the Nth button of the menu, counting from the top. #>
-    param($Proc, [int]$Index, [double]$Before = 0.6)
-    $rows = Get-MenuButtonRows $Proc
+    param([IntPtr]$Menu, [int]$Index, [double]$Before = 0.6)
+    $rows = Get-MenuButtonRows $Menu
     if ($Index -ge $rows.Count) {
         throw ("the menu shows {0} buttons, so there is no button {1}" -f $rows.Count, $Index)
     }
-    $r = Get-MenuRect $Proc
+    $r = Get-MenuRect $Menu
     $y = $r.T + [int](($rows[$Index][0] + $rows[$Index][1]) / 2)
     $x = $r.L + 615          # the panel is 250 wide at x=490
     Move-To -X $x -Y $y
