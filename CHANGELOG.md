@@ -7,6 +7,35 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Fixed
+
+- **"Readable on Windows XP and older" no longer offers itself for discs it
+  cannot build.** The box was available whenever every file was under 4 GiB,
+  which is ISO9660's own ceiling. The Windows image writer that actually builds
+  the disc stops at 2 GiB, so a disc that passed the check could still fail, and
+  it failed late: after staging the whole payload, with
+
+      ERROR: Data file is too large for 'ISO9660/Joliet' file system.
+
+  and no disc to show for it. Found on a 7.79 GB game whose largest part is
+  4,294,040,574 bytes.
+
+  The ceiling is now 2,147,483,648 bytes, measured rather than reasoned about.
+  `tools\Measure-IsoFileCeiling.ps1` measures it again on any machine: the writer
+  takes a file of exactly that size and refuses one byte more, with or without
+  Joliet, and Joliet cannot be requested on its own.
+
+  **What this costs:** GOG splits its installers into parts just under 4 GiB, to
+  stay under the identical FAT32 ceiling, which is twice this limit, so no game
+  that arrives in parts can carry the older filesystems. Those discs stay UDF
+  only, and UDF needs Windows Vista or newer. A game that arrives as a single
+  installer under 2 GiB is unaffected, and so is a disc of smaller things. The
+  box greys itself and names the file that is the problem.
+
+  Nothing about a disc already built changes, and the option was off by default.
+
 ## [0.7.1] — 2026-09-12
 
 ### Fixed
