@@ -164,6 +164,15 @@ it:
   fires, whether the menu's buttons open anything.
 - **Old DVD players and other appliances** that read ISO9660 and nothing newer.
 
+One thing that *can* be checked here, and should be after any change near the
+older filesystems, is the file size they will take. It is not the number the
+ISO9660 specification gives: the image writer stops a full 2 GiB earlier, and the
+gap between the two is what made a build fail after staging 7.79 GB.
+
+- [ ] Run `tools\Measure-IsoFileCeiling.ps1` and confirm it still reports
+      2,147,483,648 bytes. It takes a couple of minutes and writes nothing to
+      disc. If the number has moved, `$ISO9660_MAX_FILE` moves with it.
+
 There is no honest way to tick those off. What there is instead is people who own
 the hardware, and the only thing that turns their goodwill into a check is asking
 precisely and saying what you already know.
@@ -248,6 +257,8 @@ Do not re-add any of these as a manual check.
 | The name goes back to the one the installer reported | same |
 | A build driven from the window, start to ISO on disk | *The form while a real build runs* |
 | The form locks during a build and restores what was enabled | *Locking the form while a build runs* |
+| A file over the ISO9660 ceiling drops the disc back to UDF alone | *falls back to UDF alone when a file is too big for ISO9660* |
+| The ceiling itself, pinned to the measured number | *holds the ceiling at the measured number* |
 
 One thing deliberately has **no** test: whether the form *looks* frozen while a
 build runs. The only moment it is observable from outside is while the completion

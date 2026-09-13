@@ -153,9 +153,11 @@ DiscWright writes the ISO as UDF 2.50. Windows Vista was the first version that 
 
 The second checkbox on the **Extra compatibility** row, **Readable on Windows XP and older**, fixes that by writing ISO9660 and Joliet filesystems alongside the UDF one. Every system reads the newest one it understands and ignores the rest, so a disc built with it ticked behaves on Windows 11 exactly as one built without it. It is off by default, and it costs nothing measurable on the disc.
 
-Two things were supposed to make this impossible, and neither does in practice. Joliet holds filenames to 64 characters, but IMAPI writes long names into the ISO9660 tree regardless — a real 96-character GOG patch filename survives intact. And ISO9660 keeps a file's length in 32 bits, so it cannot describe a file of 4 GiB or more — but GOG already splits its installers a byte under that limit, because FAT32 has the same ceiling.
+**A game that came in parts cannot have it, and the box greys itself when yours cannot.** The older filesystems take a single file of 2 GiB at most. That number is measured against the Windows image writer that builds the disc, not read off the ISO9660 specification, which is twice as generous on paper and was what this said until a build failed on it. GOG splits its installers into parts just under 4 GiB, to stay under the identical FAT32 ceiling, so a game that arrives in parts is over this limit and the box is unavailable for it. A game that arrives as one installer under 2 GiB can have it, as can a disc of small things.
 
-When a file **is** too big, the checkbox greys itself and says why. If something added in step 5 slips past that, the build checks the finished disc folder again and quietly falls back to UDF alone rather than writing an image that has lost a file to a 32-bit field.
+The filename limit turned out not to matter. Joliet holds names to 64 characters, but IMAPI writes long names into the ISO9660 tree regardless, and a real 96-character GOG patch filename survives intact.
+
+If something added in step 5 slips past the greyed box, the build checks the finished disc folder again and falls back to UDF alone, saying so in the log, rather than writing an image that has lost a file.
 
 Old DVD players and other appliances that only speak ISO9660 benefit from the same box.
 
