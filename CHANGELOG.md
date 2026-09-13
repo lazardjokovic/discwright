@@ -7,7 +7,7 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
-## [Unreleased]
+## [0.7.2] — 2026-09-13
 
 ### Fixed
 
@@ -35,6 +35,38 @@ between minor versions.
   box greys itself and names the file that is the problem.
 
   Nothing about a disc already built changes, and the option was off by default.
+
+- **The window tests could not walk a folder dialog, and said nothing about it.**
+  `Complete-FolderDialog` takes arguments for stepping through the tree, and they
+  had never moved anything: Browse For Folder opens with the keyboard focus on
+  its OK button, so every arrow key went to a button and OK returned the folder
+  the dialog started on. No test caught it because every caller so far picked the
+  folder the app had already seeded. The tree is given the focus first now, and
+  two tests cover it.
+
+### Changed
+
+- **The demonstrations in the README were re-recorded.** Both still showed 0.4.0:
+  a window with no compatibility row, no icon of its own in the title bar, and a
+  build finishing in a version three releases old. The new ones show the *Also
+  make the disc* row doing what it should, including the XP box greying itself
+  for a game that came in parts, and the one-game demo still ends on a real
+  build.
+
+### Added
+
+- `tools\Measure-IsoFileCeiling.ps1`, which measures the largest file the older
+  filesystems will take, on whatever machine it is run on.
+- A skill that records the demonstrations by driving the window, capturing frames
+  and assembling them, so they can be redone in ten minutes without anyone
+  touching the machine. What it knows is written down with it: which segments
+  have to be cut for privacy, why the menu cannot be driven through UI
+  Automation, and how to keep a GIF of this window under a few megabytes.
+
+### Removed
+
+- `tools\New-DemoGif.ps1`. It came from #10, nothing referenced it, and it never
+  produced the published demonstrations.
 
 ## [0.7.1] — 2026-09-12
 
@@ -82,6 +114,10 @@ between minor versions.
   intact. And ISO9660 keeps a file's length in 32 bits, so it cannot describe a
   file of 4 GiB or more - but GOG already splits its installers one byte under
   that, because FAT32 has the same ceiling.
+
+  > The second half of that paragraph is wrong, and 0.7.2 corrects it. The image
+  > writer stops at 2 GiB, not 4, which is half what a GOG part is, so a game
+  > that arrives in parts cannot have this option at all.
 
   Where a file really is too big the checkbox greys itself and says so, and the
   build re-checks the finished disc folder and falls back to UDF alone rather
@@ -658,7 +694,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/lazardjokovic/discwright/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/lazardjokovic/discwright/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/lazardjokovic/discwright/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/lazardjokovic/discwright/compare/v0.5.1...v0.6.0
