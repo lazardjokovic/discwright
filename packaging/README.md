@@ -70,16 +70,26 @@ user picks.
    ```
 
 4. Submit: fork [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs),
-   copy the folder to `manifests\l\LazarDjokovic\DiscWright\<version>\`, open a
-   PR. Their CI runs the install on a clean VM and a human reviews it.
+   copy the folder to `manifests\d\DiscWright\DiscWright\<version>\`, open a PR.
+   Their CI runs the install on a clean VM.
 
-Step 4 is not automated on purpose - it publishes to somebody else's repository,
-and that should be a decision rather than a side effect of pushing a tag.
+**Nothing goes to winget until the release works here.** Step 4 comes after the
+full suite has passed on a free desktop, after the built installer has really
+installed and uninstalled, and after a disc has been built and mounted. An update
+to a package that already exists merges without a human, so a bad build there
+installs itself on other people's machines and takes a second PR to undo.
+
+That is also why step 4 is not automated, and why it should not be wired to
+publishing a release: an action that fires on publish submits before anyone has
+looked at it, which is the wrong way round. If it is ever automated, it wants a
+manual trigger run after the checks.
 
 ## First submission
 
-The first PR to `winget-pkgs` claims the publisher folder `LazarDjokovic`, so
-the identifier `LazarDjokovic.DiscWright` is fixed from then on. `AppId` in
+The first PR to `winget-pkgs` claims the publisher folder, so the identifier
+`DiscWright.DiscWright` is fixed from then on - the project's own name rather
+than a person's, which is both the more accurate publisher for this and keeps a
+real name out of a command people type. `AppId` in
 `DiscWright.iss` and `ProductCode` in the generated installer manifest have to
 stay in step with each other forever after, or winget stops recognising an
 installed copy as the same product.
