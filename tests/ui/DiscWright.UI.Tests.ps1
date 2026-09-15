@@ -865,6 +865,116 @@ Describe 'Previewing the menu' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         Test-CtlEnabled $script:Win '*BUILD ISO' | Should -BeTrue
     }
 }
+Describe 'Driving the menu of a disc with two games' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The block above opens the menu and stops: a window, no script error, the
+    # right title. None of that notices a chooser that lists the wrong games, a
+    # game screen that leaves its add-ons off, a Back that goes nowhere or an Exit
+    # that does not close. Those only fail for someone holding the disc. This
+    # clicks through them.
+    #
+    # UI Automation cannot see inside the document, so the buttons are found on
+    # screen - see Get-MenuButtonRows - and counted. The count is the assertion:
+    # every screen here has a different number of buttons, so arriving on the
+    # wrong one cannot pass.
+
+    BeforeAll {
+        $script:MshtaBefore = @(Get-Process mshta -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+
+        # A background with no flat stretch in it. Buttons are found by being a
+        # flat dark block; a plain dark background would read as one tall button
+        # once the menu shades the panel side.
+        $bmp = New-Object System.Drawing.Bitmap(1280, 720)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        for ($y = 0; $y -lt 720; $y += 6) {
+            $c = if (($y / 6) % 2) { [System.Drawing.Color]::FromArgb(210, 190, 90) } else { [System.Drawing.Color]::FromArgb(70, 140, 210) }
+            $g.FillRectangle((New-Object System.Drawing.SolidBrush($c)), 0, $y, 1280, 6)
+        }
+        $g.Dispose()
+        $script:StripeArt = Join-Path $script:Sandbox 'stripes.png'
+        $bmp.Save($script:StripeArt, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+
+        # Two games, the first with both patches filed under it.
+        $script:MenuOut = Join-Path $script:Sandbox 'menuproj'
+        New-Item -ItemType Directory -Force -Path $script:MenuOut | Out-Null
+        $a  = Get-GameInfo $script:GameA
+        $b  = Get-GameInfo $script:GameB
+        $p1 = Get-AddOnInfo $script:PatchOne; $p1.ParentIndex = 0
+        $p2 = Get-AddOnInfo $script:PatchTwo; $p2.ParentIndex = 0
+        Save-Project @{
+            Games=@($a, $b, $p1, $p2); Label='Menu Walk'
+            IconPath=$script:Art; IconIsIco=$false
+            Menu=$true; BgPath=$script:StripeArt; BgAsIs=$false; PanelSide='Right'
+            Divider=$false; ShowTitle=$false; TitleText=''
+            WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+            Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
+            ExtraItems=@(); MediaKey=''; OutDir=$script:MenuOut
+        } $script:MenuOut
+
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:MenuOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+
+        $script:Menu = [IntPtr]::Zero
+        if ((Test-CtlEnabled $script:Win 'Preview menu') -eq $true) {
+            Invoke-CtlNamed $script:Win 'Preview menu' | Out-Null
+            $proc = $null
+            for ($i = 0; $i -lt 40 -and -not $proc; $i++) {
+                $proc = Get-Process mshta -ErrorAction SilentlyContinue |
+                        Where-Object { $script:MshtaBefore -notcontains $_.Id } | Select-Object -First 1
+                if (-not $proc) { Start-Sleep -Milliseconds 250 }
+            }
+            if ($proc) { $script:Menu = Find-MenuWindow -ProcessId $proc.Id }
+        }
+    }
+
+    AfterAll {
+        Get-Process mshta -ErrorAction SilentlyContinue |
+            Where-Object { $script:MshtaBefore -notcontains $_.Id } |
+            ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+        Stop-DiscWright $script:App; $script:App = $null
+    }
+
+    It 'finds the window the menu is drawn in' {
+        $script:Menu | Should -Not -Be ([IntPtr]::Zero)
+    }
+
+    It 'opens on a chooser: one button per game, and Exit' {
+        Wait-MenuButtonCount -Menu $script:Menu -Expected 3 | Should -Be 3
+    }
+
+    It 'opens a game on its own screen, its add-ons under Install' {
+        # Play, Install, the two patches, Back, Exit.
+        Invoke-MenuButton -Menu $script:Menu -Index 0
+        Wait-MenuButtonCount -Menu $script:Menu -Expected 6 | Should -Be 6
+    }
+
+    It 'goes back to the chooser from Back' {
+        Invoke-MenuButton -Menu $script:Menu -Index 4
+        Wait-MenuButtonCount -Menu $script:Menu -Expected 3 | Should -Be 3
+    }
+
+    It 'opens the other game without the first one''s add-ons' {
+        # Play, Install, Back, Exit. A screen that carried the patches over from
+        # the game before would show six.
+        Invoke-MenuButton -Menu $script:Menu -Index 1
+        Wait-MenuButtonCount -Menu $script:Menu -Expected 4 | Should -Be 4
+    }
+
+    It 'closes when Exit is pressed' {
+        Invoke-MenuButton -Menu $script:Menu -Index 3
+        $gone = $false
+        for ($i = 0; $i -lt 20 -and -not $gone; $i++) {
+            $gone = -not (Test-MenuWindowOpen -Menu $script:Menu)
+            if (-not $gone) { Start-Sleep -Milliseconds 250 }
+        }
+        $gone | Should -BeTrue
+    }
+}
+
 Describe 'Choosing the disc you are going to burn' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     BeforeAll {

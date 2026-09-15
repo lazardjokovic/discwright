@@ -7,6 +7,18 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Added
+
+- **The window tests click through the menu.** Until now they opened the preview
+  and stopped: a window appeared, no script error, the right title. A chooser
+  listing the wrong games, a game screen missing its add-ons, a Back that went
+  nowhere or an Exit that did not close would all have passed. The new tests
+  walk a two-game disc through every one of those and count the buttons on each
+  screen. Both halves were checked by breaking the menu on purpose - Back that
+  does nothing, add-ons left off - and watching the matching test fail.
+
 ## [0.7.2] — 2026-09-13
 
 ### Fixed
