@@ -1,6 +1,6 @@
 # Manual checks before a release
 
-The automated suite is 415 logic tests and 78 window tests, and it runs in about
+The automated suite is 415 logic tests and 84 window tests, and it runs in about
 four minutes:
 
 ```
@@ -41,8 +41,10 @@ and **Preview menu**. **BUILD ISO** is at the bottom, beside the log box.
 ## 1. Does the menu look right?
 
 A test opens the preview, proves the JavaScript ran without a script error, and
-reads the window title back to confirm the characters survived. UI Automation
-cannot see inside the rendered document, so **layout is the whole of this check**.
+reads the window title back to confirm the characters survived. Another clicks
+through a two-game menu - chooser, a game's screen with its add-ons, Back, the
+other game, Exit - counting the buttons on each screen as it goes. What neither
+can judge is how it looks, so **layout is the whole of this check**.
 
 - [ ] In **4)  Autorun menu**, tick **Autorun menu**.
 - [ ] Click **Browse...** beside **Background image** and pick any PNG or JPG.
@@ -239,6 +241,7 @@ Do not re-add any of these as a manual check.
 | The installer is reachable at the path the menu was given | same |
 | Menu JavaScript parses, and defines what it calls | *The menu's JavaScript is valid JavaScript* |
 | Menu opens without a runtime script error | *Previewing the menu* |
+| Chooser, a game's screen with its add-ons, Back and Exit all work | *Driving the menu of a disc with two games* |
 | `™` and `®` reach the screen intact | same, and *A game name with characters outside plain ASCII* |
 | Project files from v1, v2, v3 and a real 0.4.2 file | *Project file* |
 | A renamed game still matches on the name GOG registered | *Renaming a game for the menu* |

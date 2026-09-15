@@ -660,6 +660,174 @@ function Find-BoxRowButton {
     return $best
 }
 
+# ---------------------------------------------------------------------------
+# The menu preview, driven rather than merely opened.
+#
+# The menu is an HTA. UI Automation sees its window and its title and nothing
+# inside the document, so its buttons cannot be found by name. Two things make
+# it drivable anyway, and both were found the hard way while recording the
+# README demonstrations:
+#
+#   - Process.MainWindowHandle is the wrong window. mshta owns about a dozen and
+#     .NET hands back a hidden zero-sized "Internet Explorer_Hidden" one. Moving
+#     it reports success and moves nothing, and clicks computed from its
+#     rectangle land wherever they land. The document is drawn in a visible
+#     "HTML Application Host Window Class".
+#   - A button is a flat dark block, and the artwork behind it is not flat, so
+#     the buttons can be found on screen instead of recomputing the layout
+#     arithmetic the menu does for itself. Give the fixture a busy background.
+# ---------------------------------------------------------------------------
+
+if (-not ('DwMenu' -as [type])) {
+    Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class DwMenu {
+  [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  delegate bool EnumProc(IntPtr h, IntPtr p);
+  [DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr p);
+  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+
+  public static IntPtr Find(int pid) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows((h, p) => {
+      uint wp; GetWindowThreadProcessId(h, out wp);
+      if (wp != (uint)pid || !IsWindowVisible(h)) return true;
+      var cls = new StringBuilder(256); GetClassName(h, cls, 256);
+      if (cls.ToString() != "HTML Application Host Window Class") return true;
+      RECT r; GetWindowRect(h, out r);
+      if (r.R - r.L < 200 || r.B - r.T < 200) return true;
+      found = h;
+      return false;
+    }, IntPtr.Zero);
+    return found;
+  }
+}
+"@
+}
+
+function Find-MenuWindow {
+    <#  .SYNOPSIS The window a menu preview is drawn in, once mshta has drawn it. #>
+    param([int]$ProcessId, [int]$TimeoutSec = 25)
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        $h = [DwMenu]::Find($ProcessId)
+        if ($h -ne [IntPtr]::Zero) { return $h }
+        Start-Sleep -Milliseconds 250
+    }
+    return [IntPtr]::Zero
+}
+
+function Test-MenuWindowOpen {
+    param([IntPtr]$Menu)
+    return [DwMenu]::IsWindow($Menu)
+}
+
+function Get-MenuButtonRows {
+    <#  .SYNOPSIS
+        The menu's buttons, top to bottom, as pixel rows inside its 760x480 stage.
+
+    .DESCRIPTION
+        Read off the screen: three columns across the button panel, which is 250
+        wide at x=490, looked at for the flat colour of a button - normal or
+        hovered. A run at least 25 rows tall in two columns of three is a button.
+        Text on a button breaks one column at most.
+    #>
+    param([IntPtr]$Menu)
+    $r = New-Object DwMenu+RECT
+    [void][DwMenu]::GetWindowRect($Menu, [ref]$r)
+    $w = $r.R - $r.L; $h = $r.B - $r.T
+    if ($w -lt 740 -or $h -lt 400) { return ,@() }
+    $bmp = New-Object System.Drawing.Bitmap($w, $h)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.CopyFromScreen($r.L, $r.T, 0, 0, $bmp.Size); $g.Dispose()
+
+    $flat = New-Object bool[] $h
+    for ($y = 0; $y -lt $h; $y++) {
+        $hits = 0
+        foreach ($x in 500, 616, 730) {
+            $p = $bmp.GetPixel($x, $y)
+            if (([Math]::Abs($p.R - 10) -le 8 -and [Math]::Abs($p.G - 21) -le 8 -and [Math]::Abs($p.B - 25) -le 8) -or
+                ([Math]::Abs($p.R - 18) -le 8 -and [Math]::Abs($p.G - 36) -le 8 -and [Math]::Abs($p.B - 43) -le 8)) {
+                $hits++
+            }
+        }
+        $flat[$y] = ($hits -ge 2)
+    }
+    $bmp.Dispose()
+
+    $rows = @(); $start = -1
+    for ($y = 0; $y -le $h; $y++) {
+        $on = ($y -lt $h) -and $flat[$y]
+        if ($on -and $start -lt 0) { $start = $y }
+        elseif (-not $on -and $start -ge 0) {
+            # The inner brackets are load-bearing: "@($start, $y - 1)" parses as
+            # "($start, $y) - 1", because the comma binds tighter than the minus.
+            if (($y - $start) -ge 25) { $rows += ,@($start, ($y - 1)) }
+            $start = -1
+        }
+    }
+    return ,$rows
+}
+
+function Wait-MenuButtonCount {
+    <#  .SYNOPSIS
+        How many buttons the menu shows once it has settled on a screen.
+
+        A screen change repaints the whole document and passes through a black
+        frame on the way, so a single read straight after a click can count
+        nothing. Waits for the expected count, and returns whatever it last saw
+        if that never comes, so the assertion can say what was there instead.
+    #>
+    param([IntPtr]$Menu, [int]$Expected, [int]$TimeoutSec = 6)
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    $n = -1
+    while ((Get-Date) -lt $deadline) {
+        # Not @(Get-MenuButtonRows ...). It returns its list with a leading comma,
+        # and wrapping that again gives a one-element array holding the list - so
+        # every screen counted as one button. Same trap as Get-Games.
+        $rows = Get-MenuButtonRows $Menu
+        $n = $rows.Count
+        if ($n -eq $Expected) { return $n }
+        Start-Sleep -Milliseconds 300
+    }
+    return $n
+}
+
+function Invoke-MenuButton {
+    <#  .SYNOPSIS
+        Click the Nth button of the menu, counting from the top.
+
+    .DESCRIPTION
+        The menu is another process, so Test-DrivingOurWindow cannot vouch for it.
+        The same promise is kept a different way: the menu is asked for the
+        foreground and the click only happens if it really has it. A click on an
+        inactive window is swallowed by the activation anyway, so this is also
+        what makes the first press count.
+    #>
+    param([IntPtr]$Menu, [int]$Index)
+    $rows = Get-MenuButtonRows $Menu       # not @(): see Wait-MenuButtonCount
+    if ($Index -lt 0 -or $Index -ge $rows.Count) {
+        throw ("the menu shows {0} buttons, so there is no button {1}" -f $rows.Count, $Index)
+    }
+    [void][DwMenu]::SetForegroundWindow($Menu)
+    Start-Sleep -Milliseconds 400
+    if ([DwMenu]::GetForegroundWindow() -ne $Menu) {
+        throw 'The menu preview could not be brought to the front, so clicking it would land in whatever is. Stopped.'
+    }
+    $r = New-Object DwMenu+RECT
+    [void][DwMenu]::GetWindowRect($Menu, [ref]$r)
+    [DwInput]::ClickAt($r.L + 615, $r.T + [int](($rows[$Index][0] + $rows[$Index][1]) / 2))
+    Start-Sleep -Milliseconds 700
+}
+
 function Find-MediaTarget {
     <#  .SYNOPSIS
         The Target disc dropdown, found by what it currently says.
@@ -743,4 +911,5 @@ Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWrigh
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-NameBox, Get-CtlOverlaps, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
     Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,
-    Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton, Find-BoxRowButton, Set-FolderTreeFocus
+    Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton, Find-BoxRowButton, Set-FolderTreeFocus,
+    Find-MenuWindow, Test-MenuWindowOpen, Get-MenuButtonRows, Wait-MenuButtonCount, Invoke-MenuButton
