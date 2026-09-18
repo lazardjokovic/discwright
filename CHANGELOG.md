@@ -9,6 +9,17 @@ between minor versions.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A multi-game disc could point a game's Install button at nothing.** A game's
+  folder name is cut at 48 characters, and only whitespace was trimmed after the
+  cut. If the cut landed on a dot, the name ended in one; Windows creates the
+  folder without the trailing dot and says nothing, while the menu kept it, so
+  the menu's path led to a folder that did not exist. It took a title whose 48th
+  character is a dot, which is rare, but the disc built without complaint and
+  only failed in the drive. Dots are now trimmed after the cut too. Found while
+  porting the function to the Linux version.
+
 ### Added
 
 - **The window tests click through the menu.** Until now they opened the preview

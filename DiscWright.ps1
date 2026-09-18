@@ -590,7 +590,11 @@ function Test-ReservedDiscName([string]$name,[string]$iconName='disc.ico') {
 function Get-GameFolderName([int]$index,[string]$name) {
     $n = (ConvertTo-AsciiFold ([string]$name)) -replace '[^A-Za-z0-9 _\-\.]',' '
     $n = ($n -replace '\s+',' ').Trim(' ','.')
-    if ($n.Length -gt 48) { $n = $n.Substring(0,48).Trim() }
+    # Trimmed of dots again after the cut, not only before. A cut that lands on a
+    # dot left the name ending in one, Windows created the folder without it, and
+    # the menu kept the dot - so that game's Install button pointed at a folder
+    # that was not there. Found porting this function to the Linux version.
+    if ($n.Length -gt 48) { $n = $n.Substring(0,48).Trim(' ','.') }
     if ([string]::IsNullOrWhiteSpace($n)) { $n = 'Game' }
     return ('{0:D2} - {1}' -f $index, $n)
 }

@@ -186,6 +186,36 @@ Describe 'Get-GameFolderName' -Tag 'Unit' {
         Get-GameFolderName 5 'Fallout...' | Should -Not -Match '\.$'
     }
 
+    It 'never ends in a dot even when the length cut lands on one' {
+        # The case above only proves the dots are trimmed BEFORE the cut. Forty
+        # seven letters and then a dot puts that dot at character 48, exactly
+        # where the cut falls, and trimming only whitespace afterwards left it
+        # on the end. Windows then created the folder without it, the menu's
+        # path kept it, and that game's Install button pointed at nothing.
+        # Found porting this function to the Linux version.
+        $name = Get-GameFolderName 1 (('A' * 47) + '.B')
+        $name | Should -Not -Match '\.$'
+        $name | Should -Be ('01 - ' + ('A' * 47))
+    }
+
+    It 'names the folder exactly what Windows creates for it' {
+        # The property that actually matters, checked against the filesystem
+        # rather than against a rule: whatever name this returns, a folder
+        # created under that name must come back with the same name.
+        $root = Join-Path $script:Sandbox 'foldername-roundtrip'
+        # The first title is bracketed as a whole on purpose. Without it the comma
+        # binds tighter than the plus, and the list collapses into one long string.
+        $titles = @((('A' * 47) + '.B'), 'Fallout...', ('X' * 300), 'Ends in space ')
+        $titles.Count | Should -Be 4
+        foreach ($title in $titles) {
+            $name = Get-GameFolderName 1 $title
+            [void][IO.Directory]::CreateDirectory((Join-Path $root $name))
+            $made = @([IO.Directory]::GetDirectories($root) | ForEach-Object { Split-Path $_ -Leaf })
+            $made | Should -Contain $name -Because "'$title' became '$name'"
+            [IO.Directory]::Delete((Join-Path $root $made[0]))
+        }
+    }
+
     It 'caps a very long title' {
         (Get-GameFolderName 6 ('X' * 300)).Length | Should -BeLessOrEqual 53
     }
