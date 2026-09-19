@@ -27,6 +27,15 @@ between minor versions.
   handles those correctly. Found while porting this function to the Linux
   version, whose icons came out right and so disagreed.
 
+- **Icons and menu backgrounds no longer have a see-through rim.** Scaling a
+  picture, Windows' drawing library samples a little past its edge and blends in
+  transparency, so the outermost pixels of every icon frame, and two edges of
+  most menu backgrounds, came out partly see-through even from a picture opaque
+  to its edges. On the menu's dark backdrop that showed as a thin line round the
+  artwork: the Alan Wake demo's background had 762 such pixels, and now has
+  none. Every scaled drawing now mirrors the picture at its edges, so there is
+  something real to sample.
+
 ## [0.7.3] — 2026-09-18
 
 ### Fixed

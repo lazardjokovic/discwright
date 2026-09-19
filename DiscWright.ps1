@@ -860,6 +860,25 @@ function Get-DibBytes([System.Drawing.Bitmap]$bmp) {
     $bw.Flush(); return $ms.ToArray()
 }
 
+# Draw part of a picture scaled into a rectangle, without the see-through rim.
+#
+# While scaling, GDI+ samples a little past the edge of the source and blends in
+# what it finds there - nothing, so transparency - which left the outermost
+# pixels of every icon frame, and two edges of most menu backgrounds, partly
+# see-through even when the picture is opaque to its edges. On the menu's dark
+# backdrop that showed as a thin line round the artwork. Mirroring the picture
+# at its edges (TileFlipXY) gives the sampler real pixels to find instead.
+# Found porting the icon code to the Linux version, which does not do it.
+function Invoke-DrawScaled($g, $img, [int]$dx, [int]$dy, [int]$dw, [int]$dh,
+                           [int]$sx, [int]$sy, [int]$sw, [int]$sh) {
+    $attr = New-Object System.Drawing.Imaging.ImageAttributes
+    try {
+        $attr.SetWrapMode([System.Drawing.Drawing2D.WrapMode]::TileFlipXY)
+        $g.DrawImage($img, (New-Object System.Drawing.Rectangle($dx, $dy, $dw, $dh)),
+                     $sx, $sy, $sw, $sh, [System.Drawing.GraphicsUnit]::Pixel, $attr)
+    } finally { $attr.Dispose() }
+}
+
 # The largest frame of an .ico, as a 32-bit bitmap, read from the file directly.
 #
 # Not through System.Drawing.Icon, which is how it used to be done and which is
@@ -970,10 +989,7 @@ function Convert-ToPng([string]$imgPath, [string]$outPng) {
         $out  = New-Object System.Drawing.Bitmap(256, 256, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
         $g    = [System.Drawing.Graphics]::FromImage($out)
         $g.InterpolationMode = 'HighQualityBicubic'
-        $g.DrawImage($src, (New-Object System.Drawing.Rectangle(0,0,256,256)),
-            (New-Object System.Drawing.Rectangle(
-                [int](($src.Width-$side)/2), [int](($src.Height-$side)/2), $side, $side)),
-            [System.Drawing.GraphicsUnit]::Pixel)
+        Invoke-DrawScaled $g $src 0 0 256 256 ([int](($src.Width-$side)/2)) ([int](($src.Height-$side)/2)) $side $side
         $g.Dispose()
         Clear-ReadOnly $outPng
         $out.Save($outPng, [System.Drawing.Imaging.ImageFormat]::Png)
@@ -988,14 +1004,13 @@ function Convert-ToIco([string]$imgPath, [string]$outIco) {
     $side=[math]::Min($src.Width,$src.Height)
     $master=New-Object System.Drawing.Bitmap($side,$side,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g=[System.Drawing.Graphics]::FromImage($master); $g.InterpolationMode='HighQualityBicubic'
-    $g.DrawImage($src,(New-Object System.Drawing.Rectangle(0,0,$side,$side)),
-        (New-Object System.Drawing.Rectangle([int](($src.Width-$side)/2),[int](($src.Height-$side)/2),$side,$side)),[System.Drawing.GraphicsUnit]::Pixel)
+    Invoke-DrawScaled $g $src 0 0 $side $side ([int](($src.Width-$side)/2)) ([int](($src.Height-$side)/2)) $side $side
     $g.Dispose(); $src.Dispose()
     $sizes=@(16,24,32,48,64,128,256); $entries=@()
     foreach($s in $sizes){
         $b=New-Object System.Drawing.Bitmap($s,$s,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
         $g2=[System.Drawing.Graphics]::FromImage($b); $g2.InterpolationMode='HighQualityBicubic'; $g2.PixelOffsetMode='HighQuality'
-        $g2.DrawImage($master,0,0,$s,$s); $g2.Dispose()
+        Invoke-DrawScaled $g2 $master 0 0 $s $s 0 0 $master.Width $master.Height; $g2.Dispose()
         if ($s -ge 256) {
             # Vista onwards, the 256px frame of an .ico is stored as a PNG file
             # rather than a raw DIB. A 32-bit DIB at that size is a quarter of a
@@ -1041,7 +1056,7 @@ function New-Background([string]$imgPath,[string]$title,[string]$outPng,[string]
     $g=[System.Drawing.Graphics]::FromImage($bmp)
     $g.InterpolationMode='HighQualityBicubic';$g.SmoothingMode='AntiAlias';$g.TextRenderingHint='ClearTypeGridFit'
     $scale=[math]::Max($W/$img.Width,$H/$img.Height); $sw=[int]($img.Width*$scale);$sh=[int]($img.Height*$scale)
-    $g.DrawImage($img,[int](($W-$sw)/2),[int](($H-$sh)/2),$sw,$sh); $img.Dispose()
+    Invoke-DrawScaled $g $img ([int](($W-$sw)/2)) ([int](($H-$sh)/2)) $sw $sh 0 0 $img.Width $img.Height; $img.Dispose()
     $g.FillRectangle((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(70,0,0,0))),0,0,$W,$H)
 
     # darkest under the buttons, fading toward the divider
