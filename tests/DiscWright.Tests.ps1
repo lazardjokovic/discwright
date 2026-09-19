@@ -4085,6 +4085,126 @@ Describe 'The edges of a scaled picture' -Tag 'Unit' {
     }
 }
 
+Describe 'The menu background, darkened to its edges and titled within its room' -Tag 'Unit' {
+
+    # Two defects found porting New-Background to the Linux version.
+    #
+    # GDI+ antialiases its rectangle fills with pixel centres on whole numbers, so
+    # a fill starting at 0 covers only half of pixel 0. The darkening over the
+    # whole picture and the panel behind the buttons were both drawn that way: the
+    # top row and the left column got half the darkening, and so did the panel's
+    # first column. On bright artwork that was a light line along the top of the
+    # button panel.
+    #
+    # And the title stopped shrinking at 12pt whether it fitted or not, with
+    # nothing limiting its length, so a long GOG title ran under the panel or off
+    # the edge of the menu.
+
+    BeforeAll {
+        $script:BgDir = Join-Path $script:Sandbox 'bg-edges'
+        New-Item -ItemType Directory -Force -Path $script:BgDir | Out-Null
+
+        function New-FlatImage([string]$path, [int]$w, [int]$h, [int]$grey) {
+            $b = New-Object System.Drawing.Bitmap($w, $h, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $g = [System.Drawing.Graphics]::FromImage($b)
+            $g.Clear([System.Drawing.Color]::FromArgb(255, $grey, $grey, $grey))
+            $g.Dispose()
+            $b.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose()
+            return $path
+        }
+
+        # The largest difference in any one channel between two pixels.
+        function Get-Step($a, $b) {
+            return [math]::Max([math]::Max([math]::Abs($a.R - $b.R), [math]::Abs($a.G - $b.G)),
+                               [math]::Max([math]::Abs($a.B - $b.B), [math]::Abs($a.A - $b.A)))
+        }
+
+        # Where the title's bright ink sits, from the leftmost to the rightmost
+        # column in the top 80 rows that is much lighter than the same picture
+        # untitled. The shadow only darkens, so it is not counted.
+        function Get-TitleInkColumns([string]$titled, [string]$plain) {
+            $t = New-Object System.Drawing.Bitmap($titled); $p = New-Object System.Drawing.Bitmap($plain)
+            try {
+                $first = -1; $last = -1
+                for ($x = 0; $x -lt $t.Width; $x++) {
+                    for ($y = 0; $y -lt 80; $y++) {
+                        if ($t.GetPixel($x, $y).GetBrightness() - $p.GetPixel($x, $y).GetBrightness() -gt 0.25) {
+                            if ($first -lt 0) { $first = $x }
+                            $last = $x; break
+                        }
+                    }
+                }
+                return @($first, $last)
+            } finally { $t.Dispose(); $p.Dispose() }
+        }
+
+        $script:Bright = New-FlatImage (Join-Path $script:BgDir 'bright.png') 760 480 220
+    }
+
+    It 'darkens the top row as much as the row under it, <Side> panel' -ForEach @(
+        @{ Side = 'Right' }, @{ Side = 'Left' }
+    ) {
+        # With the divider on: it is antialiased too, and a line starting at 0
+        # covers only half of row 0 the same way.
+        $out = Join-Path $script:BgDir "rows-$Side.png"
+        New-Background $script:Bright '' $out $Side $true $false
+        $b = New-Object System.Drawing.Bitmap($out)
+        try {
+            $lighter = 0
+            for ($x = 0; $x -lt $b.Width; $x++) { if ((Get-Step $b.GetPixel($x, 0) $b.GetPixel($x, 1)) -gt 0) { $lighter++ } }
+            $lighter | Should -Be 0 -Because 'a fill or a line starting at 0 must cover all of row 0'
+        } finally { $b.Dispose() }
+    }
+
+    It 'darkens the left column as much as the one beside it, <Side> panel' -ForEach @(
+        @{ Side = 'Right' }, @{ Side = 'Left' }
+    ) {
+        $out = Join-Path $script:BgDir "cols-$Side.png"
+        New-Background $script:Bright '' $out $Side $false $false
+        $b = New-Object System.Drawing.Bitmap($out)
+        # The panel's gradient moves a level or two per column; half the
+        # darkening is off by tens.
+        try { Get-Step $b.GetPixel(0, 240) $b.GetPixel(1, 240) | Should -BeLessOrEqual 2 } finally { $b.Dispose() }
+    }
+
+    It 'gives the column where the panel starts wholly to one side, <Side> panel' -ForEach @(
+        @{ Side = 'Right'; Start = 470 }, @{ Side = 'Left'; Start = 290 }
+    ) {
+        $out = Join-Path $script:BgDir "panel-$Side.png"
+        New-Background $script:Bright '' $out $Side $false $false
+        $b = New-Object System.Drawing.Bitmap($out)
+        try {
+            $here = $b.GetPixel($Start, 240)
+            $near = [math]::Min((Get-Step $here $b.GetPixel(($Start - 1), 240)), (Get-Step $here $b.GetPixel(($Start + 1), 240)))
+            $near | Should -BeLessOrEqual 2 -Because 'half a panel is neither the panel nor the artwork'
+        } finally { $b.Dispose() }
+    }
+
+    # 451px wide at 12pt, in 416px of room.
+    It 'keeps even a very long title in its room, <Side> panel' -ForEach @(
+        @{ Side = 'Right'; Tx = 27 }, @{ Side = 'Left'; Tx = 330 }
+    ) {
+        $title  = 'Warhammer 40,000: Dawn of War - Game of the Year Edition'
+        $titled = Join-Path $script:BgDir "long-$Side.png"
+        $plain  = Join-Path $script:BgDir "plain-$Side.png"
+        New-Background $script:Bright $title $titled $Side $false $true
+        New-Background $script:Bright ''     $plain  $Side $false $false
+        $ink = Get-TitleInkColumns $titled $plain
+        $ink[0] | Should -BeGreaterOrEqual $Tx -Because 'the title was drawn'
+        $ink[1] | Should -BeLessThan ($Tx + 416) -Because 'the title has 416px of room'
+    }
+
+    It 'still draws a title that fits at full size' {
+        $titled = Join-Path $script:BgDir 'short.png'
+        $plain  = Join-Path $script:BgDir 'short-plain.png'
+        New-Background $script:Bright 'ALAN WAKE' $titled 'Right' $false $true
+        New-Background $script:Bright ''          $plain  'Right' $false $false
+        $ink = Get-TitleInkColumns $titled $plain
+        # Measured off 0.7.4: 30pt, ink from column 35 to 256.
+        ($ink[1] - $ink[0]) | Should -BeGreaterThan 200
+    }
+}
+
 Describe 'Asking for the Linux files, and changing your mind' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
 
     BeforeAll {
