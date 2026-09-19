@@ -7,6 +7,26 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Fixed
+
+- **The icon a disc shows on Linux was wrong for almost every icon.** With
+  *named on Linux* ticked, the disc carries a PNG copy of its icon, made from
+  the icon's largest frame. It was read through Windows' old icon class, which
+  cannot decode a frame stored as a PNG, and from Vista on that is how an icon's
+  256px frame is normally stored. Depending on how the icon was laid out, the
+  build then threw, wrote random noise, or quietly used a 16, 48 or 128px frame
+  scaled up to 256. The icon from Alan Wake's own installed game came out as
+  noise. Since 0.6.0, any disc named for Linux from an icon with a 256px frame
+  showed one of those on a Linux desktop.
+
+  The icon file is now read directly: the largest frame is found and decoded as
+  what it is, a PNG through the PNG decoder or a 32-bit bitmap from its own
+  pixels. Only old 256-colour frames still go through the old class, which
+  handles those correctly. Found while porting this function to the Linux
+  version, whose icons came out right and so disagreed.
+
 ## [0.7.3] — 2026-09-18
 
 ### Fixed

@@ -860,6 +860,86 @@ function Get-DibBytes([System.Drawing.Bitmap]$bmp) {
     $bw.Flush(); return $ms.ToArray()
 }
 
+# The largest frame of an .ico, as a 32-bit bitmap, read from the file directly.
+#
+# Not through System.Drawing.Icon, which is how it used to be done and which is
+# wrong three different ways. It cannot decode a frame stored as a PNG - which
+# from Vista on is how an icon's 256px frame is normally stored - so asked for
+# one it throws "Requested range extends past the end of the array", or on some
+# real game icons returns noise. Offered a PNG frame and a smaller bitmap, it
+# quietly takes the bitmap and upscales it. And even an icon made only of
+# bitmaps comes back upscaled from a small frame when its largest is 256px. The
+# Linux icon on a disc named for Linux was one of those three for any icon with
+# a 256px frame, which is nearly all of them. Found porting this function to the
+# Linux version.
+#
+# So the directory is read here, the largest frame picked, and decoded by what
+# it actually is: a PNG through the PNG decoder, a 32-bit bitmap from its own
+# pixels. Only an older frame - 256 or 16 colours, with no alpha channel - still
+# goes to System.Drawing.Icon, which was written for exactly those.
+function Get-IcoLargestFrame([string]$path) {
+    $bytes = [IO.File]::ReadAllBytes($path)
+    if ($bytes.Length -lt 6) { throw "Not an icon file: $path" }
+    $count = [BitConverter]::ToUInt16($bytes, 4)
+    $best = $null
+    for ($i = 0; $i -lt $count; $i++) {
+        $e = 6 + 16 * $i
+        if ($e + 16 -gt $bytes.Length) { break }
+        $w = [int]$bytes[$e]; if ($w -eq 0) { $w = 256 }
+        $bpp  = [int][BitConverter]::ToUInt16($bytes, $e + 6)
+        $size = [long][BitConverter]::ToUInt32($bytes, $e + 8)
+        $off  = [long][BitConverter]::ToUInt32($bytes, $e + 12)
+        # A directory entry pointing past the end of the file is skipped, not
+        # trusted: that is the arithmetic the old path got wrong.
+        if ($size -lt 8 -or $off + $size -gt $bytes.Length) { continue }
+        if (-not $best -or $w -gt $best.W -or ($w -eq $best.W -and $bpp -gt $best.Bpp)) {
+            $best = @{ W = $w; Bpp = $bpp; Size = [int]$size; Off = [int]$off }
+        }
+    }
+    if (-not $best) { throw "No readable frame in the icon: $path" }
+    $o = $best.Off
+
+    if ($bytes[$o] -eq 0x89 -and $bytes[$o+1] -eq 0x50 -and $bytes[$o+2] -eq 0x4E -and $bytes[$o+3] -eq 0x47) {
+        $ms = New-Object System.IO.MemoryStream($bytes, $o, $best.Size)
+        try {
+            # Copied into a bitmap of its own: one made straight from a stream
+            # needs that stream kept open for as long as the bitmap lives.
+            $img = [System.Drawing.Image]::FromStream($ms)
+            try { return (New-Object System.Drawing.Bitmap($img)) } finally { $img.Dispose() }
+        } finally { $ms.Dispose() }
+    }
+
+    # A bitmap frame: BITMAPINFOHEADER, then the rows bottom-up, the header's
+    # height counting the AND mask as well, so twice the picture's.
+    $hdrSize  = [BitConverter]::ToInt32($bytes, $o)
+    $dw       = [BitConverter]::ToInt32($bytes, $o + 4)
+    $dh       = [int]([BitConverter]::ToInt32($bytes, $o + 8) / 2)
+    $bitCount = [BitConverter]::ToUInt16($bytes, $o + 14)
+    $pixels   = $o + $hdrSize
+    if ($bitCount -eq 32 -and $dw -gt 0 -and $dh -gt 0 -and ($pixels + $dw * $dh * 4) -le $bytes.Length) {
+        # An XP-era 32-bit frame can leave its alpha channel empty and rely on the
+        # mask instead; read literally that is an invisible icon. Only a frame
+        # that actually uses its alpha channel is decoded here.
+        $usesAlpha = $false
+        for ($k = $pixels + 3; $k -lt $pixels + $dw * $dh * 4; $k += 4) { if ($bytes[$k] -ne 0) { $usesAlpha = $true; break } }
+        if ($usesAlpha) {
+            $bmp  = New-Object System.Drawing.Bitmap($dw, $dh, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $rect = New-Object System.Drawing.Rectangle(0, 0, $dw, $dh)
+            $data = $bmp.LockBits($rect, [System.Drawing.Imaging.ImageLockMode]::WriteOnly, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            try {
+                for ($y = 0; $y -lt $dh; $y++) {
+                    [System.Runtime.InteropServices.Marshal]::Copy($bytes, $pixels + ($dh - 1 - $y) * $dw * 4,
+                        [IntPtr]::Add($data.Scan0, $y * $data.Stride), $dw * 4)
+                }
+            } finally { $bmp.UnlockBits($data) }
+            return $bmp
+        }
+    }
+
+    $ico = New-Object System.Drawing.Icon($path, (New-Object System.Drawing.Size($best.W, $best.W)))
+    try { return $ico.ToBitmap() } finally { $ico.Dispose() }
+}
+
 # The same picture again, as a PNG, for Linux.
 #
 # Linux file managers cannot use the .ico: gvfs turns IconFile= into a GFileIcon
@@ -876,10 +956,10 @@ function Convert-ToPng([string]$imgPath, [string]$outPng) {
     try {
         # An .ico source has to be asked for its largest frame. Image.FromFile
         # on an .ico silently picks a small one, which is how a 256px cover
-        # becomes a blurry 32px square nobody can explain.
+        # becomes a blurry 32px square nobody can explain. See
+        # Get-IcoLargestFrame for why System.Drawing.Icon is not the way either.
         if ([IO.Path]::GetExtension($imgPath) -eq '.ico') {
-            $ico = New-Object System.Drawing.Icon($imgPath, (New-Object System.Drawing.Size(256,256)))
-            $src = $ico.ToBitmap(); $ico.Dispose()
+            $src = Get-IcoLargestFrame $imgPath
         } else {
             $src = [System.Drawing.Image]::FromFile($imgPath)
         }
