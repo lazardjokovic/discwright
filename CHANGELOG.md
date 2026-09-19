@@ -7,6 +7,20 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Fixed
+
+- **Rebuilding a disc you had reopened saved a project that had lost its icon
+  and background.** *Open existing disc...* points the icon, the background and
+  the extra content at the files on the disc itself. Rebuilding renames that
+  disc folder aside, because the build reads from it, and deletes it once the
+  ISO is written. The project was saved in between, naming files inside the
+  folder about to go: reopening it found no icon and no background, and the
+  next build silently had none. Those paths now point at the disc folder the
+  build has just written, where the same files are. Found while porting the
+  project file to the Linux version, and measured by running a build.
+
 ## [0.7.5] — 2026-09-19
 
 ### Fixed
