@@ -1723,17 +1723,23 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if ($cfg.Preview) { $appName += '_Preview' }
     # The taskbar icon is cached by path too, so it follows the disc's icon name.
     $iconFile = if ($cfg.IconName) { $cfg.IconName } else { 'disc.ico' }
-    $html = $tpl.Replace('%%APPNAME%%',$appName).
-                 Replace('%%ICONFILE%%',(ConvertTo-HtmlText $iconFile)).
-                 Replace('%%PREVIEW%%',$previewFlag).
-                 Replace('%%STAGEBORDER%%',$stageBorder).
-                 Replace('%%BTNBORDER%%',$btnBorder).
-                 Replace('%%TITLE%%',(ConvertTo-HtmlText $cfg.GameName)).
-                 Replace('%%PANELLEFT%%',"$panelLeft").
-                 Replace('%%GAMES%%',$gamesJs).
-                 Replace('%%BTNS%%',$btnsJs).
-                 Replace('%%MANUAL%%',(ConvertTo-JsString $cfg.ManualFile)).
-                 Replace('%%MUSIC%%',$musicJs)
+    $vals = @{
+        APPNAME=$appName; ICONFILE=(ConvertTo-HtmlText $iconFile); PREVIEW=$previewFlag
+        STAGEBORDER=$stageBorder; BTNBORDER=$btnBorder; TITLE=(ConvertTo-HtmlText $cfg.GameName)
+        PANELLEFT="$panelLeft"; GAMES=$gamesJs; BTNS=$btnsJs
+        MANUAL=(ConvertTo-JsString $cfg.ManualFile); MUSIC=$musicJs
+    }
+    # One pass over the template, so text filled in is never filled in again.
+    # This used to chain eleven replaces, and a game renamed "Game %%BTNS%%
+    # Edition" got the button list pasted inside its string literal, which ended
+    # the literal and stopped the whole menu compiling. Found porting this
+    # function to the Linux version. The values are all strings, and a
+    # MatchEvaluator's result is used as it is, with no $1 or $$ expanded in it.
+    $html = [regex]::Replace($tpl, '%%([A-Z]+)%%', {
+        param($m)
+        $k = $m.Groups[1].Value
+        if ($vals.ContainsKey($k)) { [string]$vals[$k] } else { $m.Value }
+    })
     Clear-ReadOnly $out; Set-Content -LiteralPath $out -Value $html -Encoding ASCII
 }
 
