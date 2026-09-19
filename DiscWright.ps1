@@ -1057,6 +1057,14 @@ function New-Background([string]$imgPath,[string]$title,[string]$outPng,[string]
     $g.InterpolationMode='HighQualityBicubic';$g.SmoothingMode='AntiAlias';$g.TextRenderingHint='ClearTypeGridFit'
     $scale=[math]::Max($W/$img.Width,$H/$img.Height); $sw=[int]($img.Width*$scale);$sh=[int]($img.Height*$scale)
     Invoke-DrawScaled $g $img ([int](($W-$sw)/2)) ([int](($H-$sh)/2)) $sw $sh 0 0 $img.Width $img.Height; $img.Dispose()
+
+    # The two fills below are whole-pixel rectangles, so they are drawn without
+    # antialiasing. With it, GDI+ puts pixel centres on whole numbers and a fill
+    # starting at 0 covers only half of pixel 0: the top row, the left column and
+    # the panel's first column got half the darkening, which on bright artwork
+    # showed as a light line along the top of the button panel. Found porting
+    # this function to the Linux version.
+    $g.SmoothingMode='None'
     $g.FillRectangle((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(70,0,0,0))),0,0,$W,$H)
 
     # darkest under the buttons, fading toward the divider
@@ -1065,17 +1073,25 @@ function New-Background([string]$imgPath,[string]$title,[string]$outPng,[string]
     $c1 = if($left){$cNear}else{$cFar}; $c2 = if($left){$cFar}else{$cNear}
     $grad=New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect,$c1,$c2,0.0)
     $g.FillRectangle($grad,$rect)
+    $g.SmoothingMode='AntiAlias'
     # The divider reads as a hard line drawn across the artwork; off by default.
-    if ($divider) { $g.DrawLine((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(200,0,190,200),2)),$dx,0,$dx,$H) }
+    # Antialiased so it sits softly on the panel's edge, and so started a pixel
+    # above the picture: a line starting at 0 covers only half of row 0.
+    if ($divider) { $g.DrawLine((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(200,0,190,200),2)),$dx,-1,$dx,$H) }
 
     # Title on the artwork is OFF by default: cover art usually carries the game's
     # own logo already, and a second title drawn over it just fights the artwork.
     if ($showTitle -and -not [string]::IsNullOrWhiteSpace($title)) {
-        # title goes on the artwork side, shrunk to fit
+        # Title goes on the artwork side, shrunk to fit. Down to 6pt if it has
+        # to: this used to stop at 12pt whether the title fitted or not, and
+        # nothing limits its length, so a long GOG title ran under the panel or
+        # off the edge of the menu. "Warhammer 40,000: Dawn of War - Game of the
+        # Year Edition" is 451px at 12pt, with 416px of room. A title that fits
+        # never gets that far.
         $tx = if($left){$PW+40}else{27}
         $maxW = $W-$PW-54
         $size=30.0; $f=New-TitleFont $size
-        while ($size -gt 12 -and $g.MeasureString($title,$f).Width -gt $maxW) {
+        while ($size -gt 6 -and $g.MeasureString($title,$f).Width -gt $maxW) {
             $f.Dispose(); $size -= 1.5; $f=New-TitleFont $size
         }
         $g.DrawString($title,$f,(New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(180,0,0,0))),($tx+2),29)

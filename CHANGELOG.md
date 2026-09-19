@@ -7,6 +7,31 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Fixed
+
+- **A light line along the top of the menu's button panel.** The menu
+  background is darkened all over and then darker still behind the buttons.
+  Both were drawn antialiased, and GDI+ antialiases with pixel centres on whole
+  numbers, so a fill starting at 0 covered only half of pixel 0. The top row,
+  the left column and the panel's first column all got half the darkening, and
+  the divider's top pixel was half strength the same way. On dark artwork it
+  could not be seen; on bright artwork it was a one-pixel light line along the
+  top of the panel. The fills are now drawn without antialiasing, which whole
+  pixel rectangles never needed, and the divider starts a pixel above the
+  picture.
+
+- **A long title no longer runs off the menu.** With *title on artwork* ticked,
+  the title shrinks until it fits, but it stopped at 12pt whether it fitted or
+  not, and nothing limits its length. "Warhammer 40,000: Dawn of War - Game of
+  the Year Edition" is 451px wide at 12pt with 416px of room, so it ran under
+  the button panel, or off the edge of the menu with the panel on the left. It
+  now carries on down to 6pt when it has to. A title that fits comes out exactly
+  as before.
+
+Both were found porting the menu background to the Linux version.
+
 ## [0.7.4] — 2026-09-19
 
 ### Fixed
