@@ -3982,6 +3982,109 @@ Describe 'Reading the picture out of an .ico' -Tag 'Unit' {
     }
 }
 
+Describe 'The edges of a scaled picture' -Tag 'Unit' {
+
+    # GDI+ samples past the edge of a picture while scaling it and blends what it
+    # finds there - nothing, so transparency - into the outermost pixels. Every
+    # icon frame and the menu background came out with a faint see-through rim,
+    # even from a picture that is opaque to its edges. On the menu's dark backdrop
+    # that shows as a thin line round the artwork. Found porting the icon code to
+    # the Linux version, which does not do it.
+    #
+    # Every picture here is opaque to its edges, so every edge pixel of every
+    # result must be too.
+
+    BeforeAll {
+        function New-OpaqueImage([string]$path, [int]$w, [int]$h) {
+            $b = New-Object System.Drawing.Bitmap($w, $h, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $g = [System.Drawing.Graphics]::FromImage($b)
+            $grad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+                (New-Object System.Drawing.Rectangle(0, 0, $w, $h)),
+                [System.Drawing.Color]::FromArgb(255, 200, 180, 40), [System.Drawing.Color]::FromArgb(255, 20, 90, 200), 30.0)
+            $g.FillRectangle($grad, 0, 0, $w, $h)
+            $g.Dispose(); $grad.Dispose()
+            $b.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose()
+            return $path
+        }
+
+        # How many pixels round the edge of a picture are not fully opaque.
+        function Get-SoftEdges([System.Drawing.Bitmap]$b) {
+            $soft = 0
+            for ($x = 0; $x -lt $b.Width; $x++) {
+                if ($b.GetPixel($x, 0).A -lt 255) { $soft++ }
+                if ($b.GetPixel($x, $b.Height - 1).A -lt 255) { $soft++ }
+            }
+            for ($y = 1; $y -lt $b.Height - 1; $y++) {
+                if ($b.GetPixel(0, $y).A -lt 255) { $soft++ }
+                if ($b.GetPixel($b.Width - 1, $y).A -lt 255) { $soft++ }
+            }
+            return $soft
+        }
+
+        # Every frame of an .ico, as bitmaps, read from the file rather than through
+        # System.Drawing.Icon so the frames checked are exactly the stored ones.
+        function Get-IcoFrames([string]$path) {
+            $bytes = [IO.File]::ReadAllBytes($path)
+            $count = [BitConverter]::ToUInt16($bytes, 4)
+            $out = @()
+            for ($i = 0; $i -lt $count; $i++) {
+                $e = 6 + 16 * $i
+                $w = [int]$bytes[$e]; if ($w -eq 0) { $w = 256 }
+                $size = [int][BitConverter]::ToUInt32($bytes, $e + 8)
+                $off = [int][BitConverter]::ToUInt32($bytes, $e + 12)
+                if ($bytes[$off] -eq 0x89) {
+                    $ms = New-Object System.IO.MemoryStream($bytes, $off, $size)
+                    $img = [System.Drawing.Image]::FromStream($ms)
+                    $out += ,(New-Object System.Drawing.Bitmap($img)); $img.Dispose(); $ms.Dispose()
+                } else {
+                    $px = $off + [BitConverter]::ToInt32($bytes, $off)
+                    $b = New-Object System.Drawing.Bitmap($w, $w, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+                    for ($y = 0; $y -lt $w; $y++) { for ($x = 0; $x -lt $w; $x++) {
+                        $p = $px + (($w - 1 - $y) * $w + $x) * 4
+                        $b.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($bytes[$p+3], $bytes[$p+2], $bytes[$p+1], $bytes[$p]))
+                    } }
+                    $out += ,$b
+                }
+            }
+            return ,$out
+        }
+
+        $script:EdgeDir = Join-Path $script:Sandbox 'edges'
+        New-Item -ItemType Directory -Force -Path $script:EdgeDir | Out-Null
+        $script:WideSrc = New-OpaqueImage (Join-Path $script:EdgeDir 'wide.png') 600 400
+    }
+
+    It 'keeps every edge of the Linux icon opaque' {
+        $out = Join-Path $script:EdgeDir 'icon.png'
+        Convert-ToPng $script:WideSrc $out
+        $b = New-Object System.Drawing.Bitmap($out)
+        try { Get-SoftEdges $b | Should -Be 0 } finally { $b.Dispose() }
+    }
+
+    It 'keeps every edge of every icon frame opaque' {
+        $ico = Join-Path $script:EdgeDir 'icon.ico'
+        Convert-ToIco $script:WideSrc $ico
+        # Not @(Get-IcoFrames ...): it returns its list with a leading comma.
+        $frames = Get-IcoFrames $ico
+        $frames.Count | Should -Be 7
+        foreach ($f in $frames) {
+            try { Get-SoftEdges $f | Should -Be 0 -Because "the $($f.Width)px frame" } finally { $f.Dispose() }
+        }
+    }
+
+    It 'keeps every edge of the menu background opaque, <Name>' -ForEach @(
+        @{ Name = 'when the picture overflows sideways';   W = 1000; H = 480 }
+        @{ Name = 'when the picture overflows vertically'; W = 400;  H = 300 }
+        @{ Name = 'when the picture fits exactly';         W = 760;  H = 480 }
+    ) {
+        $src = New-OpaqueImage (Join-Path $script:EdgeDir "bg-$W-$H.png") $W $H
+        $out = Join-Path $script:EdgeDir "bg-$W-$H-out.png"
+        New-Background $src '' $out 'Right' $false $false
+        $b = New-Object System.Drawing.Bitmap($out)
+        try { Get-SoftEdges $b | Should -Be 0 } finally { $b.Dispose() }
+    }
+}
+
 Describe 'Asking for the Linux files, and changing your mind' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
 
     BeforeAll {
