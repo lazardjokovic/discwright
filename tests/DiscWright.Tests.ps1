@@ -3860,6 +3860,128 @@ Describe 'The PNG icon the Linux side needs' -Tag 'Unit' {
     }
 }
 
+Describe 'Reading the picture out of an .ico' -Tag 'Unit' {
+
+    # The two tests above convert a single flat colour and check only the size of
+    # what comes out, so they could not see what went wrong here. GDI+'s Icon
+    # class cannot decode a frame stored as a PNG, which from Vista on is how an
+    # icon's 256px frame is normally stored. Asked for one it throws, or on some
+    # real game icons returns noise; offered another frame it quietly uses that
+    # instead, so even the icons that "worked" came out upscaled from 48 or 128
+    # pixels. Found porting this function to the Linux version.
+    #
+    # So these build icons laid out the way real ones are, from a picture with
+    # detail in it, and check what the result actually shows.
+
+    BeforeAll {
+        # A picture with detail at every scale: a colour gradient, a disc and a
+        # small black square. Upscaled from a small frame, the square's edges go
+        # soft, which a flat colour would never show.
+        function New-DetailBitmap([int]$size) {
+            $b = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $g = [System.Drawing.Graphics]::FromImage($b)
+            $grad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+                (New-Object System.Drawing.Rectangle(0, 0, $size, $size)),
+                [System.Drawing.Color]::FromArgb(255, 30, 60, 220), [System.Drawing.Color]::FromArgb(255, 230, 40, 40), 45.0)
+            $g.FillRectangle($grad, 0, 0, $size, $size)
+            $g.FillEllipse([System.Drawing.Brushes]::Gold, [int]($size * 0.25), [int]($size * 0.25), [int]($size * 0.5), [int]($size * 0.5))
+            $g.FillRectangle([System.Drawing.Brushes]::Black, [int]($size * 0.44), [int]($size * 0.44), [int]($size * 0.12), [int]($size * 0.12))
+            $g.Dispose(); $grad.Dispose()
+            return $b
+        }
+
+        # An .ico with exactly the frames asked for, in the order given, each
+        # stored as a PNG or as a 32-bit bitmap - the two ways real icons store
+        # them. Assembled here rather than with Convert-ToIco, which only ever
+        # writes one layout.
+        function New-TestIco([string]$path, [array]$frames) {
+            $blobs = @()
+            foreach ($f in $frames) {
+                $b = New-DetailBitmap $f.Size
+                if ($f.Png) {
+                    $ms = New-Object System.IO.MemoryStream
+                    $b.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+                    $blobs += ,@($f.Size, $ms.ToArray()); $ms.Dispose()
+                } else {
+                    $blobs += ,@($f.Size, (Get-DibBytes $b))
+                }
+                $b.Dispose()
+            }
+            $ms = New-Object System.IO.MemoryStream; $w = New-Object System.IO.BinaryWriter($ms)
+            $w.Write([int16]0); $w.Write([int16]1); $w.Write([int16]$blobs.Count)
+            $off = 6 + 16 * $blobs.Count
+            foreach ($bl in $blobs) {
+                $dim = if ($bl[0] -ge 256) { 0 } else { $bl[0] }
+                $w.Write([byte]$dim); $w.Write([byte]$dim); $w.Write([byte]0); $w.Write([byte]0)
+                $w.Write([int16]1); $w.Write([int16]32); $w.Write([int]$bl[1].Length); $w.Write([int]$off)
+                $off += $bl[1].Length
+            }
+            foreach ($bl in $blobs) { $w.Write($bl[1], 0, $bl[1].Length) }
+            $w.Flush(); [IO.File]::WriteAllBytes($path, $ms.ToArray()); $w.Dispose()
+        }
+
+        # How far a 256px result is from the picture the icon's 256px frame holds,
+        # as a mean per channel over a grid of samples, skipping the outermost
+        # pixel. Measured: exactly 0.00 when the 256px frame is used, for all four
+        # layouts below. Before the fix, 1.74 when a 128px frame was upscaled and
+        # 9.82 when a 16px one was, and an exception for the PNG layouts. The
+        # limit of 0.5 sits well clear of both.
+        function Get-DistanceFromTruth([string]$png) {
+            $truth = New-DetailBitmap 256
+            $got = New-Object System.Drawing.Bitmap($png)
+            try {
+                $sum = 0; $n = 0
+                for ($y = 2; $y -lt 254; $y += 3) { for ($x = 2; $x -lt 254; $x += 3) {
+                    $a = $got.GetPixel($x, $y); $t = $truth.GetPixel($x, $y)
+                    $sum += [math]::Abs($a.R - $t.R) + [math]::Abs($a.G - $t.G) + [math]::Abs($a.B - $t.B); $n += 3
+                } }
+                return ($sum / $n)
+            } finally { $got.Dispose(); $truth.Dispose() }
+        }
+
+        $script:IcoDir = Join-Path $script:Sandbox 'ico-layouts'
+        New-Item -ItemType Directory -Force -Path $script:IcoDir | Out-Null
+    }
+
+    It 'reads an icon whose only frame is a PNG' {
+        $ico = Join-Path $script:IcoDir 'png-only.ico'
+        New-TestIco $ico @(@{ Size = 256; Png = $true })
+        $out = Join-Path $script:IcoDir 'png-only.png'
+        Convert-ToPng $ico $out
+        Get-DistanceFromTruth $out | Should -BeLessThan 0.5
+    }
+
+    It 'reads an icon laid out like a real game''s: 256 and 48 as PNG, first' {
+        # The layout of the Alan Wake icon, which is taken from the installed game
+        # and which the Windows app turned into noise.
+        $ico = Join-Path $script:IcoDir 'game-layout.ico'
+        New-TestIco $ico @(@{ Size = 256; Png = $true }, @{ Size = 48; Png = $true },
+                           @{ Size = 32; Png = $false }, @{ Size = 16; Png = $false })
+        $out = Join-Path $script:IcoDir 'game-layout.png'
+        Convert-ToPng $ico $out
+        Get-DistanceFromTruth $out | Should -BeLessThan 0.5
+    }
+
+    It 'uses the 256px frame rather than upscaling a smaller one' {
+        # The layout Convert-ToIco writes, 256 as PNG and last. It never failed,
+        # which is why nothing looked wrong: it upscaled the 128px bitmap instead.
+        $ico = Join-Path $script:IcoDir 'ours.ico'
+        New-TestIco $ico @(@{ Size = 16; Png = $false }, @{ Size = 32; Png = $false },
+                           @{ Size = 128; Png = $false }, @{ Size = 256; Png = $true })
+        $out = Join-Path $script:IcoDir 'ours.png'
+        Convert-ToPng $ico $out
+        Get-DistanceFromTruth $out | Should -BeLessThan 0.5
+    }
+
+    It 'still reads an icon whose largest frame is a plain bitmap' {
+        $ico = Join-Path $script:IcoDir 'bitmaps.ico'
+        New-TestIco $ico @(@{ Size = 16; Png = $false }, @{ Size = 256; Png = $false })
+        $out = Join-Path $script:IcoDir 'bitmaps.png'
+        Convert-ToPng $ico $out
+        Get-DistanceFromTruth $out | Should -BeLessThan 0.5
+    }
+}
+
 Describe 'Asking for the Linux files, and changing your mind' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
 
     BeforeAll {
