@@ -3455,6 +3455,67 @@ WScript.Echo(out.join(","));
     }
 }
 
+Describe "A name that looks like one of the menu's own placeholders" {
+
+    # New-MenuHta fills %%GAMES%%, %%BTNS%% and the rest into its template, and
+    # used to do it with eleven chained replaces. Text already filled in was then
+    # filled in again: a game renamed "Game %%BTNS%% Edition" got the button list
+    # pasted inside its string literal, which ended the literal, and the whole
+    # menu failed to compile. GOG never names a game like that, but a game can be
+    # renamed to anything. Found porting New-MenuHta to the Linux version.
+
+    BeforeDiscovery {
+        $script:HaveCScriptPct = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:CScriptPct = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        $script:PctHta = Join-Path $script:Sandbox 'placeholder-menu.hta'
+        New-MenuHta @{
+            GameName = '%%GAMES%%'
+            Games    = @(@{ Name='Game %%BTNS%% Edition'; MatchName='%%TITLE%%'
+                            Setup='setup.exe'; AddOns=@(@{ Name='%%MUSIC%% Pack'; Setup='addon.exe' }) })
+            Buttons  = @('Play','Install','Exit')
+            MusicFile = 'music.mp3'; ManualFile = ''; PanelSide = 'Right'; IconName = 'disc.ico'
+            WindowBorder = $true; ButtonStyle = 'Minimal'
+        } $script:PctHta
+        $script:PctText = Get-Content -LiteralPath $script:PctHta -Raw
+    }
+
+    It 'keeps each name exactly as it was typed' {
+        $script:PctText | Should -Match ([regex]::Escape('n:"Game %%BTNS%% Edition",m:"%%TITLE%%"'))
+        $script:PctText | Should -Match ([regex]::Escape('a:[{n:"%%MUSIC%% Pack"'))
+        $script:PctText | Should -Match ([regex]::Escape('<title>%%GAMES%%</title>'))
+    }
+
+    It 'still fills in the placeholders themselves' {
+        $script:PctText | Should -Match ([regex]::Escape('var BTNS=["Play","Install","Exit"];'))
+        $script:PctText | Should -Match ([regex]::Escape('var MUSIC="music.mp3";'))
+    }
+
+    It "leaves the menu's script parsing" -Skip:(-not $script:HaveCScriptPct) {
+        $js = [regex]::Match($script:PctText, '(?s)<script[^>]*>(.*?)</script>').Groups[1].Value
+        $probe = @'
+var src = WScript.StdIn.ReadAll();
+try { new Function(src); WScript.Echo("OK"); }
+catch (e) { WScript.Echo("SYNTAX ERROR: " + e.message); }
+'@
+        $pf = Join-Path $script:Sandbox 'pctparse.js'
+        $bf = Join-Path $script:Sandbox 'pctbody.js'
+        Set-Content -LiteralPath $pf -Value $probe -Encoding Ascii
+        Set-Content -LiteralPath $bf -Value $js -Encoding Ascii
+        $out = (cmd /c "`"$script:CScriptPct`" //Nologo //E:JScript `"$pf`" < `"$bf`"" 2>&1) -join ' '
+        $out.Trim() | Should -Be 'OK'
+    }
+}
+
 Describe 'Renaming a game for the menu' -Tag 'Unit' {
 
     # Show-EntryKindDialog has offered "Name on the menu" since multi-game discs

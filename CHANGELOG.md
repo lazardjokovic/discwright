@@ -32,6 +32,15 @@ between minor versions.
 
 Both were found porting the menu background to the Linux version.
 
+- **A game renamed to something like the menu's own placeholders broke the
+  menu.** The menu is built from a template with a dozen placeholders, such as
+  %%GAMES%% and %%BTNS%%, filled in one after another, so text already filled
+  in could be filled in again. A game renamed "Game %%BTNS%% Edition" got the
+  button list pasted into its name, and the menu's script stopped compiling:
+  the disc opened to nothing. GOG never names a game like that, but a game can
+  be renamed to anything. The placeholders are now filled in one pass. Found
+  porting the menu to the Linux version.
+
 ## [0.7.4] — 2026-09-19
 
 ### Fixed
