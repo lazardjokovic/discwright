@@ -2376,6 +2376,31 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     New-Iso $stage $iso $vol $progress $fsMask
     & $log ("DONE.  ISO: {0}  ({1:N2} GB)" -f $iso, ((Get-Item $iso).Length/1GB))
 
+    # Point the disc's own assets back at the staging folder before saving.
+    #
+    # A rebuild over an existing disc renames that folder aside and repoints
+    # everything that lived in it, because the build reads from there. The folder
+    # is deleted at the end of this function - so a project saved with those paths
+    # named files that no longer existed, and reopening it lost the icon and the
+    # background of any disc rebuilt from itself, which is exactly what Open
+    # existing disc... sets up. The games list is already put straight as each
+    # entry is copied (Restaged, above); these are what was left.
+    #
+    # Unconditionally, without checking the file is there. Almost always it is,
+    # under the same name. When it is not - an icon that was a .png inside the
+    # old folder comes out as the disc's .ico, so the .png is nowhere - this
+    # still writes the path the user picked in the first place, which is a
+    # better thing for a project to remember than the name of a temporary folder
+    # that has been deleted. Found porting Save-Project to the Linux version.
+    if ($tmpKeep) {
+        foreach ($k in @('IconPath','BgPath','MusicFile','ManualPath','ExtrasPath')) {
+            if (-not (Test-SubPath $s[$k] $tmpKeep)) { continue }
+            $s[$k] = Get-PathMovedAside $s[$k] $tmpKeep $stage
+        }
+        $s.ExtraItems = @(@($s.ExtraItems) | ForEach-Object {
+            if ($_ -and (Test-SubPath $_ $tmpKeep)) { Get-PathMovedAside $_ $tmpKeep $stage } else { $_ } })
+    }
+
     # One project file describes the whole set, so the caller saves it once after
     # the last disc rather than each disc overwriting it with its own slice.
     if (-not $s.SkipProject) {

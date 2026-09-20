@@ -2711,6 +2711,63 @@ Describe 'Rebuilding a disc folder that the installers themselves live in' {
     }
 }
 
+Describe 'Reopening a built disc and rebuilding it' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    # Open existing disc... leaves the icon, the background and the extra content
+    # pointing at files inside disc\, because that is where a built disc keeps
+    # them. Rebuilding sets that folder aside, points the settings at the copy,
+    # writes the ISO, saves the project and then deletes the folder - so the
+    # project it just saved named files that no longer existed, and reopening it
+    # lost the icon and the background. Found porting Save-Project to the Linux
+    # version, and measured here before it was fixed.
+
+    BeforeAll {
+        $script:ReOut = Join-Path $script:Sandbox 'out-reopened'
+        New-Item -ItemType Directory -Force -Path $script:ReOut | Out-Null
+        $script:ReSettings = @{
+            Games=@((Get-GameInfo (New-FixtureGame -Slug 'reopened'))); Label='Reopened Disc'
+            IconPath=$script:Art; IconIsIco=$false; Menu=$true
+            BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'
+            Divider=$false; ShowTitle=$false; TitleText=''
+            WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+            Buttons=@('Install','Exit'); ManualPath=$null; ExtrasPath=$null
+            ExtraItems=@(); OutDir=$script:ReOut }
+        $null = Invoke-Build $script:ReSettings $script:LogSink
+
+        # Now the window's Open existing disc...: every asset named on the disc.
+        $script:ReDisc = Join-Path $script:ReOut 'disc'
+        $reopened = $script:ReSettings.Clone()
+        $reopened.Games     = @((Get-GameInfo (New-FixtureGame -Slug 'reopened')))
+        $reopened.IconPath  = Join-Path $script:ReDisc (Get-DiscIconName 'Reopened Disc')
+        $reopened.IconIsIco = $true
+        $reopened.BgPath    = Join-Path $script:ReDisc 'AUTORUN\bg.png'
+        $reopened.BgAsIs    = $true
+        $null = Invoke-Build $reopened $script:LogSink
+        $script:ReProject = Get-Content -Raw (Join-Path $script:ReOut $script:PROJECT_FILE) | ConvertFrom-Json
+    }
+
+    It 'saves a project naming the icon where it actually is' {
+        Test-Path $script:ReProject.IconPath | Should -BeTrue -Because $script:ReProject.IconPath
+        Test-SubPath $script:ReProject.IconPath $script:ReDisc | Should -BeTrue
+    }
+
+    It 'saves a project naming the background where it actually is' {
+        Test-Path $script:ReProject.BgPath | Should -BeTrue -Because $script:ReProject.BgPath
+    }
+
+    It 'reopens that project with both assets intact' {
+        # The whole point: the file has to survive a round trip through Open.
+        $back = Import-Project (Join-Path $script:ReOut $script:PROJECT_FILE)
+        $back | Should -Not -BeNullOrEmpty
+        Test-Path $back.IconPath | Should -BeTrue
+        Test-Path $back.BgPath   | Should -BeTrue
+    }
+
+    It 'still clears the folder it set aside' {
+        @(Get-ChildItem $script:ReOut -Directory -Filter 'disc.previous-*').Count | Should -Be 0
+    }
+}
+
 Describe 'The comma-return convention is not undone at the call sites' -Tag 'Unit' {
 
     # Several functions return ,@(...) so that a one-element result survives
