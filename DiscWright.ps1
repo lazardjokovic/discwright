@@ -2386,21 +2386,19 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     # existing disc... sets up. The games list is already put straight as each
     # entry is copied (Restaged, above); these are what was left.
     #
-    # Only when the file really is there under the same name. An icon that was a
-    # .png inside the old disc folder is not on the new disc at all, and naming a
-    # path that never existed would be no better than the one it replaces.
-    # Found porting Save-Project to the Linux version.
+    # Unconditionally, without checking the file is there. Almost always it is,
+    # under the same name. When it is not - an icon that was a .png inside the
+    # old folder comes out as the disc's .ico, so the .png is nowhere - this
+    # still writes the path the user picked in the first place, which is a
+    # better thing for a project to remember than the name of a temporary folder
+    # that has been deleted. Found porting Save-Project to the Linux version.
     if ($tmpKeep) {
         foreach ($k in @('IconPath','BgPath','MusicFile','ManualPath','ExtrasPath')) {
             if (-not (Test-SubPath $s[$k] $tmpKeep)) { continue }
-            $back = Get-PathMovedAside $s[$k] $tmpKeep $stage
-            if (Test-Path $back) { $s[$k] = $back }
+            $s[$k] = Get-PathMovedAside $s[$k] $tmpKeep $stage
         }
         $s.ExtraItems = @(@($s.ExtraItems) | ForEach-Object {
-            if ($_ -and (Test-SubPath $_ $tmpKeep)) {
-                $b = Get-PathMovedAside $_ $tmpKeep $stage
-                if (Test-Path $b) { $b } else { $_ }
-            } else { $_ } })
+            if ($_ -and (Test-SubPath $_ $tmpKeep)) { Get-PathMovedAside $_ $tmpKeep $stage } else { $_ } })
     }
 
     # One project file describes the whole set, so the caller saves it once after
