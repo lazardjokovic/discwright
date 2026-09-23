@@ -23,6 +23,8 @@ Play knows whether the game is already installed and greys itself out until it i
 
 **A disc can hold more than one game.** With two or more, the menu opens on a chooser and picking one leads to its own screen, with Back to return. DLC, an expansion, a GOG patch or a mod goes on the game it belongs to, where it becomes an extra Install button on that game's screen rather than another entry in the chooser. A one-game disc shows neither the chooser nor Back — it has nothing to choose.
 
+**A game does not have to come from GOG.** Point DiscWright at any folder of game files — an installed game, an unpacked archive, an itch.io download, anything portable — and it goes on the disc as it stands, subfolders and all. DiscWright asks whether one of the executables in there is an installer: say which and the menu gets an Install button for it, or say there is none and the menu gets **Open Folder** instead, which opens the game's folder on the disc.
+
 ## What you need
 
 - **Windows 10 or 11**
@@ -59,6 +61,8 @@ The launchers run the script with `-ExecutionPolicy Bypass`, the flag Windows re
 ![The whole build in one pass: add the game, set the label, icon and background, attach the manual and extras, name the disc on Linux, preview the menu, then BUILD ISO through to the finished file](docs/demo.gif)
 
 1. **Add the games** — each one a GOG folder holding `setup_*.exe` and any `.bin` parts. DiscWright reads the game's name out of the installer and tells you which disc size the lot of them needs. Add as many as fit.
+
+   **A folder that is not a GOG download** is taken too. DiscWright says so and asks what the menu should do with it: it lists every executable it found, biggest first, so you can name the one that installs the game — or leave it on *No installer*, which puts the files on the disc and gives the menu an **Open Folder** button. Either way the whole folder goes on the disc with its subfolders intact, and the entry is named after the folder, or after the installer you named if that reports a product name. An empty folder is still refused.
 
    **Add-ons** — DLC, expansions, GOG patches, mods — are added the same way, except you pick the **installer file** rather than a folder, and it can be **any `.exe`**: the `setup_*.exe` rule is how a GOG *game* folder is recognised, and GOG ships patches as `patch_*.exe` while a mod installer is named whatever its author chose. You say which game each one belongs to. Names come from the filename and can be edited, because every GOG patch reports the game's own name as its product name — all four Hollow Knight patches call themselves "Hollow Knight".
 2. **Set the disc label** — what This PC will call the drive. **Target disc** next

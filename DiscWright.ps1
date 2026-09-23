@@ -210,7 +210,7 @@ function Get-GameInfo([string]$folder) {
     # every project written before this, behaving exactly as it did.
     $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; MatchName=$null; Msg=''; TotalBytes=0; MaxFileBytes=0; Folder=$null
                Warning=''; MissingParts=@(); Kind='Game'; ParentIndex=-1
-               ManualPath=$null; ExtrasPath=$null }
+               ManualPath=$null; ExtrasPath=$null; Source='GOG' }
     if (-not (Test-Path $folder)) { $info.Msg='Folder not found.'; return $info }
     $exes = @(Get-ChildItem $folder -Filter 'setup_*.exe' -File -ErrorAction SilentlyContinue |
               Sort-Object Length -Descending)
@@ -239,6 +239,77 @@ function Get-GameInfo([string]$folder) {
         # one was picked, so a wrong guess is visible before the disc is burned.
         $info.Warning = "$($exes.Count) installers in this folder - using the largest, $($exe.Name)."
     }
+    return $info
+}
+
+# Where one of an entry's files goes, relative to the entry's folder on the disc.
+# A GOG download keeps none of its shape, because it has none: an installer and
+# its numbered parts sit in one folder. A folder of game files keeps all of it.
+function Get-EntryFileRelative([hashtable]$entry,$file) {
+    if ($entry.Source -ne 'Files' -or -not $entry.Folder) { return $file.Name }
+    $root = [IO.Path]::GetFullPath([string]$entry.Folder).TrimEnd('\')
+    $full = [IO.Path]::GetFullPath($file.FullName)
+    if ($full.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        return $full.Substring($root.Length + 1)
+    }
+    return $file.Name
+}
+
+# Every executable in a folder, for the dialog that asks which one installs the
+# game. Deepest first would bury the obvious one, so they are ordered by size:
+# an installer is nearly always the biggest .exe in the folder, and a crash
+# handler or an uninstaller the smallest. Capped, because a game folder can hold
+# hundreds of tools and nobody picks from a list that long.
+function Get-FolderExecutables([string]$folder,[int]$limit=25) {
+    if (-not (Test-Path $folder)) { return ,@() }
+    $exes = @(Get-ChildItem $folder -Recurse -File -Filter '*.exe' -Force -ErrorAction SilentlyContinue |
+              Sort-Object Length -Descending | Select-Object -First $limit)
+    return ,@($exes)
+}
+
+# A folder that is not a GOG download: a DRM-free zip unpacked, an itch.io
+# download, a portable game, anything. Asked for by somebody who had burned a
+# 17 GB GOG disc with this and then wanted to do the same with game files that
+# GOG never touched.
+#
+# Everything in the folder goes on the disc, subfolders and all, which is the
+# difference from a GOG download: there the disc carries one installer and its
+# numbered parts, here it carries whatever shape the game already has.
+#
+# $installerPath is the executable the menu's Install button runs, chosen in the
+# dialog, or empty for a folder that only holds files. Empty is not a failure:
+# the menu offers the folder instead, and the disc is still a disc.
+function Get-FolderInfo([string]$folder,[string]$installerPath='') {
+    $info = @{ Ok=$false; SetupExe=$null; Files=@(); GameName=$null; MatchName=$null; Msg=''; TotalBytes=0; MaxFileBytes=0; Folder=$null
+               Warning=''; MissingParts=@(); Kind='Game'; ParentIndex=-1
+               ManualPath=$null; ExtrasPath=$null; Source='Files' }
+    if (-not (Test-Path $folder)) { $info.Msg='Folder not found.'; return $info }
+    $files = @(Get-ChildItem $folder -Recurse -File -Force -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) { $info.Msg='This folder has no files in it.'; return $info }
+
+    $info.Folder       = (Resolve-Path -LiteralPath $folder).Path
+    $info.Files        = $files
+    $info.TotalBytes   = [double](($files | Measure-Object Length -Sum).Sum)
+    $info.MaxFileBytes = [double](($files | Measure-Object Length -Maximum).Maximum)
+
+    if ($installerPath -and (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+        $exe = Get-Item -LiteralPath $installerPath
+        $info.SetupExe = $exe
+        # The name the installer gives itself, as for a GOG download, and the
+        # folder's own name when it gives none. A portable game's exe usually
+        # carries the game's name; an unpacked zip usually does not.
+        $name = $exe.VersionInfo.ProductName
+        if ([string]::IsNullOrWhiteSpace($name)) { $name = Split-Path $info.Folder -Leaf }
+        $info.GameName = $name.Trim()
+    } else {
+        $info.GameName = Split-Path $info.Folder -Leaf
+    }
+    # Nothing registers these in the way GOG's installers do, so Play has nothing
+    # to look for. MatchName is set anyway rather than left empty: a disc whose
+    # files a GOG installer put there is still findable, and an empty match makes
+    # the menu search for nothing and light Play up for every game it finds.
+    $info.MatchName = $info.GameName
+    $info.Ok = $true
     return $info
 }
 
@@ -688,8 +759,13 @@ function Get-DiscEntryFolder([array]$entries,[int]$index) {
 }
 
 function Get-DiscEntrySetup([array]$entries,[int]$index) {
+    # An entry can have no installer at all: a folder of game files, picked with
+    # "no installer" in step 1. The menu reads an empty string as "nothing to
+    # install here" and offers the folder instead.
+    $exe = $entries[$index].SetupExe
+    if (-not $exe) { return '' }
     $rel = Get-DiscEntryFolder $entries $index
-    $name = $entries[$index].SetupExe.Name
+    $name = $exe.Name
     if ([string]::IsNullOrEmpty($rel)) { return $name }
     return (Join-Path $rel $name)
 }
@@ -732,8 +808,13 @@ function Get-MenuGames([array]$entries) {
         # fallback only fires when the folder has gone - and then GameName is the
         # best guess left.
         $mn = if ($e.MatchName) { [string]$e.MatchName } else { [string]$e.GameName }
+        # The entry's own folder on the disc. An entry with no installer offers
+        # this instead of Install, so the files are reachable from the menu
+        # rather than only by browsing the disc. Empty is the disc root, which is
+        # where a one-game disc puts everything.
         $out += @{ Name=$e.GameName; MatchName=$mn
                    Setup=(Get-DiscEntrySetup $entries $i); AddOns=@($addOns)
+                   Folder=(Get-DiscEntryFolder $entries $i)
                    Manual=$man; Extras=$ext }
     }
     return ,@($out)
@@ -1232,6 +1313,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         $mn = if ($_.MatchName) { $_.MatchName } else { $_.Name }
         '{n:"' + (ConvertTo-JsString $_.Name) + '",m:"' + (ConvertTo-JsString $mn) +
         '",s:"' + (ConvertTo-JsString $_.Setup) +
+        '",d:"' + (ConvertTo-JsString ([string]$_.Folder)) +
         '",man:"' + (ConvertTo-JsString ([string]$_.Manual)) +
         '",ext:"' + (ConvertTo-JsString ([string]$_.Extras)) + '",a:' + $addJs + '}'
     }) -join ',') + ']'
@@ -1478,7 +1560,12 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var g=GAMES[cur], h="";
     if(has("Play"))    h+=btnHtml("btn_Play","play","Play","doPlay()","");
     if(has("Install")){
-      h+=btnHtml("btn_Install","install","Install","doInstall()","Install "+g.n);
+      // A game with no installer is a folder of files: an unpacked zip, a
+      // portable game, anything GOG never packaged. Nothing to install, so the
+      // menu opens the folder rather than offering a button that could only
+      // ever be grey.
+      if(g.s) h+=btnHtml("btn_Install","install","Install","doInstall()","Install "+g.n);
+      else    h+=btnHtml("btn_Open","install","Open Folder","doOpenFolder()","Open "+g.n+" on this disc");
       // Add-ons sit directly under Install in the same colour, because that is
       // what they are - another installer, for this game.
       for(var i=0;i<g.a.length;i++){
@@ -1502,8 +1589,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // would grey out buttons that will be fine on the real disc. Show them live.
     if(cur<0){
       for(var i=0;i<GAMES.length;i++){
-        setEnabled("btn_game_"+i, (PREVIEW || fso.FileExists(fso.BuildPath(root,GAMES[i].s))),
-                   "This game's installer is not on the disc.");
+        // A game with an installer is there when the installer is; one that is a
+        // folder of files is there when the folder is. Asking FileExists about an
+        // empty path greyed out every such game on the chooser.
+        var there = GAMES[i].s ? fso.FileExists(fso.BuildPath(root,GAMES[i].s))
+                               : fso.FolderExists(fso.BuildPath(root,GAMES[i].d));
+        setEnabled("btn_game_"+i, (PREVIEW || there),
+                   "This game's files are not on the disc.");
       }
       return;
     }
@@ -1566,6 +1658,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     launchWithStatus("btn_Manual","Opening the manual...",manualOf(GAMES[cur]),false); }
   function doExtras(){ if(off("btn_Extras")) return; if(PREVIEW){ previewStop("Extras"); return; }
     openItem(extrasOf(GAMES[cur]),true); }
+  // The folder this game's files sit in, for a game with no installer. An empty
+  // path is the disc root, which is where a one-game disc keeps everything.
+  function doOpenFolder(){ if(off("btn_Open")) return; if(PREVIEW){ previewStop("Open Folder"); return; }
+    openItem(GAMES[cur].d,true); }
   function doExit(){ window.close(); }
   function regGet(reg,h,sub,val){ try{ var i=reg.Methods_.Item("GetStringValue").InParameters.SpawnInstance_();
     i.hDefKey=h;i.sSubKeyName=sub;i.sValueName=val; var o=reg.ExecMethod_("GetStringValue",i); if(o.ReturnValue==0)return o.sValue; }catch(e){} return null; }
@@ -1886,7 +1982,11 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # before rather than quietly adding files to it.
         # Version 8 adds LegacyFs the same way - whether the disc also gets
         # ISO9660 and Joliet so it reads on Windows XP and older.
-        Version      = 8
+        # Version 9 adds Source per entry: 'GOG' for a folder holding a GOG
+        # installer, 'Files' for a folder of game files that never came from
+        # GOG. Absent in anything older, which reads back as 'GOG', because that
+        # is the only kind of entry those versions could make.
+        Version      = 9
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -1909,6 +2009,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
                                         MatchName=$_.MatchName
                                         Setup=$(if($_.SetupExe){$_.SetupExe.FullName}else{$null})
                                         Kind=$(if($_.Kind -eq 'AddOn'){'AddOn'}else{'Game'})
+                                        Source=$(if($_.Source -eq 'Files'){'Files'}else{'GOG'})
                                         Parent=[int]$_.ParentIndex
                                         Manual=$_.ManualPath; Extras=$_.ExtrasPath } })
         Label        = $s.Label
@@ -1962,8 +2063,13 @@ function Import-Project([string]$jsonPath) {
                 # disc-wide manual and Extras, exactly as those discs behaved.
                 if ($g.PSObject.Properties.Name -contains 'Manual') { $man = [string]$g.Manual }
                 if ($g.PSObject.Properties.Name -contains 'Extras') { $ext = [string]$g.Extras }
+                # Version 9. Anything older could only hold GOG downloads, so a
+                # file without it describes one, and re-detection reads the
+                # folder for a GOG installer exactly as it always did.
+                $src = 'GOG'
+                if ($g.PSObject.Properties.Name -contains 'Source' -and $g.Source -eq 'Files') { $src = 'Files' }
                 $entries += ,@{ Folder=[string]$g.Folder; Kind=$kind; ParentIndex=$parent; Setup=$setup; Name=$nm; Match=$mt
-                                Manual=$man; Extras=$ext }
+                                Source=$src; Manual=$man; Extras=$ext }
             }
         }
         if ($entries.Count -eq 0 -and $j.SourceFolder) {
@@ -2078,6 +2184,9 @@ function Get-IsoPath([string]$outDir, [string]$label) {
 function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$null) {
     $stage = Join-Path $s.OutDir 'disc'
     $tmpKeep = $null
+    # Names the disc's own content puts at the root, filled in while copying and
+    # read by the stale-icon cleanup at the end.
+    $ownRootFiles = @{}
 
     $games = @($s.Games)
     # Rebuilding a disc folder in place: the payload already lives in the stage,
@@ -2140,10 +2249,12 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
                 $g.Folder     = Get-PathMovedAside $g.Folder     $stage $aside
                 $g.ManualPath = Get-PathMovedAside $g.ManualPath $stage $aside
                 $g.ExtrasPath = Get-PathMovedAside $g.ExtrasPath $stage $aside
-                $g.SetupExe   = New-Object System.IO.FileInfo (Get-PathMovedAside $g.SetupExe.FullName $stage $aside)
+                if ($g.SetupExe) {
+                    $g.SetupExe = New-Object System.IO.FileInfo (Get-PathMovedAside $g.SetupExe.FullName $stage $aside)
+                }
                 $g.Files      = @(@($g.Files) | ForEach-Object { New-Object System.IO.FileInfo (Get-PathMovedAside $_.FullName $stage $aside) })
                 $g.Restaged   = $true
-                & $log "  kept the installer for $($g.GameName)"
+                & $log "  kept the files for $($g.GameName)"
             }
         }
         & $log "Preparing staging folder..."
@@ -2164,9 +2275,25 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
             }
             # Hardlinks are per-volume, so this is decided per game: two games on
             # different drives can still have one linked and the other copied.
-            $sameVol = ([IO.Path]::GetPathRoot($g.SetupExe.FullName) -eq $stageRoot)
+            # Taken from the folder rather than the installer, because an entry
+            # that is a folder of game files has no installer to ask.
+            $srcRoot = if ($g.SetupExe) { $g.SetupExe.DirectoryName } else { [string]$g.Folder }
+            $sameVol = ([IO.Path]::GetPathRoot($srcRoot) -eq $stageRoot)
             foreach ($f in $g.Files) {
-                $dest = Join-Path $destDir $f.Name
+                # A GOG download is an installer and its parts, all in one folder,
+                # so the file's own name is where it goes. A folder of game files
+                # keeps its shape instead: subfolders and all, or a game that
+                # expects data/textures.pak beside its exe arrives broken.
+                $relFile = Get-EntryFileRelative $g $f
+                # What the game itself puts at the disc root, so the stale-icon
+                # cleanup at the end can tell a game's own icon from one this
+                # build left behind.
+                if ($destDir -eq $stage -and $relFile -notmatch '\\') { $ownRootFiles[$relFile] = $true }
+                $dest = Join-Path $destDir $relFile
+                $destParent = Split-Path $dest -Parent
+                if ($destParent -and -not (Test-Path $destParent)) {
+                    New-Item -ItemType Directory -Force -Path $destParent | Out-Null
+                }
                 if ($sameVol) { try { New-Item -ItemType HardLink -Path $dest -Target $f.FullName -EA Stop | Out-Null; & $log "  linked $($f.Name)" }
                                 catch { Copy-Item $f.FullName $dest; & $log "  copied $($f.Name)" } }
                 else { & $log "  copying $($f.Name) ..."; Copy-Item $f.FullName $dest }
@@ -2197,9 +2324,15 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
             # Point the interface's own record at it, or the list still names a
             # file that is about to stop existing.
             if ($g.Restaged) {
+                # Worked out before Folder moves, since the relative paths of a
+                # folder of game files are measured from the old one.
+                $moved = @(@($g.Files) | ForEach-Object {
+                              New-Object System.IO.FileInfo (Join-Path $destDir (Get-EntryFileRelative $g $_)) })
+                if ($g.SetupExe) {
+                    $g.SetupExe = New-Object System.IO.FileInfo (Join-Path $destDir (Get-EntryFileRelative $g $g.SetupExe))
+                }
                 $g.Folder   = $destDir
-                $g.SetupExe = New-Object System.IO.FileInfo (Join-Path $destDir $g.SetupExe.Name)
-                $g.Files    = @(@($g.Files) | ForEach-Object { New-Object System.IO.FileInfo (Join-Path $destDir $_.Name) })
+                $g.Files    = $moved
                 if ($g.ManualPath -or $g.ExtrasPath) {
                     $gx2 = Join-Path $stage (Get-DiscEntryExtras $games $gi)
                     if ($g.ManualPath) { $g.ManualPath = Join-Path $gx2 ([IO.Path]::GetFileName($g.ManualPath)) }
@@ -2241,14 +2374,20 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     # Rebuilding a disc whose label (or the icon naming rule) changed would
     # otherwise leave the previous icon behind as dead weight on the disc. Runs
     # AFTER the copy above, because the old icon is often the copy's source.
+    #
+    # Never touches a file the disc's own content put there. A folder of game
+    # files lands at the disc root on a one-game disc, and a real game folder is
+    # full of icons: Hollow Knight carries gog.ico, support.ico and its own
+    # goggame-*.ico, and this swept all three off the disc before the rule was
+    # written. Measured on the installed game, not imagined.
     foreach ($stale in @(Get-ChildItem $stage -Filter '*.png' -File -EA SilentlyContinue)) {
-        if ($stale.Name -ne $pngName) {
+        if ($stale.Name -ne $pngName -and -not $ownRootFiles.ContainsKey($stale.Name)) {
             Clear-ReadOnly $stale.FullName; Remove-Item -LiteralPath $stale.FullName -Force -EA SilentlyContinue
             & $log "  removed old Linux icon: $($stale.Name)"
         }
     }
     foreach ($stale in @(Get-ChildItem $stage -Filter '*.ico' -File -EA SilentlyContinue)) {
-        if ($stale.Name -ne $icoName) {
+        if ($stale.Name -ne $icoName -and -not $ownRootFiles.ContainsKey($stale.Name)) {
             Clear-ReadOnly $stale.FullName; Remove-Item -LiteralPath $stale.FullName -Force -EA SilentlyContinue
             & $log "  removed old icon: $($stale.Name)"
         }
@@ -3196,6 +3335,10 @@ function Set-GameEntries([array]$entries) {
         # before Setup was recorded.
         if ($e.Kind -eq 'AddOn' -and $e.Setup -and (Test-Path $e.Setup -PathType Leaf)) {
             $g = Get-AddOnInfo $e.Setup
+        } elseif ($e.Source -eq 'Files') {
+            # A folder of game files, not a GOG download. Reading it as one would
+            # find no setup_*.exe and report the disc's own game as broken.
+            $g = Get-FolderInfo $e.Folder ([string]$e.Setup)
         } else {
             $g = Get-GameInfo $e.Folder
         }
@@ -3252,15 +3395,34 @@ function Set-GameFolder([string]$path) {
 function Add-GameFolder([string]$path) {
     $g = Get-GameInfo $path
     if (-not $g.Ok) {
-        $lblGame.Text = $g.Msg
-        $lblGame.ForeColor = [System.Drawing.Color]::Firebrick
-        return $null
+        # No GOG installer is not a reason to refuse the folder any more. It is a
+        # question: which executable installs this, or is the folder itself the
+        # game? Anything else that went wrong, a missing folder or the output
+        # folder picked by mistake, is still refused with its own message.
+        # Asked only when there is something to ask about. An empty folder, or one
+        # picked by mistake, is refused with its own message rather than with a
+        # dialog about which of its nought executables installs the game.
+        $files = @(Get-ChildItem $path -Recurse -File -Force -ErrorAction SilentlyContinue | Select-Object -First 1)
+        if ($g.Msg -like 'No GOG*' -and $files.Count -gt 0) {
+            $installer = Show-FolderInstallerDialog $path
+            if ($null -eq $installer) { return $null }      # cancelled
+            $g = Get-FolderInfo $path $installer
+        }
+        if (-not $g.Ok) {
+            $lblGame.Text = $g.Msg
+            $lblGame.ForeColor = [System.Drawing.Color]::Firebrick
+            return $null
+        }
     }
     # Compared on the installer, not the folder. A patch added as an add-on lives
     # in the same folder as the game it patches, so a folder comparison would
-    # refuse to re-add the game after it had been removed from the list.
+    # refuse to re-add the game after it had been removed from the list. An entry
+    # with no installer has only its folder to be compared on.
     foreach ($e in @($state.Games)) {
-        if ($e.SetupExe -and (Test-SamePath $e.SetupExe.FullName $g.SetupExe.FullName)) {
+        $same = if ($g.SetupExe -and $e.SetupExe) { Test-SamePath $e.SetupExe.FullName $g.SetupExe.FullName }
+                elseif (-not $g.SetupExe -and -not $e.SetupExe) { Test-SamePath ([string]$e.Folder) ([string]$g.Folder) }
+                else { $false }
+        if ($same) {
             $lblGame.Text = "$($g.GameName) is already on this disc."
             $lblGame.ForeColor = [System.Drawing.Color]::DarkOrange
             return $null
@@ -3396,6 +3558,66 @@ function Update-GameButtons {
 # Asks whether an entry is a game or an add-on, and of what. A window rather
 # than two more controls on the main form: step 1 is already the tallest part of
 # it, and this is answered once per installer, not adjusted while working.
+# A folder with no GOG installer in it. Rather than refuse it, ask what the
+# folder is: which executable installs the game, or none at all because the
+# folder is the game. Guessing was the alternative and it guesses wrong on any
+# folder holding a crash handler, an uninstaller or a launcher beside the real
+# installer.
+#
+# Returns the chosen installer's path, '' for "no installer, just the files", or
+# $null when the dialog was cancelled, which is the one case the caller must not
+# treat as a folder to add.
+function Show-FolderInstallerDialog([string]$folder) {
+    # No @() around the call: Get-FolderExecutables already returns its list with
+    # a leading comma, which is what keeps a one-element result an array.
+    $exes = Get-FolderExecutables $folder
+
+    $dlg=New-Object System.Windows.Forms.Form
+    $dlg.Text='No GOG installer in this folder'; $dlg.Font=$form.Font
+    $dlg.FormBorderStyle='FixedDialog'; $dlg.MaximizeBox=$false; $dlg.MinimizeBox=$false
+    $dlg.StartPosition='CenterParent'; $dlg.ShowInTaskbar=$false
+    $dlg.ClientSize=New-Object System.Drawing.Size(520,300)
+
+    $l=New-Object System.Windows.Forms.Label
+    $l.Text = "$([IO.Path]::GetFileName($folder.TrimEnd('\'))) holds no setup_*.exe, so it is not a GOG download." +
+              [Environment]::NewLine + 'Everything in it goes on the disc either way. What should the menu do with it?'
+    $l.Location=New-Object System.Drawing.Point(15,14); $l.Size=New-Object System.Drawing.Size(490,40)
+    $dlg.Controls.Add($l)
+
+    $lst=New-Object System.Windows.Forms.ListBox
+    $lst.Location=New-Object System.Drawing.Point(15,62); $lst.Size=New-Object System.Drawing.Size(490,180)
+    $lst.IntegralHeight=$false
+    [void]$lst.Items.Add('No installer: put the files on the disc and let the menu open the folder')
+    foreach ($e in $exes) { [void]$lst.Items.Add("Install with $($e.Name)   ($(Format-Size $e.Length))") }
+    # The safe answer first and selected: a wrong installer is a menu button that
+    # runs the wrong program, while no installer only means one button fewer.
+    $lst.SelectedIndex = 0
+    $dlg.Controls.Add($lst)
+
+    $note=New-Object System.Windows.Forms.Label
+    $note.Text = if ($exes.Count) { "$($exes.Count) executable(s) found, largest first." }
+                 else { 'No executables in this folder at all, so there is nothing to install.' }
+    $note.Location=New-Object System.Drawing.Point(15,246); $note.Size=New-Object System.Drawing.Size(320,20)
+    $note.ForeColor=[System.Drawing.Color]::DimGray
+    $dlg.Controls.Add($note)
+
+    $ok=New-Object System.Windows.Forms.Button; $ok.Text='Add'
+    $ok.Location=New-Object System.Drawing.Point(330,244); $ok.Size=New-Object System.Drawing.Size(80,26)
+    $ok.DialogResult=[System.Windows.Forms.DialogResult]::OK
+    $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'
+    $cancel.Location=New-Object System.Drawing.Point(420,244); $cancel.Size=New-Object System.Drawing.Size(85,26)
+    $cancel.DialogResult=[System.Windows.Forms.DialogResult]::Cancel
+    $dlg.Controls.Add($ok); $dlg.Controls.Add($cancel)
+    $dlg.AcceptButton=$ok; $dlg.CancelButton=$cancel
+
+    $res = $dlg.ShowDialog($form)
+    $index = $lst.SelectedIndex
+    $dlg.Dispose()
+    if ($res -ne [System.Windows.Forms.DialogResult]::OK) { return $null }
+    if ($index -le 0) { return '' }
+    return $exes[$index - 1].FullName
+}
+
 function Show-EntryKindDialog([int]$index) {
     $games = @($state.Games)
     if ($index -lt 0 -or $index -ge $games.Count) { return $false }
@@ -4114,7 +4336,9 @@ $btnBuild.Add_Click({
             $free     = [double]$di.AvailableFreeSpace
             # Hardlinking needs every installer on the same volume as the stage.
             # With games spread across drives, some get copied, so budget for the lot.
-            $srcRoots = @(Get-Games | ForEach-Object { [IO.Path]::GetPathRoot($_.SetupExe.FullName) } | Sort-Object -Unique)
+            $srcRoots = @(Get-Games | ForEach-Object {
+                              [IO.Path]::GetPathRoot($(if ($_.SetupExe) { $_.SetupExe.FullName } else { [string]$_.Folder }))
+                          } | Sort-Object -Unique)
             $linkable = ($di.DriveFormat -ieq 'NTFS') -and ($srcRoots.Count -eq 1) -and ($srcRoots[0] -ieq $outRoot)
             # Assign the branch, do not inline it: "(if ...)" parses as a command
             # invocation and only blows up at run time, which would hide here.
