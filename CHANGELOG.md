@@ -7,6 +7,49 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+### Added
+
+- **A game no longer has to be a GOG download.** Any folder of game files goes
+  on the disc: an installed game, an unpacked archive, an itch.io download,
+  anything portable. Until now a game had to be a folder holding a
+  `setup_*.exe`, and anything else was refused with "No GOG installer in this
+  folder", which is how it was asked for publicly — somebody had burned a 17 GB
+  GOG disc with DiscWright and then wanted the same disc from files GOG never
+  packaged.
+
+  Pick such a folder and DiscWright asks what the menu should do with it,
+  listing every executable it found, largest first, because an installer is
+  rarely the smallest thing in a game folder. Name one and the menu installs
+  with it; leave it on *No installer* — the answer already selected, since a
+  wrong installer is a menu button that runs the wrong program while no
+  installer is only one button fewer — and the menu shows **Open Folder**
+  instead, which opens the game's folder on the disc. The whole folder goes on
+  the disc with its subfolders intact: a GOG download is an installer and its
+  parts in one flat folder, so it has no shape to lose, while a game whose
+  `data\` folder was flattened onto the disc root is a broken game. An empty
+  folder is still refused, and so is a folder that is not there.
+
+  The question also reports what is about to go on the disc — the folder's file
+  count and total size — and says so when the folder is where GOG downloads
+  live rather than a game: picking `C:\GOG Games` instead of one game inside it
+  is the likeliest way to arrive here by mistake, and it names the first
+  download it found in there and suggests cancelling. It is a warning and not a
+  refusal, because a real game folder can have a `setup_*.exe` buried somewhere
+  under it too.
+
+  Project files record which of the two an entry is (schema 9) and reopen it as
+  the same thing, so a disc built from game files can be rebuilt from its
+  project.
+
+  Built and checked against a real 4.9 GB installed game before release, not
+  only against fixtures — which is how one bug in it was caught: the build
+  clears stale disc icons out of the disc root by name, and a game folder
+  carrying `gog.ico` or `support.ico` at its top level had them deleted from the
+  disc straight after being copied there. Files the disc itself puts at the root
+  are now left alone.
+
 ## [0.7.6] — 2026-09-20
 
 ### Fixed

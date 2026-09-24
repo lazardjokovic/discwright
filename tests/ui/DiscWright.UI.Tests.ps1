@@ -1163,3 +1163,196 @@ Describe 'The form while a real build runs' -Tag 'UI' -Skip:(-not $script:HaveDe
         $script:ThawedChange | Should -BeFalse
     }
 }
+
+Describe 'The question a folder with no GOG installer asks' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # This dialog cannot be reached the way the others are. Everything else here
+    # is driven through the main window, but this one only opens after a folder
+    # has been picked in the shell's own folder browser, and no test can steer
+    # that tree to a fixture on a machine it knows nothing about. So the real
+    # dialog is hosted on its own (tests/ui/DialogHost.ps1) and asked about a
+    # folder of the test's choosing. What it looks like is one half; what it
+    # hands back for each of the three answers is the half that decides whether
+    # an entry lands on the disc, so the host writes that down and it is read.
+
+    BeforeAll {
+        $script:AskSrc = Join-Path $script:Sandbox 'src\ask_folder_game'
+        $null = New-Installer $script:AskSrc 'BigGame.exe' 6
+        $null = New-Installer (Join-Path $script:AskSrc 'tools') 'Helper.exe' 1
+        Set-Content -LiteralPath (Join-Path $script:AskSrc 'readme.txt') -Value 'read me' -Encoding Ascii
+
+        # The folder somebody's downloads sit in, rather than one game: two GOG
+        # downloads in subfolders and no installer of its own.
+        $script:AskShelf = Join-Path $script:Sandbox 'src\gog_shelf'
+        $null = New-Installer (Join-Path $script:AskShelf 'first game')  'setup_first_game_1.0.exe' 2
+        $null = New-Installer (Join-Path $script:AskShelf 'second game') 'setup_second_game_1.0.exe' 2
+
+        $script:HostScript = Join-Path $PSScriptRoot 'DialogHost.ps1'
+        $script:AskAnswerFile = Join-Path $script:Sandbox 'dialog-answer.txt'
+
+        function Start-Question([string]$folder) {
+            Remove-Item -LiteralPath $script:AskAnswerFile -Force -ErrorAction SilentlyContinue
+            # Whatever the host says on its way out is kept: a host that failed to
+            # start looks exactly like a dialog that never opened, and the two
+            # need telling apart.
+            $log = Join-Path $script:Sandbox 'dialog-host.log'
+            $proc = Start-Process powershell.exe -WindowStyle Hidden -PassThru -RedirectStandardError $log -ArgumentList @(
+                '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', $script:HostScript,
+                '-Folder', $folder, '-ResultFile', $script:AskAnswerFile)
+            # Every top-level window is looked at, not just the first one with
+            # this title, and the one that belongs to THIS host is the one taken.
+            # Wait-Win hands back the first match it finds, and a dialog left
+            # standing by an earlier failure answers to the same title forever -
+            # which is exactly how this test first failed.
+            $deadline = (Get-Date).AddSeconds(45)
+            $dlg = $null
+            while (-not $dlg -and (Get-Date) -lt $deadline) {
+                $kids = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+                    [System.Windows.Automation.TreeScope]::Children,
+                    [System.Windows.Automation.Condition]::TrueCondition)
+                for ($i = 0; $i -lt $kids.Count; $i++) {
+                    try {
+                        $k = $kids.Item($i)
+                        if ($k.Current.ProcessId -eq $proc.Id -and $k.Current.Name -like 'No GOG installer*') {
+                            $dlg = $k; break
+                        }
+                    } catch {}
+                }
+                if (-not $dlg) { Start-Sleep -Milliseconds 300 }
+            }
+            if (-not $dlg) {
+                $gone = $proc.HasExited
+                try { $proc.Kill() } catch {}
+                $why = ([string](@(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue) -join ' ')).Trim()
+                throw ("the folder question never appeared (host pid $($proc.Id), exited: $gone)" +
+                       $(if ($why) { " - the host said: $why" } else { '' }))
+            }
+            # From here on the process must not be allowed to leak: a host left
+            # running holds a dialog on the desktop that the next test finds
+            # instead of its own.
+            try {
+                Set-DrivenWindow $dlg
+                $null = Set-WindowFocus $dlg
+            } catch {
+                try { $proc.Kill() } catch {}
+                throw
+            }
+            Start-Sleep -Milliseconds 500
+            return [pscustomobject]@{ Process = $proc; Window = $dlg }
+        }
+
+        function Get-QuestionAnswer($Question) {
+            # The host writes the answer down before it closes, so waiting for it
+            # to exit is waiting for the file.
+            try { $null = $Question.Process.WaitForExit(15000) } catch {}
+            if (-not (Test-Path $script:AskAnswerFile)) { return '(nothing written)' }
+            return (Get-Content -LiteralPath $script:AskAnswerFile -Raw).Trim()
+        }
+
+        function Select-QuestionRow($Question, [int]$Down) {
+            # A WinForms list box tells UI Automation nothing about its rows: the
+            # whole control arrives as one nameless pane with no children, so
+            # there is no row to find and click by name. What there is, is the
+            # pane itself - clicked once to put the keyboard in the list, then
+            # moved down as many rows as asked. Which row that lands on is what
+            # the answer proves.
+            $all = $Question.Window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+                                            [System.Windows.Automation.Condition]::TrueCondition)
+            $list = $null
+            for ($i = 0; $i -lt $all.Count; $i++) {
+                try {
+                    $el = $all.Item($i)
+                    if ($el.Current.Name -ne '') { continue }
+                    $r = $el.Current.BoundingRectangle
+                    if ($r.Height -lt 100) { continue }          # the list is the tall one
+                    if (-not $list -or $r.Height -gt $list.Current.BoundingRectangle.Height) { $list = $el }
+                } catch {}
+            }
+            if (-not $list) { throw 'the list of choices is not in the dialog' }
+            if (-not (Test-DrivingOurWindow)) {
+                throw ('The foreground window is no longer the dialog, so this click would land ' +
+                       'in whatever is in front of it. Stopped.')
+            }
+            $r = $list.Current.BoundingRectangle
+            # Near the top left, which is the first row whatever the row height is.
+            [DwInput]::ClickAt([int]($r.X + 30), [int]($r.Y + 8))
+            Start-Sleep -Milliseconds 300
+            for ($n = 0; $n -lt $Down; $n++) { Send-Keys '{DOWN}' 200 }
+        }
+    }
+
+    AfterEach {
+        if ($script:Question) { try { $script:Question.Process.Kill() } catch {}; $script:Question = $null }
+    }
+
+    It 'names the folder and says the files go on the disc either way' {
+        $script:Question = Start-Question $script:AskSrc
+        Save-WindowShot $script:Question.Window (Join-Path $script:ShotDir 'folder-question.png')
+        (Find-Ctl -Root $script:Question.Window -NameLike '*ask_folder_game holds no setup_*') |
+            Should -Not -BeNullOrEmpty
+    }
+
+    It 'says what is about to go on the disc, and how many executables it offers' {
+        # The size is the mis-pick showing itself: a game folder reads as a few
+        # files and a few GB, the folder holding every download somebody owns
+        # reads as tens of GB, and both are visible before Add is pressed.
+        $script:Question = Start-Question $script:AskSrc
+        (Find-Ctl -Root $script:Question.Window -NameLike '3 file(s)*MB*2 executable(s), largest first*') |
+            Should -Not -BeNullOrEmpty
+    }
+
+    It 'warns when the folder is where the downloads live, not a game' {
+        # Nothing is refused: a real game folder can carry a setup_*.exe somewhere
+        # underneath it too. The dialog says what it found and leaves the choice.
+        $script:Question = Start-Question $script:AskShelf
+        Save-WindowShot $script:Question.Window (Join-Path $script:ShotDir 'folder-question-shelf.png')
+        (Find-Ctl -Root $script:Question.Window -NameLike '2 GOG download(s) sit in subfolders*"first game"*') |
+            Should -Not -BeNullOrEmpty
+        (Find-Ctl -Root $script:Question.Window -NameLike '*Cancel and pick that folder instead*') |
+            Should -Not -BeNullOrEmpty
+    }
+
+    It 'leaves that warning off an ordinary game folder' {
+        $script:Question = Start-Question $script:AskSrc
+        (Find-Ctl -Root $script:Question.Window -NameLike '*sit in subfolders*' -TimeoutSec 2) |
+            Should -BeNullOrEmpty
+    }
+
+    It 'answers with no installer when Add is clicked as it stands' {
+        # The safe answer is the one already selected, so the fastest way through
+        # the dialog is also the one that cannot point a menu button at the wrong
+        # program.
+        $script:Question = Start-Question $script:AskSrc
+        Invoke-CtlNamed $script:Question.Window 'Add' -SettleMs 800 | Out-Null
+        Get-QuestionAnswer $script:Question | Should -Be 'NONE'
+    }
+
+    It 'answers with the executable one row down, which is the biggest one' {
+        # Also the ordering, proven through the window rather than through the
+        # function: the row under "no installer" has to be the largest
+        # executable, or a person picking the obvious one picks the wrong one.
+        $script:Question = Start-Question $script:AskSrc
+        Select-QuestionRow $script:Question -Down 1
+        Invoke-CtlNamed $script:Question.Window 'Add' -SettleMs 800 | Out-Null
+        Get-QuestionAnswer $script:Question | Should -Be "INSTALLER`t$(Join-Path $script:AskSrc 'BigGame.exe')"
+    }
+
+    It 'answers with the one two rows down, which is in a subfolder' {
+        # The second row is Helper.exe, which lives in tools\ - so the dialog
+        # really does look through the whole folder, and the path it hands back
+        # is the executable's own and not the folder's.
+        $script:Question = Start-Question $script:AskSrc
+        Select-QuestionRow $script:Question -Down 2
+        Invoke-CtlNamed $script:Question.Window 'Add' -SettleMs 800 | Out-Null
+        Get-QuestionAnswer $script:Question |
+            Should -Be "INSTALLER`t$(Join-Path $script:AskSrc 'tools\Helper.exe')"
+    }
+
+    It 'answers with nothing at all when Cancel is clicked' {
+        # Cancel has to be distinguishable from "no installer", or cancelling the
+        # question would add the very entry that was just refused.
+        $script:Question = Start-Question $script:AskSrc
+        Invoke-CtlNamed $script:Question.Window 'Cancel' -SettleMs 800 | Out-Null
+        Get-QuestionAnswer $script:Question | Should -Be 'CANCELLED'
+    }
+}

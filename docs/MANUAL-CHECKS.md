@@ -1,7 +1,7 @@
 # Manual checks before a release
 
-The automated suite is 442 logic tests and 84 window tests, and it runs in about
-four minutes:
+The automated suite is 468 logic tests and 92 window tests, and it runs in about
+six minutes:
 
 ```
 .\tests\Invoke-Tests.ps1
@@ -147,16 +147,41 @@ names still have to agree.
 in the menu disagree), or Play saying it cannot find the game after a successful
 install.
 
-## 5. A burned disc
+## 5. Does a game run from a folder that was never a GOG download?
+
+A folder of game files goes on the disc as it stands, and the menu offers **Open
+Folder** instead of Install. Tests prove the files arrive with their subfolders
+intact and that the menu carries the folder rather than an installer. What they
+cannot judge is whether the game then *runs* from a read-only drive, which is the
+part a person has to watch.
+
+- [ ] **Add game...** and pick an installed game's folder — anything without a
+      `setup_*.exe` in it. Answer the question it asks with **No installer**.
+- [ ] Build, then right-click the ISO and choose **Mount**.
+- [ ] From the menu, click **Open Folder**.
+
+**Should see:** Explorer opens the game's folder on the mounted drive, with the
+same subfolders it has on disk.
+
+- [ ] Run the game's `.exe` from there.
+
+**Should see:** either the game starts, or it complains it cannot write to its own
+folder — which is the disc being read-only and not a fault in the disc. Copy the
+folder to the hard drive and run it there to tell the two apart.
+
+**Failure looks like:** Open Folder opening the disc root instead of the game's
+folder, subfolders missing, or the game's own icons gone from the folder.
+
+## 6. A burned disc
 
 Only if you are burning one. Everything above is about an ISO; a burner is a
 different piece of hardware with its own failure modes.
 
-- [ ] Burn, put it in a drive, and work through checks 2 to 4 on the real disc.
+- [ ] Burn, put it in a drive, and work through checks 2 to 5 on the real disc.
 
 ---
 
-## 6. Checks this machine cannot do at all
+## 7. Checks this machine cannot do at all
 
 Everything above assumes Windows 11 and a burner. Some of what DiscWright claims
 is about hardware nobody here has, and no amount of care at this desk will test
@@ -262,6 +287,12 @@ Do not re-add any of these as a manual check.
 | The form locks during a build and restores what was enabled | *Locking the form while a build runs* |
 | A file over the ISO9660 ceiling drops the disc back to UDF alone | *falls back to UDF alone when a file is too big for ISO9660* |
 | The ceiling itself, pinned to the measured number | *holds the ceiling at the measured number* |
+| A folder with no GOG installer is taken, with its subfolders | *A folder that is not a GOG download*, and *Building a disc from a folder of game files* |
+| The game's own icons survive the disc's icon cleanup | *leaves the game's own icons on the disc* |
+| The menu offers Open Folder rather than Install | *gives that game an Open Folder button instead of Install* |
+| Which answer to the installer question adds an entry | *Adding a folder the file dialog came back with* |
+| The question itself: its text, its rows, what each hands back | *The question a folder with no GOG installer asks* |
+| The warning when the folder holds downloads rather than a game | *spots the folder that holds the downloads rather than a game*, and *warns when the folder is where the downloads live, not a game* |
 
 One thing deliberately has **no** test: whether the form *looks* frozen while a
 build runs. The only moment it is observable from outside is while the completion

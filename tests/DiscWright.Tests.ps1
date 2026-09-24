@@ -724,8 +724,15 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 8' {
-            $script:PJson.Version | Should -Be 8
+        It 'declares schema version 9' {
+            $script:PJson.Version | Should -Be 9
+        }
+
+        It 'records where each entry came from' {
+            # Version 9. A GOG download and a folder of game files are told apart
+            # here, because reopening has to re-read them differently: one is
+            # searched for a setup_*.exe, the other is taken as it is.
+            $script:PJson.Games[0].Source | Should -Be 'GOG'
         }
 
         It 'records which disc the set was planned for' {
@@ -2711,6 +2718,309 @@ Describe 'Rebuilding a disc folder that the installers themselves live in' {
     }
 }
 
+Describe 'A folder that is not a GOG download' -Tag 'Unit' {
+
+    # Asked for publicly: somebody burned a 17 GB GOG disc with this and then
+    # wanted the same disc from game files GOG never packaged. Until now a game
+    # had to be a folder holding a setup_*.exe, which ruled out an unpacked zip,
+    # an itch.io download and anything portable.
+    #
+    # Everything in the folder goes on the disc, keeping its shape, and the
+    # installer is whichever executable was picked in the dialog, or none.
+
+    BeforeAll {
+        $script:Loose = Join-Path $script:Sandbox 'src\loose-game'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:Loose 'data\textures') | Out-Null
+        $fs = [IO.File]::Create((Join-Path $script:Loose 'Game.exe')); $fs.SetLength(3MB); $fs.Close()
+        $fs = [IO.File]::Create((Join-Path $script:Loose 'CrashHandler.exe')); $fs.SetLength(64KB); $fs.Close()
+        Set-Content -LiteralPath (Join-Path $script:Loose 'readme.txt') -Value 'read me' -Encoding Ascii
+        Set-Content -LiteralPath (Join-Path $script:Loose 'data\config.ini') -Value 'x=1' -Encoding Ascii
+        Set-Content -LiteralPath (Join-Path $script:Loose 'data\textures\wall.dds') -Value 'dds' -Encoding Ascii
+    }
+
+    It 'is refused by the GOG reader, which is what asks the question' {
+        $g = Get-GameInfo $script:Loose
+        $g.Ok  | Should -BeFalse
+        $g.Msg | Should -BeLike 'No GOG*'
+    }
+
+    It 'takes the folder, with everything in it' {
+        $g = Get-FolderInfo $script:Loose
+        $g.Ok     | Should -BeTrue
+        $g.Source | Should -Be 'Files'
+        @($g.Files).Count | Should -Be 5
+        $g.TotalBytes | Should -BeGreaterThan 3MB
+    }
+
+    It 'names it after the folder when no installer was picked' {
+        (Get-FolderInfo $script:Loose).GameName | Should -Be 'loose-game'
+        (Get-FolderInfo $script:Loose).SetupExe | Should -BeNullOrEmpty
+    }
+
+    It 'installs with the executable that was picked' {
+        $exe = Join-Path $script:Loose 'Game.exe'
+        $g = Get-FolderInfo $script:Loose $exe
+        $g.SetupExe.FullName | Should -Be $exe
+    }
+
+    It 'offers every executable, biggest first, because an installer is rarely the smallest' {
+        $exes = Get-FolderExecutables $script:Loose
+        @($exes).Count | Should -Be 2
+        $exes[0].Name  | Should -Be 'Game.exe'
+    }
+
+    It 'orders a list it was handed exactly as one it read itself' {
+        # The dialog reads the folder once and hands the list over, because a cold
+        # 20 GB game folder makes a second walk visible. Same rule either way, or
+        # the list a person sees stops matching the one under test.
+        $files = @(Get-ChildItem $script:Loose -Recurse -File -Force)
+        $given = Get-FolderExecutables $script:Loose 25 $files
+        $read  = Get-FolderExecutables $script:Loose
+        @($given | ForEach-Object { $_.FullName }) | Should -Be @($read | ForEach-Object { $_.FullName })
+    }
+
+    It 'still caps the list, whoever read the folder' {
+        $many = Join-Path $script:Sandbox 'src\many-exes'
+        New-Item -ItemType Directory -Force -Path $many | Out-Null
+        foreach ($i in 1..30) {
+            $fs = [IO.File]::Create((Join-Path $many "tool$i.exe")); $fs.SetLength(1KB * $i); $fs.Close()
+        }
+        # Assigned, never wrapped: the list comes back with a leading comma, and
+        # @() around the call collapses it to one element holding the list.
+        $read = Get-FolderExecutables $many
+        $read.Count | Should -Be 25
+        $given = Get-FolderExecutables $many 25 (Get-ChildItem $many -Recurse -File -Force)
+        $given.Count | Should -Be 25
+    }
+
+    It 'spots the folder that holds the downloads rather than a game' {
+        # The likeliest way to reach the question by mistake: C:\GOG Games has no
+        # setup_*.exe of its own, so it is not a GOG download, and taking it whole
+        # would put every game on one entry named after the folder.
+        $shelf = Join-Path $script:Sandbox 'src\gog-shelf'
+        $one = Join-Path $shelf 'game one'
+        foreach ($g in @($one, (Join-Path $shelf 'game two'))) {
+            New-Item -ItemType Directory -Force -Path $g | Out-Null
+            $fs = [IO.File]::Create((Join-Path $g 'setup_a_game_1.0_(90210).exe')); $fs.SetLength(2MB); $fs.Close()
+        }
+        # A folder that is not a download sits beside them and must not be counted.
+        New-Item -ItemType Directory -Force -Path (Join-Path $shelf 'artwork') | Out-Null
+        $hits = Get-GogSubfolders $shelf
+        $hits.Count | Should -Be 2
+        ($hits | ForEach-Object { $_.Name }) -join ',' | Should -Be 'game one,game two'
+        # And the game folder itself is not one of those, or every ordinary folder
+        # would carry the warning.
+        $inside = Get-GogSubfolders $one
+        $inside.Count | Should -Be 0
+        $plain = Get-GogSubfolders $script:Loose
+        $plain.Count | Should -Be 0
+    }
+
+    It 'says nothing about a folder that is not there' {
+        $gone = Get-GogSubfolders (Join-Path $script:Sandbox 'src\nowhere-at-all')
+        $gone.Count | Should -Be 0
+    }
+
+    It 'refuses a folder with nothing in it' {
+        $empty = Join-Path $script:Sandbox 'src\empty-folder'
+        New-Item -ItemType Directory -Force -Path $empty | Out-Null
+        $g = Get-FolderInfo $empty
+        $g.Ok  | Should -BeFalse
+        $g.Msg | Should -Match 'no files'
+    }
+
+    It 'keeps the shape of the folder on the disc' {
+        # A game that expects data\textures\wall.dds beside its exe arrives broken
+        # if the disc flattens it, which is what a GOG download gets, having no
+        # shape to keep.
+        $g = Get-FolderInfo $script:Loose
+        $deep = @($g.Files | Where-Object { $_.Name -eq 'wall.dds' })[0]
+        Get-EntryFileRelative $g $deep | Should -Be 'data\textures\wall.dds'
+        $flat = Get-GameInfo (New-FixtureGame -Slug 'shape_gog')
+        Get-EntryFileRelative $flat $flat.Files[0] | Should -Be $flat.Files[0].Name
+    }
+
+    It 'tells the menu there is nothing to install, and where the files are' {
+        $entries = @((Get-FolderInfo $script:Loose), (Get-GameInfo (New-FixtureGame -Slug 'menu_gog')))
+        $menu = Get-MenuGames $entries
+        $menu[0].Setup  | Should -Be ''
+        $menu[0].Folder | Should -Be (Get-DiscEntryFolder $entries 0)
+        $menu[1].Setup  | Should -Not -Be ''
+    }
+
+    It 'gives that game an Open Folder button instead of Install' {
+        $hta = Join-Path $script:Sandbox 'loose-menu.hta'
+        $entries = @((Get-FolderInfo $script:Loose))
+        New-MenuHta @{ GameName='LOOSE'; Games=(Get-MenuGames $entries); Buttons=@('Play','Install','Exit')
+                       MusicFile=''; ManualFile=''; PanelSide='Right'; IconName='disc.ico'
+                       WindowBorder=$true; ButtonStyle='Minimal' } $hta
+        $text = Get-Content -LiteralPath $hta -Raw
+        $text | Should -Match 'btn_Open'
+        $text | Should -Match 'function doOpenFolder'
+        $text | Should -Match 'd:"'
+    }
+
+    It 'still saves and reopens as a folder of files' {
+        $out = Join-Path $script:Sandbox 'loose-project'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        $g = Get-FolderInfo $script:Loose (Join-Path $script:Loose 'Game.exe')
+        Save-Project @{ Games=@($g); Label='LOOSE'; IconPath=$script:Art; IconIsIco=$false; Menu=$true
+                        BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'; Divider=$false
+                        ShowTitle=$false; TitleText=''; WindowBorder=$true; ButtonStyle='Minimal'
+                        MusicFile=$null; Buttons=@('Install','Exit'); ManualPath=$null; ExtrasPath=$null
+                        ExtraItems=@(); MediaKey=''; LinuxInfo=$false; LegacyFs=$false } $out
+        $back = Import-Project (Join-Path $out $PROJECT_FILE)
+        $back.GameEntries[0].Source | Should -Be 'Files'
+        $back.GameEntries[0].Setup  | Should -Be (Join-Path $script:Loose 'Game.exe')
+    }
+}
+
+Describe 'Adding a folder the file dialog came back with' -Tag 'Unit' {
+
+    # The wiring between picking a folder and the question that follows it. The
+    # question itself is a window, so what it looks like and what it offers is
+    # asked of the running dialog in the window suite; here it is stubbed, and
+    # what is under test is which answers add an entry and which do not.
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Windows.Forms
+        function Update-GameList {}
+        function Update-MediaLabel {}
+        function Show-FolderInstallerDialog([string]$folder) {
+            $script:AskedAbout = $folder
+            return $script:AskAnswer
+        }
+
+        $script:lblGame = [pscustomobject]@{ Text=''; ForeColor=$null }
+        $script:state   = @{ Games=@(); ExtraItems=@() }
+
+        $script:PickFiles = Join-Path $script:Sandbox 'src\picked-files'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:PickFiles 'bin') | Out-Null
+        $fs = [IO.File]::Create((Join-Path $script:PickFiles 'bin\Game.exe')); $fs.SetLength(2MB); $fs.Close()
+        Set-Content -LiteralPath (Join-Path $script:PickFiles 'readme.txt') -Value 'read me' -Encoding Ascii
+
+        $script:PickNothing = Join-Path $script:Sandbox 'src\picked-nothing'
+        New-Item -ItemType Directory -Force -Path $script:PickNothing | Out-Null
+    }
+
+    BeforeEach {
+        $script:state.Games  = @()
+        $script:AskedAbout   = $null
+        $script:AskAnswer    = ''
+        $script:lblGame.Text = ''
+    }
+
+    It 'asks about a folder that has files but no GOG installer' {
+        $g = Add-GameFolder $script:PickFiles
+        $script:AskedAbout | Should -Be $script:PickFiles
+        $g.Source   | Should -Be 'Files'
+        $g.GameName | Should -Be 'picked-files'
+        @($script:state.Games).Count | Should -Be 1
+    }
+
+    It 'takes the installer the question came back with' {
+        $script:AskAnswer = Join-Path $script:PickFiles 'bin\Game.exe'
+        $g = Add-GameFolder $script:PickFiles
+        $g.SetupExe.FullName | Should -Be $script:AskAnswer
+    }
+
+    It 'adds nothing when the question is cancelled' {
+        # Cancel is $null; '' is an answer, and it means put the files on the
+        # disc with nothing to install. Treating the two alike would leave an
+        # entry on the list that had just been refused.
+        $script:AskAnswer = $null
+        $g = Add-GameFolder $script:PickFiles
+        $g | Should -BeNullOrEmpty
+        @($script:state.Games).Count | Should -Be 0
+    }
+
+    It 'never asks about a folder with nothing in it' {
+        # A dialog offering a choice between none of nought executables is not a
+        # question. It is also what hung the suite once, so it is asked about.
+        $g = Add-GameFolder $script:PickNothing
+        $g | Should -BeNullOrEmpty
+        $script:AskedAbout   | Should -BeNullOrEmpty
+        $script:lblGame.Text | Should -BeLike 'No GOG*'
+    }
+
+    It 'refuses the same folder of files twice' {
+        # Nothing to compare installers on when neither entry has one, so the
+        # folders are compared instead.
+        $null = Add-GameFolder $script:PickFiles
+        $g = Add-GameFolder $script:PickFiles
+        $g | Should -BeNullOrEmpty
+        $script:lblGame.Text | Should -Match 'already on this disc'
+        @($script:state.Games).Count | Should -Be 1
+    }
+}
+
+Describe 'Building a disc from a folder of game files' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    # The whole point of taking folders that are not GOG downloads: the disc has
+    # to carry them as they are. A GOG download is an installer and its parts in
+    # one folder, so it has no shape to lose; a game folder does, and a game
+    # whose data\ subfolder was flattened onto the disc root is a broken game.
+
+    BeforeAll {
+        $script:FilesOut = Join-Path $script:Sandbox 'out-files'
+        New-Item -ItemType Directory -Force -Path $script:FilesOut | Out-Null
+        $src = Join-Path $script:Sandbox 'src\files-game'
+        New-Item -ItemType Directory -Force -Path (Join-Path $src 'data\textures') | Out-Null
+        $fs = [IO.File]::Create((Join-Path $src 'Game.exe')); $fs.SetLength(2MB); $fs.Close()
+        Set-Content -LiteralPath (Join-Path $src 'data\config.ini') -Value 'x=1' -Encoding Ascii
+        Set-Content -LiteralPath (Join-Path $src 'data\textures\wall.dds') -Value 'dds' -Encoding Ascii
+        # A game's own icons, which the stale-icon cleanup used to eat.
+        Set-Content -LiteralPath (Join-Path $src 'gamething.ico') -Value 'ico' -Encoding Ascii
+        Set-Content -LiteralPath (Join-Path $src 'screenshot.png') -Value 'png' -Encoding Ascii
+
+        $script:FilesGame = Get-FolderInfo $src
+        $script:FilesIso = Invoke-Build @{
+            Games=@($script:FilesGame); Label='Files Disc'
+            IconPath=$script:Art; IconIsIco=$false; Menu=$true
+            BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'
+            Divider=$false; ShowTitle=$false; TitleText=''
+            WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+            Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
+            ExtraItems=@(); OutDir=$script:FilesOut } $script:LogSink
+        $script:FilesDisc = Join-Path $script:FilesOut 'disc'
+    }
+
+    It 'writes the ISO' {
+        Test-Path $script:FilesIso | Should -BeTrue
+    }
+
+    It 'keeps the subfolders the game expects' {
+        Test-Path (Join-Path $script:FilesDisc 'Game.exe')                  | Should -BeTrue
+        Test-Path (Join-Path $script:FilesDisc 'data\config.ini')           | Should -BeTrue
+        Test-Path (Join-Path $script:FilesDisc 'data\textures\wall.dds')    | Should -BeTrue
+    }
+
+    It 'puts nothing where the flat copy would have put it' {
+        Test-Path (Join-Path $script:FilesDisc 'wall.dds') | Should -BeFalse
+    }
+
+    It "leaves the game's own icons on the disc" {
+        # The build clears icons a previous build left at the disc root, and a
+        # folder of game files lands there too. The installed Hollow Knight
+        # carries gog.ico, support.ico and its own goggame-*.ico, and all three
+        # were swept off the disc before this rule existed.
+        Test-Path (Join-Path $script:FilesDisc 'gamething.ico')  | Should -BeTrue
+        Test-Path (Join-Path $script:FilesDisc 'screenshot.png') | Should -BeTrue
+        Test-Path (Join-Path $script:FilesDisc (Get-DiscIconName 'Files Disc')) | Should -BeTrue
+    }
+
+    It 'gives the menu the folder instead of an installer' {
+        $hta = Get-Content -LiteralPath (Join-Path $script:FilesDisc 'AUTORUN\menu.hta') -Raw
+        $hta | Should -Match 's:""'
+        $hta | Should -Match 'btn_Open'
+    }
+
+    It 'saves a project that reopens as a folder of files' {
+        $back = Import-Project (Join-Path $script:FilesOut $PROJECT_FILE)
+        $back.GameEntries[0].Source | Should -Be 'Files'
+    }
+}
+
 Describe 'Reopening a built disc and rebuilding it' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
 
     # Open existing disc... leaves the icon, the background and the extra content
@@ -2784,7 +3094,8 @@ Describe 'The comma-return convention is not undone at the call sites' -Tag 'Uni
     BeforeAll {
         $script:CommaReturners = @(
             'Get-Games', 'Get-MenuGames', 'Remove-GameEntry', 'Get-EntryAddOns',
-            'Set-GameEntries', 'Set-GameFolders', 'Set-GameFolder'
+            'Set-GameEntries', 'Set-GameFolders', 'Set-GameFolder', 'Get-FolderExecutables',
+            'Get-GogSubfolders'
         )
         $appFile = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
         $tree = [System.Management.Automation.Language.Parser]::ParseFile($appFile, [ref]$null, [ref]$null)
@@ -3727,8 +4038,8 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
         }
 
-        It 'writes schema version 8' {
-            $script:RenameRaw.Version | Should -Be 8
+        It 'writes schema version 9' {
+            $script:RenameRaw.Version | Should -Be 9
         }
 
         It 'stores the registered name beside the chosen one' {
@@ -3828,11 +4139,12 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:MatchWriters = @($assigns | ForEach-Object { Get-EnclosingFunction $_ } | Sort-Object -Unique)
         }
 
-        It 'is written in exactly the two places that are allowed to write it' {
-            # Set-InstallerFacts reads it off the installer; Set-GameEntries
-            # restores one a project file carried. Anywhere else - and
-            # Show-EntryKindDialog above all - is the bug coming back.
-            $script:MatchWriters | Should -Be @('Set-GameEntries', 'Set-InstallerFacts')
+        It 'is written in exactly the three places that are allowed to write it' {
+            # Set-InstallerFacts reads it off a GOG installer, Get-FolderInfo off a
+            # folder that is not a GOG download, and Set-GameEntries restores one
+            # a project file carried. Anywhere else - and Show-EntryKindDialog
+            # above all - is the bug coming back.
+            $script:MatchWriters | Should -Be @('Get-FolderInfo', 'Set-GameEntries', 'Set-InstallerFacts')
         }
 
         It 'is never written by the dialog that renames a game' {
@@ -4614,7 +4926,7 @@ Describe 'The older-Windows setting in a project file' -Tag 'Unit' {
                 ExtraItems=@(); MediaKey=''; LinuxInfo=$false; LegacyFs=$true }
         Save-Project $s $script:LegProj
         $raw = Get-Content -Raw (Join-Path $script:LegProj 'discproject.json') | ConvertFrom-Json
-        $raw.Version  | Should -Be 8
+        $raw.Version  | Should -Be 9
         $raw.LegacyFs | Should -BeTrue
         (Import-Project (Join-Path $script:LegProj 'discproject.json')).LegacyFs | Should -BeTrue
     }

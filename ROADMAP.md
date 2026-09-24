@@ -21,6 +21,16 @@ that happens, and a request other people turn up and agree with moves up.
 
 ## Delivered
 
+**Games that are not GOG downloads** — asked about by people with other DRM-free
+sources, and this was sitting under *Considering* while the honest position was that
+only GOG downloads had been tested. What made it decidable was realising the question
+is not which filenames to accept: it is what the menu can promise. So DiscWright asks.
+Any folder of game files is taken, whole, with its subfolders; it lists the executables
+it found and you say which one installs the game, or say there is none and the menu
+offers **Open Folder** instead of Install. Nothing is guessed from a filename, and what
+Play claims is unchanged, because Play still relies on the registry keys GOG's
+installers write and a folder of files never wrote any.
+
 **A disc readable on Windows XP and older** — asked for on Reddit by somebody who
 runs Planescape Torment and Diablo on period hardware, and who had noticed the menu
 worked there but autoplay never fired. The autorun.inf turned out to be innocent:
@@ -106,11 +116,6 @@ of the installer itself, may be the better trade.
 
 ## Considering
 
-- **Installers that are not from GOG.** Detection looks for `setup_*.exe`, which is GOG's
-  naming, and Play locates an installed copy through registry keys GOG's installers write.
-  Someone asked about other DRM-free sources. Relaxing the filename filter is a small
-  change; deciding what DiscWright claims to support is not, and the honest position today
-  is that only GOG downloads have been tested.
 - **Linux.** Asked for twice. A Linux *tool* is still a rewrite rather than a port — the
   interface is WinForms and the ISO builder is IMAPI2FS, both Windows-only. Measured, the
   split is about 37% portable logic, 46% WinForms and the ISO helper, and 17% the menu
