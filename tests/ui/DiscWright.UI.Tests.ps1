@@ -1181,6 +1181,12 @@ Describe 'The question a folder with no GOG installer asks' -Tag 'UI' -Skip:(-no
         $null = New-Installer (Join-Path $script:AskSrc 'tools') 'Helper.exe' 1
         Set-Content -LiteralPath (Join-Path $script:AskSrc 'readme.txt') -Value 'read me' -Encoding Ascii
 
+        # The folder somebody's downloads sit in, rather than one game: two GOG
+        # downloads in subfolders and no installer of its own.
+        $script:AskShelf = Join-Path $script:Sandbox 'src\gog_shelf'
+        $null = New-Installer (Join-Path $script:AskShelf 'first game')  'setup_first_game_1.0.exe' 2
+        $null = New-Installer (Join-Path $script:AskShelf 'second game') 'setup_second_game_1.0.exe' 2
+
         $script:HostScript = Join-Path $PSScriptRoot 'DialogHost.ps1'
         $script:AskAnswerFile = Join-Path $script:Sandbox 'dialog-answer.txt'
 
@@ -1286,10 +1292,30 @@ Describe 'The question a folder with no GOG installer asks' -Tag 'UI' -Skip:(-no
             Should -Not -BeNullOrEmpty
     }
 
-    It 'says how many executables it is offering' {
+    It 'says what is about to go on the disc, and how many executables it offers' {
+        # The size is the mis-pick showing itself: a game folder reads as a few
+        # files and a few GB, the folder holding every download somebody owns
+        # reads as tens of GB, and both are visible before Add is pressed.
         $script:Question = Start-Question $script:AskSrc
-        (Find-Ctl -Root $script:Question.Window -NameLike '2 executable*largest first*') |
+        (Find-Ctl -Root $script:Question.Window -NameLike '3 file(s)*MB*2 executable(s), largest first*') |
             Should -Not -BeNullOrEmpty
+    }
+
+    It 'warns when the folder is where the downloads live, not a game' {
+        # Nothing is refused: a real game folder can carry a setup_*.exe somewhere
+        # underneath it too. The dialog says what it found and leaves the choice.
+        $script:Question = Start-Question $script:AskShelf
+        Save-WindowShot $script:Question.Window (Join-Path $script:ShotDir 'folder-question-shelf.png')
+        (Find-Ctl -Root $script:Question.Window -NameLike '2 GOG download(s) sit in subfolders*"first game"*') |
+            Should -Not -BeNullOrEmpty
+        (Find-Ctl -Root $script:Question.Window -NameLike '*Cancel and pick that folder instead*') |
+            Should -Not -BeNullOrEmpty
+    }
+
+    It 'leaves that warning off an ordinary game folder' {
+        $script:Question = Start-Question $script:AskSrc
+        (Find-Ctl -Root $script:Question.Window -NameLike '*sit in subfolders*' -TimeoutSec 2) |
+            Should -BeNullOrEmpty
     }
 
     It 'answers with no installer when Add is clicked as it stands' {

@@ -260,11 +260,35 @@ function Get-EntryFileRelative([hashtable]$entry,$file) {
 # an installer is nearly always the biggest .exe in the folder, and a crash
 # handler or an uninstaller the smallest. Capped, because a game folder can hold
 # hundreds of tools and nobody picks from a list that long.
-function Get-FolderExecutables([string]$folder,[int]$limit=25) {
-    if (-not (Test-Path $folder)) { return ,@() }
-    $exes = @(Get-ChildItem $folder -Recurse -File -Filter '*.exe' -Force -ErrorAction SilentlyContinue |
+#
+# $files is an already-read list of the folder's files, for a caller that needs
+# the whole list anyway - the dialog also counts and totals it. Walking a game
+# folder twice costs real seconds on a cold cache and a 20 GB game, and the
+# ordering rule stays in one place rather than being copied to the caller.
+function Get-FolderExecutables([string]$folder,[int]$limit=25,$files=$null) {
+    if ($null -eq $files) {
+        if (-not (Test-Path $folder)) { return ,@() }
+        $files = @(Get-ChildItem $folder -Recurse -File -Filter '*.exe' -Force -ErrorAction SilentlyContinue)
+    }
+    $exes = @(@($files) | Where-Object { $_.Extension -eq '.exe' } |
               Sort-Object Length -Descending | Select-Object -First $limit)
     return ,@($exes)
+}
+
+# The subfolders of this one that are GOG downloads in their own right.
+#
+# Picking the folder that HOLDS your downloads, rather than one game inside it,
+# is the likeliest way to arrive at the folder question by mistake: C:\GOG Games
+# has no setup_*.exe of its own, so it is not a GOG download, and taking it whole
+# would put every game you own on one disc entry named after the folder. Nothing
+# refuses it - a real game folder can have a setup_*.exe buried somewhere too,
+# and refusing that would be worse - but the dialog says what it found and what
+# to do about it. Immediate children only: this runs before a window is shown.
+function Get-GogSubfolders([string]$folder) {
+    if (-not (Test-Path $folder)) { return ,@() }
+    $hits = @(Get-ChildItem $folder -Directory -Force -ErrorAction SilentlyContinue | Where-Object {
+                  @(Get-ChildItem $_.FullName -Filter 'setup_*.exe' -File -ErrorAction SilentlyContinue).Count -gt 0 })
+    return ,@($hits)
 }
 
 # A folder that is not a GOG download: a DRM-free zip unpacked, an itch.io
@@ -3568,15 +3592,19 @@ function Update-GameButtons {
 # $null when the dialog was cancelled, which is the one case the caller must not
 # treat as a folder to add.
 function Show-FolderInstallerDialog([string]$folder) {
+    # Read once: the executables to offer, and the count and size to report, come
+    # out of the same walk. A cold 20 GB game folder makes a second one visible.
+    $all = @(Get-ChildItem $folder -Recurse -File -Force -ErrorAction SilentlyContinue)
     # No @() around the call: Get-FolderExecutables already returns its list with
     # a leading comma, which is what keeps a one-element result an array.
-    $exes = Get-FolderExecutables $folder
+    $exes = Get-FolderExecutables $folder 25 $all
+    $inner = Get-GogSubfolders $folder
 
     $dlg=New-Object System.Windows.Forms.Form
     $dlg.Text='No GOG installer in this folder'; $dlg.Font=$form.Font
     $dlg.FormBorderStyle='FixedDialog'; $dlg.MaximizeBox=$false; $dlg.MinimizeBox=$false
     $dlg.StartPosition='CenterParent'; $dlg.ShowInTaskbar=$false
-    $dlg.ClientSize=New-Object System.Drawing.Size(520,300)
+    $dlg.ClientSize=New-Object System.Drawing.Size(520,326)
 
     $l=New-Object System.Windows.Forms.Label
     $l.Text = "$([IO.Path]::GetFileName($folder.TrimEnd('\'))) holds no setup_*.exe, so it is not a GOG download." +
@@ -3584,8 +3612,22 @@ function Show-FolderInstallerDialog([string]$folder) {
     $l.Location=New-Object System.Drawing.Point(15,14); $l.Size=New-Object System.Drawing.Size(490,40)
     $dlg.Controls.Add($l)
 
+    # The likeliest way to be here by mistake: the folder holding the downloads
+    # rather than one game in it. Said plainly, in the colour the rest of the app
+    # uses for "look at this", and it still leaves the choice open - a real game
+    # folder can have a setup_*.exe somewhere under it too.
+    $warn=New-Object System.Windows.Forms.Label
+    $warn.Location=New-Object System.Drawing.Point(15,56); $warn.Size=New-Object System.Drawing.Size(490,32)
+    $warn.ForeColor=[System.Drawing.Color]::DarkOrange
+    if ($inner.Count) {
+        $warn.Text = "$($inner.Count) GOG download(s) sit in subfolders of this one, starting with " +
+                     "`"$($inner[0].Name)`"." + [Environment]::NewLine +
+                     'If you meant one of those, Cancel and pick that folder instead.'
+    }
+    $dlg.Controls.Add($warn)
+
     $lst=New-Object System.Windows.Forms.ListBox
-    $lst.Location=New-Object System.Drawing.Point(15,62); $lst.Size=New-Object System.Drawing.Size(490,180)
+    $lst.Location=New-Object System.Drawing.Point(15,88); $lst.Size=New-Object System.Drawing.Size(490,180)
     $lst.IntegralHeight=$false
     [void]$lst.Items.Add('No installer: put the files on the disc and let the menu open the folder')
     foreach ($e in $exes) { [void]$lst.Items.Add("Install with $($e.Name)   ($(Format-Size $e.Length))") }
@@ -3594,18 +3636,24 @@ function Show-FolderInstallerDialog([string]$folder) {
     $lst.SelectedIndex = 0
     $dlg.Controls.Add($lst)
 
+    # What is actually about to go on the disc, before the button is pressed. A
+    # game folder reads as a few thousand files and a few GB; the folder holding
+    # every download you own reads as tens of GB, which is the mis-pick showing
+    # itself without anybody having to explain it.
     $note=New-Object System.Windows.Forms.Label
-    $note.Text = if ($exes.Count) { "$($exes.Count) executable(s) found, largest first." }
-                 else { 'No executables in this folder at all, so there is nothing to install.' }
-    $note.Location=New-Object System.Drawing.Point(15,246); $note.Size=New-Object System.Drawing.Size(320,20)
+    $size = Format-Size ([double](($all | Measure-Object Length -Sum).Sum))
+    $note.Text = "$($all.Count) file(s), $size.  " +
+                 $(if ($exes.Count) { "$($exes.Count) executable(s), largest first." }
+                   else { 'No executables at all, so there is nothing to install.' })
+    $note.Location=New-Object System.Drawing.Point(15,272); $note.Size=New-Object System.Drawing.Size(320,32)
     $note.ForeColor=[System.Drawing.Color]::DimGray
     $dlg.Controls.Add($note)
 
     $ok=New-Object System.Windows.Forms.Button; $ok.Text='Add'
-    $ok.Location=New-Object System.Drawing.Point(330,244); $ok.Size=New-Object System.Drawing.Size(80,26)
+    $ok.Location=New-Object System.Drawing.Point(330,276); $ok.Size=New-Object System.Drawing.Size(80,26)
     $ok.DialogResult=[System.Windows.Forms.DialogResult]::OK
     $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'
-    $cancel.Location=New-Object System.Drawing.Point(420,244); $cancel.Size=New-Object System.Drawing.Size(85,26)
+    $cancel.Location=New-Object System.Drawing.Point(420,276); $cancel.Size=New-Object System.Drawing.Size(85,26)
     $cancel.DialogResult=[System.Windows.Forms.DialogResult]::Cancel
     $dlg.Controls.Add($ok); $dlg.Controls.Add($cancel)
     $dlg.AcceptButton=$ok; $dlg.CancelButton=$cancel

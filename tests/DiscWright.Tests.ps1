@@ -2769,6 +2769,58 @@ Describe 'A folder that is not a GOG download' -Tag 'Unit' {
         $exes[0].Name  | Should -Be 'Game.exe'
     }
 
+    It 'orders a list it was handed exactly as one it read itself' {
+        # The dialog reads the folder once and hands the list over, because a cold
+        # 20 GB game folder makes a second walk visible. Same rule either way, or
+        # the list a person sees stops matching the one under test.
+        $files = @(Get-ChildItem $script:Loose -Recurse -File -Force)
+        $given = Get-FolderExecutables $script:Loose 25 $files
+        $read  = Get-FolderExecutables $script:Loose
+        @($given | ForEach-Object { $_.FullName }) | Should -Be @($read | ForEach-Object { $_.FullName })
+    }
+
+    It 'still caps the list, whoever read the folder' {
+        $many = Join-Path $script:Sandbox 'src\many-exes'
+        New-Item -ItemType Directory -Force -Path $many | Out-Null
+        foreach ($i in 1..30) {
+            $fs = [IO.File]::Create((Join-Path $many "tool$i.exe")); $fs.SetLength(1KB * $i); $fs.Close()
+        }
+        # Assigned, never wrapped: the list comes back with a leading comma, and
+        # @() around the call collapses it to one element holding the list.
+        $read = Get-FolderExecutables $many
+        $read.Count | Should -Be 25
+        $given = Get-FolderExecutables $many 25 (Get-ChildItem $many -Recurse -File -Force)
+        $given.Count | Should -Be 25
+    }
+
+    It 'spots the folder that holds the downloads rather than a game' {
+        # The likeliest way to reach the question by mistake: C:\GOG Games has no
+        # setup_*.exe of its own, so it is not a GOG download, and taking it whole
+        # would put every game on one entry named after the folder.
+        $shelf = Join-Path $script:Sandbox 'src\gog-shelf'
+        $one = Join-Path $shelf 'game one'
+        foreach ($g in @($one, (Join-Path $shelf 'game two'))) {
+            New-Item -ItemType Directory -Force -Path $g | Out-Null
+            $fs = [IO.File]::Create((Join-Path $g 'setup_a_game_1.0_(90210).exe')); $fs.SetLength(2MB); $fs.Close()
+        }
+        # A folder that is not a download sits beside them and must not be counted.
+        New-Item -ItemType Directory -Force -Path (Join-Path $shelf 'artwork') | Out-Null
+        $hits = Get-GogSubfolders $shelf
+        $hits.Count | Should -Be 2
+        ($hits | ForEach-Object { $_.Name }) -join ',' | Should -Be 'game one,game two'
+        # And the game folder itself is not one of those, or every ordinary folder
+        # would carry the warning.
+        $inside = Get-GogSubfolders $one
+        $inside.Count | Should -Be 0
+        $plain = Get-GogSubfolders $script:Loose
+        $plain.Count | Should -Be 0
+    }
+
+    It 'says nothing about a folder that is not there' {
+        $gone = Get-GogSubfolders (Join-Path $script:Sandbox 'src\nowhere-at-all')
+        $gone.Count | Should -Be 0
+    }
+
     It 'refuses a folder with nothing in it' {
         $empty = Join-Path $script:Sandbox 'src\empty-folder'
         New-Item -ItemType Directory -Force -Path $empty | Out-Null
@@ -3042,7 +3094,8 @@ Describe 'The comma-return convention is not undone at the call sites' -Tag 'Uni
     BeforeAll {
         $script:CommaReturners = @(
             'Get-Games', 'Get-MenuGames', 'Remove-GameEntry', 'Get-EntryAddOns',
-            'Set-GameEntries', 'Set-GameFolders', 'Set-GameFolder', 'Get-FolderExecutables'
+            'Set-GameEntries', 'Set-GameFolders', 'Set-GameFolder', 'Get-FolderExecutables',
+            'Get-GogSubfolders'
         )
         $appFile = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
         $tree = [System.Management.Automation.Language.Parser]::ParseFile($appFile, [ref]$null, [ref]$null)

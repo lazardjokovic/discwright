@@ -1,6 +1,6 @@
 # Manual checks before a release
 
-The automated suite is 464 logic tests and 90 window tests, and it runs in about
+The automated suite is 468 logic tests and 92 window tests, and it runs in about
 six minutes:
 
 ```
@@ -292,6 +292,7 @@ Do not re-add any of these as a manual check.
 | The menu offers Open Folder rather than Install | *gives that game an Open Folder button instead of Install* |
 | Which answer to the installer question adds an entry | *Adding a folder the file dialog came back with* |
 | The question itself: its text, its rows, what each hands back | *The question a folder with no GOG installer asks* |
+| The warning when the folder holds downloads rather than a game | *spots the folder that holds the downloads rather than a game*, and *warns when the folder is where the downloads live, not a game* |
 
 One thing deliberately has **no** test: whether the form *looks* frozen while a
 build runs. The only moment it is observable from outside is while the completion

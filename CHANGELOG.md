@@ -31,6 +31,14 @@ between minor versions.
   `data\` folder was flattened onto the disc root is a broken game. An empty
   folder is still refused, and so is a folder that is not there.
 
+  The question also reports what is about to go on the disc — the folder's file
+  count and total size — and says so when the folder is where GOG downloads
+  live rather than a game: picking `C:\GOG Games` instead of one game inside it
+  is the likeliest way to arrive here by mistake, and it names the first
+  download it found in there and suggests cancelling. It is a warning and not a
+  refusal, because a real game folder can have a `setup_*.exe` buried somewhere
+  under it too.
+
   Project files record which of the two an entry is (schema 9) and reopen it as
   the same thing, so a disc built from game files can be rebuilt from its
   project.
