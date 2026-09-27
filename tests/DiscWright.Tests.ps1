@@ -3021,6 +3021,86 @@ Describe 'Building a disc from a folder of game files' -Tag 'Build' -Skip:(-not 
     }
 }
 
+Describe "A game folder that already holds the disc's own names" -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    # A GOG download is setup_*.exe and its .bin parts, which can never be called
+    # autorun.inf or the disc's icon. A folder of game files can be called
+    # anything, and plenty of games ship an autorun.inf of their own - so since
+    # 0.8.0 a one-game disc, where the files land at the root, can have the
+    # disc's own files land on top of the game's.
+    #
+    # The disc has to win: its autorun.inf is what opens the menu. What it must
+    # not do is win silently, because the promise is that the folder goes on the
+    # disc as it stands, and here part of it did not.
+
+    BeforeAll {
+        $script:ClashOut = Join-Path $script:Sandbox 'out-clash'
+        New-Item -ItemType Directory -Force -Path $script:ClashOut | Out-Null
+        $src = Join-Path $script:Sandbox 'src\clashing-game'
+        New-Item -ItemType Directory -Force -Path (Join-Path $src 'AUTORUN') | Out-Null
+        $fs = [IO.File]::Create((Join-Path $src 'Game.exe')); $fs.SetLength(1MB); $fs.Close()
+        Set-Content -LiteralPath (Join-Path $src 'autorun.inf') -Value "[autorun]`r`nopen=THEIRS.EXE" -Encoding Ascii
+        Set-Content -LiteralPath (Join-Path $src 'AUTORUN\theirs.txt') -Value 'the game has one too' -Encoding Ascii
+        Set-Content -LiteralPath (Join-Path $src (Get-DiscIconName 'Clash Disc')) -Value 'not an icon' -Encoding Ascii
+
+        $script:ClashLog = New-Object System.Collections.ArrayList
+        $sink = { param($m) $null = $script:ClashLog.Add([string]$m) }
+        $script:ClashIso = Invoke-Build @{
+            Games=@(Get-FolderInfo $src); Label='Clash Disc'
+            IconPath=$script:Art; IconIsIco=$false; Menu=$true
+            BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'
+            Divider=$false; ShowTitle=$false; TitleText=''
+            WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+            Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
+            ExtraItems=@(); OutDir=$script:ClashOut } $sink
+        $script:ClashDisc = Join-Path $script:ClashOut 'disc'
+        $script:ClashSaid = ($script:ClashLog -join "`n")
+    }
+
+    It 'still writes a disc that opens its own menu' {
+        (Get-Content -LiteralPath (Join-Path $script:ClashDisc 'autorun.inf') -Raw) |
+            Should -Match 'AUTORUN'
+    }
+
+    It 'says which of the game files the disc replaced' {
+        $script:ClashSaid | Should -Match "the disc's own autorun\.inf replaced"
+    }
+
+    It 'names the icon it replaced as well, not just the first one' {
+        $ico = [regex]::Escape((Get-DiscIconName 'Clash Disc'))
+        $script:ClashSaid | Should -Match "the disc's own $ico replaced"
+    }
+
+    It 'says nothing of the sort for a folder with no such names in it' {
+        # The one thing that would make the note worthless: a warning on every
+        # disc. The sink writes to a script-scoped list on purpose - a local
+        # $log is shadowed by Invoke-Build's own parameter of that name when the
+        # scriptblock runs inside it.
+        $script:PlainLog = New-Object System.Collections.ArrayList
+        $sink = { param($m) $null = $script:PlainLog.Add([string]$m) }
+        $out = Join-Path $script:Sandbox 'out-noclash'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        $src = Join-Path $script:Sandbox 'src\plain-game'
+        New-Item -ItemType Directory -Force -Path $src | Out-Null
+        $fs = [IO.File]::Create((Join-Path $src 'Game.exe')); $fs.SetLength(1MB); $fs.Close()
+        $null = Invoke-Build @{
+            Games=@(Get-FolderInfo $src); Label='Plain Disc'
+            IconPath=$script:Art; IconIsIco=$false; Menu=$true
+            BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'
+            Divider=$false; ShowTitle=$false; TitleText=''
+            WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+            Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
+            ExtraItems=@(); OutDir=$out } $sink
+        ($script:PlainLog -join "`n") | Should -Not -Match "the disc's own .* replaced"
+    }
+
+    It "keeps the game's own AUTORUN folder alongside the menu, and says so" {
+        Test-Path (Join-Path $script:ClashDisc 'AUTORUN\theirs.txt') | Should -BeTrue
+        Test-Path (Join-Path $script:ClashDisc 'AUTORUN\menu.hta')   | Should -BeTrue
+        $script:ClashSaid | Should -Match 'brings an AUTORUN folder'
+    }
+}
+
 Describe 'Reopening a built disc and rebuilding it' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
 
     # Open existing disc... leaves the icon, the background and the extra content

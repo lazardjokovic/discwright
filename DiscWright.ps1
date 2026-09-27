@@ -2211,6 +2211,7 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     # Names the disc's own content puts at the root, filled in while copying and
     # read by the stale-icon cleanup at the end.
     $ownRootFiles = @{}
+    $ownRootDirs  = @{}
 
     $games = @($s.Games)
     # Rebuilding a disc folder in place: the payload already lives in the stage,
@@ -2312,7 +2313,12 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
                 # What the game itself puts at the disc root, so the stale-icon
                 # cleanup at the end can tell a game's own icon from one this
                 # build left behind.
-                if ($destDir -eq $stage -and $relFile -notmatch '\\') { $ownRootFiles[$relFile] = $true }
+                if ($destDir -eq $stage) {
+                    if ($relFile -notmatch '\\') { $ownRootFiles[$relFile] = $true }
+                    # The folders it brings to the root as well, because the disc
+                    # writes into AUTORUN and Extras and would merge with them.
+                    else { $ownRootDirs[($relFile -split '\\')[0]] = $true }
+                }
                 $dest = Join-Path $destDir $relFile
                 $destParent = Split-Path $dest -Parent
                 if ($destParent -and -not (Test-Path $destParent)) {
@@ -2497,6 +2503,24 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 
     & $log "Writing autorun.inf..."
     New-AutorunInf $s.Label $icoName $s.Menu (Join-Path $stage 'autorun.inf')
+
+    # What the disc writes at its own root, now that everything is written. A GOG
+    # download is setup_*.exe and its .bin parts, which can never be called any of
+    # these; a folder of game files can be called anything, and plenty of games
+    # ship an autorun.inf of their own. On a one-game disc those files land at the
+    # root, so the disc's own can land on top of them.
+    #
+    # The disc has to win - its autorun.inf is what opens the menu - but it must
+    # not win in silence, because the promise made when the folder was added is
+    # that it goes on the disc as it stands, and here part of it did not.
+    foreach ($name in @('autorun.inf', $icoName, $pngName, '.xdg-volume-info')) {
+        if ($name -and $ownRootFiles.ContainsKey($name)) {
+            & $log "  NOTE: the disc's own $name replaced the game's file of that name."
+        }
+    }
+    if ($ownRootDirs.ContainsKey('AUTORUN')) {
+        & $log "  NOTE: this game brings an AUTORUN folder; the disc's menu files sit in it too."
+    }
 
     # Windows never looks at this file and Linux never looks at autorun.inf, so
     # the two sit side by side and the disc introduces itself on either machine.
