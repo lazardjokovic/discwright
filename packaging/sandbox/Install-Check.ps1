@@ -74,13 +74,28 @@ $shortcut = @(Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs"
               Where-Object { $_.Name -like '*DiscWright*' })
 $null = Check "a Start menu shortcut exists" ($shortcut.Count -gt 0) ($shortcut.Name -join ', ')
 
+# What that shortcut actually starts. The installer picks its launcher from what
+# the machine has: wscript and the .vbs where VBScript exists, because that is
+# the one that opens the app with no console flashing up first, and powershell
+# directly where it does not. Pointing at a launcher this machine cannot run is
+# how 0.8.0 shipped a Start menu entry that only ever opened an error box.
+$start = @($shortcut | Where-Object { $_.Name -notlike 'Uninstall*' })[0]
+if ($start) {
+    $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($start.FullName)
+    Say "shortcut target: $($lnk.TargetPath) $($lnk.Arguments)"
+    $usesVbs = $lnk.TargetPath -like '*wscript.exe' -or $lnk.Arguments -like '*.vbs*'
+    $null = Check "the shortcut's launcher is one this machine can run" `
+        ($usesVbs -eq $vbsHere) `
+        $(if ($usesVbs) { 'wscript and the .vbs' } else { 'powershell directly' })
+}
+
 # 3. The Windows pieces this depends on, because a clean image is where their
 #    absence shows. VBScript became a Feature on Demand in Windows 11 24H2 and
 #    Microsoft has said it goes away; the disc's menu needs mshta with JScript
 #    and Scripting.FileSystemObject, which is a separate question.
 Say ""
 $vbsHere = Test-Path 'C:\Windows\System32\vbscript.dll'
-$null = Check "VBScript is on this image, which the .vbs launcher needs" $vbsHere
+Say "VBScript on this image: $vbsHere"
 $null = Check "mshta and JScript are on this image, which every disc's menu needs" `
     ((Test-Path 'C:\Windows\System32\mshta.exe') -and (Test-Path 'C:\Windows\System32\jscript.dll') `
      -and (Test-Path 'C:\Windows\System32\scrrun.dll'))

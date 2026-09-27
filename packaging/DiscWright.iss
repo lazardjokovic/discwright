@@ -92,18 +92,38 @@ Source: "..\README.md";           DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE";             DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Pointed at the .vbs rather than the .cmd because that is the launcher whose
-; whole job is starting the app without a console window flashing up first, and
-; because wscript.exe -> powershell.exe is the Microsoft-signed chain that keeps
-; this working under Smart App Control. Naming wscript.exe explicitly rather
-; than letting the shell resolve the .vbs association means a machine that has
-; had .vbs re-associated with an editor still launches the app.
+; Two launchers, and the machine picks. Where VBScript is present the shortcut
+; goes through wscript.exe and DiscWright.vbs, whose whole job is starting the
+; app with no console window flashing up first; wscript.exe -> powershell.exe is
+; also the Microsoft-signed chain that keeps this working under Smart App
+; Control. Naming wscript.exe explicitly rather than letting the shell resolve
+; the .vbs association means a machine that has had .vbs re-associated with an
+; editor still launches the app.
+;
+; Where VBScript is absent that shortcut opens a Windows Script Host error box
+; and nothing else, which is what 0.8.0 shipped: vbscript.dll is not on a
+; current Windows 11 image, VBScript having become a Feature on Demand in 24H2
+; with Microsoft saying it will be disabled by default and then removed. Found
+; by installing 0.8.0 in Windows Sandbox; see packaging\sandbox.
+;
+; Those machines get powershell.exe directly. Its console is created and then
+; hidden, so there is a brief flash, which is worth accepting only where the
+; quieter way cannot run at all.
 Name: "{group}\{#AppName}"; \
     Filename: "{sys}\wscript.exe"; \
     Parameters: """{app}\DiscWright.vbs"""; \
     WorkingDir: "{app}"; \
     IconFilename: "{app}\DiscWright.ico"; \
-    Comment: "Turn a GOG installer folder into a burnable game disc"
+    Comment: "Turn a GOG installer folder into a burnable game disc"; \
+    Check: HasVBScript
+
+Name: "{group}\{#AppName}"; \
+    Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File ""{app}\DiscWright.ps1"""; \
+    WorkingDir: "{app}"; \
+    IconFilename: "{app}\DiscWright.ico"; \
+    Comment: "Turn a GOG installer folder into a burnable game disc"; \
+    Check: not HasVBScript
 
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
 
@@ -112,11 +132,36 @@ Name: "{autodesktop}\{#AppName}"; \
     Parameters: """{app}\DiscWright.vbs"""; \
     WorkingDir: "{app}"; \
     IconFilename: "{app}\DiscWright.ico"; \
-    Tasks: desktopicon
+    Tasks: desktopicon; Check: HasVBScript
+
+Name: "{autodesktop}\{#AppName}"; \
+    Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File ""{app}\DiscWright.ps1"""; \
+    WorkingDir: "{app}"; \
+    IconFilename: "{app}\DiscWright.ico"; \
+    Tasks: desktopicon; Check: not HasVBScript
 
 [Run]
+; The tick box at the end of the install, which has to pick its launcher the
+; same way, or finishing the install is where somebody meets the error box.
 Description: "{cm:LaunchProgram,{#AppName}}"; \
     Filename: "{sys}\wscript.exe"; \
     Parameters: """{app}\DiscWright.vbs"""; \
     WorkingDir: "{app}"; \
-    Flags: postinstall nowait skipifsilent
+    Flags: postinstall nowait skipifsilent; Check: HasVBScript
+
+Description: "{cm:LaunchProgram,{#AppName}}"; \
+    Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+    Parameters: "-NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File ""{app}\DiscWright.ps1"""; \
+    WorkingDir: "{app}"; \
+    Flags: postinstall nowait skipifsilent; Check: not HasVBScript
+
+[Code]
+// Whether this machine can run a .vbs at all. VBScript is a Feature on Demand
+// from Windows 11 24H2: present on an ordinary install, absent from a trimmed
+// image, and on its way out altogether. Checked in {sys}, which is where the
+// wscript.exe these shortcuts name lives, so the answer is about the same pair.
+function HasVBScript(): Boolean;
+begin
+  Result := FileExists(ExpandConstant('{sys}\vbscript.dll'));
+end;
