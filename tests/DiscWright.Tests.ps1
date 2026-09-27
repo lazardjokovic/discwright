@@ -5022,3 +5022,76 @@ Describe 'The older-Windows setting in a project file' -Tag 'Unit' {
         [bool]$p.LegacyFs  | Should -BeFalse
     }
 }
+
+Describe "The installer's choice of launcher" -Tag 'Unit' {
+
+    # 0.8.0's Start menu shortcut pointed at wscript.exe and DiscWright.vbs. On
+    # a machine without VBScript that opens a Windows Script Host error box and
+    # nothing else, and vbscript.dll is not on a current Windows 11 image:
+    # VBScript became a Feature on Demand in 24H2 and Microsoft has said it will
+    # be disabled by default and then removed. Found by installing 0.8.0 in
+    # Windows Sandbox, which is where a clean machine can be had.
+    #
+    # The installer now picks per machine. The half where VBScript is missing is
+    # proved end to end by packaging\sandbox\Test-Installer.ps1, on an image that
+    # really lacks it. The half where it is present cannot be proved here - this
+    # machine's Smart App Control refuses to run the installer at all, and the
+    # sandbox could not fetch the Feature on Demand (dism error 12006) - so what
+    # is checked here is that the installer still asks the question, and that
+    # both answers name a launcher that would work.
+
+    BeforeAll {
+        $script:Iss = Get-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'packaging\DiscWright.iss') -Raw
+        # An Inno entry is one logical line written over several with trailing
+        # backslashes, so the continuations are joined before anything is asked
+        # of them. What is collected is every entry that starts the app: the two
+        # shortcuts and the tick box at the end of the install, each in both of
+        # its versions.
+        $flat = $script:Iss -replace '\\\s*\r?\n\s*', ' '
+        $script:Launches = @($flat -split '\r?\n' | Where-Object {
+            $_ -match '^(Name|Description):' -and $_ -match 'wscript\.exe|powershell\.exe' })
+    }
+
+    It 'has a line for every way the app is started' {
+        # The Start menu shortcut, the optional desktop icon, and the tick box,
+        # times two launchers. Miss one and that is where somebody meets the
+        # error box.
+        $script:Launches.Count | Should -Be 6
+    }
+
+    It 'asks about VBScript before choosing, every time' {
+        foreach ($line in $script:Launches) {
+            $line | Should -Match 'Check:\s*(not\s+)?HasVBScript' -Because "of: $line"
+        }
+    }
+
+    It 'pairs each launcher with its opposite, so neither case is left out' {
+        $withVbs = @($script:Launches | Where-Object { $_ -match 'Check:\s*HasVBScript' })
+        $without = @($script:Launches | Where-Object { $_ -match 'Check:\s*not\s+HasVBScript' })
+        $withVbs.Count | Should -Be 3
+        $without.Count | Should -Be 3
+        # And each pair points at a different launcher, which is the whole point.
+        foreach ($line in $withVbs) { $line | Should -Match 'wscript\.exe' }
+        foreach ($line in $without) { $line | Should -Match 'powershell\.exe' }
+    }
+
+    It 'starts the app the same way on either branch' {
+        foreach ($line in @($script:Launches | Where-Object { $_ -match 'not\s+HasVBScript' })) {
+            # -STA because the window is WinForms, hidden because the console is
+            # what the .vbs existed to avoid, and -File pointing at the app.
+            $line | Should -Match '-STA'
+            $line | Should -Match '-WindowStyle Hidden'
+            $line | Should -Match 'DiscWright\.ps1'
+        }
+        foreach ($line in @($script:Launches | Where-Object { $_ -match 'Check:\s*HasVBScript' })) {
+            $line | Should -Match 'DiscWright\.vbs'
+        }
+    }
+
+    It 'defines the check it asks with' {
+        $script:Iss | Should -Match 'function HasVBScript\(\): Boolean'
+        # Looked for in {sys}, which is where the wscript.exe these shortcuts
+        # name lives, so the answer is about the same pair of files.
+        $script:Iss | Should -Match ([regex]::Escape("FileExists(ExpandConstant('{sys}\vbscript.dll'))"))
+    }
+}
