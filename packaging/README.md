@@ -55,13 +55,34 @@ user picks.
    script on the line written to prevent the problem. Both times the release was
    published by hand, which is exactly why the second bug was not caught. 0.7.1
    is the first release the job did on its own.
-2. Build the manifests with that hash:
+2. **Run the installer on a clean Windows**, which is what Windows Sandbox is
+   for and what Smart App Control makes impossible on this machine:
+
+   ```powershell
+   .\packaging\sandbox\Test-Installer.ps1        # newest setup.exe it can find
+   ```
+
+   It installs silently, checks what Windows records, starts the app, uninstalls
+   and checks it is gone, then shuts the sandbox down and prints the answers. A
+   sandbox window opens and closes itself, and nothing is installed here. See
+   [sandbox/README.md](sandbox/README.md) for what it asks and why.
+
+   It needs Windows Sandbox turned on, once:
+
+   ```powershell
+   Enable-WindowsOptionalFeature -Online -FeatureName "Containers-DisposableClientVM" -All
+   ```
+
+   **0.8.0 shipped before this existed, and the first run of it found a real
+   defect** in that release: see the same file.
+
+3. Build the manifests with that hash:
 
    ```powershell
    .\packaging\winget\New-WingetManifest.ps1 -Version 0.7.1 -Sha256 <hash>
    ```
 
-3. Check them, on this machine, before they go anywhere:
+4. Check them, on this machine, before they go anywhere:
 
    ```powershell
    winget validate --manifest .\build\winget\0.7.1
@@ -69,17 +90,18 @@ user picks.
    winget uninstall DiscWright
    ```
 
-4. Submit: fork [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs),
+5. Submit: fork [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs),
    copy the folder to `manifests\d\DiscWright\DiscWright\<version>\`, open a PR.
    Their CI runs the install on a clean VM.
 
-**Nothing goes to winget until the release works here.** Step 4 comes after the
-full suite has passed on a free desktop, after the built installer has really
-installed and uninstalled, and after a disc has been built and mounted. An update
+**Nothing goes to winget until the release works here.** Step 5 comes after the
+full suite has passed on a free desktop, after the installer has really
+installed and uninstalled **on a clean Windows** (step 2), and after a disc has
+been built and mounted. An update
 to a package that already exists merges without a human, so a bad build there
 installs itself on other people's machines and takes a second PR to undo.
 
-That is also why step 4 is not automated, and why it should not be wired to
+That is also why step 5 is not automated, and why it should not be wired to
 publishing a release: an action that fires on publish submits before anyone has
 looked at it, which is the wrong way round. If it is ever automated, it wants a
 manual trigger run after the checks.
