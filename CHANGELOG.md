@@ -7,6 +7,37 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [0.8.1] — 2026-09-27
+
+### Fixed
+
+- **The Start menu shortcut did nothing on a Windows without VBScript.** The
+  installer pointed it at `wscript.exe` and `DiscWright.vbs`, the launcher that
+  starts the app with no console window flashing up first. `vbscript.dll` is
+  not on a current Windows 11 image: VBScript became a Feature on Demand in
+  24H2, and Microsoft has said it will be disabled by default and then removed.
+  On such a machine the shortcut opened a Windows Script Host error box and the
+  app never started, which is where DiscWright ended for anyone who installed it
+  rather than unzipping it.
+
+  The installer now asks the machine and creates the shortcut to match. Where
+  VBScript is there, nothing changes. Where it is not, the shortcut runs
+  `powershell.exe` directly with its window hidden, which costs a brief console
+  flash and is worth it only where the quieter way cannot run at all. All three
+  places that start the app are covered: the Start menu shortcut, the optional
+  desktop icon, and the tick box at the end of the install.
+
+  Found by running the published 0.8.0 installer on a clean Windows for the
+  first time, in Windows Sandbox. Smart App Control blocks an unsigned installer
+  on the machine DiscWright is developed on, so until now the installer shipped
+  having never been run; `packaging\sandbox` is that test, and it is a step in
+  the release runbook from now on.
+
+  The zip was never affected: `Run DiscWright.cmd` calls PowerShell directly.
+  Neither were discs, which the same run confirmed: `mshta`, JScript and
+  `Scripting.FileSystemObject` are all present on that image, so the menu has
+  everything it uses.
+
 ## [0.8.0] — 2026-09-24
 
 ### Added
@@ -837,7 +868,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/lazardjokovic/discwright/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/lazardjokovic/discwright/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/lazardjokovic/discwright/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/lazardjokovic/discwright/compare/v0.7.4...v0.7.5
