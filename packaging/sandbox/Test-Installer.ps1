@@ -38,7 +38,13 @@
 [CmdletBinding()]
 param(
     [string]$Installer,
-    [int]$TimeoutMinutes = 15
+    [int]$TimeoutMinutes = 15,
+
+    # Add VBScript to the sandbox before installing, which tests the other half
+    # of the installer's choice: with it there, the shortcut should be wscript
+    # and the quiet .vbs launcher rather than powershell. Needs the network, to
+    # fetch the Feature on Demand, so it is off by default.
+    [switch]$WithVBScript
 )
 $ErrorActionPreference = 'Stop'
 
@@ -70,12 +76,15 @@ New-Item -ItemType Directory -Force -Path (Join-Path $work 'in'), (Join-Path $wo
 Copy-Item $Installer (Join-Path $work 'in')
 Copy-Item (Join-Path $here 'Install-Check.ps1') (Join-Path $work 'in')
 
-# Networking off: nothing here needs it, and a sandbox with no network is one
-# fewer thing to think about when the thing being run is an unsigned installer.
+# Networking off by default: nothing here needs it, and a sandbox with no
+# network is one fewer thing to think about when the thing being run is an
+# unsigned installer. -WithVBScript needs it, to fetch the Feature on Demand.
+$net = if ($WithVBScript) { 'Default' } else { 'Disable' }
+$args = if ($WithVBScript) { ' -WithVBScript' } else { '' }
 $wsb = Join-Path $work 'discwright.wsb'
 @"
 <Configuration>
-  <Networking>Disable</Networking>
+  <Networking>$net</Networking>
   <MappedFolders>
     <MappedFolder>
       <HostFolder>$work</HostFolder>
@@ -84,12 +93,15 @@ $wsb = Join-Path $work 'discwright.wsb'
     </MappedFolder>
   </MappedFolders>
   <LogonCommand>
-    <Command>powershell.exe -ExecutionPolicy Bypass -WindowStyle Normal -File C:\dw\in\Install-Check.ps1</Command>
+    <Command>powershell.exe -ExecutionPolicy Bypass -WindowStyle Normal -File C:\dw\in\Install-Check.ps1$args</Command>
   </LogonCommand>
 </Configuration>
 "@ | Set-Content -LiteralPath $wsb -Encoding UTF8
 
 Write-Host "Testing $(Split-Path $Installer -Leaf) in Windows Sandbox."
+if ($WithVBScript) {
+    Write-Host "Adding VBScript in there first, so this tests the other half of the choice."
+}
 Write-Host "A sandbox window will open and close itself. Nothing is installed on this machine."
 
 $result = Join-Path $work 'out\result.txt'

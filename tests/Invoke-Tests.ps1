@@ -44,6 +44,14 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 
+# Worth knowing before writing any script that calls Invoke-Pester around work
+# of its own: Pester 5.9.1 leaves a variable called $p in the caller's scope,
+# set to the path of its own Pester.ps1. A script holding a file path in $p
+# across the call - to restore a file it had deliberately broken, say - then
+# writes over Pester's file instead of its own. Measured, after it happened:
+# the module needed that one file restored. Anything that has to survive an
+# Invoke-Pester call wants a name of its own.
+
 # Pester 5, deliberately, and not merely "5 or later".
 #
 # Under Pester 6.1.0 every file in this suite hangs in BeforeAll and launches a
