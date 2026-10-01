@@ -90,6 +90,23 @@ own Burn to disc button rather than by calling the module:
       could not show this, because its installers were random bytes with an .exe
       name and Windows refused them as 16-bit.
 
+A third CD-R, 2026-10-01, the non-GOG disc burned through the app's button:
+
+- [x] **A disc of loose game files burns and verifies.** `DISCWRIGHT FILES`,
+      241.7 MB, 112 seconds at 16x, all 13 files matching byte for byte. It is
+      laid out the other way: `gothic.exe` with a `data\` folder of pak files
+      beside it rather than a single `setup_*.exe`, and both data folders
+      survived the burn with all three files each.
+- [x] **The game runs from the disc**, reporting its own path back as
+      `D:\Games - gothic\gothic.exe`.
+- [ ] **The menu offers the wrong action for it.** On the game's screen PLAY is
+      greyed out, saying "is not installed yet, use Install first", and INSTALL
+      is the enabled button. For a folder of game files there is nothing to
+      install: the executable is the game. The menu record has no idea which it
+      is, because `Get-MenuGames` does not carry the entry's Source, so every
+      entry is treated as a GOG installer. Found by burning the disc and
+      looking at it; no test knew to ask.
+
 Still open:
 
 - [ ] A disc burned here read in a different machine.
