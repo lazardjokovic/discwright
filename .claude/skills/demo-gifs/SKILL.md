@@ -20,15 +20,40 @@ Two recordings come out of one run:
 
 ## Before running
 
+**The only thing a person has to do is stay off the machine.** Everything else the
+recorder now handles itself. Say so plainly before starting, and say when the machine is
+theirs again: this drives the real pointer and the real foreground window, and it stops the
+moment anything else takes the foreground, photographing whatever that was.
+
+A browser left in front is enough to stop it. The window being merely unattended is not the
+same as the desktop being free.
+
+Handled without asking:
+
+- **Priming the game picker.** With no memory it opens at GOG Galaxy's download folder,
+  and every step count here is measured from the demo folder's own node. `F:\DWdemo-prime`
+  holds a built project for this and is found automatically; `-PrimeFrom` overrides it.
+  Without one, the run stops and asks for a single pick, which is the only time a person
+  was ever needed.
+- **An output folder with a previous build in it**, which would make the button read
+  REBUILD ISO. Its contents are moved to `F:\DWdemo-previous-runs\<timestamp>`.
+
+Still true, and still worth knowing:
+
 - **The demo folder.** Everything on camera comes from `F:\DWdemo`, whose own
   `RECORDING-STEPS.md` is the human version of this procedure. That path exists so no
   username appears in any of the six text boxes the window keeps on screen. Never record
   with assets under a home directory.
-- **`out` must be empty**, or the button reads REBUILD ISO instead of BUILD ISO.
-- **Nothing else may touch the machine.** This drives the real pointer and the real
-  foreground window. The harness stops the moment something else takes the foreground, and
-  whatever that is gets photographed. Tell the user when the machine is theirs again.
+- **Nothing may be added to the demo root.** The folder dialog is navigated by counting
+  rows, so a folder left beside the games shifts every count below it. One left there once
+  put The Witcher a row lower and the recording picked the wrong game. Anything parked goes
+  beside `F:\DWdemo`, never inside it.
+- **The two films are a pair.** The second opens the disc the first built, so `-Only multi`
+  fails unless `-Only demo` has run first.
 - **Pillow** is needed for the assembler.
+- **Watch the log, not the screen.** Started in the background with its output in a file,
+  a run that is waiting on something can be told apart from one that is simply slow. The
+  long stretch is a real 7.79 GB build and looks like nothing happening.
 
 ## Running it
 
