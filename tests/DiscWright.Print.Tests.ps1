@@ -194,3 +194,58 @@ Describe 'The calibration sheet' -Tag 'Unit' {
         (Get-Item $out).Length | Should -BeGreaterThan 10000
     }
 }
+
+Describe 'Checking a printer before any paper moves' -Tag 'Unit' {
+
+    BeforeAll {
+        # The script reports on whatever printers exist, so dot-sourcing it would
+        # run that. Only the decision function is wanted here, and it is pulled
+        # out by parsing rather than by running anything.
+        $src = Join-Path (Split-Path $PSScriptRoot -Parent) 'print\Test-PrinterSetup.ps1'
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$null, [ref]$null)
+        $fn = $ast.Find({
+            param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                      $n.Name -eq 'Get-FitReport'
+        }, $true)
+        $fn | Should -Not -BeNullOrEmpty -Because 'the fit verdict has to be its own function to be testable'
+        . ([scriptblock]::Create($fn.Extent.Text))
+    }
+
+    It 'passes everything on a printer with no margins at all' {
+        # A4 landscape edge to edge, which is what Microsoft Print to PDF reports.
+        $rows = Get-FitReport -AreaWidthMm 297 -AreaHeightMm 210
+        @($rows | Where-Object { -not $_.Fits }) | Should -BeNullOrEmpty
+    }
+
+    It 'fails the wraps on a portrait page, because a 273 mm wrap is wider than A4' {
+        $rows = Get-FitReport -AreaWidthMm 210 -AreaHeightMm 297
+        foreach ($r in $rows | Where-Object { $_.WidthMm -gt 210 }) {
+            $r.Fits | Should -BeFalse -Because "$($r.Name) is $($r.WidthMm) mm wide"
+        }
+        # A disc face and a jewel insert are both 120 mm, so they still fit.
+        ($rows | Where-Object { $_.Name -eq 'A disc face, printed on paper' }).Fits | Should -BeTrue
+    }
+
+    It 'catches the real case, a printer with ordinary margins' {
+        # Many inkjets leave about 3 mm all round without borderless, which
+        # leaves 291 x 204 mm of A4 landscape. A 273 mm wrap still fits; this is
+        # the number the Epson will decide for real.
+        $rows = Get-FitReport -AreaWidthMm 291 -AreaHeightMm 204
+        ($rows | Where-Object { $_.Name -like 'DVD case, standard*' }).Fits | Should -BeTrue
+    }
+
+    It 'says no when the margins eat the width, rather than letting it be scaled' {
+        # A driver with a 15 mm unprintable band each side leaves 267 mm, which
+        # is less than a standard wrap. Silence here would cost photo paper.
+        $rows = Get-FitReport -AreaWidthMm 267 -AreaHeightMm 204
+        ($rows | Where-Object { $_.Name -like 'DVD case, standard*' }).Fits | Should -BeFalse
+        # The slim case is 266 mm and still fits, so this is a real boundary and
+        # not the function failing everything.
+        ($rows | Where-Object { $_.Name -like 'DVD case, slim*' }).Fits | Should -BeTrue
+    }
+
+    It 'reports on every case in the table plus the disc face' {
+        $rows = Get-FitReport -AreaWidthMm 297 -AreaHeightMm 210
+        @($rows).Count | Should -Be (@($script:CaseFormats).Count + 1)
+    }
+}
