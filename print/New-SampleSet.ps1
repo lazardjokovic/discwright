@@ -24,6 +24,10 @@ param(
     # Deliberately not the Desktop and not anything inside OneDrive: these are
     # regenerated files and should not be synced anywhere.
     [string]$OutRoot = (Join-Path $env:USERPROFILE 'DiscWright-Lab'),
+    # A real discproject.json, to see the artwork with a real title, real game
+    # names and the cover art the person actually chose. Placeholder text hides
+    # the problems that only turn up with a real picture in the panel.
+    [string]$ProjectPath,
     [switch]$KeepExisting
 )
 
@@ -133,6 +137,21 @@ $sampleCalib = Join-Path $folders.Samples 'calibration-dvd-a4.pdf'
 $null = New-CalibrationSheet -OutPdf $sampleCalib
 $null = Save-Preview $sampleCalib
 Add-Made 'sample' $sampleCalib 'print this one first, on plain paper'
+
+# ---- a real disc, if one was named
+if ($ProjectPath) {
+    $fromProject = Join-Path $folders.Samples 'from-a-real-project'
+    New-Item -ItemType Directory -Force -Path $fromProject | Out-Null
+    try {
+        $art = New-ArtworkForProject -ProjectPath $ProjectPath -OutDir $fromProject
+        $null = Save-Preview $art.Wrap
+        $cover = if ($art.UsedCover) { 'with its own cover art' } else { 'no cover art found' }
+        Add-Made 'project' $art.Wrap "$($art.Title), $cover"
+        Add-Made 'project' $art.DiscFace "$($art.Title), hub-printable"
+    } catch {
+        Write-Output "  could not read $ProjectPath : $($_.Exception.Message.Split([char]10)[0])"
+    }
+}
 
 # ---- what is here, so the folder explains itself
 $readme = Join-Path $OutRoot 'README.txt'

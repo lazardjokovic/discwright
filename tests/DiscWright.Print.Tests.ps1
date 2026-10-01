@@ -574,3 +574,152 @@ Describe 'How many panels a case takes' -Tag 'Unit' {
         $warnings.Count | Should -Be 0
     }
 }
+
+Describe 'A file name made from a disc title' -Tag 'Unit' {
+
+    It 'turns <Title> into <Stem>' -ForEach @(
+        @{ Title = 'Gothic';                    Stem = 'Gothic' }
+        @{ Title = 'Alan Wake';                 Stem = 'Alan-Wake' }
+        # Colons and question marks are ordinary in game titles and illegal in
+        # Windows file names, and finding that out after drawing everything is
+        # a poor way to spend a render.
+        @{ Title = 'Riddick: Butcher Bay';      Stem = 'Riddick-Butcher-Bay' }
+        @{ Title = 'Where in the World?';       Stem = 'Where-in-the-World' }
+        @{ Title = '  spaced   out  ';          Stem = 'spaced-out' }
+        @{ Title = '';                          Stem = 'disc' }
+        @{ Title = '???';                       Stem = 'disc' }
+    ) {
+        Get-SafeFileStem $Title | Should -Be $Stem
+    }
+
+    It 'keeps a very long title down to something a file system will take' {
+        $stem = Get-SafeFileStem ('Very ' * 40 + 'Long')
+        $stem.Length | Should -BeLessOrEqual 60
+        $stem | Should -Not -Match '-$'
+    }
+}
+
+Describe 'Artwork for a disc the app has already planned' -Tag 'Unit' {
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Drawing
+
+        # A project file as DiscWright writes it, with only the keys this reads.
+        function New-TestProject {
+            param([hashtable]$Overrides = @{}, [string]$Name = 'p')
+            $dir = Join-Path $script:Sandbox "proj-$Name-$(Get-Random)"
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $p = [ordered]@{
+                Version = 9; AppVersion = '0.8.1'
+                Label = 'GOTHIC'; TitleText = 'Gothic'
+                ShowTitle = $false; BgPath = $null; IconPath = $null
+                Games = @(
+                    [ordered]@{ GameName = 'Gothic';     Kind = 'Game';  Source = 'GOG' }
+                    [ordered]@{ GameName = 'Gothic II';  Kind = 'Game';  Source = 'GOG' }
+                    [ordered]@{ GameName = 'Patch 1.1';  Kind = 'AddOn'; Source = 'GOG' }
+                )
+            }
+            foreach ($k in $Overrides.Keys) { $p[$k] = $Overrides[$k] }
+            $file = Join-Path $dir 'discproject.json'
+            $p | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $file -Encoding UTF8
+            return $file
+        }
+
+        function New-TestCover([string]$path, [int]$w = 600, [int]$h = 900) {
+            $bmp = New-Object System.Drawing.Bitmap $w, $h
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.Clear([System.Drawing.Color]::DarkRed)
+            $g.Dispose()
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+            $bmp.Dispose()
+            return $path
+        }
+    }
+
+    It 'takes the title the person typed for the menu' {
+        $r = New-ArtworkForProject -ProjectPath (New-TestProject)
+        $r.Title | Should -Be 'Gothic'
+    }
+
+    It 'falls back to the volume label, and then to something rather than nothing' {
+        $r = New-ArtworkForProject -ProjectPath (New-TestProject @{ TitleText = '' })
+        $r.Title | Should -Be 'GOTHIC'
+        $r2 = New-ArtworkForProject -ProjectPath (New-TestProject @{ TitleText = ''; Label = '' })
+        $r2.Title | Should -Be 'Untitled disc'
+    }
+
+    It 'lists the games and counts the add-ons rather than listing them beside their game' {
+        $r = New-ArtworkForProject -ProjectPath (New-TestProject)
+        $r.Contents | Should -Contain 'Gothic'
+        $r.Contents | Should -Contain 'Gothic II'
+        $r.Contents | Should -Contain '1 add-on'
+        $r.Contents | Should -Not -Contain 'Patch 1.1'
+    }
+
+    It 'says add-ons in the plural when there is more than one' {
+        $games = @(
+            [ordered]@{ GameName = 'Gothic';   Kind = 'Game' }
+            [ordered]@{ GameName = 'Patch 1';  Kind = 'AddOn' }
+            [ordered]@{ GameName = 'Patch 2';  Kind = 'AddOn' }
+        )
+        $r = New-ArtworkForProject -ProjectPath (New-TestProject @{ Games = $games })
+        $r.Contents | Should -Contain '2 add-ons'
+    }
+
+    It 'uses the background image the person already chose as the cover' {
+        $dir = Split-Path (New-TestProject) -Parent
+        $cover = New-TestCover (Join-Path $dir 'bg.jpg')
+        $r = New-ArtworkForProject -ProjectPath (New-TestProject @{ BgPath = $cover })
+        $r.UsedCover | Should -BeTrue
+        $r.CoverImage | Should -Be $cover
+    }
+
+    It 'carries on without the cover when the project has moved machines' {
+        # Not an error. A project copied from another PC points at a path that
+        # is not there, and a wrap in the accent colour is better than a throw.
+        $r = New-ArtworkForProject -ProjectPath (New-TestProject @{ BgPath = 'Z:\gone\bg.jpg' })
+        $r.UsedCover | Should -BeFalse
+        Test-Path $r.Wrap | Should -BeTrue
+    }
+
+    It 'leaves the title off the cover when the person turned it off for the menu' {
+        # Cover art usually carries the game's own logo. This is the app's own
+        # rule for the menu background, and it is the same picture.
+        $dir = Split-Path (New-TestProject) -Parent
+        $cover = New-TestCover (Join-Path $dir 'bg2.jpg')
+        $off = New-ArtworkForProject -ProjectPath (New-TestProject @{ BgPath = $cover; ShowTitle = $false })
+        $off.TitleOnCover | Should -BeFalse
+        $on = New-ArtworkForProject -ProjectPath (New-TestProject @{ BgPath = $cover; ShowTitle = $true })
+        $on.TitleOnCover | Should -BeTrue
+    }
+
+    It 'still letters the cover when there is no cover art to fight with' {
+        $r = New-ArtworkForProject -ProjectPath (New-TestProject @{ ShowTitle = $false })
+        $r.TitleOnCover | Should -BeTrue -Because 'a plain colour panel with no title says nothing'
+    }
+
+    It 'writes both pieces, named after the disc' {
+        $r = New-ArtworkForProject -ProjectPath (New-TestProject @{ TitleText = 'Riddick: Butcher Bay' })
+        Test-Path $r.Wrap | Should -BeTrue
+        Test-Path $r.DiscFace | Should -BeTrue
+        (Split-Path $r.Wrap -Leaf) | Should -BeLike 'Riddick-Butcher-Bay-wrap-*'
+        (Split-Path $r.DiscFace -Leaf) | Should -BeLike 'Riddick-Butcher-Bay-disc-face-*'
+    }
+
+    It 'takes the folder as well as the file, because that is what people have' {
+        $file = New-TestProject
+        $r = New-ArtworkForProject -ProjectPath (Split-Path $file -Parent)
+        $r.ProjectFile | Should -Be $file
+    }
+
+    It 'says what is missing rather than failing obscurely' {
+        { New-ArtworkForProject -ProjectPath 'Z:\nothing\here' } |
+            Should -Throw -ExpectedMessage '*No project file*'
+
+        $broken = Join-Path $script:Sandbox 'broken-project'
+        New-Item -ItemType Directory -Force -Path $broken | Out-Null
+        Set-Content -LiteralPath (Join-Path $broken 'discproject.json') -Value 'not json at all'
+        { New-ArtworkForProject -ProjectPath $broken } |
+            Should -Throw -ExpectedMessage '*not a readable project file*'
+    }
+}

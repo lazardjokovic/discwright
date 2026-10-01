@@ -376,8 +376,13 @@ function Set-ImageCover {
     $scale = [Math]::Max($Target.Width / $Image.Width, $Target.Height / $Image.Height)
     $srcW = $Target.Width / $scale
     $srcH = $Target.Height / $scale
+    # Every argument wrapped whole: a comma binds tighter than a divide, so
+    # `(a - b) / 2, (c - d) / 2` divides by the array `2, (c - d)` instead. The
+    # failure only appears once a real image is passed, because without one
+    # this line never runs.
     $src = New-Object System.Drawing.RectangleF(
-        ($Image.Width - $srcW) / 2, ($Image.Height - $srcH) / 2, $srcW, $srcH)
+        [single](($Image.Width - $srcW) / 2.0), [single](($Image.Height - $srcH) / 2.0),
+        [single]$srcW, [single]$srcH)
     $Graphics.DrawImage($Image, $Target, $src, [System.Drawing.GraphicsUnit]::Pixel)
 }
 
@@ -548,6 +553,11 @@ function New-CaseWrap {
         [ValidateSet('a4', 'letter')][string]$Page = 'a4',
         [double]$BleedMm = 3,
         [string]$Accent = '#1B2A41',
+        # Cover art usually carries the game's own logo, and a second title
+        # drawn over it fights the artwork. That is the app's rule for the menu
+        # background and it is the same picture here. The spine and the back
+        # still name the disc, so nothing becomes unidentifiable.
+        [bool]$ShowTitleOnFront = $true,
         [switch]$NoCropMarks
     )
     $fmt = Get-CaseFormat $Case
@@ -634,7 +644,9 @@ function New-CaseWrap {
     }
 
     # A scrim up from the foot of the front panel, so a title stays readable
-    # over artwork nobody chose for its contrast.
+    # over artwork nobody chose for its contrast. No lettering, no scrim: it
+    # would only be a shadow across somebody's cover art.
+    if ($ShowTitleOnFront) {
     $scrimH = $trimHp * 0.34
     $scrimRect = New-Object System.Drawing.RectangleF(
         $frontRect.X, [single]($frontRect.Bottom - $scrimH), $frontRect.Width, [single]$scrimH)
@@ -649,6 +661,7 @@ function New-CaseWrap {
     $scrim.InterpolationColors = $blend
     $g.FillRectangle($scrim, $scrimRect)
     $scrim.Dispose()
+    }
 
     $pad = ConvertTo-Px 8.0
     $textW = $panelW - ($pad * 2)
@@ -657,7 +670,8 @@ function New-CaseWrap {
     $left.LineAlignment = [System.Drawing.StringAlignment]::Far
 
     $titleFont = Get-FittedFont -Graphics $g -Text $Title -MaxWidthPx $textW -StartPt 30 -MinPt 11
-    $subH = if ($Subtitle) { ConvertTo-Px 9.0 } else { 0 }
+    $subH = if ($Subtitle -and $ShowTitleOnFront) { ConvertTo-Px 9.0 } else { 0 }
+    if ($ShowTitleOnFront) {
     $titleBox = New-Object System.Drawing.RectangleF(
         [single]($frontRect.X + $pad),
         [single]($frontRect.Bottom - $bleed - $pad - $subH - (ConvertTo-Px 16.0)),
@@ -672,6 +686,7 @@ function New-CaseWrap {
         $g.DrawString($Subtitle, $subFont, $faint, $subBox, $left)
         $subFont.Dispose()
     }
+    }   # end of the front-panel lettering
 
     # ---- the spine, and the back panel, neither of which a front insert has
     if ($twoPanel) {
@@ -797,4 +812,119 @@ function New-CaseWrap {
     $null = Export-ImageAsPdf -Image $bmp -OutPdf $OutPdf -PageWidthMm $pageW -PageHeightMm $pageH
     $bmp.Dispose()
     return $OutPdf
+}
+
+# ------------------------------------------------- artwork for a real project
+
+<#
+    Make the wrap and the disc face for a disc DiscWright has already planned.
+
+    It reads `discproject.json`, which the app writes beside the ISO, and
+    nothing else. That direction matters: the app may reach into this file, but
+    this file never reaches into the app. A project file is a published format
+    with a version number, so reading it keeps the two separable, which is the
+    point of keeping the ISO builder able to ship on its own one day.
+
+    Everything the artwork needs is already in there and already chosen by the
+    person: the title they typed, the games they added, and the background
+    image they picked for the menu, which is the cover art. Asking them for it
+    again would be asking twice.
+#>
+function New-ArtworkForProject {
+    param(
+        # The project file, or the folder holding it.
+        [Parameter(Mandatory)][string]$ProjectPath,
+        [string]$OutDir,
+        [string]$Case = 'dvd',
+        [string]$Disc = 'hub',
+        [ValidateSet('a4', 'letter')][string]$Page = 'a4',
+        [string]$Accent = '#1B2A41'
+    )
+    $path = $ProjectPath
+    if (Test-Path -LiteralPath $path -PathType Container) {
+        $path = Join-Path $path 'discproject.json'
+    }
+    if (-not (Test-Path -LiteralPath $path)) {
+        throw "No project file at '$path'. DiscWright writes discproject.json beside the ISO."
+    }
+
+    try { $p = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json }
+    catch { throw "'$path' is not a readable project file: $($_.Exception.Message)" }
+
+    # TitleText is what the menu shows and is the better name when it is there.
+    # Label is the disc's volume label, which is always set, so it is the floor.
+    $title = $p.TitleText
+    if ([string]::IsNullOrWhiteSpace($title)) { $title = $p.Label }
+    if ([string]::IsNullOrWhiteSpace($title)) { $title = 'Untitled disc' }
+
+    # Add-ons belong to a game rather than standing beside it, so the back panel
+    # lists the games and says how many add-ons came with them.
+    $entries = @($p.Games)
+    $games = @($entries | Where-Object { $_.Kind -ne 'AddOn' } |
+               ForEach-Object { $_.GameName } | Where-Object { $_ })
+    $addOns = @($entries | Where-Object { $_.Kind -eq 'AddOn' }).Count
+    $contents = @($games)
+    if ($addOns -gt 0) {
+        $contents += ('{0} add-on{1}' -f $addOns, $(if ($addOns -eq 1) { '' } else { 's' }))
+    }
+
+    # BgPath is the menu background the person already chose. It can be missing
+    # if the project moved machines, which is not an error: the artwork falls
+    # back to the accent colour and the caller is told which happened.
+    $cover = $null
+    if ($p.BgPath -and (Test-Path -LiteralPath $p.BgPath)) { $cover = $p.BgPath }
+
+    if (-not $OutDir) { $OutDir = Split-Path -Parent $path }
+    New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+
+    $stem = Get-SafeFileStem $title
+    $wrap = Join-Path $OutDir "$stem-wrap-$Case-$Page.pdf"
+    $face = Join-Path $OutDir "$stem-disc-face-$Disc.png"
+
+    # The volume label is only worth printing when it says something the title
+    # does not. On most discs they are the same words, and printing both just
+    # prints the name twice.
+    $subtitle = $null
+    if ($p.Label -and $p.Label.Trim() -ne $title.Trim()) { $subtitle = $p.Label }
+
+    # With cover art, follow the choice already made for the menu. Without it,
+    # the front is a plain colour and the title is all there is.
+    $titleOnFront = $true
+    if ($cover) { $titleOnFront = [bool]$p.ShowTitle }
+
+    $null = New-CaseWrap -OutPdf $wrap -Case $Case -Page $Page -Accent $Accent `
+                         -Title $title -Subtitle $subtitle -CoverImage $cover `
+                         -Contents $contents -ShowTitleOnFront $titleOnFront
+    # The face keeps its title whatever the wrap does: a disc out of its case
+    # with no writing on it is the one nobody can identify.
+    $null = New-DiscFace -OutPng $face -Disc $Disc -Accent $Accent `
+                         -Title $title -Subtitle $subtitle -CoverImage $cover
+
+    return [pscustomobject]@{
+        Title       = $title
+        Contents    = $contents
+        CoverImage  = $cover
+        UsedCover   = [bool]$cover
+        TitleOnCover = $titleOnFront
+        Wrap        = $wrap
+        DiscFace    = $face
+        ProjectFile = $path
+    }
+}
+
+<#
+    A file name from a disc title. Titles carry colons and question marks, which
+    Windows will not have in a file name, and a renderer that throws at the last
+    step after drawing everything is a poor way to find that out.
+#>
+function Get-SafeFileStem([string]$text) {
+    $clean = $text
+    foreach ($bad in [IO.Path]::GetInvalidFileNameChars()) {
+        $clean = $clean.Replace($bad, '-')
+    }
+    $clean = ($clean -replace '\s+', '-') -replace '-{2,}', '-'
+    $clean = $clean.Trim('-', '.')
+    if ([string]::IsNullOrWhiteSpace($clean)) { return 'disc' }
+    if ($clean.Length -gt 60) { $clean = $clean.Substring(0, 60).TrimEnd('-') }
+    return $clean
 }
