@@ -723,3 +723,152 @@ Describe 'Artwork for a disc the app has already planned' -Tag 'Unit' {
             Should -Throw -ExpectedMessage '*not a readable project file*'
     }
 }
+
+Describe 'Printing artwork somebody else made' -Tag 'Unit' {
+
+    # There is a community that makes these, and a collector who found a cover
+    # for their game does not want a layout put on top of it. For them this is
+    # not a designer: it is the part that gets the millimetres right.
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Drawing
+
+        function New-FlatArt([int]$w, [int]$h, [System.Drawing.Color]$colour, [string]$name) {
+            $path = Join-Path $script:Sandbox "$name.png"
+            $bmp = New-Object System.Drawing.Bitmap $w, $h
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.Clear($colour); $g.Dispose()
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+            return $path
+        }
+
+        # Edges in a colour of their own, so a crop shows up as a missing band.
+        function New-EdgedArt([int]$w, [int]$h, [string]$name) {
+            $path = Join-Path $script:Sandbox "$name.png"
+            $bmp = New-Object System.Drawing.Bitmap $w, $h
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.Clear([System.Drawing.Color]::FromArgb(40, 40, 40))
+            $edge = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::Yellow)
+            $band = [int]([Math]::Max(8, $w * 0.02))
+            $g.FillRectangle($edge, 0, 0, $band, $h)
+            $g.FillRectangle($edge, $w - $band, 0, $band, $h)
+            $g.FillRectangle($edge, 0, 0, $w, $band)
+            $g.FillRectangle($edge, 0, $h - $band, $w, $band)
+            $edge.Dispose(); $g.Dispose()
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+            return $path
+        }
+
+        function Get-PageBmp([string]$pdf) {
+            $bytes = [IO.File]::ReadAllBytes($pdf)
+            $s = -1; for ($i = 0; $i -lt $bytes.Length - 1; $i++) {
+                if ($bytes[$i] -eq 0xFF -and $bytes[$i + 1] -eq 0xD8) { $s = $i; break } }
+            $e = -1; for ($i = $bytes.Length - 2; $i -gt $s; $i--) {
+                if ($bytes[$i] -eq 0xFF -and $bytes[$i + 1] -eq 0xD9) { $e = $i + 1; break } }
+            $jpg = [IO.Path]::ChangeExtension($pdf, '.page.jpg')
+            [IO.File]::WriteAllBytes($jpg, $bytes[$s..$e])
+            return (New-Object System.Drawing.Bitmap $jpg)
+        }
+
+        function Test-Yellowish($p) { return ($p.R -gt 180 -and $p.G -gt 180 -and $p.B -lt 120) }
+    }
+
+    It 'knows a full wrap from a front panel by its shape' {
+        $dvd = Get-CaseFormat 'dvd'
+        (Get-ArtworkKind -Width 3224 -Height 2161 -Case $dvd).Kind | Should -Be 'wrap'
+        (Get-ArtworkKind -Width 1530 -Height 2161 -Case $dvd).Kind | Should -Be 'front'
+        # A 16:9 picture is nearer a wrap than a panel, and saying how far off it
+        # is matters more than which it picked.
+        $wide = Get-ArtworkKind -Width 1920 -Height 1080 -Case $dvd
+        $wide.OffByPct | Should -BeGreaterThan 10
+    }
+
+    It 'says a correctly sized wrap is not off at all' {
+        $dvd = Get-CaseFormat 'dvd'
+        (Get-ArtworkKind -Width 3224 -Height 2161 -Case $dvd).OffByPct | Should -Be 0
+    }
+
+    It 'prints a full wrap at the full trim width' {
+        $art = New-EdgedArt 3224 2161 'wrap-art'
+        $r = New-WrapFromArtwork -OutPdf (Join-Path $script:Sandbox 'art-wrap.pdf') -Artwork $art
+        $r.Kind | Should -Be 'wrap'
+        $r.TrimWidthMm | Should -Be 273
+        $r.TrimHeightMm | Should -Be 183
+    }
+
+    It 'prints a front-only cover at panel width, not stretched across the case' {
+        $art = New-EdgedArt 1530 2161 'front-art'
+        $r = New-WrapFromArtwork -OutPdf (Join-Path $script:Sandbox 'art-front.pdf') -Artwork $art
+        $r.Kind | Should -Be 'front'
+        $r.TrimWidthMm | Should -Be 129.5
+    }
+
+    It 'keeps all four edges of the artwork, because cropping somebody else`s cover is not ours to do' {
+        $art = New-EdgedArt 3224 2161 'edges-art'
+        $pdf = Join-Path $script:Sandbox 'art-edges.pdf'
+        $null = New-WrapFromArtwork -OutPdf $pdf -Artwork $art
+        $page = Get-PageBmp $pdf
+        try {
+            $trimX = [int](((ConvertTo-Px 297.0) - (ConvertTo-Px 273.0)) / 2)
+            $trimY = [int](((ConvertTo-Px 210.0) - (ConvertTo-Px 183.0)) / 2)
+            $trimW = ConvertTo-Px 273.0
+            $trimH = ConvertTo-Px 183.0
+            $midY = $trimY + [int]($trimH / 2)
+            $midX = $trimX + [int]($trimW / 2)
+            # Just inside each edge of the trim, the artwork's own yellow band.
+            Test-Yellowish $page.GetPixel(($trimX + 10), $midY)              | Should -BeTrue -Because 'left edge'
+            Test-Yellowish $page.GetPixel(($trimX + $trimW - 10), $midY)     | Should -BeTrue -Because 'right edge'
+            Test-Yellowish $page.GetPixel($midX, ($trimY + 10))              | Should -BeTrue -Because 'top edge'
+            Test-Yellowish $page.GetPixel($midX, ($trimY + $trimH - 10))     | Should -BeTrue -Because 'bottom edge'
+        } finally { $page.Dispose() }
+    }
+
+    It 'invents the bleed the artwork has not got, by carrying its edge outwards' {
+        $art = New-EdgedArt 3224 2161 'bleed-art'
+        $pdf = Join-Path $script:Sandbox 'art-bleed.pdf'
+        $null = New-WrapFromArtwork -OutPdf $pdf -Artwork $art -BleedMm 3
+        $page = Get-PageBmp $pdf
+        try {
+            $trimX = [int](((ConvertTo-Px 297.0) - (ConvertTo-Px 273.0)) / 2)
+            $midY = [int]((ConvertTo-Px 210.0) / 2)
+            # 1.5 mm outside the trim is bleed, and it has to carry the yellow
+            # rather than leave white for a crooked cut to find.
+            $out = $trimX - [int](ConvertTo-Px 1.5)
+            Test-Yellowish $page.GetPixel($out, $midY) | Should -BeTrue
+        } finally { $page.Dispose() }
+    }
+
+    It 'refuses artwork that is not there, and a bleed that will not fit' {
+        { New-WrapFromArtwork -OutPdf (Join-Path $script:Sandbox 'x.pdf') -Artwork 'Z:\none.png' } |
+            Should -Throw -ExpectedMessage '*No artwork at*'
+        $art = New-FlatArt 3224 2161 ([System.Drawing.Color]::Red) 'toobig-art'
+        { New-WrapFromArtwork -OutPdf (Join-Path $script:Sandbox 'y.pdf') -Artwork $art -BleedMm 13 } |
+            Should -Throw -ExpectedMessage '*does not fit*'
+    }
+
+    It 'puts nothing of its own on a finished disc face' {
+        # The giveaway would be the title band this app draws on artwork it
+        # composes itself. A solid red face has to come back solid red.
+        $art = New-FlatArt 1400 1400 ([System.Drawing.Color]::FromArgb(200, 30, 30)) 'disc-art'
+        $png = Join-Path $script:Sandbox 'art-face.png'
+        $r = New-DiscFaceFromArtwork -OutPng $png -Artwork $art -Disc 'hub'
+        $r.Png | Should -Exist
+        $face = New-Object System.Drawing.Bitmap $png
+        try {
+            $c = ($face.Width - 1) / 2.0
+            foreach ($mm in 15, 25, 35, 45, 55) {
+                foreach ($deg in 0, 90, 180, 270) {
+                    $rad = ConvertTo-Px ([double]$mm)
+                    $x = [int][Math]::Round($c + ($rad * [Math]::Cos($deg * [Math]::PI / 180)))
+                    $y = [int][Math]::Round($c + ($rad * [Math]::Sin($deg * [Math]::PI / 180)))
+                    $p = $face.GetPixel($x, $y)
+                    if ($mm -lt 11) { continue }
+                    $p.R | Should -BeGreaterThan 150 -Because "at $mm mm, $deg degrees, the art is red"
+                    $p.G | Should -BeLessThan 90
+                }
+            }
+            # And the hub is still taken out.
+            $face.GetPixel([int]$c, [int]$c).A | Should -Be 0
+        } finally { $face.Dispose() }
+    }
+}

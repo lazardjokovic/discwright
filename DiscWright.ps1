@@ -4247,8 +4247,17 @@ $btnArtwork.Add_Click({
                                   -CoverImage $coverPic -DiscImage $facePic `
                                   -ShowTitleOnCover $chkTitle.Checked -OutDir $out
 
-        $cover = if ($art.UsedCover) { 'Cover art: the menu background.' }
-                 else { 'No cover art: the menu background is not set or not found, so the panels are a plain colour.' }
+        # Say which way it was made. Somebody who handed over a finished cover
+        # needs to know it was printed untouched, and somebody who did not needs
+        # to know a layout was built for them.
+        $cover = if ($art.WrapFromArtwork) {
+                     'Your cover was printed as it is, at exact size with crop marks. Nothing was added to it.'
+                 } elseif ($art.UsedCover) {
+                     'No finished cover was given, so one was built around your picture.'
+                 } else {
+                     'No picture was given, so the panels are a plain colour with the title on them.'
+                 }
+        if ($art.FaceFromArtwork) { $cover += "`r`nYour disc art was printed as it is, with the hub left clear." }
         [System.Windows.Forms.MessageBox]::Show(
             ("Artwork for $($art.Title):`r`n`r`n" +
              "$(Split-Path $art.Wrap -Leaf)`r`n" +
