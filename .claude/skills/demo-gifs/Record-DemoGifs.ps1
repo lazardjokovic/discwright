@@ -49,7 +49,34 @@ $repo = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Pare
 Import-Module (Join-Path $repo 'tests\ui\UiDriver.psm1') -Force
 . "$SC\demolib.ps1"
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+# A built project to prime the game picker from. Without one this stops and asks
+# for a single pick, which is the one thing that ever needed a person here.
+#
+# It must live OUTSIDE the demo root. The folder dialog is navigated by counting
+# rows, so anything added beside the games shifts every count below it: a folder
+# left in there once put The Witcher one row lower and the recording picked the
+# wrong game. F:\DWdemo-prime is kept for this.
+if (-not $PrimeFrom) {
+    foreach ($candidate in "$D-prime", (Join-Path $D 'out-previous')) {
+        if (Test-Path -LiteralPath (Join-Path $candidate 'discproject.json')) {
+            $PrimeFrom = $candidate
+            break
+        }
+    }
+}
 if (-not $PrimeFrom) { $PrimeFrom = Join-Path $D 'out-previous' }
+
+# The output folder has to start empty or the button reads REBUILD ISO and the
+# film shows the wrong thing. Emptied here rather than asked about, into a
+# folder beside the demo root rather than inside it, for the counting reason
+# above.
+$outDir = Join-Path $D 'out'
+if ((Test-Path -LiteralPath $outDir) -and @(Get-ChildItem -LiteralPath $outDir -Force).Count) {
+    $parked = "$D-previous-runs\$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    New-Item -ItemType Directory -Force -Path $parked | Out-Null
+    Get-ChildItem -LiteralPath $outDir -Force | Move-Item -Destination $parked -Force
+    Write-Host "  the output folder was not empty; moved what was in it to $parked"
+}
 
 # Step counts into the demo folder's tree, measured by treemap.ps1 rather than
 # assumed from an alphabetical sort - the shell sorts its own way and the folder
