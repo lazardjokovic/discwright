@@ -58,6 +58,57 @@ $script:WriteProfiles = @{
 # sectors has to be multiplied before it can be compared with a file size.
 $script:SectorBytes = 2048
 
+<#
+    A speed in KB/s means a different multiple depending on what is loaded: a CD
+    1x is 150 KB/s and a DVD 1x is 1385 KB/s. Reporting raw KB/s to somebody
+    deciding whether to burn at 8x or 24x is not an answer.
+#>
+function Get-SpeedBaseKb([int]$mediaType) {
+    # CD-ROM, CD-R and CD-RW. Everything else in this table is a DVD or better.
+    if ($mediaType -in 1, 2, 3) { return 150.0 }
+    return 1385.0
+}
+
+function ConvertTo-SpeedMultiple([int]$kb, [int]$mediaType) {
+    return [Math]::Round($kb / (Get-SpeedBaseKb $mediaType), 1)
+}
+
+<#
+    Turn "8x" or "1199" into the KB/s the drive wants, for whatever is loaded.
+    A multiple is what the disc is labelled with, so that is what a person has
+    in their hand when they choose.
+#>
+function ConvertTo-WriteSpeedKb {
+    param(
+        [Parameter(Mandatory)][string]$Speed,
+        [Parameter(Mandatory)][int]$MediaType
+    )
+    $t = $Speed.Trim()
+    if ($t -match '^(?<n>[0-9]+(\.[0-9]+)?)\s*[xX]$') {
+        return [int][Math]::Round([double]$Matches.n * (Get-SpeedBaseKb $MediaType))
+    }
+    if ($t -match '^[0-9]+$') { return [int]$t }
+    throw "Cannot read '$Speed' as a write speed. Use a multiple like 8x, or KB/s like 1199."
+}
+
+function Get-WriteSpeeds($fmt, [int]$mediaType) {
+    $out = @()
+    try {
+        foreach ($d in $fmt.SupportedWriteSpeedDescriptors) {
+            $out += , [pscustomobject]@{
+                Kb       = [int]$d.WriteSpeed
+                Multiple = ConvertTo-SpeedMultiple ([int]$d.WriteSpeed) $mediaType
+                PureCav  = [bool]$d.RotationTypeIsPureCAV
+            }
+        }
+    } catch {
+        # Some drives only answer with a blank disc loaded. An empty list is an
+        # honest answer; a guessed one is not.
+        Write-Verbose "The drive would not list its write speeds: $($_.Exception.Message)"
+    }
+    return , @($out | Sort-Object Kb -Descending)
+}
+
 function Get-MediaTypeName([int]$code) {
     if ($script:MediaTypes.ContainsKey($code)) { return $script:MediaTypes[$code].Name }
     return "unknown media type $code"
@@ -132,6 +183,7 @@ function Get-BurnerInfo {
             Blank         = $false
             FreeSectors   = [long]0
             FreeBytes     = [long]0
+            Speeds        = @()
             Ready         = $false
             Why           = ''
         }
@@ -146,6 +198,10 @@ function Get-BurnerInfo {
                 $info.Blank         = [bool]$fmt.MediaHeuristicallyBlank
                 $info.FreeSectors   = [long]$fmt.FreeSectorsOnMedia
                 $info.FreeBytes     = $info.FreeSectors * $script:SectorBytes
+                # Burning cheap media at the drive's top speed is a known way to
+                # make a coaster, so the choice has to be visible rather than
+                # left to whatever the drive picks.
+                $info.Speeds        = Get-WriteSpeeds $fmt $info.MediaType
             } else {
                 $info.Why = 'the data burner does not support this recorder'
             }
@@ -158,6 +214,14 @@ function Get-BurnerInfo {
         if (-not $info.MediaWritable) {
             if (-not $info.Why) {
                 $info.Why = if ($info.MediaType -eq 0) { 'there is no disc in the drive' }
+                            elseif ($info.MediaType -in 1, 4, 17) {
+                                # A CD-R closed after burning reports itself as
+                                # CD-ROM from then on, so this is what a disc
+                                # this project just wrote looks like on the way
+                                # back in. Measured, not assumed.
+                                "the disc in it reports as $($info.MediaName), which is also what a " +
+                                'written and closed disc reports, so either way it cannot be written again'
+                            }
                             else { "the disc in it is $($info.MediaName), which cannot be written" }
             }
         } elseif (-not $info.Blank) {
@@ -192,7 +256,9 @@ function Write-IsoToDisc {
         # Which recorder, by drive letter. Named rather than assumed: a machine
         # with two drives would otherwise burn to whichever came back first.
         [string]$Drive,
-        [int]$SpeedKb = 0,
+        # Either a multiple from the disc's own label, like '8x', or KB/s. Left
+        # alone, the drive picks, which is usually its fastest.
+        [string]$Speed,
         # Close the disc so it reads everywhere. A disc left open reads on the
         # machine that wrote it and can confuse older drives, which is exactly
         # the audience for a game on a CD.
@@ -244,9 +310,14 @@ function Write-IsoToDisc {
     $fmt.Recorder = $recorder
     $fmt.ClientName = 'DiscWright'
     $fmt.ForceMediaToBeClosed = $CloseMedia
-    if ($SpeedKb -gt 0) { try { $fmt.SetWriteSpeed($SpeedKb, $false) } catch {
-        Write-Warning "The drive would not take a speed of $SpeedKb KB/s, so its own default is used."
-    } }
+    if ($Speed) {
+        $kb = ConvertTo-WriteSpeedKb -Speed $Speed -MediaType $target.MediaType
+        try { $fmt.SetWriteSpeed($kb, $false) }
+        catch {
+            Write-Warning ("The drive would not take $Speed ($kb KB/s), so its own choice is used. " +
+                           "It offers: " + (($target.Speeds | ForEach-Object { "$($_.Multiple)x" }) -join ', '))
+        }
+    }
 
     # ADODB.Stream is the way to hand an existing file to IMAPI as an IStream
     # from PowerShell. Type 1 is binary; without it the ISO is read as text and

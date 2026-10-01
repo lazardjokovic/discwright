@@ -17,13 +17,19 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$OutDir = (Join-Path $env:USERPROFILE 'DiscWright-Lab\burn-test'),
+    [string]$OutDir,
     # Two games at this size each, plus the menu. Small on purpose.
     # Big enough that the drive has to sustain a write for a minute or two,
     # small enough to stay well inside a CD-R. A 50 MB disc would be over
     # before the drive settled.
     [double]$GameMb = 120,
     [string]$Label = 'DISCWRIGHT TEST',
+    # GOG is a folder holding an installer, which is what DiscWright was built
+    # for. Files is a folder of loose game files, added in 0.8.0, laid out
+    # differently on the disc and played differently from the menu. Both need a
+    # disc of their own: a burn that only ever proves the GOG shape proves half
+    # of what people now put on discs.
+    [ValidateSet('GOG', 'Files')][string]$Source = 'GOG',
     # Also write ISO9660 and Joliet, so the disc reads on something old. Worth
     # a disc of its own later rather than mixing it into the first one.
     [switch]$LegacyFs
@@ -31,6 +37,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
+
+# A folder per source, so building the non-GOG disc does not quietly replace the
+# GOG one and leave two burns each claiming to have tested something else.
+if (-not $OutDir) {
+    $OutDir = Join-Path $env:USERPROFILE ('DiscWright-Lab' + [char]92 + 'burn-test-' + $Source.ToLower())
+}
 
 $appScript = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
 $parseErrors = $null
@@ -73,11 +85,24 @@ function New-Art([string]$path, [int]$w, [int]$h, [int[]]$rgb) {
     is how the file can be both a working executable and large enough to make
     the drive work for its living.
 #>
-function New-FakeGame([string]$slug, [double]$mb) {
+function New-FakeGame([string]$slug, [double]$mb, [string]$shape = 'installer') {
     $dir = Join-Path $work $slug
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
-    $stem = "setup_${slug}_1.0_(90210)"
-    $path = Join-Path $dir "$stem.exe"
+    if ($shape -eq 'installer') {
+        # What a GOG download looks like: one setup executable whose name
+        # carries the version and build.
+        $path = Join-Path $dir ("setup_${slug}_1.0_(90210).exe")
+    } else {
+        # What a folder of game files looks like: the game itself, with data
+        # beside it. Naming this setup_... too would make the non-GOG disc a
+        # copy of the GOG one and test nothing new, which is what the first
+        # version of this did.
+        $path = Join-Path $dir "$slug.exe"
+        New-Item -ItemType Directory -Force -Path (Join-Path $dir 'data') | Out-Null
+        foreach ($n in 'textures.pak', 'sound.pak', 'readme.txt') {
+            Set-Content -LiteralPath (Join-Path $dir "data\$n") -Value "test data for $slug"
+        }
+    }
 
     $source = @"
 using System;
@@ -134,19 +159,29 @@ $icon = New-Art (Join-Path $OutDir 'art.png')  512 512 @(27, 42, 65)
 # Two distinct names: 'gothic' and 'gothic2' both come back as Gothic, and a
 # menu with two buttons reading the same thing tests nothing about choosing
 # between them.
-$folders = @((New-FakeGame 'gothic' $GameMb), (New-FakeGame 'arcanum' $GameMb))
+$shape = if ($Source -eq 'GOG') { 'installer' } else { 'game' }
+$folders = @((New-FakeGame 'gothic' $GameMb $shape), (New-FakeGame 'arcanum' $GameMb $shape))
 $games = @()
 foreach ($f in $folders) {
-    # Get-GameInfo is the GOG path, which is what these folders imitate.
-    # Get-FolderInfo is the newer one for a folder of loose game files, and it
-    # would describe these differently.
-    $info = Get-GameInfo $f
-    if (-not $info -or -not $info.Ok) {
-        throw "DiscWright did not recognise $f as a GOG folder: $($info.Msg)"
+    if ($Source -eq 'GOG') {
+        # Get-GameInfo is the GOG path, which is what these folders imitate.
+        $info = Get-GameInfo $f
+        if (-not $info -or -not $info.Ok) {
+            throw "DiscWright did not recognise $f as a GOG folder: $($info.Msg)"
+        }
+    } else {
+        # The same folder read the other way: a folder of game files, with an
+        # executable named as the thing to run rather than as an installer.
+        $entry = Get-ChildItem $f -Filter '*.exe' -File | Select-Object -First 1
+        $info = Get-FolderInfo $f $entry.FullName
+        if (-not $info -or -not $info.Ok) {
+            throw "DiscWright did not recognise $f as a folder of game files: $($info.Msg)"
+        }
     }
     $games += , $info
 }
-Write-Output "  games: $(($games | ForEach-Object { $_.GameName }) -join ', ')"
+Write-Output "  games : $(($games | ForEach-Object { $_.GameName }) -join ', ')"
+Write-Output "  source: $(($games | ForEach-Object { $_.Source }) -join ', ')"
 
 $settings = @{
     Games = $games; Label = $Label; IconPath = $icon; IconIsIco = $false

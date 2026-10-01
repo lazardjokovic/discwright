@@ -32,6 +32,11 @@ foreach ($b in $burners) {
         Write-Output "  blank     : $($b.Blank)"
         Write-Output ("  free      : {0:N0} sectors, {1:N1} MB" -f $b.FreeSectors, ($b.FreeBytes / 1MB))
     }
+    if ($b.Speeds.Count) {
+        $list = ($b.Speeds | ForEach-Object { "$($_.Multiple)x" }) -join ', '
+        Write-Output "  speeds    : $list   (for the disc that is loaded)"
+        Write-Output "              burning below the top speed is the usual advice for cheap media"
+    }
     Write-Output "  ready     : $($b.Ready)  ($($b.Why))"
 
     if ($IsoPath -and (Test-Path -LiteralPath $IsoPath)) {
