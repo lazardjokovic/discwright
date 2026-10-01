@@ -185,6 +185,21 @@ drawn as two half-width panels either side of a spine with no width, with the
 whole suite passing. A renderer that has only ever run for one row has something
 wrong with it for the others.
 
+## The menu knows where an entry came from
+
+Each game in the menu carries `files:1` when it is a folder of game files and
+`files:0` when it is a GOG download. On a files entry the menu shows **Play from
+disc**, runs the executable straight off the disc and offers no Install at all,
+because there is nothing to install. On a GOG entry nothing changed: Install
+runs the installer and Play waits until something is installed.
+
+This existed only after a disc was burned and looked at. Every menu test had
+been written around GOG discs, where greying Play out and pointing at Install is
+correct, so the suite was green while the behaviour was wrong for half the
+discs this app can now make.
+
+The Linux port carries a copy of the menu template and has not had this change.
+
 ## Traps that have already cost time
 
 - **Heredocs halve backslashes.** Writing files through a shell heredoc turned
