@@ -1,6 +1,6 @@
 # DiscWright
 
-Turn a GOG offline installer into a real game disc — one that shows the game's own icon and title in This PC, and opens a menu when you double-click it.
+Turn a GOG offline installer into a real game disc — one that shows the game's own icon and title in This PC, and opens a menu when you double-click it. DiscWright builds the image, prints the cover and the disc face, burns the disc and then checks every file on it.
 
 The way PC games came in a box.
 
@@ -29,7 +29,8 @@ Play knows whether the game is already installed and greys itself out until it i
 
 - **Windows 10 or 11**
 - **Windows PowerShell 5.1** — the one that ships with Windows. DiscWright checks on startup and tells you if you launch it the wrong way. PowerShell 7 is refused: it may well work now that the ISO builder no longer needs a compiler option PowerShell 6 removed, but nobody has tried it, so the check stays until somebody does.
-- **A blank disc and something to burn it with.** DiscWright makes the ISO. Burning is deliberately out of scope — [ImgBurn](https://www.imgburn.com/), Nero, and Windows' own built-in burner all do it well, and there is no reason to write a worse one.
+- **A blank disc and a burner**, if you want a disc rather than an image. DiscWright burns it for you and checks the result, and any other burning tool works just as well on the ISO it writes.
+- **A printer**, only if you want the cover and the disc face. Everything else works without one.
 
 No installation. No dependencies. It is a single PowerShell script.
 
@@ -196,11 +197,29 @@ Put the patch in **step 5** and it lands at the disc root beside the installer, 
 
 A `patch_*.exe` can also be added as an **add-on entry**, which files it in the menu under the game it patches. That is the better place when the patch is for the same Windows the disc is aimed at. For something the menu could never launch anyway, step 5 is simpler.
 
-## Burning the ISO
+## Burning the disc
 
-DiscWright does not burn. But three things are worth knowing, because all of them cost real discs to learn.
+**Burn to disc** writes the ISO to a blank and then proves it. It asks first, and
+the question carries what is worth refusing on: which image, how large, which
+drive, what disc is in it and how much of it is free. It refuses rather than
+guesses when there is no disc, when the disc is not blank, or when the image is
+larger than the space.
 
-**Burn the ISO, or the disc folder's *contents* — never the folder itself.** DiscWright writes the finished image beside a staging folder called `disc`:
+It burns below the drive's top speed, 16× on a CD and 8× on a DVD, because cheap
+media written flat out is the usual way to make a coaster and the minute saved is
+not worth a disc. The window stops responding while the drive writes, which the
+dialog says beforehand along with roughly how long it will take: the drive writes
+in one go and reports nothing until it finishes.
+
+Afterwards it reads every file back off the disc and compares it with what was
+built, by SHA-256. A burn that ends without an error is not the same thing as a
+disc holding the right bytes, and that check is the reason to burn from here
+rather than from a file manager.
+
+Three things are still worth knowing, because all of them cost real discs to
+learn.
+
+**If you burn it yourself, burn the ISO, or the disc folder's *contents* — never the folder itself.** DiscWright writes the finished image beside a staging folder called `disc`:
 
 ```text
 The Witcher\
@@ -215,9 +234,36 @@ Burning the `disc` folder rather than what is inside it puts everything one leve
 
 Most burning software asks which you meant. The answer is the contents. Burning the `.iso` avoids the question entirely, and is the reason it is there.
 
-**Burn slower than the maximum.** A disc rated 6× does not mean your setup can feed it at 6×. An external USB burner behind a USB 2.0 link has roughly 30 MB/s to work with, and 6× Blu-ray wants 27 MB/s of that, with a 4 MB buffer absorbing any hiccup. Dropping to 4× halves the demand and costs a few extra minutes. On a 25 GB BD-R, 6× failed 7.4 GB in with a write error; 4× wrote the whole 9.2 GB without complaint.
+**Burn slower than the maximum.** DiscWright already does; this matters when you burn the ISO with something else. A disc rated 6× does not mean your setup can feed it at 6×. An external USB burner behind a USB 2.0 link has roughly 30 MB/s to work with, and 6× Blu-ray wants 27 MB/s of that, with a 4 MB buffer absorbing any hiccup. Dropping to 4× halves the demand and costs a few extra minutes. On a 25 GB BD-R, 6× failed 7.4 GB in with a write error; 4× wrote the whole 9.2 GB without complaint.
 
 **Check the link, not the label.** A USB 3.0 drive in a USB 3.0 port with a USB 3.0 cable can still negotiate a USB 2.0 link, and nothing in Windows will tell you unless you go looking. Your burning software's log usually names the bus it actually got.
+
+## Printing the cover and the disc face
+
+**Print artwork** makes two things for the disc you have planned: a case wrap, as
+a PDF at its true size with crop marks, and a disc face, as a 300 dpi PNG with
+the hub left clear. A PDF because the page carries its real physical size, so
+"print at 100%, no scaling" is something the driver can honour. A PNG for the
+disc because that is what printer software for printable discs wants: you hand it
+a picture and it keeps the diameters and lines the tray up, which is the part
+that ruins discs when a tool guesses at it.
+
+**Artwork you already have is printed exactly as it is.** People make covers for
+games and share them, and somebody who has found or drawn one does not want a
+layout imposed on it. Point DiscWright at one and it places it at exact trim,
+carries its own edges outwards to make the bleed it has not got, and puts crop
+marks outside that. Nothing is added, nothing is cropped off, and nothing is
+stretched. With no picture at all you get a plain label with the title on it,
+which is still worth having on an unmarked disc in a stack.
+
+Two boxes in step 7 hold the pictures, one for the cover and one for the disc
+face, because a cover is tall and a disc face is a circle and one picture rarely
+suits both. Under them a line says what each picture will cost before anything is
+printed: a 16:9 wallpaper loses about 60% of its width on a cover panel, and
+being told that beforehand beats finding out on paper.
+
+DiscWright does not align anything to a printer tray. That belongs to the printer
+software, it differs by printer, and getting it wrong wastes a disc.
 
 ## Known limitations
 

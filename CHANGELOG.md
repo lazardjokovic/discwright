@@ -7,6 +7,89 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [0.9.0] — 2026-10-01
+
+DiscWright used to stop at the ISO. It now prints the artwork and burns the disc.
+
+### Added
+
+- **Printed artwork.** A **Print artwork** button makes the case wrap and the
+  disc face for the disc you have planned, at their true physical sizes: a
+  273 × 183 mm wrap with a 14 mm spine, and a disc face composed for the ring a
+  printable disc can actually take, 22 mm to 118 mm on a hub-printable one. The
+  wrap comes out as a PDF, because a PDF page carries its real size and "print
+  at 100%, no scaling" is then something a printer driver can honour. The disc
+  face comes out as a 300 dpi PNG with the hub left clear, which is what Epson
+  Photo+ and Canon Easy-PhotoPrint want: you hand them a picture and they keep
+  the diameters and the tray alignment, which is the part that ruins discs when
+  a tool guesses at it.
+
+  **Artwork you already have is printed exactly as it is.** There is a whole
+  community making covers for games, and somebody who has found or drawn one
+  does not want a layout imposed on it. Hand one over and DiscWright places it
+  at exact trim, carries its own outermost pixels outwards to make the bleed it
+  has not got, and puts crop marks outside that. Nothing is added to it, nothing
+  is cropped off it, and nothing is stretched: a cover whose proportions are
+  slightly out is placed whole rather than trimmed to fit. With no picture at
+  all, what comes out is a plain typographic label, which is still worth having
+  on an unmarked disc in a stack.
+
+  Two fields in the main window hold the pictures, one for the cover and one for
+  the disc face, because a cover is tall and a disc face is a circle and one
+  picture rarely suits both. They are saved in the project. Under them a line
+  says what each picture will cost before anything is printed: a 16:9 menu
+  background loses about 60% of its width on a cover panel, and being told that
+  beforehand is worth more than discovering it on paper.
+
+- **Burning.** A **Burn to disc** button writes the ISO to a blank and then
+  proves it. It asks first, and the question carries what is worth refusing on:
+  which image, how large, which drive, what disc is in it and how much of it is
+  free. It refuses by name rather than guessing when there is no disc, when the
+  disc is not blank, when the media cannot be written, or when the image is
+  larger than the space. It burns below the drive's top speed, 16× on a CD and
+  8× on a DVD, because cheap media written flat out is the usual way to make a
+  coaster and the minute saved is not worth a disc.
+
+  Afterwards it reads every file back off the disc and compares it with what was
+  built, by SHA-256, and says plainly if anything is missing, unexpected, the
+  wrong length or the wrong bytes. A burn that ends without an error is not the
+  same thing as a disc holding the right bytes, and that check is the reason to
+  burn from here rather than from a file manager.
+
+### Changed
+
+- **A disc of game files now says Play from disc.** On a disc built from folders
+  of game files rather than GOG installers, the menu used to grey Play out with
+  "is not installed yet, use Install first" and offer Install, on a disc where
+  nothing can be installed, because the executable is the game. Such an entry
+  now shows one button reading **Play from disc**, which runs the game straight
+  off the disc, and no Install button at all. GOG discs are unchanged.
+
+  Found by burning a disc and looking at the screen. Every menu test had been
+  written around GOG discs, where the old behaviour is correct, so the suite was
+  green throughout. The menu tests now walk both kinds of disc.
+
+- **The project file is at schema 10**, adding the two pictures. A project
+  written by an older version opens and behaves exactly as it did, with both
+  fields empty.
+
+### Measured on real discs
+
+Three CD-Rs, written by this build on an ASUS DRW-24D5MT, because none of the
+above had ever been proved on anything but a mounted image:
+
+- A 241.7 MB disc burned in 93 seconds, mounted as UDF, and every one of its
+  files matched the staging folder byte for byte.
+- Windows offered **Run DISCWRIGHT TEST** on insert, which is the `action=` line
+  of `autorun.inf`, and the menu opened from the disc. Until that disc, every
+  menu test had run from a mounted image, and Windows does not treat the two the
+  same.
+- A 120 MB program on the disc started in 8 seconds and reported its own path
+  back from the optical drive, so a game on a disc made by DiscWright runs from
+  that disc.
+- The third disc was the one built from loose game files, and it is the one that
+  found the Play button defect above.
+
 ## [0.8.1] — 2026-09-27
 
 ### Fixed
@@ -868,7 +951,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/lazardjokovic/discwright/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/lazardjokovic/discwright/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/lazardjokovic/discwright/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/lazardjokovic/discwright/compare/v0.7.5...v0.7.6
