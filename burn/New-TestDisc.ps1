@@ -60,27 +60,70 @@ function New-Art([string]$path, [int]$w, [int]$h, [int[]]$rgb) {
     return $path
 }
 
-# A GOG folder is recognised by the shape of its installer name, so the fake
-# ones are named the way the real ones are.
+<#
+    A real program, so the disc can be told to run it and actually run it.
+
+    The first test disc carried 120 MB of random bytes with an .exe name.
+    Windows could not parse a PE header, fell back to assuming MS-DOS, and
+    said "Unsupported 16-Bit Application". That proved the menu launches the
+    right path from the disc and proved nothing about running anything.
+
+    So this compiles a genuine console program and pads it out afterwards.
+    Bytes appended past the end of a PE image are ignored by the loader, which
+    is how the file can be both a working executable and large enough to make
+    the drive work for its living.
+#>
 function New-FakeGame([string]$slug, [double]$mb) {
     $dir = Join-Path $work $slug
     New-Item -ItemType Directory -Force -Path $dir | Out-Null
     $stem = "setup_${slug}_1.0_(90210)"
     $path = Join-Path $dir "$stem.exe"
-    $fs = [IO.File]::Create($path)
-    try {
-        # Written with real bytes rather than left sparse: a file of zeroes
-        # compresses to nothing and would not exercise the burn honestly.
-        $buf = New-Object byte[] (1MB)
-        $rand = New-Object Random 1234
-        $left = [long]($mb * 1MB)
-        while ($left -gt 0) {
-            $rand.NextBytes($buf)
-            $take = [int][Math]::Min($buf.Length, $left)
-            $fs.Write($buf, 0, $take)
-            $left -= $take
-        }
-    } finally { $fs.Close() }
+
+    $source = @"
+using System;
+using System.IO;
+using System.Windows.Forms;
+public static class FakeInstaller {
+    [STAThread]
+    public static int Main(string[] args) {
+        string where = System.Reflection.Assembly.GetExecutingAssembly().Location;
+        string nl = Environment.NewLine;
+        string note = "DiscWright test installer for $slug" + nl + nl + "It ran from:" + nl + where;
+        try {
+            File.AppendAllText(
+                Path.Combine(Path.GetTempPath(), "discwright-installer-ran.txt"),
+                DateTime.Now.ToString("s") + "  |  " + where + nl);
+        } catch { }
+        MessageBox.Show(note, "DiscWright test installer",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return 0;
+    }
+}
+"@
+    Add-Type -TypeDefinition $source -OutputAssembly $path `
+             -OutputType ConsoleApplication `
+             -ReferencedAssemblies 'System.Windows.Forms', 'System.Drawing'
+
+    $realBytes = (Get-Item -LiteralPath $path).Length
+    $target = [long]($mb * 1MB)
+    if ($target -gt $realBytes) {
+        # Appended, not written over: the PE stays intact and the loader never
+        # looks past where the headers say the image ends.
+        $fs = [IO.File]::Open($path, [IO.FileMode]::Append)
+        try {
+            $buf = New-Object byte[] (1MB)
+            $rand = New-Object Random 1234
+            $left = $target - $realBytes
+            while ($left -gt 0) {
+                # Random rather than zeroes: a run of zeroes tells us nothing
+                # about whether the drive wrote what it was given.
+                $rand.NextBytes($buf)
+                $take = [int][Math]::Min($buf.Length, $left)
+                $fs.Write($buf, 0, $take)
+                $left -= $take
+            }
+        } finally { $fs.Close() }
+    }
     return $dir
 }
 

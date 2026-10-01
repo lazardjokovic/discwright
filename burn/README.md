@@ -65,13 +65,28 @@ Done, on a CD-R on 2026-10-01, with a 241.7 MB two-game test disc:
       Exit. This had only ever been tested from a mounted image before, and
       Windows does not treat the two the same.
 
+- [x] **AutoPlay offers the disc on insert and the menu opens from it.** Windows
+      showed `Run DISCWRIGHT TEST`, which is the `action=` line of
+      `autorun.inf`, and clicking it opened the menu. Confirmed by the person at
+      the machine, not by a script. `NoDriveTypeAutoRun` is `0x9E` here, the
+      Windows default, which leaves AutoRun on for optical drives alone.
+- [x] **The menu launches an installer from the disc, at the right path.** It
+      ran `\\?\D:\Games\02 - arcanum\setup_arcanum_1.0_(90210).exe` and showed
+      its "Reading from disc can take a minute" status while doing it. The
+      extended-length prefix is the menu's own, and it works from a disc.
+
 Still open:
 
-- [ ] The AutoPlay prompt on insert, seen by a person. `NoDriveTypeAutoRun` is
-      `0x9E` here, the Windows default, which leaves AutoRun on for optical
-      drives alone. Since Windows 7 it offers rather than launches, and what it
-      offers is the `action=` line from `autorun.inf`.
-- [ ] A game's installer actually started from the disc.
+- [ ] An installer that actually *runs* from the disc. The first test disc
+      carried 120 MB of random bytes named `.exe`, so Windows could not parse a
+      PE header, assumed MS-DOS and said "Unsupported 16-Bit Application". That
+      is the fixture being fake, not DiscWright being wrong, and it still proved
+      the launch and the path. `New-TestDisc.ps1` now compiles a real console
+      program and pads it to size afterwards: bytes appended past the end of a
+      PE image are ignored by the loader, so the file is both a working
+      executable and big enough to make the drive work. Verified at 5 MB and
+      again at 120 MB from the staging folder. The next burn settles it on
+      optical media.
 - [ ] A disc burned here read in a different machine.
 - [ ] A multi-disc set, which 700 MB CD-Rs make cheap to test: a few GB spans
       several discs and each burns in minutes rather than most of an hour.
