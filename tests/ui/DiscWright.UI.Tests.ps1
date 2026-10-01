@@ -208,8 +208,27 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         $lay.Clashes.Count | Should -Be 0 -Because ($lay.Clashes -join '; ')
     }
 
+    It 'shows every button the script creates' {
+        # A control placed exactly on top of another is not reported as a clash,
+        # because UI Automation hands back the one in front and the covered one
+        # simply is not there. That is what a new button dropped onto Preview
+        # menu looked like: ten failures elsewhere and nothing saying why.
+        # So the window is checked against the script rather than against taste.
+        $src = Get-Content -Raw -LiteralPath $script:AppPath
+        $names = @([regex]::Matches($src, "AddBtn\s+'([^']+)'") |
+                   ForEach-Object { $_.Groups[1].Value } |
+                   Where-Object { $_ -ne 'Browse...' } | Sort-Object -Unique)
+        $names.Count | Should -BeGreaterThan 5 -Because 'the window has buttons'
+        $missing = @()
+        foreach ($n in $names) {
+            if (-not (Find-Ctl $script:Win $n)) { $missing += $n }
+        }
+        $missing.Count | Should -Be 0 -Because "hidden or missing: $($missing -join ', ')"
+    }
+
     It 'leaves <_> greyed until there is something for it to act on' -ForEach @(
-        'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu', 'New disc'
+        'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu', 'New disc',
+        'Print artwork*'
     ) {
         Test-CtlEnabled $script:Win $_ | Should -BeFalse
     }
@@ -288,6 +307,10 @@ Describe 'Opening a disc that was already built' -Tag 'UI' -Skip:(-not $script:H
         Test-CtlEnabled $script:Win 'Add-on*'          | Should -BeTrue
         Test-CtlEnabled $script:Win 'Show disc folder' | Should -BeTrue
         Test-CtlEnabled $script:Win 'Preview menu'     | Should -BeTrue
+        # Artwork comes from the plan rather than from the ISO, so it is
+        # available as soon as there is a game and somewhere to write to,
+        # build or no build.
+        Test-CtlEnabled $script:Win 'Print artwork*'   | Should -BeTrue
     }
 
     It 'keeps Change... and Remove greyed while no row is selected' {

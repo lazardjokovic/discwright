@@ -875,9 +875,46 @@ function New-ArtworkForProject {
     if ($p.BgPath -and (Test-Path -LiteralPath $p.BgPath)) { $cover = $p.BgPath }
 
     if (-not $OutDir) { $OutDir = Split-Path -Parent $path }
+
+    $r = New-ArtworkForDisc -Title $title -Label $p.Label -Games $games -AddOnCount $addOns `
+                            -CoverImage $cover -ShowTitleOnCover:([bool]$p.ShowTitle) `
+                            -OutDir $OutDir -Case $Case -Disc $Disc -Page $Page -Accent $Accent
+    $r | Add-Member -NotePropertyName ProjectFile -NotePropertyValue $path -PassThru
+}
+
+<#
+    The same work, from values rather than from a file.
+
+    The app calls this one with what is on the form, because a button that
+    writes discproject.json to read it straight back would overwrite a saved
+    project with whatever happened to be on screen. The file reader above calls
+    it too, so there is one description of what a disc's artwork looks like.
+#>
+function New-ArtworkForDisc {
+    param(
+        [Parameter(Mandatory)][string]$Title,
+        [string]$Label,
+        [string[]]$Games = @(),
+        [int]$AddOnCount = 0,
+        [string]$CoverImage,
+        [bool]$ShowTitleOnCover = $false,
+        [Parameter(Mandatory)][string]$OutDir,
+        [string]$Case = 'dvd',
+        [string]$Disc = 'hub',
+        [ValidateSet('a4', 'letter')][string]$Page = 'a4',
+        [string]$Accent = '#1B2A41'
+    )
+    $contents = @($Games | Where-Object { $_ })
+    if ($AddOnCount -gt 0) {
+        $contents += ('{0} add-on{1}' -f $AddOnCount, $(if ($AddOnCount -eq 1) { '' } else { 's' }))
+    }
+
+    $cover = $null
+    if ($CoverImage -and (Test-Path -LiteralPath $CoverImage)) { $cover = $CoverImage }
+
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-    $stem = Get-SafeFileStem $title
+    $stem = Get-SafeFileStem $Title
     $wrap = Join-Path $OutDir "$stem-wrap-$Case-$Page.pdf"
     $face = Join-Path $OutDir "$stem-disc-face-$Disc.png"
 
@@ -885,30 +922,29 @@ function New-ArtworkForProject {
     # does not. On most discs they are the same words, and printing both just
     # prints the name twice.
     $subtitle = $null
-    if ($p.Label -and $p.Label.Trim() -ne $title.Trim()) { $subtitle = $p.Label }
+    if ($Label -and $Label.Trim() -ne $Title.Trim()) { $subtitle = $Label }
 
     # With cover art, follow the choice already made for the menu. Without it,
     # the front is a plain colour and the title is all there is.
     $titleOnFront = $true
-    if ($cover) { $titleOnFront = [bool]$p.ShowTitle }
+    if ($cover) { $titleOnFront = $ShowTitleOnCover }
 
     $null = New-CaseWrap -OutPdf $wrap -Case $Case -Page $Page -Accent $Accent `
-                         -Title $title -Subtitle $subtitle -CoverImage $cover `
+                         -Title $Title -Subtitle $subtitle -CoverImage $cover `
                          -Contents $contents -ShowTitleOnFront $titleOnFront
     # The face keeps its title whatever the wrap does: a disc out of its case
     # with no writing on it is the one nobody can identify.
     $null = New-DiscFace -OutPng $face -Disc $Disc -Accent $Accent `
-                         -Title $title -Subtitle $subtitle -CoverImage $cover
+                         -Title $Title -Subtitle $subtitle -CoverImage $cover
 
     return [pscustomobject]@{
-        Title       = $title
-        Contents    = $contents
-        CoverImage  = $cover
-        UsedCover   = [bool]$cover
+        Title        = $Title
+        Contents     = $contents
+        CoverImage   = $cover
+        UsedCover    = [bool]$cover
         TitleOnCover = $titleOnFront
-        Wrap        = $wrap
-        DiscFace    = $face
-        ProjectFile = $path
+        Wrap         = $wrap
+        DiscFace     = $face
     }
 }
 

@@ -1,4 +1,4 @@
-; DiscWright - Inno Setup script
+﻿; DiscWright - Inno Setup script
 ;
 ; Why there is an installer at all, for an app whose README opens with "there is
 ; nothing to install": winget will not take a folder of scripts. Its only route
@@ -88,6 +88,9 @@ Source: "..\DiscWright.ps1";      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DiscWright.ico";      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DiscWright.vbs";      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\Run DiscWright.cmd";  DestDir: "{app}"; Flags: ignoreversion
+; The print module, which the Print artwork button dot-sources. Shipped in
+; its own folder so the ISO builder stays separable from it.
+Source: "..\print\DiscWright.Print.ps1"; DestDir: "{app}\print"; Flags: ignoreversion
 Source: "..\README.md";           DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE";             DestDir: "{app}"; Flags: ignoreversion
 

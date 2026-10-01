@@ -1,4 +1,4 @@
-<#
+﻿<#
   DiscWright
   Turns a GOG offline-installer folder into a burnable "retro game disc" image:
   custom drive icon + label, and an optional autorun splash menu (background, music,
@@ -2899,6 +2899,7 @@ $btnXDel =New-Object System.Windows.Forms.Button; $btnXDel.Text='Remove'; $btnXD
 
 AddLabel '6)  Output folder (ISO + disc staging go here):' 15 800 520 | Out-Null
 $txtOut=AddText 15 822 520
+$btnArtwork = AddBtn 'Print artwork' 545 796 110
 $btnOut=AddBtn 'Browse...' 545 822 110
 
 $btnBuild=New-Object System.Windows.Forms.Button; $btnBuild.Text='BUILD ISO'; $btnBuild.Location=New-Object System.Drawing.Point(15,856); $btnBuild.Size=New-Object System.Drawing.Size(150,30); $btnBuild.BackColor=[System.Drawing.Color]::FromArgb(0,150,160); $btnBuild.ForeColor=[System.Drawing.Color]::White; $form.Controls.Add($btnBuild)
@@ -3271,12 +3272,20 @@ function Update-ActionButtons {
     $canPreview = $chkMenu.Checked -and $state.BgPath -and (Test-Path $state.BgPath)
     $isDirty = Test-FormDirty
     $btnOpenDisc.Enabled = [bool]$hasOut
+    # Artwork needs a name to print and somewhere to put it, and nothing else.
+    # It does not need a build: the wrap and the face come from the plan, not
+    # from the ISO, so they can be printed and trimmed while the disc is still
+    # being written.
+    $canArt = [bool]$hasOut -and (Get-Games).Count -gt 0
+    $btnArtwork.Enabled = $canArt
     $btnPreview.Enabled  = [bool]$canPreview
     $btnNew.Enabled      = [bool]$isDirty
     $tips.SetToolTip($btnNew, $(if($isDirty){'Clear everything and start a new disc. The output folder is kept.'}else{'Nothing to clear - this is already a new disc'}))
     $tips.SetToolTip($btnOpenDisc, $(if($hasOut){'Open the disc staging folder in Explorer'}else{'Set an output folder first (step 6)'}))
     $tips.SetToolTip($btnPreview,  $(if($canPreview){'Show the menu using the current settings - no rebuild needed'}else{'Turn the menu on and choose a background first (step 4)'}))
     $tips.SetToolTip($btnOpenProj, 'Load a disc you already built, to edit and rebuild it')
+    $tips.SetToolTip($btnArtwork, $(if($canArt){'Make the case wrap and the disc face for this disc, ready to print'}
+                                    else{'Add a game and set an output folder first'}))
 
     # The button names the file it is about to write, so REBUILD always means "this
     # exact file is going to be overwritten" rather than "there is something in that
@@ -4115,6 +4124,52 @@ $btnOpenDisc.Add_Click({
     # Do not quietly open something else than what the button promises.
     Show-Warn "Nothing has been built here yet - there is no 'disc' staging folder in:`r`n`r`n$t`r`n`r`nOpening the output folder instead."
     Start-Process explorer.exe $t
+})
+$btnArtwork.Add_Click({
+    $t = $txtOut.Text.Trim()
+    if (-not $t) { Show-Warn "No output folder is set yet.`r`n`r`nPick one in step 6."; return }
+
+    # print\ is a separate module on purpose: this reaches into it, it never
+    # reaches back, so the ISO builder stays able to ship without it. A missing
+    # copy is a broken install, and saying which file is missing beats failing
+    # with nothing.
+    $printer = Join-Path $PSScriptRoot 'print\DiscWright.Print.ps1'
+    if (-not (Test-Path $printer)) {
+        Show-Warn "The artwork files are not installed:`r`n`r`n$printer`r`n`r`nReinstall DiscWright, or run it from a full copy of the folder."
+        return
+    }
+
+    try {
+        $entries = Get-Games
+        $names   = @($entries | Where-Object { $_.Kind -ne 'AddOn' } | ForEach-Object { $_.GameName })
+        $addOns  = @($entries | Where-Object { $_.Kind -eq 'AddOn' }).Count
+
+        # Read straight off the form. Writing the project file first and reading
+        # it back would overwrite a saved project with whatever is on screen,
+        # which is not what a button called Print artwork should ever do.
+        . $printer
+        $out = Join-Path $t 'artwork'
+        $art = New-ArtworkForDisc -Title $(if($txtTitle.Text.Trim()){$txtTitle.Text.Trim()}else{$txtLabel.Text.Trim()}) `
+                                  -Label $txtLabel.Text.Trim() -Games $names -AddOnCount $addOns `
+                                  -CoverImage $state.BgPath -ShowTitleOnCover $chkTitle.Checked `
+                                  -OutDir $out
+
+        $cover = if ($art.UsedCover) { 'Cover art: the menu background.' }
+                 else { 'No cover art: the menu background is not set or not found, so the panels are a plain colour.' }
+        [System.Windows.Forms.MessageBox]::Show(
+            ("Artwork for $($art.Title):`r`n`r`n" +
+             "$(Split-Path $art.Wrap -Leaf)`r`n" +
+             "    The case wrap. Print at 100% with scaling off, then cut to the marks.`r`n`r`n" +
+             "$(Split-Path $art.DiscFace -Leaf)`r`n" +
+             "    The disc face. Open it in your printer's disc software, which sets the`r`n" +
+             "    diameters and lines the tray up.`r`n`r`n" +
+             $cover),
+            'Artwork ready', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+        Start-Process explorer.exe $out
+    } catch {
+        Show-Warn "The artwork could not be made:`r`n`r`n$($_.Exception.Message)"
+    }
 })
 $btnPreview.Add_Click({
     $h = New-PreviewMenu
