@@ -50,6 +50,12 @@ $payload = @(
     'Run DiscWright.cmd'
     'README.md'
     'LICENSE'
+    # The two modules the app dot-sources when their buttons are pressed. Left
+    # out, Print artwork and Burn to disc are dead ends for everybody who takes
+    # the zip, which is the main download. The installer's list already carried
+    # them and this one did not, so the zip shipped half an app once.
+    'print\DiscWright.Print.ps1'
+    'burn\DiscWright.Burn.ps1'
 )
 
 $stage = Join-Path $OutDir "DiscWright-$version"
@@ -62,7 +68,13 @@ New-Item -ItemType Directory -Path $stage -Force | Out-Null
 foreach ($f in $payload) {
     $src = Join-Path $repo $f
     if (-not (Test-Path -LiteralPath $src)) { throw "Missing payload file: $f" }
-    Copy-Item -LiteralPath $src -Destination (Join-Path $stage $f) -Force
+    $dst = Join-Path $stage $f
+    # A payload entry can now sit in a folder, and Copy-Item will not make one.
+    $dstDir = Split-Path $dst -Parent
+    if (-not (Test-Path -LiteralPath $dstDir)) {
+        New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $src -Destination $dst -Force
 }
 
 # Compress-Archive is in PS 5.1, so this needs nothing installed. The wildcard
