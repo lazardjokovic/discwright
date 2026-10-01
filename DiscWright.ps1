@@ -1988,6 +1988,28 @@ public class ISOFile {
 
 # =================== PROJECT SAVE / REOPEN ===================
 
+# How much of a picture survives being fitted to a panel, and whether that is
+# worth saying out loud. A menu background is wide and a cover is tall, so the
+# usual answer is that most of the width goes. Printing costs paper and ink, so
+# the warning belongs before it rather than in the result.
+function Get-ArtFitNote([string]$imagePath, [double]$panelW, [double]$panelH, [string]$what) {
+    if (-not $imagePath -or -not (Test-Path -LiteralPath $imagePath)) { return '' }
+    try {
+        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $imagePath).Path)
+        try { $w = $img.Width; $h = $img.Height } finally { $img.Dispose() }
+    } catch { return '' }
+    if ($w -le 0 -or $h -le 0) { return '' }
+
+    # Scaled to cover the panel, then whatever hangs over the edge is cut away.
+    $scale = [Math]::Max($panelW / $w, $panelH / $h)
+    $cutW = [int][Math]::Round(100 - (100 * [Math]::Min($w, $panelW / $scale) / $w))
+    $cutH = [int][Math]::Round(100 - (100 * [Math]::Min($h, $panelH / $scale) / $h))
+    $worst = [Math]::Max($cutW, $cutH)
+    if ($worst -lt 15) { return "$what ${w}x${h}, a good shape for this." }
+    $side = if ($cutW -ge $cutH) { 'width' } else { 'height' }
+    return "$what ${w}x${h}: about $worst% of its $side is cut off."
+}
+
 function Save-Project([hashtable]$s,[string]$outDir) {
     $games = @($s.Games)
     $o = [ordered]@{
@@ -2010,7 +2032,13 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # installer, 'Files' for a folder of game files that never came from
         # GOG. Absent in anything older, which reads back as 'GOG', because that
         # is the only kind of entry those versions could make.
-        Version      = 9
+        # Version 10 adds CoverPath and DiscArtPath: pictures chosen for the
+        # printed cover and the printed disc face, which are not the same job as
+        # the menu background. A 16:9 background loses 60% of its width on a
+        # 129 x 183 mm panel, so using it for both was a guess that usually
+        # guessed wrong. Absent in anything older, which reads back as empty and
+        # falls back to the background exactly as those versions did.
+        Version      = 10
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -2042,6 +2070,8 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         Menu         = [bool]$s.Menu
         BgPath       = $s.BgPath
         BgAsIs       = [bool]$s.BgAsIs
+        CoverPath    = $s.CoverPath
+        DiscArtPath  = $s.DiscArtPath
         PanelSide    = $s.PanelSide
         Divider      = [bool]$s.Divider
         ShowTitle    = [bool]$s.ShowTitle
@@ -2107,6 +2137,7 @@ function Import-Project([string]$jsonPath) {
             LinuxInfo=[bool]$j.LinuxInfo
             LegacyFs=[bool]$j.LegacyFs
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
+            CoverPath=$j.CoverPath; DiscArtPath=$j.DiscArtPath
             PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
             Divider=[bool]$j.Divider; ShowTitle=[bool]$j.ShowTitle; TitleText=[string]$j.TitleText
             WindowBorder=[bool]$j.WindowBorder
@@ -2606,6 +2637,7 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 # removing every entry: where your GOG downloads and artwork live does not change
 # when you start a second disc.
 $state = @{ Games=@(); IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
+            CoverPath=$null; DiscArtPath=$null
             LabelSeededFrom=$null; LastGameBrowse=$null; LastFileBrowse=$null }
 
 # One game per disc is still the common case, so the disc layout, the UI and the
@@ -2899,7 +2931,7 @@ $btnXDel =New-Object System.Windows.Forms.Button; $btnXDel.Text='Remove'; $btnXD
 
 AddLabel '6)  Output folder (ISO + disc staging go here):' 15 800 520 | Out-Null
 $txtOut=AddText 15 822 520
-$btnArtwork = AddBtn 'Print artwork' 545 796 110
+
 $btnOut=AddBtn 'Browse...' 545 822 110
 
 $btnBuild=New-Object System.Windows.Forms.Button; $btnBuild.Text='BUILD ISO'; $btnBuild.Location=New-Object System.Drawing.Point(15,856); $btnBuild.Size=New-Object System.Drawing.Size(150,30); $btnBuild.BackColor=[System.Drawing.Color]::FromArgb(0,150,160); $btnBuild.ForeColor=[System.Drawing.Color]::White; $form.Controls.Add($btnBuild)
@@ -2908,6 +2940,17 @@ $txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLo
 # Both sit in space the layout already had, under the BUILD button and beside the
 # log, so nothing else has to move. Hidden until a build starts - an idle window
 # looks exactly as it did before.
+AddLabel '7)  Printed artwork (optional - the Print artwork button uses these):' 15 952 540 | Out-Null
+AddLabel 'Cover picture' 15 982 95 | Out-Null
+$txtCover = AddText 115 980 425
+$btnCover = AddBtn 'Browse...' 545 980 110
+AddLabel 'Disc face picture' 15 1012 95 | Out-Null
+$txtDiscArt = AddText 115 1010 425
+$btnDiscArt = AddBtn 'Browse...' 545 1010 110
+$lblArtNote = AddLabel '' 15 1040 645
+$lblArtNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
+$btnArtwork = AddBtn 'Print artwork' 15 1066 150
+
 $pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,894); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
 $lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
 
@@ -3265,6 +3308,25 @@ function Test-FormDirty {
 
 # Grey out the two inspect buttons when there is nothing for them to open, and
 # make the build button say what it will actually do.
+# The cover panel is 129.5 x 183 mm and the disc face is a 118 mm circle, both
+# at 300 dpi. Those are the shapes a picture has to survive, and saying so here
+# is cheaper than saying it after somebody has printed one.
+function Update-ArtNote {
+    if (-not $lblArtNote) { return }
+    $cover = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
+    $face  = if ($state.DiscArtPath) { $state.DiscArtPath } else { $cover }
+    $notes = @()
+    $n = Get-ArtFitNote $cover 1530 2161 'Cover'
+    if ($n) { $notes += $n }
+    $n = Get-ArtFitNote $face 1394 1394 'Disc face'
+    if ($n) { $notes += $n }
+    if (-not $notes.Count) {
+        $notes += if ($state.BgPath) { 'Empty means the menu background is used.' }
+                  else { 'Left empty, the panels print in a plain colour with the title on them.' }
+    }
+    $lblArtNote.Text = $notes -join '   '
+}
+
 function Update-ActionButtons {
     $t = $txtOut.Text.Trim()
     $hasOut  = $t -and (Test-Path $t)
@@ -4054,6 +4116,11 @@ function Open-Project([string]$folder) {
     $chkDivider.Checked   = [bool]$p.Divider
     $chkTitle.Checked     = [bool]$p.ShowTitle
     $txtTitle.Text        = [string]$p.TitleText
+    # Setting the boxes is enough: their TextChanged handlers put the paths back
+    # into the state and refresh the note. Written in version 10, so anything
+    # older leaves them empty and falls back to the background as it always did.
+    $txtCover.Text   = [string]$p.CoverPath
+    $txtDiscArt.Text = [string]$p.DiscArtPath
     $chkWinBorder.Checked = [bool]$p.WindowBorder
     $cmbBtnStyle.SelectedItem = $(if($p.ButtonStyle -ieq 'Minimal'){'Minimal'}else{'Bordered'})
 
@@ -4108,6 +4175,27 @@ $btnNew.Add_Click({
     if (-not (Show-Confirm $msg 'New disc')) { return }
     Reset-Form
 })
+$btnCover.Add_Click({
+    $f = New-Object System.Windows.Forms.OpenFileDialog
+    $f.Filter = 'Pictures|*.png;*.jpg;*.jpeg;*.bmp|All files|*.*'
+    $f.Title = 'Picture for the printed cover'
+    $seed = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
+    if ($seed) { $f.InitialDirectory = Split-Path $seed -Parent }
+    if ($f.ShowDialog() -eq 'OK') { $txtCover.Text = $f.FileName }
+})
+$btnDiscArt.Add_Click({
+    $f = New-Object System.Windows.Forms.OpenFileDialog
+    $f.Filter = 'Pictures|*.png;*.jpg;*.jpeg;*.bmp|All files|*.*'
+    $f.Title = 'Picture for the printed disc face'
+    $seed = if ($state.DiscArtPath) { $state.DiscArtPath } else { $state.BgPath }
+    if ($seed) { $f.InitialDirectory = Split-Path $seed -Parent }
+    if ($f.ShowDialog() -eq 'OK') { $txtDiscArt.Text = $f.FileName }
+})
+# The boxes are the truth, so the state follows them. Typing a path by hand has
+# to work exactly as well as browsing for one.
+$txtCover.Add_TextChanged({ $state.CoverPath = $txtCover.Text.Trim(); Update-ArtNote })
+$txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Update-ArtNote })
+
 $btnOpenProj.Add_Click({
     $d = New-FolderDialog 'Pick the disc output folder (the one holding disc\ and the .iso)' $txtOut.Text.Trim()
     if ($d.ShowDialog() -eq 'OK') { Open-Project $d.SelectedPath }
@@ -4149,10 +4237,15 @@ $btnArtwork.Add_Click({
         # which is not what a button called Print artwork should ever do.
         . $printer
         $out = Join-Path $t 'artwork'
+        # A picture chosen for the cover wins over the menu background, which was
+        # chosen to sit behind buttons rather than to be a cover.
+        $coverPic = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
+        $facePic  = if ($state.DiscArtPath) { $state.DiscArtPath } else { $coverPic }
+
         $art = New-ArtworkForDisc -Title $(if($txtTitle.Text.Trim()){$txtTitle.Text.Trim()}else{$txtLabel.Text.Trim()}) `
                                   -Label $txtLabel.Text.Trim() -Games $names -AddOnCount $addOns `
-                                  -CoverImage $state.BgPath -ShowTitleOnCover $chkTitle.Checked `
-                                  -OutDir $out
+                                  -CoverImage $coverPic -DiscImage $facePic `
+                                  -ShowTitleOnCover $chkTitle.Checked -OutDir $out
 
         $cover = if ($art.UsedCover) { 'Cover art: the menu background.' }
                  else { 'No cover art: the menu background is not set or not found, so the panels are a plain colour.' }

@@ -897,6 +897,10 @@ function New-ArtworkForDisc {
         [string[]]$Games = @(),
         [int]$AddOnCount = 0,
         [string]$CoverImage,
+        # A cover is tall and a disc face is a circle, so one picture rarely
+        # suits both. Left empty, the cover picture is used for both, which is
+        # what happened before this existed.
+        [string]$DiscImage,
         [bool]$ShowTitleOnCover = $false,
         [Parameter(Mandatory)][string]$OutDir,
         [string]$Case = 'dvd',
@@ -911,12 +915,14 @@ function New-ArtworkForDisc {
 
     $cover = $null
     if ($CoverImage -and (Test-Path -LiteralPath $CoverImage)) { $cover = $CoverImage }
+    $facePic = $cover
+    if ($DiscImage -and (Test-Path -LiteralPath $DiscImage)) { $facePic = $DiscImage }
 
     New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
     $stem = Get-SafeFileStem $Title
     $wrap = Join-Path $OutDir "$stem-wrap-$Case-$Page.pdf"
-    $face = Join-Path $OutDir "$stem-disc-face-$Disc.png"
+    $facePath = Join-Path $OutDir "$stem-disc-face-$Disc.png"
 
     # The volume label is only worth printing when it says something the title
     # does not. On most discs they are the same words, and printing both just
@@ -934,17 +940,18 @@ function New-ArtworkForDisc {
                          -Contents $contents -ShowTitleOnFront $titleOnFront
     # The face keeps its title whatever the wrap does: a disc out of its case
     # with no writing on it is the one nobody can identify.
-    $null = New-DiscFace -OutPng $face -Disc $Disc -Accent $Accent `
-                         -Title $Title -Subtitle $subtitle -CoverImage $cover
+    $null = New-DiscFace -OutPng $facePath -Disc $Disc -Accent $Accent `
+                         -Title $Title -Subtitle $subtitle -CoverImage $facePic
 
     return [pscustomobject]@{
         Title        = $Title
         Contents     = $contents
         CoverImage   = $cover
         UsedCover    = [bool]$cover
+        DiscImage    = $facePic
         TitleOnCover = $titleOnFront
         Wrap         = $wrap
-        DiscFace     = $face
+        DiscFace     = $facePath
     }
 }
 

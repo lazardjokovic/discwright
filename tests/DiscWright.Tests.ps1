@@ -1,4 +1,4 @@
-# Pester tests for DiscWright.
+﻿# Pester tests for DiscWright.
 #
 #   Invoke-Pester tests
 #   Invoke-Pester tests -ExcludeTagFilter Build     # skip the slow ISO builds
@@ -724,8 +724,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 9' {
-            $script:PJson.Version | Should -Be 9
+        It 'declares schema version 10' {
+            $script:PJson.Version | Should -Be 10
         }
 
         It 'records where each entry came from' {
@@ -4118,8 +4118,8 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
         }
 
-        It 'writes schema version 9' {
-            $script:RenameRaw.Version | Should -Be 9
+        It 'writes schema version 10' {
+            $script:RenameRaw.Version | Should -Be 10
         }
 
         It 'stores the registered name beside the chosen one' {
@@ -4997,7 +4997,7 @@ Describe 'The older-Windows setting in a project file' -Tag 'Unit' {
         New-Item -ItemType Directory -Force -Path $script:LegProj | Out-Null
     }
 
-    It 'is written as schema 8 and comes back the way it went in' {
+    It 'is written as the current schema and comes back the way it went in' {
         $s = @{ Games=@(); Label='Legacy Trip'; IconPath=$script:Art; IconIsIco=$false
                 Menu=$true; BgPath=$null; BgAsIs=$true; PanelSide='Right'
                 Divider=$false; ShowTitle=$false; TitleText=''
@@ -5006,7 +5006,7 @@ Describe 'The older-Windows setting in a project file' -Tag 'Unit' {
                 ExtraItems=@(); MediaKey=''; LinuxInfo=$false; LegacyFs=$true }
         Save-Project $s $script:LegProj
         $raw = Get-Content -Raw (Join-Path $script:LegProj 'discproject.json') | ConvertFrom-Json
-        $raw.Version  | Should -Be 9
+        $raw.Version  | Should -Be 10
         $raw.LegacyFs | Should -BeTrue
         (Import-Project (Join-Path $script:LegProj 'discproject.json')).LegacyFs | Should -BeTrue
     }
@@ -5093,5 +5093,123 @@ Describe "The installer's choice of launcher" -Tag 'Unit' {
         # Looked for in {sys}, which is where the wscript.exe these shortcuts
         # name lives, so the answer is about the same pair of files.
         $script:Iss | Should -Match ([regex]::Escape("FileExists(ExpandConstant('{sys}\vbscript.dll'))"))
+    }
+}
+
+Describe 'Saying what a picture will lose before it is printed' -Tag 'Unit' {
+
+    # The menu background is wide because it sits behind buttons. A cover panel
+    # is 129.5 x 183 mm and tall. Using one for the other is not wrong so much
+    # as expensive, and it is only expensive after somebody has printed it.
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Drawing
+        $src = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
+        $ast = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$null, [ref]$null)
+        $fn = $ast.Find({
+            param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                      $n.Name -eq 'Get-ArtFitNote'
+        }, $true)
+        $fn | Should -Not -BeNullOrEmpty
+        . ([scriptblock]::Create($fn.Extent.Text))
+
+        $script:ArtDir = Join-Path ([IO.Path]::GetTempPath()) ('dwart_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:ArtDir | Out-Null
+
+        function New-SizedPicture([int]$w, [int]$h) {
+            $path = Join-Path $script:ArtDir "pic-${w}x${h}.png"
+            $bmp = New-Object System.Drawing.Bitmap $w, $h
+            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
+            $bmp.Dispose()
+            return $path
+        }
+
+        # The real panel, in pixels at 300 dpi.
+        $script:PanelW = 1530
+        $script:PanelH = 2161
+    }
+
+    AfterAll {
+        if ($script:ArtDir -and (Test-Path $script:ArtDir)) {
+            Remove-Item -LiteralPath $script:ArtDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'warns that a 16:9 background loses most of its width on a cover' {
+        $note = Get-ArtFitNote (New-SizedPicture 1920 1080) $script:PanelW $script:PanelH 'Cover'
+        $note | Should -Match '1920x1080'
+        $note | Should -Match 'width'
+        # 60% is the real figure for 16:9 against this panel. Anything much
+        # smaller would mean the arithmetic has drifted.
+        [int]([regex]::Match($note, '(\d+)%').Groups[1].Value) | Should -BeGreaterThan 50
+    }
+
+    It 'warns about the menu background size DiscWright itself asks for' {
+        $note = Get-ArtFitNote (New-SizedPicture 760 480) $script:PanelW $script:PanelH 'Cover'
+        [int]([regex]::Match($note, '(\d+)%').Groups[1].Value) | Should -BeGreaterThan 50
+    }
+
+    It 'is content with a portrait picture, which is what a case wants' {
+        $note = Get-ArtFitNote (New-SizedPicture 1000 1420) $script:PanelW $script:PanelH 'Cover'
+        $note | Should -Match 'good shape'
+        $note | Should -Not -Match 'cut off'
+    }
+
+    It 'is content with a square picture on a round disc face' {
+        $note = Get-ArtFitNote (New-SizedPicture 1200 1200) 1394 1394 'Disc face'
+        $note | Should -Match 'good shape'
+    }
+
+    It 'warns that a wide picture loses its sides on a disc face' {
+        $note = Get-ArtFitNote (New-SizedPicture 1920 1080) 1394 1394 'Disc face'
+        $note | Should -Match 'width'
+    }
+
+    It 'says nothing at all when there is no picture to talk about' {
+        Get-ArtFitNote '' $script:PanelW $script:PanelH 'Cover' | Should -Be ''
+        Get-ArtFitNote 'Z:\gone.png' $script:PanelW $script:PanelH 'Cover' | Should -Be ''
+    }
+
+    It 'says nothing rather than throwing when the file is not a picture' {
+        $notPic = Join-Path $script:ArtDir 'notapicture.png'
+        Set-Content -LiteralPath $notPic -Value 'this is not a png'
+        Get-ArtFitNote $notPic $script:PanelW $script:PanelH 'Cover' | Should -Be ''
+    }
+}
+
+Describe 'Keeping the printed pictures in the project' -Tag 'Unit' {
+
+    It 'writes both paths, so reopening a disc does not ask again' {
+        $out = Join-Path $script:Sandbox 'cover-project'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        Save-Project @{
+            Games = @(); Label = 'ART'; IconPath = $script:Art; IconIsIco = $false
+            Menu = $true; BgPath = $script:Bg; BgAsIs = $false; PanelSide = 'Right'
+            Divider = $false; ShowTitle = $false; TitleText = ''
+            WindowBorder = $true; ButtonStyle = 'Minimal'; MusicFile = $null
+            Buttons = @('Play', 'Exit'); ManualPath = $null; ExtrasPath = $null
+            ExtraItems = @(); MediaKey = ''; OutDir = $out
+            CoverPath = 'C:\art\cover.png'; DiscArtPath = 'C:\art\face.png'
+        } $out
+        $raw = Get-Content (Join-Path $out 'discproject.json') -Raw | ConvertFrom-Json
+        $raw.Version     | Should -Be 10
+        $raw.CoverPath   | Should -Be 'C:\art\cover.png'
+        $raw.DiscArtPath | Should -Be 'C:\art\face.png'
+    }
+
+    It 'reads an older project back without them, rather than refusing it' {
+        # Version 9 and earlier had no such fields, and those discs were built
+        # from the background alone. They have to keep opening.
+        $out = Join-Path $script:Sandbox 'old-project'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        $old = [ordered]@{
+            Version = 9; AppVersion = '0.8.1'; Label = 'OLD'; TitleText = 'Old disc'
+            Games = @(); BgPath = $script:Bg; ShowTitle = $false; OutDir = $out
+        }
+        $old | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $out 'discproject.json') -Encoding UTF8
+        $read = Import-Project (Join-Path $out 'discproject.json')
+        $read | Should -Not -BeNullOrEmpty
+        $read.CoverPath | Should -BeNullOrEmpty
+        $read.DiscArtPath | Should -BeNullOrEmpty
     }
 }
