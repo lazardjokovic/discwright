@@ -75,22 +75,29 @@ Done, on a CD-R on 2026-10-01, with a 241.7 MB two-game test disc:
       its "Reading from disc can take a minute" status while doing it. The
       extended-length prefix is the menu's own, and it works from a disc.
 
+Done again on a second CD-R on 2026-10-01, this time entirely through the app's
+own Burn to disc button rather than by calling the module:
+
+- [x] **The button burns, and the dialog carries enough to refuse on.** It named
+      the ISO, 241.7 MB onto a CD-R with 702.8 MB free, the drive, 16x, and
+      "about 2 minutes". The write took 110 seconds, so the estimate erred long,
+      which is the direction it is meant to err.
+- [x] **It checks the disc afterwards and says so.** "All 7 files on the disc
+      match what was built, byte for byte."
+- [x] **An installer runs from the disc.** A 120 MB program on the CD-R started
+      in 8 seconds and reported its own path back as
+      `D:\Games\01 - gothic\setup_gothic_1.0_(90210).exe`. The first test disc
+      could not show this, because its installers were random bytes with an .exe
+      name and Windows refused them as 16-bit.
+
 Still open:
 
-- [ ] An installer that actually *runs* from the disc. The first test disc
-      carried 120 MB of random bytes named `.exe`, so Windows could not parse a
-      PE header, assumed MS-DOS and said "Unsupported 16-Bit Application". That
-      is the fixture being fake, not DiscWright being wrong, and it still proved
-      the launch and the path. `New-TestDisc.ps1` now compiles a real console
-      program and pads it to size afterwards: bytes appended past the end of a
-      PE image are ignored by the loader, so the file is both a working
-      executable and big enough to make the drive work. Verified at 5 MB and
-      again at 120 MB from the staging folder. The next burn settles it on
-      optical media.
 - [ ] A disc burned here read in a different machine.
 - [ ] A multi-disc set, which 700 MB CD-Rs make cheap to test: a few GB spans
       several discs and each burns in minutes rather than most of an hour.
 - [ ] `LegacyFs` on, read on something old.
+- [ ] The non-GOG disc, which builds but has never been burned. It lays out
+      differently and the menu runs a game rather than an installer.
 
 One thing to know before writing another test harness for this: the suite counts
 menu buttons by sampling screen pixels, so the menu has to be in front and

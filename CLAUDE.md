@@ -164,6 +164,12 @@ Measured on 2026-10-01 by burning a 241.7 MB two-game test disc to a CD-R:
   leaves AutoRun on for optical drives only. Since Windows 7 it offers rather
   than launches, and what it offers is the `action=` line of `autorun.inf`.
 
+A second disc, burned through the app's own button on 2026-10-01: the dialog
+named everything worth refusing on, the write took 110 seconds at 16x against
+an estimate of about two minutes, all 7 files matched byte for byte, and a
+120 MB program ran straight off the disc in 8 seconds and reported its own
+path back as `D:\`.
+
 `burn\README.md` carries the full checklist, including what is still unproven.
 
 ## Rendered output, and looking at it
