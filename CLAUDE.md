@@ -221,6 +221,19 @@ wrong with it for the others.
   pass each row with `-ForEach` so the run phase can see it; a bare `foreach`
   inside an `It` body is fine, since that is only assertions.
 
+- **A control below the fold is clicked outside the window.** The form has
+  AutoScroll and wants to be taller than the screen, so a control near the
+  bottom has a screen rectangle past the window's edge. Clicking it hits
+  whatever is behind, which also takes the foreground away, and every test
+  after it fails with the focus message rather than with anything about the
+  control. `Invoke-Ctl` now scrolls first. Measured while fixing it: these
+  boxes refuse `SetFocus` with "Target element cannot receive focus" and have
+  no ValuePattern, because the WinForms bridge exposes them as pattern-less
+  Panes. `WM_VSCROLL` does work.
+- **A step's box is found by geometry, not by name.** `Get-BoxAfter` wants the
+  label on its own line with the box directly beneath at the same left edge.
+  A label placed beside its box is invisible to the window tests.
+
 ## Where things stand
 
 **0.8.1, released 2026-09-27.** The Linux port is caught up with 0.8.0's feature

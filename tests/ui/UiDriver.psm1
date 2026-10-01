@@ -47,6 +47,13 @@ public class DwInput {
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint x, uint y, uint d, IntPtr e);
   [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint msg, IntPtr w, IntPtr l);
+  // WM_VSCROLL with SB_TOP or SB_BOTTOM, which is how an AutoScroll form is
+  // moved from outside it. A control below the fold has a screen rectangle
+  // outside the window, and clicking there hits whatever is behind.
+  public static void ScrollToEnd(IntPtr h, bool bottom) {
+    SendMessage(h, 0x0115, (IntPtr)(bottom ? 7 : 6), IntPtr.Zero);
+  }
   public static void ClickAt(int x, int y) {
     SetCursorPos(x, y);
     System.Threading.Thread.Sleep(60);
@@ -220,6 +227,11 @@ function Invoke-Ctl {
     #>
     param($Ctl, [int]$SettleMs = 400, [switch]$NoFocusCheck)
     if (-not $Ctl) { throw 'Invoke-Ctl was given nothing to click' }
+    # The window scrolls, so a control can sit below the bottom of it. Its
+    # rectangle is then a screen coordinate OUTSIDE the app, and the click lands
+    # on whatever is behind: the desktop, or another window, which also takes
+    # the foreground away and fails every test after it. Scroll it in first.
+    $null = Set-CtlInView $Ctl
     $r = $Ctl.Current.BoundingRectangle
     if ($r.Width -le 0 -or $r.Height -le 0) { throw "'$($Ctl.Current.Name)' has no clickable area" }
     if (-not $NoFocusCheck -and -not (Test-DrivingOurWindow)) {
@@ -229,6 +241,38 @@ function Invoke-Ctl {
     }
     [DwInput]::ClickAt([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
     Start-Sleep -Milliseconds $SettleMs
+}
+
+function Set-CtlInView {
+    <#
+    .SYNOPSIS
+        Scroll a control into the window, and say whether it is visible now.
+
+    .DESCRIPTION
+        DiscWright's window has AutoScroll on and wants to be taller than most
+        screens, so the controls at the bottom start out below the visible area.
+
+        Asking for focus is what makes WinForms scroll to a control, and it is
+        the only handle there is here: the accessibility bridge exposes these as
+        pattern-less Panes, so there is no ScrollItemPattern to call instead.
+    #>
+    param($Ctl)
+    if (-not $Ctl -or -not $script:DrivenHandle) { return $false }
+    $wr = New-Object DwMenu+RECT
+    if (-not [DwMenu]::GetWindowRect($script:DrivenHandle, [ref]$wr)) { return $false }
+
+    $r = $Ctl.Current.BoundingRectangle
+    if ($r.Top -ge $wr.T -and $r.Bottom -le $wr.B) { return $true }
+
+    # Measured rather than assumed. On this form a text box reports
+    # "Target element cannot receive focus" to SetFocus and has no
+    # ValuePattern, because the accessibility bridge exposes it as a
+    # pattern-less Pane. WM_VSCROLL moves the form and does work: a box at
+    # y 1049 on a window ending at y 1012 came back at y 861.
+    [DwInput]::ScrollToEnd($script:DrivenHandle, ($r.Top -gt $wr.B))
+    Start-Sleep -Milliseconds 400
+    $r = $Ctl.Current.BoundingRectangle
+    return ($r.Top -ge $wr.T -and $r.Bottom -le $wr.B)
 }
 
 function Set-DrivenWindow {
@@ -910,6 +954,6 @@ function Clear-AllEntries {
 Export-ModuleMember -Function Test-UiAvailable, Start-DiscWright, Stop-DiscWright, Wait-Win, Wait-WinForProcess, Wait-AnyWinForProcess,
     Find-Ctl, Set-WindowFocus, Invoke-Ctl, Invoke-CtlNamed, Test-CtlEnabled, Set-CtlText,
     Send-Keys, Get-BoxAfter, Get-NameBox, Get-CtlOverlaps, Get-StatusText, Get-EntryCount, Select-ListRow, Clear-AllEntries,
-    Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow,
+    Complete-FolderDialog, Complete-FileDialog, Read-MessageBox, Save-WindowShot, ConvertTo-SendKeys, Set-DrivenWindow, Test-DrivingOurWindow, Set-CtlInView,
     Find-MediaTarget, Get-MediaTargetText, Set-MediaTarget, Find-RowButton, Find-BoxRowButton, Set-FolderTreeFocus,
     Find-MenuWindow, Test-MenuWindowOpen, Get-MenuButtonRows, Wait-MenuButtonCount, Invoke-MenuButton

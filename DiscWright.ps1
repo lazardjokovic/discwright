@@ -2940,17 +2940,21 @@ $txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLo
 # Both sit in space the layout already had, under the BUILD button and beside the
 # log, so nothing else has to move. Hidden until a build starts - an idle window
 # looks exactly as it did before.
-AddLabel '7)  Printed artwork (optional - the Print artwork button uses these):' 15 952 540 | Out-Null
-AddLabel 'Cover picture' 15 982 95 | Out-Null
-$txtCover = AddText 115 980 425
-$btnCover = AddBtn 'Browse...' 545 980 110
-AddLabel 'Disc face picture' 15 1012 95 | Out-Null
-$txtDiscArt = AddText 115 1010 425
-$btnDiscArt = AddBtn 'Browse...' 545 1010 110
-$lblArtNote = AddLabel '' 15 1040 645
+# Laid out like every other step: the label on its own line with its box
+# directly beneath at the same left edge. That is not only for the look. The
+# window tests find a step's box by that geometry, and a label beside its box
+# is invisible to them.
+AddLabel '7)  Printed artwork (optional):' 15 952 540 | Out-Null
+AddLabel 'Cover picture' 15 976 200 | Out-Null
+$txtCover = AddText 15 998 525
+$btnCover = AddBtn 'Browse...' 545 998 110
+AddLabel 'Disc face picture' 15 1024 200 | Out-Null
+$txtDiscArt = AddText 15 1046 525
+$btnDiscArt = AddBtn 'Browse...' 545 1046 110
+$lblArtNote = AddLabel '' 15 1074 645
 $lblArtNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
-$btnArtwork = AddBtn 'Print artwork' 15 1066 150
-$btnBurn    = AddBtn 'Burn to disc...' 180 1066 150
+$btnArtwork = AddBtn 'Print artwork' 15 1100 150
+$btnBurn    = AddBtn 'Burn to disc...' 180 1100 150
 
 $pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,894); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
 $lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
