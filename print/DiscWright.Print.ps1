@@ -927,6 +927,17 @@ function New-ArtworkForDisc {
         $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $cover).Path)
         try { $wrapKind = Get-ArtworkKind -Width $img.Width -Height $img.Height -Case $fmt }
         finally { $img.Dispose() }
+    }
+    # Only a picture already shaped like a cover is a cover. A menu background
+    # is 16:9 because it sits behind buttons, and printing one across a 273 mm
+    # wrap gives a stretched wallpaper with no spine, no back and no game list,
+    # which is worse than the plain label. So the shape decides: close to a wrap
+    # or a panel and it is somebody's finished work, printed untouched; anything
+    # else and the label is printed and the picture left alone. Nothing is ever
+    # cropped or squashed either way.
+    $coverIsArtwork = $wrapKind -and $wrapKind.OffByPct -le 6
+
+    if ($coverIsArtwork) {
         $null = New-WrapFromArtwork -OutPdf $wrap -Artwork $cover -Case $Case -Page $Page
     } else {
         $null = New-CaseWrap -OutPdf $wrap -Case $Case -Page $Page -Accent $Accent `
@@ -938,7 +949,15 @@ function New-ArtworkForDisc {
     # The disc face, the same way. A picture chosen for the face is printed;
     # with none, it is a plain label with the title on it, which is what tells
     # one unlabelled disc from another.
+    # Disc art is square, because a disc is round. A picture of any other shape
+    # was not drawn for a disc.
+    $faceIsArtwork = $false
     if ($facePic) {
+        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $facePic).Path)
+        try { $faceIsArtwork = [Math]::Abs(($img.Width / [double]$img.Height) - 1.0) -le 0.06 }
+        finally { $img.Dispose() }
+    }
+    if ($faceIsArtwork) {
         $null = New-DiscFaceFromArtwork -OutPng $facePath -Artwork $facePic -Disc $Disc
     } else {
         $null = New-DiscFace -OutPng $facePath -Disc $Disc -Accent $Accent `
@@ -953,8 +972,8 @@ function New-ArtworkForDisc {
         DiscImage    = $facePic
         # Which way each was made, so the app can say so rather than leave
         # somebody wondering why their cover came back with a title on it.
-        WrapFromArtwork = [bool]$cover
-        FaceFromArtwork = [bool]$facePic
+        WrapFromArtwork = [bool]$coverIsArtwork
+        FaceFromArtwork = [bool]$faceIsArtwork
         # How far the cover is from the shape a case wants, so the app can say
         # what to change rather than silently placing it with bands either side.
         CoverOffByPct   = $(if ($wrapKind) { $wrapKind.OffByPct } else { 0 })

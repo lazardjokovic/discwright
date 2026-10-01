@@ -2031,14 +2031,16 @@ function Get-ArtFitNote([string]$imagePath, [double]$panelW, [double]$panelH, [s
     } catch { return '' }
     if ($w -le 0 -or $h -le 0) { return '' }
 
-    # Scaled to cover the panel, then whatever hangs over the edge is cut away.
-    $scale = [Math]::Max($panelW / $w, $panelH / $h)
-    $cutW = [int][Math]::Round(100 - (100 * [Math]::Min($w, $panelW / $scale) / $w))
-    $cutH = [int][Math]::Round(100 - (100 * [Math]::Min($h, $panelH / $scale) / $h))
-    $worst = [Math]::Max($cutW, $cutH)
-    if ($worst -lt 15) { return "$what ${w}x${h}, a good shape for this." }
-    $side = if ($cutW -ge $cutH) { 'width' } else { 'height' }
-    return "$what ${w}x${h}: about $worst% of its $side is cut off."
+    # Nothing is cropped or stretched any more, so the question is no longer how
+    # much is lost. It is whether the picture is the shape of the thing being
+    # printed. Close enough and it is printed exactly as it is; anything else is
+    # not cover art, and a plain label is printed instead with the picture left
+    # alone.
+    $want = $panelW / $panelH
+    $have = $w / [double]$h
+    $off = [int][Math]::Round(100 * [Math]::Abs($have - $want) / $want)
+    if ($off -le 6) { return "$what ${w}x${h}, the right shape: printed exactly as it is." }
+    return "$what ${w}x${h} is not that shape, so a plain label is printed instead."
 }
 
 function Save-Project([hashtable]$s,[string]$outDir) {

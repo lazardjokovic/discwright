@@ -246,6 +246,8 @@ Most burning software asks which you meant. The answer is the contents. Burning 
 
 ## Printing the cover and the disc face
 
+![A case wrap and a disc face made by DiscWright: the wrap shows a back panel listing what is on the disc, a spine, and a front with the title; the disc face is a circle with the hub left clear](docs/printed-artwork.png)
+
 **Print artwork** makes two things for the disc you have planned: a case wrap, as
 a PDF at its true size with crop marks, and a disc face, as a 300 dpi PNG with
 the hub left clear. A PDF because the page carries its real physical size, so
