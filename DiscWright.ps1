@@ -836,9 +836,16 @@ function Get-MenuGames([array]$entries) {
         # this instead of Install, so the files are reachable from the menu
         # rather than only by browsing the disc. Empty is the disc root, which is
         # where a one-game disc puts everything.
+        # Where the entry came from, because the menu cannot work it out and
+        # the right button depends on it. A GOG folder holds an installer, so
+        # the disc offers Install and Play waits until something is installed.
+        # A folder of game files holds the game, so there is nothing to install
+        # and Play runs it off the disc. Without this the menu called every
+        # entry an installer, which is what a burned disc showed.
         $out += @{ Name=$e.GameName; MatchName=$mn
                    Setup=(Get-DiscEntrySetup $entries $i); AddOns=@($addOns)
                    Folder=(Get-DiscEntryFolder $entries $i)
+                   Source=$(if ($e.Source -eq 'Files') { 'Files' } else { 'GOG' })
                    Manual=$man; Extras=$ext }
     }
     return ,@($out)
@@ -1339,7 +1346,12 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         '",s:"' + (ConvertTo-JsString $_.Setup) +
         '",d:"' + (ConvertTo-JsString ([string]$_.Folder)) +
         '",man:"' + (ConvertTo-JsString ([string]$_.Manual)) +
-        '",ext:"' + (ConvertTo-JsString ([string]$_.Extras)) + '",a:' + $addJs + '}'
+        '",ext:"' + (ConvertTo-JsString ([string]$_.Extras)) +
+        # files is 1 when the entry is a folder of game files rather than an
+        # installer. A number rather than the word, because every byte of the
+        # menu is read off a disc. PowerShell here, not JavaScript: this line
+        # builds the string, it is not inside it.
+        '",files:' + $(if ($_.Source -eq 'Files') { '1' } else { '0' }) + ',a:' + $addJs + '}'
     }) -join ',') + ']'
 
     $btnsJs = '[' + ((@($cfg.Buttons) | ForEach-Object { '"' + (ConvertTo-JsString $_) + '"' }) -join ',') + ']'
@@ -1582,8 +1594,15 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   }
   function renderGame(){
     var g=GAMES[cur], h="";
-    if(has("Play"))    h+=btnHtml("btn_Play","play","Play","doPlay()","");
-    if(has("Install")){
+    // A folder of game files holds the game itself, so it is played from the
+    // disc and there is nothing to install. The button says so rather than
+    // leaving somebody to work out why Install is missing.
+    if(has("Play")){
+      if(g.files) h+=btnHtml("btn_Play","play","Play from disc","doPlay()",
+                             "Run "+g.n+" straight from this disc. Nothing is installed.");
+      else        h+=btnHtml("btn_Play","play","Play","doPlay()","");
+    }
+    if(has("Install") && !g.files){
       // A game with no installer is a folder of files: an unpacked zip, a
       // portable game, anything GOG never packaged. Nothing to install, so the
       // menu opens the folder rather than offering a button that could only
@@ -1645,7 +1664,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
                "There is no manual for " + g.n + " on this disc.");
     setEnabled("btn_Extras", (PREVIEW || fso.FolderExists(fso.BuildPath(root,gext))),
                "There is nothing extra for " + g.n + " on this disc.");
-    setEnabled("btn_Play", parentOn,
+    // A files entry is played off the disc, so it never waits on an install.
+    // Greying this out and saying "use Install first" on a disc with no Install
+    // button was the state a burned disc arrived in.
+    setEnabled("btn_Play", (g.files ? true : parentOn),
                g.n+" is not installed yet - use Install first.");
     if(PREVIEW){
       var ids=["btn_Install","btn_Manual","btn_Extras"];
@@ -1806,6 +1828,15 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   function tasksBack(){ tasks=null; show(); }
   function doPlay(){ if(off("btn_Play")) return;
     var g=GAMES[cur];
+    // Played from the disc: the entry is the game, so there is nothing to look
+    // up in the registry and nothing to install first.
+    if(g.files){
+      if(PREVIEW){ previewStop("Play from disc"); return; }
+      var exe=fso.BuildPath(root,g.s);
+      if(!fso.FileExists(exe)){ alert(g.n+" is not on this disc where the menu expected it:\n\n"+g.s); return; }
+      launchExe(exe,"",fso.GetParentFolderName(exe));
+      return;
+    }
     var hit=findGame(g.m);
     if(!hit){ alert(g.n+" isn't installed yet.\n\nUse INSTALL first, then PLAY."); return; }
     // Two or more launch targets means a bundle, so ask which - the same way the

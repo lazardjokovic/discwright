@@ -5319,3 +5319,86 @@ Describe 'Executable files stay pure ASCII' -Tag 'Unit' {
         ([IO.File]::ReadAllBytes($fixture)[0..2] -join ',') | Should -Be '239,187,191'
     }
 }
+
+Describe 'A disc of game files, not installers' -Tag 'Unit' {
+
+    # Found by burning one and looking at the screen: PLAY was greyed out with
+    # "use Install first" while INSTALL was the enabled button, on a disc where
+    # nothing can be installed because the executable is the game. Every menu
+    # test had been written around GOG discs, where that behaviour is right.
+
+    BeforeAll {
+        function New-FilesEntry([string]$name, [string]$exe) {
+            return @{
+                GameName = $name; MatchName = $name; Kind = 'Game'; Source = 'Files'
+                SetupExe = [pscustomobject]@{ FullName = $exe }
+                Folder = (Split-Path $exe -Parent); ParentIndex = -1; Ok = $true
+            }
+        }
+        function New-GogEntry([string]$name, [string]$exe) {
+            $e = New-FilesEntry $name $exe
+            $e.Source = 'GOG'
+            return $e
+        }
+    }
+
+    It 'carries the source through to the menu, which cannot work it out alone' {
+        $m = Get-MenuGames @( (New-FilesEntry 'Gothic' 'C:\g\gothic.exe') )
+        $m[0].Source | Should -Be 'Files'
+        $g = Get-MenuGames @( (New-GogEntry 'Gothic' 'C:\g\setup_gothic.exe') )
+        $g[0].Source | Should -Be 'GOG'
+    }
+
+    It 'treats anything that does not say Files as a GOG installer' {
+        # Projects written before Source existed have no such field, and those
+        # discs were all GOG downloads.
+        $old = @{ GameName = 'Old'; MatchName = 'Old'; Kind = 'Game'; Ok = $true
+                  SetupExe = [pscustomobject]@{ FullName = 'C:\g\setup.exe' }
+                  Folder = 'C:\g'; ParentIndex = -1 }
+        (Get-MenuGames @($old))[0].Source | Should -Be 'GOG'
+    }
+}
+
+Describe 'What the menu does with a folder of game files' -Tag 'Unit' {
+
+    BeforeAll {
+        $script:MenuSrc = Get-Content -Raw -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+    }
+
+    It 'writes a files flag into the menu for every game' {
+        # Asserted in pieces rather than as one long escaped line, which is
+        # unreadable and matched the wrong quote the first time it was written.
+        $script:MenuSrc | Should -Match ([regex]::Escape('",files:'))
+        $script:MenuSrc | Should -Match ([regex]::Escape("if (`$_.Source -eq 'Files') { '1' } else { '0' }"))
+    }
+
+    It 'says Play from disc rather than Play, so nobody has to infer it' {
+        # The wording is the whole fix for somebody reading the screen: it
+        # explains both what the button does and why Install is not there.
+        $script:MenuSrc | Should -Match 'Play from disc'
+        $script:MenuSrc | Should -Match 'Run "\+g\.n\+" straight from this disc\. Nothing is installed\.'
+    }
+
+    It 'offers no Install button at all on a files entry' {
+        $script:MenuSrc | Should -Match 'if\(has\("Install"\) && !g\.files\)\{'
+    }
+
+    It 'never greys Play out waiting for an install that cannot happen' {
+        $script:MenuSrc | Should -Match 'setEnabled\("btn_Play", \(g\.files \? true : parentOn\)'
+    }
+
+    It 'runs the executable off the disc rather than hunting the registry' {
+        # findGame looks an installed game up in the registry. A game played
+        # from the disc was never installed, so there is nothing to find.
+        $script:MenuSrc | Should -Match 'if\(g\.files\)\{'
+        $script:MenuSrc | Should -Match 'var exe=fso\.BuildPath\(root,g\.s\);'
+    }
+
+    It 'says so when the file is not where the menu expects, rather than failing quietly' {
+        $script:MenuSrc | Should -Match 'is not on this disc where the menu expected it'
+    }
+
+    It 'still tells a GOG game to install first, because that is true there' {
+        $script:MenuSrc | Should -Match "isn't installed yet"
+    }
+}

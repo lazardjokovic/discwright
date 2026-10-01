@@ -99,13 +99,14 @@ A third CD-R, 2026-10-01, the non-GOG disc burned through the app's button:
       survived the burn with all three files each.
 - [x] **The game runs from the disc**, reporting its own path back as
       `D:\Games - gothic\gothic.exe`.
-- [ ] **The menu offers the wrong action for it.** On the game's screen PLAY is
-      greyed out, saying "is not installed yet, use Install first", and INSTALL
-      is the enabled button. For a folder of game files there is nothing to
-      install: the executable is the game. The menu record has no idea which it
-      is, because `Get-MenuGames` does not carry the entry's Source, so every
-      entry is treated as a GOG installer. Found by burning the disc and
-      looking at it; no test knew to ask.
+- [x] **The menu offered the wrong action for it, and now does not.** On the
+      burned disc PLAY was greyed out saying "is not installed yet, use Install
+      first" while INSTALL was the enabled button, on a disc where nothing can
+      be installed because the executable is the game. `Get-MenuGames` did not
+      carry the entry's Source, so the menu treated every entry as a GOG
+      installer. It now reads **PLAY FROM DISC**, with no Install button at
+      all. Found by burning the disc and looking at it; no test knew to ask,
+      and nine now do.
 
 Still open:
 
