@@ -146,6 +146,26 @@ The owner's, and they are not negotiable in a hurry.
   package merges without a human, so a bad one installs itself on other people's
   machines.
 
+## Burning, and what a real disc settled
+
+A burner is attached: an ASUS DRW-24D5MT on D:, writing CD-R, CD-RW, DVD-R,
+DVD-RW, DVD+R and DVD+RW. `burn\` holds the module, the pre-flight and
+`New-TestDisc.ps1`, which builds a small disc worth spending a CD-R on.
+
+Measured on 2026-10-01 by burning a 241.7 MB two-game test disc to a CD-R:
+
+- It burned in 93 seconds and mounted as UDF.
+- Every file matched by SHA-256, 7 of 7, read back in 68 seconds.
+- A volume label loses its spaces: `DISCWRIGHT TEST` mounts as
+  `DISCWRIGHT_TEST`. That is the filesystem, not DiscWright.
+- **The menu runs from real optical media.** Until this disc, every menu test
+  had run from a mounted image, and Windows does not treat the two the same.
+- `NoDriveTypeAutoRun` is `0x9E` on this machine, the Windows default, which
+  leaves AutoRun on for optical drives only. Since Windows 7 it offers rather
+  than launches, and what it offers is the `action=` line of `autorun.inf`.
+
+`burn\README.md` carries the full checklist, including what is still unproven.
+
 ## Rendered output, and looking at it
 
 `print\New-SampleSet.ps1` renders every row of the format tables into

@@ -49,17 +49,38 @@ catching.
 arithmetic, the refusals and the comparison, all with no disc in the drive. The
 write itself is not mocked, because a mocked burn proves nothing about a drive.
 
-These are done by hand, with a disc meant to be spent, and the answers belong in
-`CLAUDE.md` once they are known:
+These are done by hand, with a disc meant to be spent.
 
-- [ ] An ISO burns and the disc mounts with the volume label DiscWright set.
-- [ ] Every file on the disc matches the staging folder by SHA-256.
-- [ ] The autorun menu appears on insert, on a real optical drive rather than a
-      mounted image. Windows treats the two differently and only the disc
-      settles it.
-- [ ] The menu's buttons work from the disc, including a game's installer.
-- [ ] A disc burned here reads in a different machine.
+Done, on a CD-R on 2026-10-01, with a 241.7 MB two-game test disc:
+
+- [x] **An ISO burns and the disc mounts with its label.** 93 seconds on an ASUS
+      DRW-24D5MT. It mounts as UDF, and `DISCWRIGHT TEST` comes back as
+      `DISCWRIGHT_TEST`: the space becomes an underscore, which is the
+      filesystem's rule and not something DiscWright chose.
+- [x] **Every file matches by SHA-256.** 7 files, nothing missing, nothing
+      unexpected, no wrong lengths, no wrong bytes. 68 seconds to read back.
+- [x] **`autorun.inf` reads correctly from the disc**, CRLF and all.
+- [x] **The menu runs from real optical media.** Started from the disc's own
+      `AUTORUN\menu.hta`, it drew its chooser with one button per game and
+      Exit. This had only ever been tested from a mounted image before, and
+      Windows does not treat the two the same.
+
+Still open:
+
+- [ ] The AutoPlay prompt on insert, seen by a person. `NoDriveTypeAutoRun` is
+      `0x9E` here, the Windows default, which leaves AutoRun on for optical
+      drives alone. Since Windows 7 it offers rather than launches, and what it
+      offers is the `action=` line from `autorun.inf`.
+- [ ] A game's installer actually started from the disc.
+- [ ] A disc burned here read in a different machine.
 - [ ] A multi-disc set, which 700 MB CD-Rs make cheap to test: a few GB spans
-      several discs and each one burns in minutes rather than the better part of
-      an hour.
+      several discs and each burns in minutes rather than most of an hour.
 - [ ] `LegacyFs` on, read on something old.
+
+One thing to know before writing another test harness for this: the suite counts
+menu buttons by sampling screen pixels, so the menu has to be in front and
+uncovered, and Windows refuses the foreground to a process that does not already
+hold it. A count of 0 or 1 from a script launched in the background means the
+screenshot caught something else, not that the menu failed. `Set-WindowFocus`
+refuses to continue for exactly this reason; a hand-written probe should do the
+same rather than report a number it cannot trust.
