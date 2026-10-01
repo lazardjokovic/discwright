@@ -46,17 +46,22 @@ Add-Type -AssemblyName System.Drawing
 # WrapWidthMm is the published trim rather than something derived, because the
 # panel is what is left over once the spine is taken out, not the other way
 # round, and the published widths do not always divide evenly.
+# Panels says what shape the printed sheet is. Two panels and a spine is a
+# wrap that goes round the case; one panel is an insert that sits in the front
+# of a jewel case and has no back and no spine. Rendering a one-panel insert as
+# a wrap produces two half-width panels either side of a spine with no width,
+# which is what this table used to do.
 $script:CaseFormats = @(
     @{ Key = 'dvd';        Name = 'DVD case, standard 14 mm'
-       WrapWidthMm = 273; HeightMm = 183; SpineMm = 14; Verified = $false }
+       WrapWidthMm = 273; HeightMm = 183; SpineMm = 14; Panels = 2; Verified = $false }
     @{ Key = 'dvd-slim';   Name = 'DVD case, slim 7 mm'
-       WrapWidthMm = 266; HeightMm = 183; SpineMm = 7;  Verified = $false }
+       WrapWidthMm = 266; HeightMm = 183; SpineMm = 7;  Panels = 2; Verified = $false }
     @{ Key = 'dvd-double'; Name = 'DVD case, double 14 mm'
-       WrapWidthMm = 273; HeightMm = 183; SpineMm = 14; Verified = $false }
+       WrapWidthMm = 273; HeightMm = 183; SpineMm = 14; Panels = 2; Verified = $false }
     @{ Key = 'bluray';     Name = 'Blu-ray case, 12 mm'
-       WrapWidthMm = 270; HeightMm = 164; SpineMm = 12; Verified = $false }
+       WrapWidthMm = 270; HeightMm = 164; SpineMm = 12; Panels = 2; Verified = $false }
     @{ Key = 'cd';         Name = 'CD jewel case, front insert'
-       WrapWidthMm = 120; HeightMm = 120; SpineMm = 0;  Verified = $false }
+       WrapWidthMm = 120; HeightMm = 120; SpineMm = 0;  Panels = 1; Verified = $false }
 )
 
 # The disc itself. Inner is where printing starts: a hub-printable disc is
@@ -88,8 +93,12 @@ function Get-DiscFormat([string]$key) {
     return $f
 }
 
-# What is left for each panel once the spine is taken out of the trim width.
-function Get-PanelWidthMm($case) { return ($case.WrapWidthMm - $case.SpineMm) / 2.0 }
+# What is left for each panel once the spine is taken out of the trim width. A
+# one-panel insert has no spine to take out, so the panel is the whole thing.
+function Get-PanelWidthMm($case) {
+    if ($case.Panels -eq 1) { return [double]$case.WrapWidthMm }
+    return ($case.WrapWidthMm - $case.SpineMm) / 2.0
+}
 
 # ---------------------------------------------------------------- units
 
@@ -575,16 +584,32 @@ function New-CaseWrap {
     $spineW = ConvertTo-Px $fmt.SpineMm
 
     # Each panel runs past the trim on the sides that reach a cut edge, so the
-    # art is still there if the cut wanders.
-    $backRect = New-Object System.Drawing.RectangleF(
-        [single]($trimX - $bleed), [single]($trimY - $bleed),
-        [single]($panelW + $bleed), [single]($trimHp + ($bleed * 2)))
-    $spineRect = New-Object System.Drawing.RectangleF(
-        [single]($trimX + $panelW), [single]($trimY - $bleed),
-        [single]$spineW, [single]($trimHp + ($bleed * 2)))
-    $frontRect = New-Object System.Drawing.RectangleF(
-        [single]($trimX + $panelW + $spineW), [single]($trimY - $bleed),
-        [single]($panelW + $bleed), [single]($trimHp + ($bleed * 2)))
+    # art is still there if the cut wanders. A one-panel insert reaches every
+    # cut edge, because it is the whole sheet.
+    $twoPanel = ($fmt.Panels -ne 1)
+    if ($twoPanel) {
+        $backRect = New-Object System.Drawing.RectangleF(
+            [single]($trimX - $bleed), [single]($trimY - $bleed),
+            [single]($panelW + $bleed), [single]($trimHp + ($bleed * 2)))
+        $spineRect = New-Object System.Drawing.RectangleF(
+            [single]($trimX + $panelW), [single]($trimY - $bleed),
+            [single]$spineW, [single]($trimHp + ($bleed * 2)))
+        $frontRect = New-Object System.Drawing.RectangleF(
+            [single]($trimX + $panelW + $spineW), [single]($trimY - $bleed),
+            [single]($panelW + $bleed), [single]($trimHp + ($bleed * 2)))
+    } else {
+        $backRect = $null
+        $spineRect = $null
+        $frontRect = New-Object System.Drawing.RectangleF(
+            [single]($trimX - $bleed), [single]($trimY - $bleed),
+            [single]($trimWp + ($bleed * 2)), [single]($trimHp + ($bleed * 2)))
+        if ($Contents.Count) {
+            # Said out loud rather than dropped: the list belongs on a back
+            # panel, and a front insert has not got one.
+            Write-Warning ("A $($fmt.Name) is a single panel, so the contents list has " +
+                           'nowhere to go and is not printed.')
+        }
+    }
 
     $white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
     $faint = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(205, 225, 230, 238))
@@ -648,7 +673,8 @@ function New-CaseWrap {
         $subFont.Dispose()
     }
 
-    # ---- the spine
+    # ---- the spine, and the back panel, neither of which a front insert has
+    if ($twoPanel) {
     $g.FillRectangle((New-Object System.Drawing.SolidBrush $darker), $spineRect)
     $spineLen = $trimHp - (ConvertTo-Px 16.0)
     # Starts near what a 14 mm spine can hold rather than at a timid size: the
@@ -728,6 +754,7 @@ function New-CaseWrap {
                       [single]$textW, [single](ConvertTo-Px 6.0))),
                   $foot)
     $footFont.Dispose(); $foot.Dispose()
+    }   # end of the two-panel-only work
 
     # ---- where to cut and where to fold
     if (-not $NoCropMarks) {
@@ -751,6 +778,7 @@ function New-CaseWrap {
         # for a cut.
         $fold = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(130, 130, 130)), 2
         $fold.DashStyle = [System.Drawing.Drawing2D.DashStyle]::Dot
+        if ($twoPanel) {
         # Every element parenthesised: a comma binds tighter than a plus, so
         # @($a + $b, $a + $c) is not the two sums it looks like.
         foreach ($x in @(($trimX + $panelW), ($trimX + $panelW + $spineW))) {
@@ -759,11 +787,12 @@ function New-CaseWrap {
             $g.DrawLine($fold, [single]$x, [single]($trimY + $trimHp + $outside),
                         [single]$x, [single]($trimY + $trimHp + $outside + ($len * 0.6)))
         }
+        }   # no fold marks on a single panel: there is nothing to fold
         $mark.Dispose(); $fold.Dispose()
     }
 
     foreach ($d in @($g, $white, $faint, $middle, $left, $topLeft, $titleFont, $spineFont)) {
-        $d.Dispose()
+        if ($d) { $d.Dispose() }
     }
     $null = Export-ImageAsPdf -Image $bmp -OutPdf $OutPdf -PageWidthMm $pageW -PageHeightMm $pageH
     $bmp.Dispose()

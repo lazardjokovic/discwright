@@ -71,7 +71,9 @@ Describe 'The table of physical sizes' -Tag 'Unit' {
     }
 
     It 'leaves room for two panels once the spine is taken out' {
-        foreach ($c in $script:CaseFormats) {
+        # Only the ones that have two. A single-panel insert gets the whole
+        # width and is checked in its own Describe.
+        foreach ($c in ($script:CaseFormats | Where-Object { $_.Panels -eq 2 })) {
             $panel = Get-PanelWidthMm $c
             $panel | Should -BeGreaterThan 0 -Because "$($c.Key) has to have panels"
             (($panel * 2) + $c.SpineMm) | Should -Be $c.WrapWidthMm
@@ -519,5 +521,56 @@ Describe 'The wrap that goes in the case' -Tag 'Unit' {
                        -CoverImage 'Z:\no\such\cover.jpg' } | Should -Throw -ExpectedMessage '*No cover image*'
         { New-CaseWrap -OutPdf (Join-Path $script:Sandbox 'x.pdf') -Title 'Gothic' `
                        -BackImage 'Z:\no\such\back.jpg' } | Should -Throw -ExpectedMessage '*No back image*'
+    }
+}
+
+Describe 'How many panels a case takes' -Tag 'Unit' {
+
+    # This was found by rendering every row and looking at the result: the CD
+    # insert came out as two half-width panels either side of a spine with no
+    # width, with the title crushed into it. Nothing in the suite objected,
+    # because nothing in the suite knew a sheet could have one panel.
+
+    It 'is declared by every case, as one or two' {
+        foreach ($c in $script:CaseFormats) {
+            $c.ContainsKey('Panels') | Should -BeTrue -Because "$($c.Key) must say"
+            $c.Panels | Should -BeIn @(1, 2)
+        }
+    }
+
+    It 'agrees with the spine: two panels have one, a single panel has none' {
+        foreach ($c in $script:CaseFormats) {
+            if ($c.Panels -eq 2) {
+                $c.SpineMm | Should -BeGreaterThan 0 -Because "$($c.Key) folds round a case"
+            } else {
+                $c.SpineMm | Should -Be 0 -Because "$($c.Key) is a flat insert"
+            }
+        }
+    }
+
+    It 'gives a single panel the whole width, not half of it' {
+        $cd = Get-CaseFormat 'cd'
+        Get-PanelWidthMm $cd | Should -Be $cd.WrapWidthMm
+        # And a two-panel case still splits what the spine leaves.
+        $dvd = Get-CaseFormat 'dvd'
+        Get-PanelWidthMm $dvd | Should -Be (($dvd.WrapWidthMm - $dvd.SpineMm) / 2)
+    }
+
+    It 'says out loud that a contents list has nowhere to go on an insert' {
+        # Dropping it silently is the failure mode this project keeps finding
+        # and keeps refusing: say what was not done.
+        $warnings = @()
+        $null = New-CaseWrap -OutPdf (Join-Path $script:Sandbox 'wrap-cd-warn.pdf') -Case 'cd' `
+                             -Title 'Gothic' -Contents @('Gothic', 'Gothic II') `
+                             -WarningVariable warnings -WarningAction SilentlyContinue
+        $warnings.Count | Should -BeGreaterThan 0
+        "$warnings" | Should -Match 'single panel'
+    }
+
+    It 'says nothing when an insert is given nothing to drop' {
+        $warnings = @()
+        $null = New-CaseWrap -OutPdf (Join-Path $script:Sandbox 'wrap-cd-quiet.pdf') -Case 'cd' `
+                             -Title 'Gothic' -WarningVariable warnings -WarningAction SilentlyContinue
+        $warnings.Count | Should -Be 0
     }
 }

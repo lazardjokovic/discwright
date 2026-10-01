@@ -146,6 +146,19 @@ The owner's, and they are not negotiable in a hurry.
   package merges without a human, so a bad one installs itself on other people's
   machines.
 
+## Rendered output, and looking at it
+
+`print\New-SampleSet.ps1` renders every row of the format tables into
+`%USERPROFILE%\DiscWright-Lab`, outside the repository and outside OneDrive,
+with a `.preview.jpg` beside every PDF. Generated files are not source, they are
+regenerated on every run, and nothing there is edited by hand.
+
+Run it after changing anything that draws, then open a combination nobody has
+looked at. That is not ceremony. It is how the CD jewel insert was caught being
+drawn as two half-width panels either side of a spine with no width, with the
+whole suite passing. A renderer that has only ever run for one row has something
+wrong with it for the others.
+
 ## Traps that have already cost time
 
 - **Heredocs halve backslashes.** Writing files through a shell heredoc turned
