@@ -2950,6 +2950,7 @@ $btnDiscArt = AddBtn 'Browse...' 545 1010 110
 $lblArtNote = AddLabel '' 15 1040 645
 $lblArtNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
 $btnArtwork = AddBtn 'Print artwork' 15 1066 150
+$btnBurn    = AddBtn 'Burn to disc...' 180 1066 150
 
 $pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,894); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
 $lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
@@ -3340,6 +3341,15 @@ function Update-ActionButtons {
     # being written.
     $canArt = [bool]$hasOut -and (Get-Games).Count -gt 0
     $btnArtwork.Enabled = $canArt
+    # An ISO on disk is the only precondition worth checking here. Whether a
+    # recorder exists and what is in it is asked at the moment of pressing,
+    # because a disc can be put in after the window opened and asking the
+    # burning service on every refresh would make the whole form crawl.
+    $canBurn = $false
+    if ($hasOut -and (Test-Path $txtOut.Text.Trim())) {
+        $canBurn = @(Get-ChildItem -LiteralPath $txtOut.Text.Trim() -Filter '*.iso' -File -EA SilentlyContinue).Count -gt 0
+    }
+    $btnBurn.Enabled = $canBurn
     $btnPreview.Enabled  = [bool]$canPreview
     $btnNew.Enabled      = [bool]$isDirty
     $tips.SetToolTip($btnNew, $(if($isDirty){'Clear everything and start a new disc. The output folder is kept.'}else{'Nothing to clear - this is already a new disc'}))
@@ -3348,6 +3358,8 @@ function Update-ActionButtons {
     $tips.SetToolTip($btnOpenProj, 'Load a disc you already built, to edit and rebuild it')
     $tips.SetToolTip($btnArtwork, $(if($canArt){'Make the case wrap and the disc face for this disc, ready to print'}
                                     else{'Add a game and set an output folder first'}))
+    $tips.SetToolTip($btnBurn, $(if($canBurn){'Write the built ISO to a blank disc, then check every file against what was built'}
+                                 else{'Build an ISO first - there is nothing in the output folder to burn'}))
 
     # The button names the file it is about to write, so REBUILD always means "this
     # exact file is going to be overwritten" rather than "there is something in that
@@ -4195,6 +4207,117 @@ $btnDiscArt.Add_Click({
 # to work exactly as well as browsing for one.
 $txtCover.Add_TextChanged({ $state.CoverPath = $txtCover.Text.Trim(); Update-ArtNote })
 $txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Update-ArtNote })
+
+$btnBurn.Add_Click({
+    $t = $txtOut.Text.Trim()
+    if (-not $t -or -not (Test-Path $t)) { Show-Warn "No output folder is set yet."; return }
+
+    $burner = Join-Path $PSScriptRoot 'burn\DiscWright.Burn.ps1'
+    if (-not (Test-Path $burner)) {
+        Show-Warn "The burning files are not installed:`r`n`r`n$burner`r`n`r`nReinstall DiscWright, or run it from a full copy of the folder."
+        return
+    }
+    . $burner
+
+    # The newest ISO in the folder. A set writes several, and the one just built
+    # is the one somebody means; the confirmation names it so a wrong guess can
+    # be refused rather than discovered afterwards.
+    $iso = Get-ChildItem -LiteralPath $t -Filter '*.iso' -File -EA SilentlyContinue |
+           Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $iso) { Show-Warn "There is no ISO in:`r`n`r`n$t"; return }
+
+    try { $burners = Get-BurnerInfo } catch {
+        Show-Warn "The burning service could not be asked anything:`r`n`r`n$($_.Exception.Message)"
+        return
+    }
+    if (-not $burners.Count) { Show-Warn 'No disc recorder was found on this machine.'; return }
+    $d = $burners | Where-Object { $_.Ready } | Select-Object -First 1
+    if (-not $d) {
+        $why = ($burners | ForEach-Object { "$($_.Drive)  $($_.Why)" }) -join "`r`n"
+        Show-Warn "No drive is ready to be written to:`r`n`r`n$why`r`n`r`nPut a blank disc in and try again."
+        return
+    }
+
+    $fit = Test-IsoFitsMedia -IsoBytes $iso.Length -FreeSectors $d.FreeSectors
+    if (-not $fit.Fits) {
+        Show-Warn ("$($iso.Name) needs {0:N0} MB and the $($d.MediaName) in $($d.Drive) has {1:N0} MB.`r`n`r`nNothing was written." -f ($fit.IsoBytes/1MB), ($fit.FreeBytes/1MB))
+        return
+    }
+
+    # Slower than the drive would choose. Cheap media written at full speed is
+    # the usual way to make a coaster, and the minute saved is not worth a disc.
+    $cap = if ($d.MediaType -in 1,2,3) { 16 } else { 8 }
+    $pick = $d.Speeds | Where-Object { $_.Multiple -le $cap } | Select-Object -First 1
+    if (-not $pick) { $pick = $d.Speeds | Select-Object -Last 1 }
+    $speedText = if ($pick) { "$($pick.Multiple)x" } else { "the drive's own choice" }
+
+    $msg = @(
+        "Write $($iso.Name) to the disc in $($d.Drive)?"
+        ''
+        ("  {0:N1} MB onto a $($d.MediaName) with {1:N1} MB free" -f ($iso.Length/1MB), ($d.FreeBytes/1MB))
+        "  $($d.Vendor) $($d.Product), at $speedText"
+        ''
+        'This cannot be undone, and a write-once disc cannot be reused.'
+        'The window will stop responding while it writes. That is normal.'
+        ''
+        'Every file is checked against what was built once it finishes.'
+    ) -join "`r`n"
+    if ([System.Windows.Forms.MessageBox]::Show($msg, 'Burn to disc',
+            [System.Windows.Forms.MessageBoxButtons]::OKCancel,
+            [System.Windows.Forms.MessageBoxIcon]::Warning) -ne [System.Windows.Forms.DialogResult]::OK) {
+        return
+    }
+
+    Set-FormBusy $true
+    $btnBurn.Enabled = $false
+    try {
+        & $log "Burning $($iso.Name) to $($d.Drive) at $speedText..."
+        # Not $args: that is an automatic variable, and splatting over it is a
+        # way to get a call that does something other than it reads.
+        $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false }
+        if ($pick) { $burnArgs.Speed = "$($pick.Multiple)x" }
+        $r = Write-IsoToDisc @burnArgs
+        & $log "Written in $($r.Seconds) seconds. Close the tray to check it."
+
+        [System.Windows.Forms.MessageBox]::Show(
+            "Written in $($r.Seconds) seconds.`r`n`r`nThe disc was ejected. Close the tray, wait for Windows to read it, then press OK to check every file against what was built.",
+            'Burned', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+
+        $stage = Join-Path $t 'disc'
+        $root = ($d.Drive.TrimEnd('\') + '\')
+        if (-not (Test-Path $stage)) {
+            & $log "No staging folder at $stage, so nothing to compare the disc against."
+        } elseif (-not (Test-Path $root)) {
+            & $log "$root is not readable yet, so the disc was not checked."
+        } else {
+            & $log 'Checking every file on the disc against what was built...'
+            $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stage
+            if ($v.Ok) {
+                & $log "All $($v.FilesOnDisc) files match."
+                [System.Windows.Forms.MessageBox]::Show(
+                    "All $($v.FilesOnDisc) files on the disc match what was built, byte for byte.",
+                    'Disc checked', [System.Windows.Forms.MessageBoxButtons]::OK,
+                    [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+            } else {
+                $detail = @()
+                if ($v.Missing.Count)      { $detail += "missing: $($v.Missing -join ', ')" }
+                if ($v.Unexpected.Count)   { $detail += "unexpected: $($v.Unexpected -join ', ')" }
+                if ($v.WrongSize.Count)    { $detail += "wrong size: $($v.WrongSize -join ', ')" }
+                if ($v.WrongContent.Count) { $detail += "wrong contents: $($v.WrongContent -join ', ')" }
+                $text = $detail -join "`r`n"
+                & $log "The disc does NOT match: $text"
+                Show-Warn "The disc does not match what was built:`r`n`r`n$text`r`n`r`nDo not rely on this disc."
+            }
+        }
+    } catch {
+        & $log "The burn failed: $($_.Exception.Message)"
+        Show-Warn "The disc could not be written:`r`n`r`n$($_.Exception.Message)"
+    } finally {
+        Set-FormBusy $false
+        Update-ActionButtons
+    }
+})
 
 $btnOpenProj.Add_Click({
     $d = New-FolderDialog 'Pick the disc output folder (the one holding disc\ and the .iso)' $txtOut.Text.Trim()

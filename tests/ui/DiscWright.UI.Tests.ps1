@@ -228,7 +228,7 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     It 'leaves <_> greyed until there is something for it to act on' -ForEach @(
         'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu', 'New disc',
-        'Print artwork*'
+        'Print artwork*', 'Burn to disc*'
     ) {
         Test-CtlEnabled $script:Win $_ | Should -BeFalse
     }

@@ -360,15 +360,21 @@ Describe 'Locking the form while a build runs' -Tag 'Unit' {
             }
         }
 
-        It 'locks the form when a build starts' {
-            @($script:BusyCalls | Where-Object { $_.CommandElements[1].Extent.Text -eq '$true' }).Count |
-                Should -Be 1
+        It 'locks the form for every long job, and there is more than one now' {
+            # This counted exactly one lock while the build was the only thing
+            # that took the window over. Burning takes it over too, so the rule
+            # is one unlock for every lock rather than a number.
+            $lock = @($script:BusyCalls | Where-Object { $_.CommandElements[1].Extent.Text -eq '$true' })
+            $lock.Count | Should -BeGreaterOrEqual 1
         }
 
-        It 'unlocks it in a finally, so a failed build cannot leave it dead' {
+        It 'unlocks in a finally every time, so a failure cannot leave it dead' {
+            $lock   = @($script:BusyCalls | Where-Object { $_.CommandElements[1].Extent.Text -eq '$true' })
             $unlock = @($script:BusyCalls | Where-Object { $_.CommandElements[1].Extent.Text -eq '$false' })
-            $unlock.Count | Should -Be 1
-            Test-InFinally $unlock[0] | Should -BeTrue
+            $unlock.Count | Should -Be $lock.Count -Because 'a lock with no unlock leaves a dead window'
+            foreach ($u in $unlock) {
+                Test-InFinally $u | Should -BeTrue -Because 'an unlock outside a finally is skipped when something throws'
+            }
         }
     }
 }

@@ -201,3 +201,85 @@ Describe 'Refusing to write rather than guessing' -Tag 'Unit' {
     # real hardware are listed in burn\README.md and done by hand, once, with a
     # disc that is meant to be spent.
 }
+
+Describe 'The Burn to disc button' -Tag 'Unit' {
+
+    BeforeAll {
+        $script:AppSrc = Get-Content -Raw -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $script:Handler = [regex]::Match($script:AppSrc,
+            '(?s)\$btnBurn\.Add_Click\(\{.*?\n\}\)').Value
+        $script:Handler | Should -Not -BeNullOrEmpty
+    }
+
+    It 'asks before writing, because a write-once disc cannot be taken back' {
+        $script:Handler | Should -Match 'MessageBox\]::Show'
+        $script:Handler | Should -Match 'OKCancel'
+        $script:Handler | Should -Match 'cannot be undone'
+        # And it stops on anything but OK, rather than treating a closed dialog
+        # as consent.
+        $script:Handler | Should -Match '-ne \[System\.Windows\.Forms\.DialogResult\]::OK'
+    }
+
+    It 'names the file, the drive and the disc in the question' {
+        foreach ($thing in '\$\(\$iso\.Name\)', '\$\(\$d\.Drive\)', '\$\(\$d\.MediaName\)') {
+            $script:Handler | Should -Match $thing
+        }
+    }
+
+    It 'refuses rather than starting a burn that cannot finish' {
+        $script:Handler | Should -Match 'Test-IsoFitsMedia'
+        $script:Handler | Should -Match 'Nothing was written'
+    }
+
+    It 'will not write to a drive that is not ready, and says why not' {
+        $script:Handler | Should -Match '\$_\.Ready'
+        $script:Handler | Should -Match '\$_\.Why'
+    }
+
+    It 'burns below the drive top speed, which is what cheap media wants' {
+        # 16x on a CD and 8x on a DVD. The minute saved at 24x is not worth a
+        # disc, and this is the whole reason the speed list is read at all.
+        $script:Handler | Should -Match '\$cap\s*=\s*if \(\$d\.MediaType -in 1,2,3\) \{ 16 \} else \{ 8 \}'
+        $script:Handler | Should -Match '\$_\.Multiple -le \$cap'
+    }
+
+    It 'checks the disc afterwards, which is the point of burning a test disc' {
+        $script:Handler | Should -Match 'Test-BurnedDisc'
+        $script:Handler | Should -Match 'Do not rely on this disc'
+    }
+
+    It 'names every kind of mismatch rather than just failing' {
+        foreach ($kind in 'Missing', 'Unexpected', 'WrongSize', 'WrongContent') {
+            $script:Handler | Should -Match "\`$v\.$kind"
+        }
+    }
+
+    It 'says the burning files are missing rather than failing silently' {
+        $script:Handler | Should -Match 'burn.DiscWright\.Burn\.ps1'
+        $script:Handler | Should -Match 'are not installed'
+    }
+
+    It 'gives the window back whatever happens' {
+        $script:Handler | Should -Match 'finally'
+        $script:Handler | Should -Match 'Set-FormBusy \$false'
+    }
+
+    It 'is shipped by the installer, or the button would be a dead end' {
+        $iss = Get-Content -Raw -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'packaging\DiscWright.iss')
+        $iss | Should -Match ([regex]::Escape('..\burn\DiscWright.Burn.ps1'))
+        $iss | Should -Match ([regex]::Escape('..\print\DiscWright.Print.ps1'))
+    }
+
+    It 'does not reach back into the app from the modules it loads' {
+        # The whole reason print\ and burn\ are separate folders: the app may
+        # use them, they may not use the app, so the ISO builder can still be
+        # shipped without either.
+        foreach ($mod in 'print\DiscWright.Print.ps1', 'burn\DiscWright.Burn.ps1') {
+            $text = Get-Content -Raw -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) $mod)
+            $text | Should -Not -Match 'Show-Warn'
+            $text | Should -Not -Match 'Set-FormBusy'
+            $text | Should -Not -Match 'Update-ActionButtons'
+            $text | Should -Not -Match '\$state\.'
+        }
+    }
+}
