@@ -5402,3 +5402,61 @@ Describe 'What the menu does with a folder of game files' -Tag 'Unit' {
         $script:MenuSrc | Should -Match "isn't installed yet"
     }
 }
+
+Describe 'What the zip ships' -Tag 'Unit' {
+
+    # The installer's file list was tested and the zip's was not, so the zip
+    # went out holding half an app: Print artwork and Burn to disc both
+    # dot-source a module at the moment they are pressed, and neither module
+    # was in it. Found by unpacking the built artifact during a release, which
+    # is late. The same mistake in the installer is what 0.8.1 exists to fix.
+
+    BeforeAll {
+        $script:Root = Split-Path $PSScriptRoot -Parent
+        $script:BuildSrc = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'packaging\Build-Release.ps1')
+        $block = [regex]::Match($script:BuildSrc, '(?s)\$payload = @\((.*?)
+\)').Groups[1].Value
+        # Comment lines dropped first. The comment inside that array mentions
+        # the buttons by name, and an apostrophe in prose reads as a quoted
+        # entry otherwise, which made this list nonsense.
+        $lines = @($block -split '?
+' | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') })
+        $script:Payload = @($lines | ForEach-Object {
+            $m = [regex]::Match($_, "'([^']+)'")
+            if ($m.Success) { $m.Groups[1].Value }
+        })
+    }
+
+    It 'lists files that are actually in the repository' {
+        $missing = @($script:Payload | Where-Object { -not (Test-Path -LiteralPath (Join-Path $script:Root $_)) })
+        $missing.Count | Should -Be 0 -Because "named but not here: $($missing -join ', ')"
+    }
+
+    It 'ships every module the app dot-sources at run time' {
+        # Taken from the app rather than listed again here, so a third module
+        # added later is covered by this test without anybody remembering to.
+        $app = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'DiscWright.ps1')
+        $needed = @([regex]::Matches($app, "Join-Path \`$PSScriptRoot '([^']+\.ps1)'") |
+                    ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+        $needed.Count | Should -BeGreaterThan 0 -Because 'the app dot-sources something'
+        foreach ($n in $needed) {
+            $script:Payload | Should -Contain $n -Because "the zip is the main download and $n is loaded at run time"
+        }
+    }
+
+    It 'ships the same modules the installer does' {
+        $iss = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'packaging\DiscWright.iss')
+        foreach ($mod in 'print\DiscWright.Print.ps1', 'burn\DiscWright.Burn.ps1') {
+            $script:Payload | Should -Contain $mod
+            # The .iss writes its sources relative to packaging\, so the path
+            # there carries a leading ..\ that the payload list does not.
+            $iss | Should -Match ([regex]::Escape('..\' + $mod))
+        }
+    }
+
+    It 'makes the folder for a payload entry that lives in one' {
+        # Copy-Item will not create a directory on the way, so a nested entry
+        # silently failed to copy before this was added.
+        $script:BuildSrc | Should -Match 'New-Item -ItemType Directory -Path \$dstDir'
+    }
+}

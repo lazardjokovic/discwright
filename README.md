@@ -45,6 +45,8 @@ There is nothing to install. DiscWright is a folder of scripts that runs from wh
 3. **Extract it anywhere.** Desktop, Documents, a USB stick. The launchers use relative paths, so there is no fixed install location and nothing to add to PATH.
 4. **Double-click `Run DiscWright.cmd`.**
 
+**There is an installer on the releases page, and on a current Windows 11 it may not run.** Smart App Control blocks unsigned programs, it is on by default on clean installs of recent builds, and it refuses the installer with "An Application Control policy has blocked this file". Signing would not settle it either: Smart App Control wants an established reputation as well as a signature. The ZIP above is unaffected, needs no installing, and is the download to use. This was measured rather than assumed: the same installer check passed in a Windows Sandbox on 27 September, when Smart App Control there was still in evaluation mode, and was blocked on 1 October once it had switched on.
+
 `DiscWright.vbs` starts the same app with the console window hidden, if you would rather not have a black box flash up first. Try `Run DiscWright.cmd` to begin with — if something goes wrong, it is the one that shows you the error.
 
 Want it on the Desktop or Start menu? Right-click `DiscWright.vbs` → **Show more options → Send to → Desktop (create shortcut)**, then set its icon to `DiscWright.ico` via the shortcut's Properties. Shortcuts are not shipped in the repo because they store an absolute path and would point at someone else's folder.
