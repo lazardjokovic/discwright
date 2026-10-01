@@ -94,9 +94,10 @@ DiscWright used to stop at the ISO. It now prints the artwork and burns the disc
 - **The installer may not run on a current Windows 11.** Smart App Control
   blocks unsigned programs, it is on by default on clean installs of recent
   builds, and it refuses the installer with "An Application Control policy has
-  blocked this file". Signing would not settle it either: Smart App Control
-  wants an established reputation as well as a signature. The zip is unaffected,
-  needs no installing, and is the download to use. Measured rather than assumed:
+  blocked this file". It is on after a clean install of Windows 11 22H2 or
+  later, in North America and Europe, and a machine upgraded from an older
+  Windows has it off. The zip is unaffected, needs no installing, and is the
+  download to use. Measured rather than assumed:
   the same installer check passed in a Windows Sandbox on 27 September with
   Smart App Control in evaluation mode, and was blocked on 1 October once it had
   switched on.
