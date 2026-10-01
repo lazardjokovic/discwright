@@ -179,6 +179,15 @@ The owner's, and they are not negotiable in a hurry.
   `Rectangle` overload of `LinearGradientBrush` and then reported the failure as
   a bad colour. `[Type]::new(...)` with explicit `[single]` casts resolves it.
 
+- **A `foreach` that builds `Context` or `It` blocks runs at discovery, before
+  `BeforeAll`.** Data loaded in `BeforeAll` does not exist yet, so the loop
+  iterates over nothing, every block it would have made silently vanishes, and
+  the run still reports all green with a smaller number nobody reads. Three
+  "every combination" loops in `tests/DiscWright.Print.Tests.ps1` ran zero
+  times this way. Dot-source what the loop reads at the top of the file, and
+  pass each row with `-ForEach` so the run phase can see it; a bare `foreach`
+  inside an `It` body is fine, since that is only assertions.
+
 ## Where things stand
 
 **0.8.1, released 2026-09-27.** The Linux port is caught up with 0.8.0's feature

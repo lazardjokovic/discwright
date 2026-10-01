@@ -12,6 +12,14 @@
     been printed and held against one, the table says so with Verified = $false.
 #>
 
+# Dot-sourced here, at the top of the file, and not only in BeforeAll. Pester
+# reads the file once to find out what tests exist and again to run them, and
+# BeforeAll only runs on the second pass. A `foreach` over $script:CaseFormats
+# during discovery therefore loops over nothing, every per-format Context
+# silently disappears, and the suite still reports all green. That is exactly
+# what happened here: three "every combination" loops ran zero times.
+. (Join-Path (Split-Path $PSScriptRoot -Parent) 'print\DiscWright.Print.ps1')
+
 BeforeAll {
     . (Join-Path (Split-Path $PSScriptRoot -Parent) 'print\DiscWright.Print.ps1')
     $script:Sandbox = Join-Path ([IO.Path]::GetTempPath()) ('dwprint_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -161,18 +169,18 @@ Describe 'The calibration sheet' -Tag 'Unit' {
 
     # Every case format, because a sheet that only works for the one case the
     # author owns is how the other rows rot.
-    foreach ($case in $script:CaseFormats) {
-        Context "for a $($case.Name)" {
-            It 'renders onto a page that fits it, at the size that page really is' {
-                $out = Join-Path $script:Sandbox "calib-$($case.Key).pdf"
-                $null = New-CalibrationSheet -OutPdf $out -Case $case.Key
-                Test-Path $out | Should -BeTrue
-                $box = Get-PdfMediaBox $out
-                # A4 landscape: the wrap is wider than a portrait page.
-                $box.W | Should -Be (ConvertTo-Points 297)
-                $box.H | Should -Be (ConvertTo-Points 210)
-                Test-PdfXref $out | Should -BeTrue
-            }
+    # -ForEach, not a bare foreach: the loop itself runs at discovery, but the
+    # row has to be handed to the run phase or it arrives empty.
+    Context 'for a <Name>' -ForEach $script:CaseFormats {
+        It 'renders onto a page that fits it, at the size that page really is' {
+            $out = Join-Path $script:Sandbox "calib-$Key.pdf"
+            $null = New-CalibrationSheet -OutPdf $out -Case $Key
+            Test-Path $out | Should -BeTrue
+            $box = Get-PdfMediaBox $out
+            # A4 landscape: the wrap is wider than a portrait page.
+            $box.W | Should -Be (ConvertTo-Points 297)
+            $box.H | Should -Be (ConvertTo-Points 210)
+            Test-PdfXref $out | Should -BeTrue
         }
     }
 
@@ -322,16 +330,12 @@ Describe 'The face that goes on the disc' -Tag 'Unit' {
         }
     }
 
-    foreach ($disc in $script:DiscFormats) {
-        Context "on a $($disc.Name)" {
+    Context 'on a <Name>' -ForEach $script:DiscFormats {
 
             BeforeAll {
-                # Pester runs this in its own scope, so the format is looked up
-                # again by key rather than captured from the loop.
-                $script:Fmt = Get-DiscFormat $disc.Key
-                $script:Png = Join-Path $script:Sandbox "face-$($disc.Key).png"
+                $script:Png = Join-Path $script:Sandbox "face-$Key.png"
                 $null = New-DiscFace -OutPng $script:Png -Title 'Gothic' -Subtitle 'GOG edition' `
-                                     -Disc $disc.Key
+                                     -Disc $Key
                 $script:Face = New-Object System.Drawing.Bitmap $script:Png
             }
 
@@ -346,21 +350,22 @@ Describe 'The face that goes on the disc' -Tag 'Unit' {
             It 'leaves the hub clear, so no ink lands on the clamp' {
                 (Get-FacePixel $script:Face 0).A | Should -Be 0
                 # Just inside the printable edge of the hub, still clear.
-                (Get-FacePixel $script:Face (($script:Fmt.InnerMm / 2) - 1)).A | Should -Be 0
+                (Get-FacePixel $script:Face (($InnerMm / 2) - 1)).A | Should -Be 0
             }
 
             It 'puts ink where the disc can take it' {
                 # A millimetre outside the hub, and a millimetre inside the rim.
-                (Get-FacePixel $script:Face (($script:Fmt.InnerMm / 2) + 1)).A | Should -BeGreaterThan 0
-                (Get-FacePixel $script:Face (($script:Fmt.OuterMm / 2) - 1)).A | Should -BeGreaterThan 0
+                (Get-FacePixel $script:Face (($InnerMm / 2) + 1)).A | Should -BeGreaterThan 0
+                (Get-FacePixel $script:Face (($OuterMm / 2) - 1)).A | Should -BeGreaterThan 0
             }
 
             It 'puts no ink past the printable rim' {
-                (Get-FacePixel $script:Face (($script:Fmt.OuterMm / 2) + 1)).A | Should -Be 0
+                # Half a millimetre, not one: a 118 mm rim plus 1 mm is outside
+                # the 120 mm image, and the sample falls off the bitmap.
+                (Get-FacePixel $script:Face (($OuterMm / 2) + 0.5)).A | Should -Be 0
                 # The corner of the square is well outside any disc.
                 $script:Face.GetPixel(2, 2).A | Should -Be 0
             }
-        }
     }
 
     It 'uses the accent colour it was given' {
@@ -390,5 +395,129 @@ Describe 'The face that goes on the disc' -Tag 'Unit' {
                        -Title 'The Chronicles of Riddick: Escape from Butcher Bay' } |
             Should -Not -Throw
         (Get-Item $png).Length | Should -BeGreaterThan 1000
+    }
+}
+
+Describe 'The wrap that goes in the case' -Tag 'Unit' {
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Drawing
+
+        # The wrap goes out as a PDF, so the pixels are reached by pulling the
+        # page image back out of it. That also proves the JPEG inside the PDF
+        # is the picture that was drawn, rather than something empty.
+        function Get-PageBitmap([string]$pdf) {
+            $bytes = [IO.File]::ReadAllBytes($pdf)
+            $start = -1
+            for ($i = 0; $i -lt $bytes.Length - 1; $i++) {
+                if ($bytes[$i] -eq 0xFF -and $bytes[$i + 1] -eq 0xD8) { $start = $i; break }
+            }
+            $end = -1
+            for ($i = $bytes.Length - 2; $i -gt $start; $i--) {
+                if ($bytes[$i] -eq 0xFF -and $bytes[$i + 1] -eq 0xD9) { $end = $i + 1; break }
+            }
+            if ($start -lt 0 -or $end -lt 0) { throw 'no page image in the PDF' }
+            $jpg = Join-Path $script:Sandbox ([IO.Path]::GetFileNameWithoutExtension($pdf) + '.jpg')
+            [IO.File]::WriteAllBytes($jpg, $bytes[$start..$end])
+            return (New-Object System.Drawing.Bitmap $jpg)
+        }
+
+        function Test-NearlyWhite($pixel) {
+            return ($pixel.R -gt 245 -and $pixel.G -gt 245 -and $pixel.B -gt 245)
+        }
+    }
+
+    # Every case in the table, because a wrap that only works for the one case
+    # the author owns is how the other rows rot.
+    Context 'for a <Name>' -ForEach $script:CaseFormats {
+
+            BeforeAll {
+                $script:Pdf = Join-Path $script:Sandbox "wrap-$Key.pdf"
+                $null = New-CaseWrap -OutPdf $script:Pdf -Case $Key -Title 'Gothic' `
+                                     -Subtitle 'GOG edition' -Contents @('Gothic', 'Gothic II')
+                $script:Page = Get-PageBitmap $script:Pdf
+            }
+
+            AfterAll { if ($script:Page) { $script:Page.Dispose() } }
+
+            It 'is a page of the size that page really is' {
+                $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($script:Pdf))
+                $text | Should -Match ([regex]::Escape("/MediaBox [0 0 $(ConvertTo-Points 297) $(ConvertTo-Points 210)]"))
+            }
+
+            It 'puts ink across the whole trim, and leaves the page margin clean' {
+                $cx = $script:Page.Width / 2
+                $cy = $script:Page.Height / 2
+                # The middle of the sheet is the spine, which is always printed.
+                Test-NearlyWhite $script:Page.GetPixel($cx, $cy) | Should -BeFalse
+                # 2 mm in from the page edge is outside the bleed on every
+                # format in the table, so it must still be paper.
+                Test-NearlyWhite $script:Page.GetPixel((ConvertTo-Px 2.0), $cy) | Should -BeTrue
+            }
+
+            It 'bleeds past the trim, so a crooked cut does not leave a white edge' {
+                $cy = $script:Page.Height / 2
+                $trimLeft = ((ConvertTo-Px 297.0) - (ConvertTo-Px $WrapWidthMm)) / 2
+                # A millimetre outside the trim is bleed, and it has to be inked.
+                $outside = [int]($trimLeft - (ConvertTo-Px 1.0))
+                Test-NearlyWhite $script:Page.GetPixel($outside, $cy) | Should -BeFalse
+            }
+    }
+
+    It 'puts the front panel on the right, where the sheet wraps it to the front' {
+        # Not a style choice: the sheet goes round the case from the back. The
+        # front carries the big title over a dark scrim, so the foot of the
+        # right-hand panel is darker than the foot of the left-hand one.
+        $pdf = Join-Path $script:Sandbox 'wrap-sides.pdf'
+        $null = New-CaseWrap -OutPdf $pdf -Title 'Gothic' -Subtitle 'GOG edition'
+        $page = Get-PageBitmap $pdf
+        try {
+            $y = [int]($page.Height * 0.86)
+            $left = $page.GetPixel([int]($page.Width * 0.22), $y)
+            $right = $page.GetPixel([int]($page.Width * 0.78), $y)
+            ($right.R + $right.G + $right.B) | Should -BeLessThan ($left.R + $left.G + $left.B)
+        } finally { $page.Dispose() }
+    }
+
+    It 'marks where to cut, outside the bleed so the marks are cut away with it' {
+        $pdf = Join-Path $script:Sandbox 'wrap-marks.pdf'
+        $null = New-CaseWrap -OutPdf $pdf -Title 'Gothic' -BleedMm 3
+        $page = Get-PageBitmap $pdf
+        try {
+            $trimLeft = ((ConvertTo-Px 297.0) - (ConvertTo-Px 273.0)) / 2
+            $trimTop  = ((ConvertTo-Px 210.0) - (ConvertTo-Px 183.0)) / 2
+            # A crop mark runs up from 4 mm above the trim corner: 3 mm of
+            # bleed and a 1 mm gap. Scan a short band for dark pixels.
+            $found = $false
+            for ($dy = 5; $dy -le 9; $dy++) {
+                for ($dx = -2; $dx -le 2; $dx++) {
+                    $p = $page.GetPixel([int]($trimLeft + $dx), [int]($trimTop - (ConvertTo-Px ([double]$dy))))
+                    if (-not (Test-NearlyWhite $p)) { $found = $true }
+                }
+            }
+            $found | Should -BeTrue -Because 'there has to be a crop mark above the trim corner'
+        } finally { $page.Dispose() }
+    }
+
+    It 'leaves the marks off when asked, for printing straight onto trimmed stock' {
+        $withMarks = Join-Path $script:Sandbox 'wrap-with.pdf'
+        $without = Join-Path $script:Sandbox 'wrap-without.pdf'
+        $null = New-CaseWrap -OutPdf $withMarks -Title 'Gothic'
+        $null = New-CaseWrap -OutPdf $without -Title 'Gothic' -NoCropMarks
+        (Get-Item $without).Length | Should -BeLessThan (Get-Item $withMarks).Length
+    }
+
+    It 'refuses a bleed that will not fit, instead of cropping the artwork' {
+        # 273 mm of wrap plus 13 mm of bleed each side is 299 mm, wider than A4.
+        { New-CaseWrap -OutPdf (Join-Path $script:Sandbox 'wrap-toobig.pdf') `
+                       -Title 'Gothic' -BleedMm 13 } |
+            Should -Throw -ExpectedMessage '*does not fit*'
+    }
+
+    It 'says so when a cover or back image is not there' {
+        { New-CaseWrap -OutPdf (Join-Path $script:Sandbox 'x.pdf') -Title 'Gothic' `
+                       -CoverImage 'Z:\no\such\cover.jpg' } | Should -Throw -ExpectedMessage '*No cover image*'
+        { New-CaseWrap -OutPdf (Join-Path $script:Sandbox 'x.pdf') -Title 'Gothic' `
+                       -BackImage 'Z:\no\such\back.jpg' } | Should -Throw -ExpectedMessage '*No back image*'
     }
 }

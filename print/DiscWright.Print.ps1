@@ -510,3 +510,262 @@ function New-DiscFace {
     $bmp.Dispose()
     return $OutPng
 }
+
+<#
+    The wrap that goes in the case: back panel, spine, front panel, printed on
+    one sheet and trimmed to the marks.
+
+    The guide this work came from builds that by hand in a design application
+    every single time, and the arithmetic is always the same. The panel is
+    whatever the trim width leaves once the spine is taken out, the art bleeds
+    past the trim so a slightly crooked cut does not leave a white edge, and
+    the marks sit outside the bleed so they are cut away with it.
+
+    Printed face up, the order across the sheet is back, spine, front. That is
+    not a style choice: the sheet wraps round the case from the back, so the
+    front panel has to be the right-hand one.
+#>
+function New-CaseWrap {
+    param(
+        [Parameter(Mandatory)][string]$OutPdf,
+        [Parameter(Mandatory)][string]$Title,
+        [string]$Subtitle,
+        [string]$CoverImage,
+        [string]$BackImage,
+        # What is actually on the disc, one line each. On a two game disc this
+        # is the thing somebody reads on the shelf.
+        [string[]]$Contents = @(),
+        [string]$Case = 'dvd',
+        [ValidateSet('a4', 'letter')][string]$Page = 'a4',
+        [double]$BleedMm = 3,
+        [string]$Accent = '#1B2A41',
+        [switch]$NoCropMarks
+    )
+    $fmt = Get-CaseFormat $Case
+    $paper = $script:PageSizes[$Page]
+    $pageW = $paper.HeightMm; $pageH = $paper.WidthMm   # landscape
+
+    $trimW = $fmt.WrapWidthMm
+    $trimH = $fmt.HeightMm
+    if (($trimW + ($BleedMm * 2)) -gt $pageW -or ($trimH + ($BleedMm * 2)) -gt $pageH) {
+        throw ("A $($fmt.Name) wrap with $BleedMm mm of bleed is " +
+               "$($trimW + ($BleedMm * 2)) x $($trimH + ($BleedMm * 2)) mm, which does not fit " +
+               "on $Page landscape at $pageW x $pageH mm. Use a smaller bleed or a bigger page.")
+    }
+
+    $bmp = New-Object System.Drawing.Bitmap (ConvertTo-Px $pageW), (ConvertTo-Px $pageH)
+    $bmp.SetResolution($script:Dpi, $script:Dpi)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.Clear([System.Drawing.Color]::White)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
+
+    $accentColour = ConvertFrom-HexColour $Accent
+    $panelMm = Get-PanelWidthMm $fmt
+
+    $bleed  = ConvertTo-Px $BleedMm
+    # Each call parenthesised: in command parsing mode a bare minus after an
+    # argument is another argument, not a subtraction.
+    $trimX  = ((ConvertTo-Px $pageW) - (ConvertTo-Px $trimW)) / 2.0
+    $trimY  = ((ConvertTo-Px $pageH) - (ConvertTo-Px $trimH)) / 2.0
+    $trimWp = ConvertTo-Px $trimW
+    $trimHp = ConvertTo-Px $trimH
+    $panelW = ConvertTo-Px $panelMm
+    $spineW = ConvertTo-Px $fmt.SpineMm
+
+    # Each panel runs past the trim on the sides that reach a cut edge, so the
+    # art is still there if the cut wanders.
+    $backRect = New-Object System.Drawing.RectangleF(
+        [single]($trimX - $bleed), [single]($trimY - $bleed),
+        [single]($panelW + $bleed), [single]($trimHp + ($bleed * 2)))
+    $spineRect = New-Object System.Drawing.RectangleF(
+        [single]($trimX + $panelW), [single]($trimY - $bleed),
+        [single]$spineW, [single]($trimHp + ($bleed * 2)))
+    $frontRect = New-Object System.Drawing.RectangleF(
+        [single]($trimX + $panelW + $spineW), [single]($trimY - $bleed),
+        [single]($panelW + $bleed), [single]($trimHp + ($bleed * 2)))
+
+    $white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
+    $faint = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(205, 225, 230, 238))
+    $middle = New-Object System.Drawing.StringFormat
+    $middle.Alignment = [System.Drawing.StringAlignment]::Center
+    $middle.LineAlignment = [System.Drawing.StringAlignment]::Center
+
+    $darker = [System.Drawing.Color]::FromArgb(
+        [Math]::Max(0, $accentColour.R - 45), [Math]::Max(0, $accentColour.G - 45),
+        [Math]::Max(0, $accentColour.B - 45))
+
+    # ---- the front panel, which is the right-hand one
+    if ($CoverImage) {
+        if (-not (Test-Path -LiteralPath $CoverImage)) { throw "No cover image at '$CoverImage'" }
+        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $CoverImage).Path)
+        try { Set-ImageCover -Graphics $g -Image $img -Target $frontRect } finally { $img.Dispose() }
+    } else {
+        $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+            $frontRect, $accentColour, $darker, [single]70.0)
+        $g.FillRectangle($grad, $frontRect)
+        $grad.Dispose()
+    }
+
+    # A scrim up from the foot of the front panel, so a title stays readable
+    # over artwork nobody chose for its contrast.
+    $scrimH = $trimHp * 0.34
+    $scrimRect = New-Object System.Drawing.RectangleF(
+        $frontRect.X, [single]($frontRect.Bottom - $scrimH), $frontRect.Width, [single]$scrimH)
+    $scrim = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+        $scrimRect, [System.Drawing.Color]::Black, [System.Drawing.Color]::Black, [single]90.0)
+    $blend = New-Object System.Drawing.Drawing2D.ColorBlend 3
+    $blend.Colors = @(
+        [System.Drawing.Color]::FromArgb(0, 0, 0, 0)
+        [System.Drawing.Color]::FromArgb(170, 0, 0, 0)
+        [System.Drawing.Color]::FromArgb(225, 0, 0, 0))
+    $blend.Positions = @([single]0.0, [single]0.55, [single]1.0)
+    $scrim.InterpolationColors = $blend
+    $g.FillRectangle($scrim, $scrimRect)
+    $scrim.Dispose()
+
+    $pad = ConvertTo-Px 8.0
+    $textW = $panelW - ($pad * 2)
+    $left = New-Object System.Drawing.StringFormat
+    $left.Alignment = [System.Drawing.StringAlignment]::Near
+    $left.LineAlignment = [System.Drawing.StringAlignment]::Far
+
+    $titleFont = Get-FittedFont -Graphics $g -Text $Title -MaxWidthPx $textW -StartPt 30 -MinPt 11
+    $subH = if ($Subtitle) { ConvertTo-Px 9.0 } else { 0 }
+    $titleBox = New-Object System.Drawing.RectangleF(
+        [single]($frontRect.X + $pad),
+        [single]($frontRect.Bottom - $bleed - $pad - $subH - (ConvertTo-Px 16.0)),
+        [single]$textW, [single](ConvertTo-Px 16.0))
+    $g.DrawString($Title, $titleFont, $white, $titleBox, $left)
+
+    if ($Subtitle) {
+        $subFont = Get-FittedFont -Graphics $g -Text $Subtitle -MaxWidthPx $textW -StartPt 11 -MinPt 7
+        $subBox = New-Object System.Drawing.RectangleF(
+            [single]($frontRect.X + $pad), [single]($frontRect.Bottom - $bleed - $pad - $subH),
+            [single]$textW, [single]$subH)
+        $g.DrawString($Subtitle, $subFont, $faint, $subBox, $left)
+        $subFont.Dispose()
+    }
+
+    # ---- the spine
+    $g.FillRectangle((New-Object System.Drawing.SolidBrush $darker), $spineRect)
+    $spineLen = $trimHp - (ConvertTo-Px 16.0)
+    # Starts near what a 14 mm spine can hold rather than at a timid size: the
+    # fitter only ever comes down, so a low start just wastes the spine.
+    $spineStart = [Math]::Min(18.0, ($fmt.SpineMm * 1.4))
+    $spineFont = Get-FittedFont -Graphics $g -Text $Title -MaxWidthPx $spineLen `
+                                -StartPt $spineStart -MinPt 5
+    $state = $g.Save()
+    $g.TranslateTransform([single]($spineRect.X + ($spineW / 2)), [single]($trimY + ($trimHp / 2)))
+    # Clockwise, so the title reads downwards with the case standing up, which
+    # is how a shelf of DVDs reads.
+    $g.RotateTransform(90)
+    $spineBox = New-Object System.Drawing.RectangleF(
+        [single](-$spineLen / 2), [single](-$spineW / 2), [single]$spineLen, [single]$spineW)
+    $g.DrawString($Title, $spineFont, $white, $spineBox, $middle)
+    $g.Restore($state)
+
+    # ---- the back panel
+    if ($BackImage) {
+        if (-not (Test-Path -LiteralPath $BackImage)) { throw "No back image at '$BackImage'" }
+        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $BackImage).Path)
+        try { Set-ImageCover -Graphics $g -Image $img -Target $backRect } finally { $img.Dispose() }
+        $wash = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(190, 0, 0, 0))
+        $g.FillRectangle($wash, $backRect)
+        $wash.Dispose()
+    } else {
+        $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+            $backRect, $darker, $accentColour, [single]70.0)
+        $g.FillRectangle($grad, $backRect)
+        $grad.Dispose()
+    }
+
+    $topLeft = New-Object System.Drawing.StringFormat
+    $topLeft.Alignment = [System.Drawing.StringAlignment]::Near
+    $topLeft.LineAlignment = [System.Drawing.StringAlignment]::Near
+
+    $backX = $trimX + $pad
+    $backY = $trimY + $pad
+    $backFont = Get-FittedFont -Graphics $g -Text $Title -MaxWidthPx $textW -StartPt 17 -MinPt 9
+    $g.DrawString($Title, $backFont, $white,
+                  (New-Object System.Drawing.RectangleF(
+                      [single]$backX, [single]$backY, [single]$textW, [single](ConvertTo-Px 11.0))),
+                  $topLeft)
+    $backFont.Dispose()
+
+    if ($Contents.Count) {
+        $head = New-Object System.Drawing.Font 'Segoe UI', 8,
+                           ([System.Drawing.FontStyle]::Bold), ([System.Drawing.GraphicsUnit]::Point)
+        $y = $backY + (ConvertTo-Px 16.0)
+        $g.DrawString('ON THIS DISC', $head, $faint,
+                      (New-Object System.Drawing.RectangleF(
+                          [single]$backX, [single]$y, [single]$textW, [single](ConvertTo-Px 6.0))),
+                      $topLeft)
+        $head.Dispose()
+        $y += ConvertTo-Px 8.0
+        foreach ($line in $Contents) {
+            $item = Get-FittedFont -Graphics $g -Text $line -MaxWidthPx ($textW - (ConvertTo-Px 5.0)) `
+                                   -StartPt 10 -MinPt 6
+            $g.DrawString([char]0x2022 + ' ' + $line, $item, $white,
+                          (New-Object System.Drawing.RectangleF(
+                              [single]$backX, [single]$y, [single]$textW, [single](ConvertTo-Px 7.0))),
+                          $topLeft)
+            $item.Dispose()
+            $y += ConvertTo-Px 7.0
+        }
+    }
+
+    # The foot of the back panel, where a publisher would put its name.
+    $footFont = New-Object System.Drawing.Font 'Segoe UI', 7,
+                           ([System.Drawing.GraphicsUnit]::Point)
+    $foot = New-Object System.Drawing.StringFormat
+    $foot.Alignment = [System.Drawing.StringAlignment]::Near
+    $foot.LineAlignment = [System.Drawing.StringAlignment]::Far
+    $g.DrawString('Made with DiscWright', $footFont, $faint,
+                  (New-Object System.Drawing.RectangleF(
+                      [single]$backX, [single]($trimY + $trimHp - $pad - (ConvertTo-Px 6.0)),
+                      [single]$textW, [single](ConvertTo-Px 6.0))),
+                  $foot)
+    $footFont.Dispose(); $foot.Dispose()
+
+    # ---- where to cut and where to fold
+    if (-not $NoCropMarks) {
+        $mark = New-Object System.Drawing.Pen ([System.Drawing.Color]::Black), 2
+        $gap = ConvertTo-Px 1.0
+        $len = ConvertTo-Px 5.0
+        $outside = $bleed + $gap
+        foreach ($x in @($trimX, ($trimX + $trimWp))) {
+            $g.DrawLine($mark, [single]$x, [single]($trimY - $outside),
+                        [single]$x, [single]($trimY - $outside - $len))
+            $g.DrawLine($mark, [single]$x, [single]($trimY + $trimHp + $outside),
+                        [single]$x, [single]($trimY + $trimHp + $outside + $len))
+        }
+        foreach ($y in @($trimY, ($trimY + $trimHp))) {
+            $g.DrawLine($mark, [single]($trimX - $outside), [single]$y,
+                        [single]($trimX - $outside - $len), [single]$y)
+            $g.DrawLine($mark, [single]($trimX + $trimWp + $outside), [single]$y,
+                        [single]($trimX + $trimWp + $outside + $len), [single]$y)
+        }
+        # Fold marks: shorter, and only at the spine, so they are not mistaken
+        # for a cut.
+        $fold = New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(130, 130, 130)), 2
+        $fold.DashStyle = [System.Drawing.Drawing2D.DashStyle]::Dot
+        # Every element parenthesised: a comma binds tighter than a plus, so
+        # @($a + $b, $a + $c) is not the two sums it looks like.
+        foreach ($x in @(($trimX + $panelW), ($trimX + $panelW + $spineW))) {
+            $g.DrawLine($fold, [single]$x, [single]($trimY - $outside),
+                        [single]$x, [single]($trimY - $outside - ($len * 0.6)))
+            $g.DrawLine($fold, [single]$x, [single]($trimY + $trimHp + $outside),
+                        [single]$x, [single]($trimY + $trimHp + $outside + ($len * 0.6)))
+        }
+        $mark.Dispose(); $fold.Dispose()
+    }
+
+    foreach ($d in @($g, $white, $faint, $middle, $left, $topLeft, $titleFont, $spineFont)) {
+        $d.Dispose()
+    }
+    $null = Export-ImageAsPdf -Image $bmp -OutPdf $OutPdf -PageWidthMm $pageW -PageHeightMm $pageH
+    $bmp.Dispose()
+    return $OutPdf
+}
