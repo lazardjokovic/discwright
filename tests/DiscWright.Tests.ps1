@@ -1,4 +1,4 @@
-﻿# Pester tests for DiscWright.
+# Pester tests for DiscWright.
 #
 #   Invoke-Pester tests
 #   Invoke-Pester tests -ExcludeTagFilter Build     # skip the slow ISO builds
@@ -5217,5 +5217,105 @@ Describe 'Keeping the printed pictures in the project' -Tag 'Unit' {
         $read | Should -Not -BeNullOrEmpty
         $read.CoverPath | Should -BeNullOrEmpty
         $read.DiscArtPath | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'What the installer promises to ship' -Tag 'Unit' {
+
+    BeforeAll {
+        $script:Root = Split-Path $PSScriptRoot -Parent
+        $script:IssText = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'packaging\DiscWright.iss')
+        # Source: "..\path"; ... one per [Files] line.
+        $script:Sources = @([regex]::Matches($script:IssText, 'Source:\s*"([^"]+)"') |
+                            ForEach-Object { $_.Groups[1].Value })
+    }
+
+    It 'lists some files at all' {
+        $script:Sources.Count | Should -BeGreaterThan 4
+    }
+
+    It 'points every one of them at a file that exists' {
+        # A path typed wrong here is not found until release day, when the
+        # installer either fails to compile or quietly ships without it. The
+        # second is worse: it is how a button becomes a dead end on somebody
+        # else's machine.
+        $missing = @()
+        foreach ($src in $script:Sources) {
+            # Paths are relative to packaging\, which is where the .iss lives.
+            $full = Join-Path (Join-Path $script:Root 'packaging') $src
+            if (-not (Test-Path -LiteralPath $full)) { $missing += $src }
+        }
+        $missing.Count | Should -Be 0 -Because "these are named but not in the repo: $($missing -join ', ')"
+    }
+
+    It 'ships the two modules the buttons depend on' {
+        # Print artwork and Burn to disc dot-source these at the moment they are
+        # pressed. Left out of the installer, both buttons are dead on an
+        # installed copy while working perfectly from a checkout.
+        $script:IssText | Should -Match ([regex]::Escape('..\print\DiscWright.Print.ps1'))
+        $script:IssText | Should -Match ([regex]::Escape('..\burn\DiscWright.Burn.ps1'))
+    }
+
+    It 'puts them where the app looks for them' {
+        # The app builds the path from $PSScriptRoot, so the folder names in the
+        # install have to match the folder names in the repo.
+        $script:IssText | Should -Match 'DestDir:\s*"\{app\}\\print"'
+        $script:IssText | Should -Match 'DestDir:\s*"\{app\}\\burn"'
+    }
+
+    It 'matches the paths the app actually dot-sources' {
+        $app = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'DiscWright.ps1')
+        $app | Should -Match ([regex]::Escape("Join-Path `$PSScriptRoot 'print\DiscWright.Print.ps1'"))
+        $app | Should -Match ([regex]::Escape("Join-Path `$PSScriptRoot 'burn\DiscWright.Burn.ps1'"))
+    }
+}
+
+Describe 'Executable files stay pure ASCII' -Tag 'Unit' {
+
+    # CI has checked this since before any of these features existed, and the
+    # local suite did not, so a full green run here could still fail there.
+    # That is exactly what happened: writing a few files with a UTF-8 BOM
+    # passed 635 tests locally and failed CI on the first push.
+    #
+    # A BOM is three bytes above 127 at offset 0. PowerShell 5.1 reads a BOM-less
+    # file as ANSI, so the rule is not decoration either: a stray accented
+    # character in a script changes meaning depending on the machine's codepage.
+
+    BeforeAll {
+        $script:RepoRoot = Split-Path $PSScriptRoot -Parent
+        # Filtered by extension rather than with -Include, which is ignored
+        # beside -LiteralPath and silently widened this to every file in the
+        # repository: pictures, markdown and all.
+        $script:Scripts = @(Get-ChildItem -LiteralPath $script:RepoRoot -Recurse -File |
+                            Where-Object { $_.Extension -in '.ps1', '.vbs', '.cmd' -and
+                                           $_.FullName -notmatch '\\\.git\\' })
+    }
+
+    It 'finds the scripts to check in the first place' {
+        $script:Scripts.Count | Should -BeGreaterThan 10
+    }
+
+    It 'has no byte above 127 in any of them' {
+        $bad = @()
+        foreach ($f in $script:Scripts) {
+            $bytes = [IO.File]::ReadAllBytes($f.FullName)
+            for ($i = 0; $i -lt $bytes.Length; $i++) {
+                if ($bytes[$i] -gt 127) {
+                    $rel = $f.FullName.Substring($script:RepoRoot.Length).TrimStart('\')
+                    $what = if ($i -eq 0) { 'a UTF-8 BOM' } else { "byte $($bytes[$i])" }
+                    $bad += "$rel ($what at offset $i)"
+                    break
+                }
+            }
+        }
+        $bad.Count | Should -Be 0 -Because "CI fails on these: $($bad -join '; ')"
+    }
+
+    It 'leaves the files that are meant to carry a BOM alone' {
+        # The fixture exists to prove DiscWright reads a project file written by
+        # 0.4.2, which carried one. Stripping it would delete the test's point,
+        # and a blanket de-BOM script did exactly that once.
+        $fixture = Join-Path $script:RepoRoot 'tests\fixtures\discproject-0.4.2.json'
+        ([IO.File]::ReadAllBytes($fixture)[0..2] -join ',') | Should -Be '239,187,191'
     }
 }

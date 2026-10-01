@@ -1,4 +1,4 @@
-﻿; DiscWright - Inno Setup script
+; DiscWright - Inno Setup script
 ;
 ; Why there is an installer at all, for an app whose README opens with "there is
 ; nothing to install": winget will not take a folder of scripts. Its only route

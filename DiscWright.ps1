@@ -1,4 +1,4 @@
-﻿<#
+<#
   DiscWright
   Turns a GOG offline-installer folder into a burnable "retro game disc" image:
   custom drive icon + label, and an optional autorun splash menu (background, music,
