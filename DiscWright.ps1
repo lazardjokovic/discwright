@@ -4245,7 +4245,7 @@ $btnArtwork.Add_Click({
         $art = New-ArtworkForDisc -Title $(if($txtTitle.Text.Trim()){$txtTitle.Text.Trim()}else{$txtLabel.Text.Trim()}) `
                                   -Label $txtLabel.Text.Trim() -Games $names -AddOnCount $addOns `
                                   -CoverImage $coverPic -DiscImage $facePic `
-                                  -ShowTitleOnCover $chkTitle.Checked -OutDir $out
+                                  -OutDir $out
 
         # Say which way it was made. Somebody who handed over a finished cover
         # needs to know it was printed untouched, and somebody who did not needs

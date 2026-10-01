@@ -385,10 +385,13 @@ Describe 'The face that goes on the disc' -Tag 'Unit' {
         } finally { $face.Dispose() }
     }
 
-    It 'says so when the cover image is not there, rather than drawing nothing' {
-        { New-DiscFace -OutPng (Join-Path $script:Sandbox 'x.png') -Title 'Gothic' `
-                       -CoverImage 'Z:\no\such\cover.jpg' } |
-            Should -Throw -ExpectedMessage '*No cover image*'
+    It 'takes no picture at all any more, so it cannot crop one' {
+        # Fitting somebody's artwork into this layout meant cropping it. The
+        # parameter is gone rather than deprecated, so there is no accidental
+        # way back to that behaviour. A picture goes to the artwork renderer,
+        # which prints it as it is.
+        (Get-Command New-DiscFace).Parameters.Keys | Should -Not -Contain 'CoverImage'
+        (Get-Command New-DiscFaceFromArtwork).Parameters.Keys | Should -Contain 'Artwork'
     }
 
     It 'fits a long title instead of running it off the disc' {
@@ -516,11 +519,11 @@ Describe 'The wrap that goes in the case' -Tag 'Unit' {
             Should -Throw -ExpectedMessage '*does not fit*'
     }
 
-    It 'says so when a cover or back image is not there' {
-        { New-CaseWrap -OutPdf (Join-Path $script:Sandbox 'x.pdf') -Title 'Gothic' `
-                       -CoverImage 'Z:\no\such\cover.jpg' } | Should -Throw -ExpectedMessage '*No cover image*'
-        { New-CaseWrap -OutPdf (Join-Path $script:Sandbox 'x.pdf') -Title 'Gothic' `
-                       -BackImage 'Z:\no\such\back.jpg' } | Should -Throw -ExpectedMessage '*No back image*'
+    It 'takes no pictures any more: this is the plain label and nothing else' {
+        $keys = (Get-Command New-CaseWrap).Parameters.Keys
+        $keys | Should -Not -Contain 'CoverImage'
+        $keys | Should -Not -Contain 'BackImage'
+        (Get-Command New-WrapFromArtwork).Parameters.Keys | Should -Contain 'Artwork'
     }
 }
 
@@ -682,15 +685,17 @@ Describe 'Artwork for a disc the app has already planned' -Tag 'Unit' {
         Test-Path $r.Wrap | Should -BeTrue
     }
 
-    It 'leaves the title off the cover when the person turned it off for the menu' {
-        # Cover art usually carries the game's own logo. This is the app's own
-        # rule for the menu background, and it is the same picture.
+    It 'prints a picture untouched whatever the menu title setting says' {
+        # That setting decided whether a title was drawn over cover art. Nothing
+        # is drawn over a picture any more, so it cannot apply, and the same
+        # cover has to come out identical either way.
         $dir = Split-Path (New-TestProject) -Parent
         $cover = New-TestCover (Join-Path $dir 'bg2.jpg')
         $off = New-ArtworkForProject -ProjectPath (New-TestProject @{ BgPath = $cover; ShowTitle = $false })
-        $off.TitleOnCover | Should -BeFalse
         $on = New-ArtworkForProject -ProjectPath (New-TestProject @{ BgPath = $cover; ShowTitle = $true })
-        $on.TitleOnCover | Should -BeTrue
+        $off.WrapFromArtwork | Should -BeTrue
+        $on.WrapFromArtwork  | Should -BeTrue
+        (Get-Item $off.Wrap).Length | Should -Be (Get-Item $on.Wrap).Length
     }
 
     It 'still letters the cover when there is no cover art to fight with' {

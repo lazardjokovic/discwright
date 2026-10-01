@@ -412,7 +412,6 @@ function New-DiscFace {
         [Parameter(Mandatory)][string]$OutPng,
         [Parameter(Mandatory)][string]$Title,
         [string]$Subtitle,
-        [string]$CoverImage,
         [string]$Disc = 'hub',
         [string]$Accent = '#1B2A41'
     )
@@ -445,14 +444,15 @@ function New-DiscFace {
         [single]($centre - $outerR), [single]($centre - $outerR),
         [single]($outerR * 2), [single]($outerR * 2))
 
-    if ($CoverImage) {
-        if (-not (Test-Path -LiteralPath $CoverImage)) { throw "No cover image at '$CoverImage'" }
-        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $CoverImage).Path)
-        try { Set-ImageCover -Graphics $g -Image $img -Target $face } finally { $img.Dispose() }
-    } else {
-        $dark = [System.Drawing.Color]::FromArgb(
-            [Math]::Max(0, $accentColour.R - 40), [Math]::Max(0, $accentColour.G - 40),
-            [Math]::Max(0, $accentColour.B - 40))
+    # No picture goes through here any more. Fitting somebody's artwork into a
+    # layout means cropping it, and a person who made disc art made it to be
+    # printed as it is: New-DiscFaceFromArtwork does that. This is the label for
+    # someone who has no artwork at all, so it is type on a colour and nothing
+    # can be ruined by it.
+    $dark = [System.Drawing.Color]::FromArgb(
+        [Math]::Max(0, $accentColour.R - 40), [Math]::Max(0, $accentColour.G - 40),
+        [Math]::Max(0, $accentColour.B - 40))
+    if ($true) {
         # ::new rather than New-Object: PowerShell picks the Rectangle
         # overload for a RectangleF and then fails converting a Color to an
         # Int32, which it reports as a colour problem rather than an overload
@@ -544,8 +544,6 @@ function New-CaseWrap {
         [Parameter(Mandatory)][string]$OutPdf,
         [Parameter(Mandatory)][string]$Title,
         [string]$Subtitle,
-        [string]$CoverImage,
-        [string]$BackImage,
         # What is actually on the disc, one line each. On a two game disc this
         # is the thing somebody reads on the shelf.
         [string[]]$Contents = @(),
@@ -631,17 +629,12 @@ function New-CaseWrap {
         [Math]::Max(0, $accentColour.R - 45), [Math]::Max(0, $accentColour.G - 45),
         [Math]::Max(0, $accentColour.B - 45))
 
-    # ---- the front panel, which is the right-hand one
-    if ($CoverImage) {
-        if (-not (Test-Path -LiteralPath $CoverImage)) { throw "No cover image at '$CoverImage'" }
-        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $CoverImage).Path)
-        try { Set-ImageCover -Graphics $g -Image $img -Target $frontRect } finally { $img.Dispose() }
-    } else {
-        $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-            $frontRect, $accentColour, $darker, [single]70.0)
-        $g.FillRectangle($grad, $frontRect)
-        $grad.Dispose()
-    }
+    # ---- the front panel, which is the right-hand one.
+    # Type on a colour, with no picture in it. See New-DiscFace for why.
+    $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+        $frontRect, $accentColour, $darker, [single]70.0)
+    $g.FillRectangle($grad, $frontRect)
+    $grad.Dispose()
 
     # A scrim up from the foot of the front panel, so a title stays readable
     # over artwork nobody chose for its contrast. No lettering, no scrim: it
@@ -708,19 +701,10 @@ function New-CaseWrap {
     $g.Restore($state)
 
     # ---- the back panel
-    if ($BackImage) {
-        if (-not (Test-Path -LiteralPath $BackImage)) { throw "No back image at '$BackImage'" }
-        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $BackImage).Path)
-        try { Set-ImageCover -Graphics $g -Image $img -Target $backRect } finally { $img.Dispose() }
-        $wash = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(190, 0, 0, 0))
-        $g.FillRectangle($wash, $backRect)
-        $wash.Dispose()
-    } else {
-        $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-            $backRect, $darker, $accentColour, [single]70.0)
-        $g.FillRectangle($grad, $backRect)
-        $grad.Dispose()
-    }
+    $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+        $backRect, $darker, $accentColour, [single]70.0)
+    $g.FillRectangle($grad, $backRect)
+    $grad.Dispose()
 
     $topLeft = New-Object System.Drawing.StringFormat
     $topLeft.Alignment = [System.Drawing.StringAlignment]::Near
@@ -877,7 +861,7 @@ function New-ArtworkForProject {
     if (-not $OutDir) { $OutDir = Split-Path -Parent $path }
 
     $r = New-ArtworkForDisc -Title $title -Label $p.Label -Games $games -AddOnCount $addOns `
-                            -CoverImage $cover -ShowTitleOnCover:([bool]$p.ShowTitle) `
+                            -CoverImage $cover `
                             -OutDir $OutDir -Case $Case -Disc $Disc -Page $Page -Accent $Accent
     $r | Add-Member -NotePropertyName ProjectFile -NotePropertyValue $path -PassThru
 }
@@ -901,7 +885,6 @@ function New-ArtworkForDisc {
         # suits both. Left empty, the cover picture is used for both, which is
         # what happened before this existed.
         [string]$DiscImage,
-        [bool]$ShowTitleOnCover = $false,
         [Parameter(Mandatory)][string]$OutDir,
         [string]$Case = 'dvd',
         [string]$Disc = 'hub',
@@ -930,47 +913,36 @@ function New-ArtworkForDisc {
     $subtitle = $null
     if ($Label -and $Label.Trim() -ne $Title.Trim()) { $subtitle = $Label }
 
-    # With cover art, follow the choice already made for the menu. Without it,
-    # the front is a plain colour and the title is all there is.
+    # Only the plain label has a title to show or hide, since a picture is now
+    # printed untouched either way.
     $titleOnFront = $true
-    if ($cover) { $titleOnFront = $ShowTitleOnCover }
 
-    # A picture already shaped like a cover is a finished cover, and the right
-    # thing to do with one is print it and keep out of the way. Only artwork
-    # that is not that shape gets a layout built around it.
+    # A picture is printed as a picture. There is no longer a path that fits one
+    # into a layout, because fitting means cropping and nobody who made a cover
+    # wants a slice taken off it. With no picture, what comes out is a plain
+    # label: type on a colour, which is still worth having on a disc in a stack.
     $fmt = Get-CaseFormat $Case
     $wrapKind = $null
     if ($cover) {
         $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $cover).Path)
         try { $wrapKind = Get-ArtworkKind -Width $img.Width -Height $img.Height -Case $fmt }
         finally { $img.Dispose() }
-    }
-    # Within a few per cent of a wrap or a panel is somebody's finished work.
-    # A menu background is nowhere near either, and gets the built layout.
-    $finished = $wrapKind -and $wrapKind.OffByPct -le 4
-
-    if ($finished) {
         $null = New-WrapFromArtwork -OutPdf $wrap -Artwork $cover -Case $Case -Page $Page
     } else {
         $null = New-CaseWrap -OutPdf $wrap -Case $Case -Page $Page -Accent $Accent `
-                             -Title $Title -Subtitle $subtitle -CoverImage $cover `
+                             -Title $Title -Subtitle $subtitle `
                              -Contents $contents -ShowTitleOnFront $titleOnFront
     }
     # The face keeps its title whatever the wrap does: a disc out of its case
     # with no writing on it is the one nobody can identify.
-    # Same for the disc: art drawn for a disc is square, and a square picture
-    # chosen for the face is somebody's finished disc art.
-    $faceFinished = $false
-    if ($facePic -and $facePic -ne $cover) {
-        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $facePic).Path)
-        try { $faceFinished = [Math]::Abs(($img.Width / [double]$img.Height) - 1.0) -le 0.04 }
-        finally { $img.Dispose() }
-    }
-    if ($faceFinished) {
+    # The disc face, the same way. A picture chosen for the face is printed;
+    # with none, it is a plain label with the title on it, which is what tells
+    # one unlabelled disc from another.
+    if ($facePic) {
         $null = New-DiscFaceFromArtwork -OutPng $facePath -Artwork $facePic -Disc $Disc
     } else {
         $null = New-DiscFace -OutPng $facePath -Disc $Disc -Accent $Accent `
-                             -Title $Title -Subtitle $subtitle -CoverImage $facePic
+                             -Title $Title -Subtitle $subtitle
     }
 
     return [pscustomobject]@{
@@ -981,8 +953,12 @@ function New-ArtworkForDisc {
         DiscImage    = $facePic
         # Which way each was made, so the app can say so rather than leave
         # somebody wondering why their cover came back with a title on it.
-        WrapFromArtwork = [bool]$finished
-        FaceFromArtwork = [bool]$faceFinished
+        WrapFromArtwork = [bool]$cover
+        FaceFromArtwork = [bool]$facePic
+        # How far the cover is from the shape a case wants, so the app can say
+        # what to change rather than silently placing it with bands either side.
+        CoverOffByPct   = $(if ($wrapKind) { $wrapKind.OffByPct } else { 0 })
+        CoverKind       = $(if ($wrapKind) { $wrapKind.Kind } else { '' })
         TitleOnCover = $titleOnFront
         Wrap         = $wrap
         DiscFace     = $facePath
@@ -1054,40 +1030,49 @@ function Get-ArtworkKind {
     usual fix is to extend the outermost pixels outwards, which invents nothing
     and is invisible on anything but a hard-edged border.
 #>
-function Expand-EdgesForBleed {
+function Expand-EdgesTo {
     param(
         [Parameter(Mandatory)][System.Drawing.Graphics]$Graphics,
         [Parameter(Mandatory)][System.Drawing.Image]$Image,
-        [Parameter(Mandatory)][System.Drawing.RectangleF]$Trim,
-        [Parameter(Mandatory)][single]$Bleed
+        # Where the picture itself sits, and how far its edges must reach.
+        [Parameter(Mandatory)][System.Drawing.RectangleF]$Inner,
+        [Parameter(Mandatory)][System.Drawing.RectangleF]$Outer
     )
-    if ($Bleed -le 0) { return }
     $iw = $Image.Width; $ih = $Image.Height
     $px = [single]1
-    # Each side: one pixel of the source stretched across the bleed margin.
-    $sides = @(
-        @{ Src = New-Object System.Drawing.RectangleF(0, 0, $px, $ih)
-           Dst = New-Object System.Drawing.RectangleF(($Trim.X - $Bleed), $Trim.Y, $Bleed, $Trim.Height) }
-        @{ Src = New-Object System.Drawing.RectangleF(($iw - $px), 0, $px, $ih)
-           Dst = New-Object System.Drawing.RectangleF($Trim.Right, $Trim.Y, $Bleed, $Trim.Height) }
-        @{ Src = New-Object System.Drawing.RectangleF(0, 0, $iw, $px)
-           Dst = New-Object System.Drawing.RectangleF($Trim.X, ($Trim.Y - $Bleed), $Trim.Width, $Bleed) }
-        @{ Src = New-Object System.Drawing.RectangleF(0, ($ih - $px), $iw, $px)
-           Dst = New-Object System.Drawing.RectangleF($Trim.X, $Trim.Bottom, $Trim.Width, $Bleed) }
-    )
+    $left   = [single]($Inner.X - $Outer.X)
+    $right  = [single]($Outer.Right - $Inner.Right)
+    $top    = [single]($Inner.Y - $Outer.Y)
+    $bottom = [single]($Outer.Bottom - $Inner.Bottom)
+
+    $sides = @()
+    if ($left -gt 0) { $sides += @{
+        Src = New-Object System.Drawing.RectangleF(0, 0, $px, $ih)
+        Dst = New-Object System.Drawing.RectangleF($Outer.X, $Inner.Y, $left, $Inner.Height) } }
+    if ($right -gt 0) { $sides += @{
+        Src = New-Object System.Drawing.RectangleF(($iw - $px), 0, $px, $ih)
+        Dst = New-Object System.Drawing.RectangleF($Inner.Right, $Inner.Y, $right, $Inner.Height) } }
+    if ($top -gt 0) { $sides += @{
+        Src = New-Object System.Drawing.RectangleF(0, 0, $iw, $px)
+        Dst = New-Object System.Drawing.RectangleF($Inner.X, $Outer.Y, $Inner.Width, $top) } }
+    if ($bottom -gt 0) { $sides += @{
+        Src = New-Object System.Drawing.RectangleF(0, ($ih - $px), $iw, $px)
+        Dst = New-Object System.Drawing.RectangleF($Inner.X, $Inner.Bottom, $Inner.Width, $bottom) } }
     foreach ($s in $sides) {
         $Graphics.DrawImage($Image, $s.Dst, $s.Src, [System.Drawing.GraphicsUnit]::Pixel)
     }
-    # And the four corners, from the corner pixel itself.
+
+    # The four corners, each from the single corner pixel.
     $corners = @(
-        @{ Sx = 0; Sy = 0;        Dx = ($Trim.X - $Bleed); Dy = ($Trim.Y - $Bleed) }
-        @{ Sx = ($iw - $px); Sy = 0;        Dx = $Trim.Right; Dy = ($Trim.Y - $Bleed) }
-        @{ Sx = 0; Sy = ($ih - $px);        Dx = ($Trim.X - $Bleed); Dy = $Trim.Bottom }
-        @{ Sx = ($iw - $px); Sy = ($ih - $px); Dx = $Trim.Right; Dy = $Trim.Bottom }
+        @{ Sx = 0;           Sy = 0;           X = $Outer.X;    Y = $Outer.Y;      W = $left;  H = $top }
+        @{ Sx = ($iw - $px); Sy = 0;           X = $Inner.Right; Y = $Outer.Y;     W = $right; H = $top }
+        @{ Sx = 0;           Sy = ($ih - $px); X = $Outer.X;    Y = $Inner.Bottom; W = $left;  H = $bottom }
+        @{ Sx = ($iw - $px); Sy = ($ih - $px); X = $Inner.Right; Y = $Inner.Bottom; W = $right; H = $bottom }
     )
     foreach ($c in $corners) {
+        if ($c.W -le 0 -or $c.H -le 0) { continue }
         $src = New-Object System.Drawing.RectangleF($c.Sx, $c.Sy, $px, $px)
-        $dst = New-Object System.Drawing.RectangleF($c.Dx, $c.Dy, $Bleed, $Bleed)
+        $dst = New-Object System.Drawing.RectangleF($c.X, $c.Y, $c.W, $c.H)
         $Graphics.DrawImage($Image, $dst, $src, [System.Drawing.GraphicsUnit]::Pixel)
     }
 }
@@ -1138,8 +1123,25 @@ function New-WrapFromArtwork {
         # If its shape is a little off it is stretched, and Get-ArtworkKind says
         # by how much so the caller can warn.
         $bleed = [single](ConvertTo-Px $BleedMm)
-        Expand-EdgesForBleed -Graphics $g -Image $img -Trim $trim -Bleed $bleed
-        $g.DrawImage($img, $trim)
+        $outer = New-Object System.Drawing.RectangleF(
+            [single]($trim.X - $bleed), [single]($trim.Y - $bleed),
+            [single]($trim.Width + ($bleed * 2)), [single]($trim.Height + ($bleed * 2)))
+
+        # Fitted whole, never cropped and never stretched. Somebody's finished
+        # cover is the one thing in this project that must come out exactly as
+        # it went in, so a shape that is slightly off is placed complete and its
+        # own edges are carried outwards to fill the rest. Nothing is lost and
+        # nothing is distorted; a cover that is the right shape fills the trim
+        # exactly and none of this shows.
+        $scale = [Math]::Min($trim.Width / $img.Width, $trim.Height / $img.Height)
+        $fw = [single]($img.Width * $scale)
+        $fh = [single]($img.Height * $scale)
+        $fit = New-Object System.Drawing.RectangleF(
+            [single]($trim.X + (($trim.Width - $fw) / 2)),
+            [single]($trim.Y + (($trim.Height - $fh) / 2)), $fw, $fh)
+
+        Expand-EdgesTo -Graphics $g -Image $img -Inner $fit -Outer $outer
+        $g.DrawImage($img, $fit)
 
         if (-not $NoCropMarks) {
             $mark = New-Object System.Drawing.Pen ([System.Drawing.Color]::Black), 2
