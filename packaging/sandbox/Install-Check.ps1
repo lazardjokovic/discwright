@@ -85,6 +85,17 @@ if ($dir -and (Test-Path $dir)) {
     $version = (Select-String -Path (Join-Path $dir 'DiscWright.ps1') -Pattern "^\`$APP_VERSION\s*=\s*'([^']+)'" |
                 Select-Object -First 1).Matches.Groups[1].Value
     $null = Check "the installed copy names its version" ($version -ne '') $version
+
+    # The Print artwork and Burn to disc buttons dot-source these when pressed.
+    # Left out of the installer they are dead ends on an installed copy while
+    # working perfectly from a checkout, which is the shape of the defect that
+    # shipped in 0.8.0 and had to be fixed in 0.8.1.
+    $printMod = Join-Path $dir 'print\DiscWright.Print.ps1'
+    $burnMod  = Join-Path $dir 'burn\DiscWright.Burn.ps1'
+    $null = Check "the print module is installed, or Print artwork is a dead button" `
+        (Test-Path $printMod) $printMod
+    $null = Check "the burn module is installed, or Burn to disc is a dead button" `
+        (Test-Path $burnMod) $burnMod
 } else {
     $null = Check "the app itself is there, as scripts rather than an exe" $false 'no install location'
 }

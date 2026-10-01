@@ -1988,6 +1988,28 @@ public class ISOFile {
 
 # =================== PROJECT SAVE / REOPEN ===================
 
+# How much of a picture survives being fitted to a panel, and whether that is
+# worth saying out loud. A menu background is wide and a cover is tall, so the
+# usual answer is that most of the width goes. Printing costs paper and ink, so
+# the warning belongs before it rather than in the result.
+function Get-ArtFitNote([string]$imagePath, [double]$panelW, [double]$panelH, [string]$what) {
+    if (-not $imagePath -or -not (Test-Path -LiteralPath $imagePath)) { return '' }
+    try {
+        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $imagePath).Path)
+        try { $w = $img.Width; $h = $img.Height } finally { $img.Dispose() }
+    } catch { return '' }
+    if ($w -le 0 -or $h -le 0) { return '' }
+
+    # Scaled to cover the panel, then whatever hangs over the edge is cut away.
+    $scale = [Math]::Max($panelW / $w, $panelH / $h)
+    $cutW = [int][Math]::Round(100 - (100 * [Math]::Min($w, $panelW / $scale) / $w))
+    $cutH = [int][Math]::Round(100 - (100 * [Math]::Min($h, $panelH / $scale) / $h))
+    $worst = [Math]::Max($cutW, $cutH)
+    if ($worst -lt 15) { return "$what ${w}x${h}, a good shape for this." }
+    $side = if ($cutW -ge $cutH) { 'width' } else { 'height' }
+    return "$what ${w}x${h}: about $worst% of its $side is cut off."
+}
+
 function Save-Project([hashtable]$s,[string]$outDir) {
     $games = @($s.Games)
     $o = [ordered]@{
@@ -2010,7 +2032,13 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # installer, 'Files' for a folder of game files that never came from
         # GOG. Absent in anything older, which reads back as 'GOG', because that
         # is the only kind of entry those versions could make.
-        Version      = 9
+        # Version 10 adds CoverPath and DiscArtPath: pictures chosen for the
+        # printed cover and the printed disc face, which are not the same job as
+        # the menu background. A 16:9 background loses 60% of its width on a
+        # 129 x 183 mm panel, so using it for both was a guess that usually
+        # guessed wrong. Absent in anything older, which reads back as empty and
+        # falls back to the background exactly as those versions did.
+        Version      = 10
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -2042,6 +2070,8 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         Menu         = [bool]$s.Menu
         BgPath       = $s.BgPath
         BgAsIs       = [bool]$s.BgAsIs
+        CoverPath    = $s.CoverPath
+        DiscArtPath  = $s.DiscArtPath
         PanelSide    = $s.PanelSide
         Divider      = [bool]$s.Divider
         ShowTitle    = [bool]$s.ShowTitle
@@ -2107,6 +2137,7 @@ function Import-Project([string]$jsonPath) {
             LinuxInfo=[bool]$j.LinuxInfo
             LegacyFs=[bool]$j.LegacyFs
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
+            CoverPath=$j.CoverPath; DiscArtPath=$j.DiscArtPath
             PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
             Divider=[bool]$j.Divider; ShowTitle=[bool]$j.ShowTitle; TitleText=[string]$j.TitleText
             WindowBorder=[bool]$j.WindowBorder
@@ -2606,6 +2637,7 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 # removing every entry: where your GOG downloads and artwork live does not change
 # when you start a second disc.
 $state = @{ Games=@(); IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
+            CoverPath=$null; DiscArtPath=$null
             LabelSeededFrom=$null; LastGameBrowse=$null; LastFileBrowse=$null }
 
 # One game per disc is still the common case, so the disc layout, the UI and the
@@ -2899,6 +2931,7 @@ $btnXDel =New-Object System.Windows.Forms.Button; $btnXDel.Text='Remove'; $btnXD
 
 AddLabel '6)  Output folder (ISO + disc staging go here):' 15 800 520 | Out-Null
 $txtOut=AddText 15 822 520
+
 $btnOut=AddBtn 'Browse...' 545 822 110
 
 $btnBuild=New-Object System.Windows.Forms.Button; $btnBuild.Text='BUILD ISO'; $btnBuild.Location=New-Object System.Drawing.Point(15,856); $btnBuild.Size=New-Object System.Drawing.Size(150,30); $btnBuild.BackColor=[System.Drawing.Color]::FromArgb(0,150,160); $btnBuild.ForeColor=[System.Drawing.Color]::White; $form.Controls.Add($btnBuild)
@@ -2907,6 +2940,22 @@ $txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLo
 # Both sit in space the layout already had, under the BUILD button and beside the
 # log, so nothing else has to move. Hidden until a build starts - an idle window
 # looks exactly as it did before.
+# Laid out like every other step: the label on its own line with its box
+# directly beneath at the same left edge. That is not only for the look. The
+# window tests find a step's box by that geometry, and a label beside its box
+# is invisible to them.
+AddLabel '7)  Printed artwork (optional):' 15 952 540 | Out-Null
+AddLabel 'Cover picture' 15 976 200 | Out-Null
+$txtCover = AddText 15 998 525
+$btnCover = AddBtn 'Browse...' 545 998 110
+AddLabel 'Disc face picture' 15 1024 200 | Out-Null
+$txtDiscArt = AddText 15 1046 525
+$btnDiscArt = AddBtn 'Browse...' 545 1046 110
+$lblArtNote = AddLabel '' 15 1074 645
+$lblArtNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
+$btnArtwork = AddBtn 'Print artwork' 15 1100 150
+$btnBurn    = AddBtn 'Burn to disc...' 180 1100 150
+
 $pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,894); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
 $lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
 
@@ -3264,6 +3313,25 @@ function Test-FormDirty {
 
 # Grey out the two inspect buttons when there is nothing for them to open, and
 # make the build button say what it will actually do.
+# The cover panel is 129.5 x 183 mm and the disc face is a 118 mm circle, both
+# at 300 dpi. Those are the shapes a picture has to survive, and saying so here
+# is cheaper than saying it after somebody has printed one.
+function Update-ArtNote {
+    if (-not $lblArtNote) { return }
+    $cover = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
+    $face  = if ($state.DiscArtPath) { $state.DiscArtPath } else { $cover }
+    $notes = @()
+    $n = Get-ArtFitNote $cover 1530 2161 'Cover'
+    if ($n) { $notes += $n }
+    $n = Get-ArtFitNote $face 1394 1394 'Disc face'
+    if ($n) { $notes += $n }
+    if (-not $notes.Count) {
+        $notes += if ($state.BgPath) { 'Empty means the menu background is used.' }
+                  else { 'Left empty, the panels print in a plain colour with the title on them.' }
+    }
+    $lblArtNote.Text = $notes -join '   '
+}
+
 function Update-ActionButtons {
     $t = $txtOut.Text.Trim()
     $hasOut  = $t -and (Test-Path $t)
@@ -3271,12 +3339,31 @@ function Update-ActionButtons {
     $canPreview = $chkMenu.Checked -and $state.BgPath -and (Test-Path $state.BgPath)
     $isDirty = Test-FormDirty
     $btnOpenDisc.Enabled = [bool]$hasOut
+    # Artwork needs a name to print and somewhere to put it, and nothing else.
+    # It does not need a build: the wrap and the face come from the plan, not
+    # from the ISO, so they can be printed and trimmed while the disc is still
+    # being written.
+    $canArt = [bool]$hasOut -and (Get-Games).Count -gt 0
+    $btnArtwork.Enabled = $canArt
+    # An ISO on disk is the only precondition worth checking here. Whether a
+    # recorder exists and what is in it is asked at the moment of pressing,
+    # because a disc can be put in after the window opened and asking the
+    # burning service on every refresh would make the whole form crawl.
+    $canBurn = $false
+    if ($hasOut -and (Test-Path $txtOut.Text.Trim())) {
+        $canBurn = @(Get-ChildItem -LiteralPath $txtOut.Text.Trim() -Filter '*.iso' -File -EA SilentlyContinue).Count -gt 0
+    }
+    $btnBurn.Enabled = $canBurn
     $btnPreview.Enabled  = [bool]$canPreview
     $btnNew.Enabled      = [bool]$isDirty
     $tips.SetToolTip($btnNew, $(if($isDirty){'Clear everything and start a new disc. The output folder is kept.'}else{'Nothing to clear - this is already a new disc'}))
     $tips.SetToolTip($btnOpenDisc, $(if($hasOut){'Open the disc staging folder in Explorer'}else{'Set an output folder first (step 6)'}))
     $tips.SetToolTip($btnPreview,  $(if($canPreview){'Show the menu using the current settings - no rebuild needed'}else{'Turn the menu on and choose a background first (step 4)'}))
     $tips.SetToolTip($btnOpenProj, 'Load a disc you already built, to edit and rebuild it')
+    $tips.SetToolTip($btnArtwork, $(if($canArt){'Make the case wrap and the disc face for this disc, ready to print'}
+                                    else{'Add a game and set an output folder first'}))
+    $tips.SetToolTip($btnBurn, $(if($canBurn){'Write the built ISO to a blank disc, then check every file against what was built'}
+                                 else{'Build an ISO first - there is nothing in the output folder to burn'}))
 
     # The button names the file it is about to write, so REBUILD always means "this
     # exact file is going to be overwritten" rather than "there is something in that
@@ -4045,6 +4132,11 @@ function Open-Project([string]$folder) {
     $chkDivider.Checked   = [bool]$p.Divider
     $chkTitle.Checked     = [bool]$p.ShowTitle
     $txtTitle.Text        = [string]$p.TitleText
+    # Setting the boxes is enough: their TextChanged handlers put the paths back
+    # into the state and refresh the note. Written in version 10, so anything
+    # older leaves them empty and falls back to the background as it always did.
+    $txtCover.Text   = [string]$p.CoverPath
+    $txtDiscArt.Text = [string]$p.DiscArtPath
     $chkWinBorder.Checked = [bool]$p.WindowBorder
     $cmbBtnStyle.SelectedItem = $(if($p.ButtonStyle -ieq 'Minimal'){'Minimal'}else{'Bordered'})
 
@@ -4099,6 +4191,158 @@ $btnNew.Add_Click({
     if (-not (Show-Confirm $msg 'New disc')) { return }
     Reset-Form
 })
+$btnCover.Add_Click({
+    $f = New-Object System.Windows.Forms.OpenFileDialog
+    $f.Filter = 'Pictures|*.png;*.jpg;*.jpeg;*.bmp|All files|*.*'
+    $f.Title = 'Picture for the printed cover'
+    $seed = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
+    if ($seed) { $f.InitialDirectory = Split-Path $seed -Parent }
+    if ($f.ShowDialog() -eq 'OK') { $txtCover.Text = $f.FileName }
+})
+$btnDiscArt.Add_Click({
+    $f = New-Object System.Windows.Forms.OpenFileDialog
+    $f.Filter = 'Pictures|*.png;*.jpg;*.jpeg;*.bmp|All files|*.*'
+    $f.Title = 'Picture for the printed disc face'
+    $seed = if ($state.DiscArtPath) { $state.DiscArtPath } else { $state.BgPath }
+    if ($seed) { $f.InitialDirectory = Split-Path $seed -Parent }
+    if ($f.ShowDialog() -eq 'OK') { $txtDiscArt.Text = $f.FileName }
+})
+# The boxes are the truth, so the state follows them. Typing a path by hand has
+# to work exactly as well as browsing for one.
+$txtCover.Add_TextChanged({ $state.CoverPath = $txtCover.Text.Trim(); Update-ArtNote })
+$txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Update-ArtNote })
+
+$btnBurn.Add_Click({
+    $t = $txtOut.Text.Trim()
+    if (-not $t -or -not (Test-Path $t)) { Show-Warn "No output folder is set yet."; return }
+
+    $burner = Join-Path $PSScriptRoot 'burn\DiscWright.Burn.ps1'
+    if (-not (Test-Path $burner)) {
+        Show-Warn "The burning files are not installed:`r`n`r`n$burner`r`n`r`nReinstall DiscWright, or run it from a full copy of the folder."
+        return
+    }
+    . $burner
+
+    # The newest ISO in the folder. A set writes several, and the one just built
+    # is the one somebody means; the confirmation names it so a wrong guess can
+    # be refused rather than discovered afterwards.
+    $iso = Get-ChildItem -LiteralPath $t -Filter '*.iso' -File -EA SilentlyContinue |
+           Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $iso) { Show-Warn "There is no ISO in:`r`n`r`n$t"; return }
+
+    try { $burners = Get-BurnerInfo } catch {
+        Show-Warn "The burning service could not be asked anything:`r`n`r`n$($_.Exception.Message)"
+        return
+    }
+    if (-not $burners.Count) { Show-Warn 'No disc recorder was found on this machine.'; return }
+    $d = $burners | Where-Object { $_.Ready } | Select-Object -First 1
+    if (-not $d) {
+        $why = ($burners | ForEach-Object { "$($_.Drive)  $($_.Why)" }) -join "`r`n"
+        Show-Warn "No drive is ready to be written to:`r`n`r`n$why`r`n`r`nPut a blank disc in and try again."
+        return
+    }
+
+    $fit = Test-IsoFitsMedia -IsoBytes $iso.Length -FreeSectors $d.FreeSectors
+    if (-not $fit.Fits) {
+        Show-Warn ("$($iso.Name) needs {0:N0} MB and the $($d.MediaName) in $($d.Drive) has {1:N0} MB.`r`n`r`nNothing was written." -f ($fit.IsoBytes/1MB), ($fit.FreeBytes/1MB))
+        return
+    }
+
+    # Slower than the drive would choose. Cheap media written at full speed is
+    # the usual way to make a coaster, and the minute saved is not worth a disc.
+    $cap = if ($d.MediaType -in 1,2,3) { 16 } else { 8 }
+    $pick = $d.Speeds | Where-Object { $_.Multiple -le $cap } | Select-Object -First 1
+    if (-not $pick) { $pick = $d.Speeds | Select-Object -Last 1 }
+    $speedText = if ($pick) { "$($pick.Multiple)x" } else { "the drive's own choice" }
+    $kb = if ($pick) { $pick.Kb } else { $(if ($d.Speeds.Count) { $d.Speeds[0].Kb } else { 0 }) }
+    $estimate = Format-BurnEstimate (Get-BurnEstimateSeconds -Bytes $iso.Length -SpeedKb $kb -MediaType $d.MediaType)
+
+    $msg = @(
+        "Write $($iso.Name) to the disc in $($d.Drive)?"
+        ''
+        ("  {0:N1} MB onto a $($d.MediaName) with {1:N1} MB free" -f ($iso.Length/1MB), ($d.FreeBytes/1MB))
+        "  $($d.Vendor) $($d.Product), at $speedText"
+        ''
+        "It should take $estimate."
+        'This cannot be undone, and a write-once disc cannot be reused.'
+        'The window will stop responding for that long. That is normal:'
+        'the drive does the writing in one go and reports nothing until it ends.'
+        ''
+        'Every file is checked against what was built once it finishes.'
+    ) -join "`r`n"
+    if ([System.Windows.Forms.MessageBox]::Show($msg, 'Burn to disc',
+            [System.Windows.Forms.MessageBoxButtons]::OKCancel,
+            [System.Windows.Forms.MessageBoxIcon]::Warning) -ne [System.Windows.Forms.DialogResult]::OK) {
+        return
+    }
+
+    Set-FormBusy $true
+    $btnBurn.Enabled = $false
+    try {
+        & $log "Burning $($iso.Name) to $($d.Drive) at $speedText, $estimate. The window will not respond until it finishes."
+        $lblElapsed.Text = 'Burning...'
+        [System.Windows.Forms.Application]::DoEvents()
+        # Not $args: that is an automatic variable, and splatting over it is a
+        # way to get a call that does something other than it reads.
+        $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false }
+        if ($pick) { $burnArgs.Speed = "$($pick.Multiple)x" }
+        $r = Write-IsoToDisc @burnArgs
+        & $log "Written in $($r.Seconds) seconds. Close the tray to check it."
+
+        [System.Windows.Forms.MessageBox]::Show(
+            "Written in $($r.Seconds) seconds.`r`n`r`nThe disc was ejected. Close the tray, wait for Windows to read it, then press OK to check every file against what was built.",
+            'Burned', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+
+        $stage = Join-Path $t 'disc'
+        $root = ($d.Drive.TrimEnd('\') + '\')
+        if (-not (Test-Path $stage)) {
+            & $log "No staging folder at $stage, so nothing to compare the disc against."
+        } elseif (-not (Test-Path $root)) {
+            & $log "$root is not readable yet, so the disc was not checked."
+        } else {
+            & $log 'Checking every file on the disc against what was built...'
+            # Reading a disc back is slow, so this one does report as it goes.
+            $checkWatch = [Diagnostics.Stopwatch]::StartNew()
+            $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stage -OnProgress {
+                # The file name is passed too, and deliberately not shown: the
+                # label has 160px before it runs under the log box, and a disc
+                # with thousands of files would scroll it into noise.
+                param($done, $total)
+                if ($total -gt 0) {
+                    $pbBuild.Value = [int](1000.0 * $done / $total)
+                    $lblElapsed.Text = 'Checking {0}/{1}   {2}' -f $done, $total, (Format-Elapsed $checkWatch.Elapsed)
+                }
+                [System.Windows.Forms.Application]::DoEvents()
+            }
+            $pbBuild.Value = 0
+            $lblElapsed.Text = ''
+            if ($v.Ok) {
+                & $log "All $($v.FilesOnDisc) files match."
+                [System.Windows.Forms.MessageBox]::Show(
+                    "All $($v.FilesOnDisc) files on the disc match what was built, byte for byte.",
+                    'Disc checked', [System.Windows.Forms.MessageBoxButtons]::OK,
+                    [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+            } else {
+                $detail = @()
+                if ($v.Missing.Count)      { $detail += "missing: $($v.Missing -join ', ')" }
+                if ($v.Unexpected.Count)   { $detail += "unexpected: $($v.Unexpected -join ', ')" }
+                if ($v.WrongSize.Count)    { $detail += "wrong size: $($v.WrongSize -join ', ')" }
+                if ($v.WrongContent.Count) { $detail += "wrong contents: $($v.WrongContent -join ', ')" }
+                $text = $detail -join "`r`n"
+                & $log "The disc does NOT match: $text"
+                Show-Warn "The disc does not match what was built:`r`n`r`n$text`r`n`r`nDo not rely on this disc."
+            }
+        }
+    } catch {
+        & $log "The burn failed: $($_.Exception.Message)"
+        Show-Warn "The disc could not be written:`r`n`r`n$($_.Exception.Message)"
+    } finally {
+        Set-FormBusy $false
+        Update-ActionButtons
+    }
+})
+
 $btnOpenProj.Add_Click({
     $d = New-FolderDialog 'Pick the disc output folder (the one holding disc\ and the .iso)' $txtOut.Text.Trim()
     if ($d.ShowDialog() -eq 'OK') { Open-Project $d.SelectedPath }
@@ -4115,6 +4359,66 @@ $btnOpenDisc.Add_Click({
     # Do not quietly open something else than what the button promises.
     Show-Warn "Nothing has been built here yet - there is no 'disc' staging folder in:`r`n`r`n$t`r`n`r`nOpening the output folder instead."
     Start-Process explorer.exe $t
+})
+$btnArtwork.Add_Click({
+    $t = $txtOut.Text.Trim()
+    if (-not $t) { Show-Warn "No output folder is set yet.`r`n`r`nPick one in step 6."; return }
+
+    # print\ is a separate module on purpose: this reaches into it, it never
+    # reaches back, so the ISO builder stays able to ship without it. A missing
+    # copy is a broken install, and saying which file is missing beats failing
+    # with nothing.
+    $printer = Join-Path $PSScriptRoot 'print\DiscWright.Print.ps1'
+    if (-not (Test-Path $printer)) {
+        Show-Warn "The artwork files are not installed:`r`n`r`n$printer`r`n`r`nReinstall DiscWright, or run it from a full copy of the folder."
+        return
+    }
+
+    try {
+        $entries = Get-Games
+        $names   = @($entries | Where-Object { $_.Kind -ne 'AddOn' } | ForEach-Object { $_.GameName })
+        $addOns  = @($entries | Where-Object { $_.Kind -eq 'AddOn' }).Count
+
+        # Read straight off the form. Writing the project file first and reading
+        # it back would overwrite a saved project with whatever is on screen,
+        # which is not what a button called Print artwork should ever do.
+        . $printer
+        $out = Join-Path $t 'artwork'
+        # A picture chosen for the cover wins over the menu background, which was
+        # chosen to sit behind buttons rather than to be a cover.
+        $coverPic = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
+        $facePic  = if ($state.DiscArtPath) { $state.DiscArtPath } else { $coverPic }
+
+        $art = New-ArtworkForDisc -Title $(if($txtTitle.Text.Trim()){$txtTitle.Text.Trim()}else{$txtLabel.Text.Trim()}) `
+                                  -Label $txtLabel.Text.Trim() -Games $names -AddOnCount $addOns `
+                                  -CoverImage $coverPic -DiscImage $facePic `
+                                  -OutDir $out
+
+        # Say which way it was made. Somebody who handed over a finished cover
+        # needs to know it was printed untouched, and somebody who did not needs
+        # to know a layout was built for them.
+        $cover = if ($art.WrapFromArtwork) {
+                     'Your cover was printed as it is, at exact size with crop marks. Nothing was added to it.'
+                 } elseif ($art.UsedCover) {
+                     'No finished cover was given, so one was built around your picture.'
+                 } else {
+                     'No picture was given, so the panels are a plain colour with the title on them.'
+                 }
+        if ($art.FaceFromArtwork) { $cover += "`r`nYour disc art was printed as it is, with the hub left clear." }
+        [System.Windows.Forms.MessageBox]::Show(
+            ("Artwork for $($art.Title):`r`n`r`n" +
+             "$(Split-Path $art.Wrap -Leaf)`r`n" +
+             "    The case wrap. Print at 100% with scaling off, then cut to the marks.`r`n`r`n" +
+             "$(Split-Path $art.DiscFace -Leaf)`r`n" +
+             "    The disc face. Open it in your printer's disc software, which sets the`r`n" +
+             "    diameters and lines the tray up.`r`n`r`n" +
+             $cover),
+            'Artwork ready', [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
+        Start-Process explorer.exe $out
+    } catch {
+        Show-Warn "The artwork could not be made:`r`n`r`n$($_.Exception.Message)"
+    }
 })
 $btnPreview.Add_Click({
     $h = New-PreviewMenu

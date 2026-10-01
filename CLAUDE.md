@@ -146,6 +146,45 @@ The owner's, and they are not negotiable in a hurry.
   package merges without a human, so a bad one installs itself on other people's
   machines.
 
+## Burning, and what a real disc settled
+
+A burner is attached: an ASUS DRW-24D5MT on D:, writing CD-R, CD-RW, DVD-R,
+DVD-RW, DVD+R and DVD+RW. `burn\` holds the module, the pre-flight and
+`New-TestDisc.ps1`, which builds a small disc worth spending a CD-R on.
+
+Measured on 2026-10-01 by burning a 241.7 MB two-game test disc to a CD-R:
+
+- It burned in 93 seconds and mounted as UDF.
+- Every file matched by SHA-256, 7 of 7, read back in 68 seconds.
+- A volume label loses its spaces: `DISCWRIGHT TEST` mounts as
+  `DISCWRIGHT_TEST`. That is the filesystem, not DiscWright.
+- **The menu runs from real optical media.** Until this disc, every menu test
+  had run from a mounted image, and Windows does not treat the two the same.
+- `NoDriveTypeAutoRun` is `0x9E` on this machine, the Windows default, which
+  leaves AutoRun on for optical drives only. Since Windows 7 it offers rather
+  than launches, and what it offers is the `action=` line of `autorun.inf`.
+
+A second disc, burned through the app's own button on 2026-10-01: the dialog
+named everything worth refusing on, the write took 110 seconds at 16x against
+an estimate of about two minutes, all 7 files matched byte for byte, and a
+120 MB program ran straight off the disc in 8 seconds and reported its own
+path back as `D:\`.
+
+`burn\README.md` carries the full checklist, including what is still unproven.
+
+## Rendered output, and looking at it
+
+`print\New-SampleSet.ps1` renders every row of the format tables into
+`%USERPROFILE%\DiscWright-Lab`, outside the repository and outside OneDrive,
+with a `.preview.jpg` beside every PDF. Generated files are not source, they are
+regenerated on every run, and nothing there is edited by hand.
+
+Run it after changing anything that draws, then open a combination nobody has
+looked at. That is not ceremony. It is how the CD jewel insert was caught being
+drawn as two half-width panels either side of a spine with no width, with the
+whole suite passing. A renderer that has only ever run for one row has something
+wrong with it for the others.
+
 ## Traps that have already cost time
 
 - **Heredocs halve backslashes.** Writing files through a shell heredoc turned
@@ -167,6 +206,39 @@ The owner's, and they are not negotiable in a hurry.
   earlier run, or a hosted dialog from a crashed test, fails every window test
   with the focus message. Find it and kill it before investigating anything
   else.
+
+- **A local that differs from a parameter only by case is that parameter**, and
+  the parameter's type still applies. `$accent = ConvertFrom-HexColour $Accent`
+  inside a function taking `[string]$Accent` converted the Color straight back
+  to the string `Color [A=255, R=27...]`, and the error arrived later and
+  elsewhere, as a constructor refusing to convert a Color to a Color. Give the
+  local its own name. `print/DiscWright.Print.ps1` has the comment and
+  `tests/DiscWright.Print.Tests.ps1` has the pixel test that catches it.
+- **`New-Object` picks the wrong overload for `RectangleF`.** It chose the
+  `Rectangle` overload of `LinearGradientBrush` and then reported the failure as
+  a bad colour. `[Type]::new(...)` with explicit `[single]` casts resolves it.
+
+- **A `foreach` that builds `Context` or `It` blocks runs at discovery, before
+  `BeforeAll`.** Data loaded in `BeforeAll` does not exist yet, so the loop
+  iterates over nothing, every block it would have made silently vanishes, and
+  the run still reports all green with a smaller number nobody reads. Three
+  "every combination" loops in `tests/DiscWright.Print.Tests.ps1` ran zero
+  times this way. Dot-source what the loop reads at the top of the file, and
+  pass each row with `-ForEach` so the run phase can see it; a bare `foreach`
+  inside an `It` body is fine, since that is only assertions.
+
+- **A control below the fold is clicked outside the window.** The form has
+  AutoScroll and wants to be taller than the screen, so a control near the
+  bottom has a screen rectangle past the window's edge. Clicking it hits
+  whatever is behind, which also takes the foreground away, and every test
+  after it fails with the focus message rather than with anything about the
+  control. `Invoke-Ctl` now scrolls first. Measured while fixing it: these
+  boxes refuse `SetFocus` with "Target element cannot receive focus" and have
+  no ValuePattern, because the WinForms bridge exposes them as pattern-less
+  Panes. `WM_VSCROLL` does work.
+- **A step's box is found by geometry, not by name.** `Get-BoxAfter` wants the
+  label on its own line with the box directly beneath at the same left edge.
+  A label placed beside its box is invisible to the window tests.
 
 ## Where things stand
 

@@ -88,6 +88,12 @@ Source: "..\DiscWright.ps1";      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DiscWright.ico";      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\DiscWright.vbs";      DestDir: "{app}"; Flags: ignoreversion
 Source: "..\Run DiscWright.cmd";  DestDir: "{app}"; Flags: ignoreversion
+; The print module, which the Print artwork button dot-sources. Shipped in
+; its own folder so the ISO builder stays separable from it.
+Source: "..\print\DiscWright.Print.ps1"; DestDir: "{app}\print"; Flags: ignoreversion
+; The burning module, which the Burn to disc button dot-sources. Same rule:
+; the app reaches into it, it never reaches back.
+Source: "..\burn\DiscWright.Burn.ps1";   DestDir: "{app}\burn";  Flags: ignoreversion
 Source: "..\README.md";           DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE";             DestDir: "{app}"; Flags: ignoreversion
 

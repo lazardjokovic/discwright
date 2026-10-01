@@ -208,8 +208,27 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         $lay.Clashes.Count | Should -Be 0 -Because ($lay.Clashes -join '; ')
     }
 
+    It 'shows every button the script creates' {
+        # A control placed exactly on top of another is not reported as a clash,
+        # because UI Automation hands back the one in front and the covered one
+        # simply is not there. That is what a new button dropped onto Preview
+        # menu looked like: ten failures elsewhere and nothing saying why.
+        # So the window is checked against the script rather than against taste.
+        $src = Get-Content -Raw -LiteralPath $script:AppPath
+        $names = @([regex]::Matches($src, "AddBtn\s+'([^']+)'") |
+                   ForEach-Object { $_.Groups[1].Value } |
+                   Where-Object { $_ -ne 'Browse...' } | Sort-Object -Unique)
+        $names.Count | Should -BeGreaterThan 5 -Because 'the window has buttons'
+        $missing = @()
+        foreach ($n in $names) {
+            if (-not (Find-Ctl $script:Win $n)) { $missing += $n }
+        }
+        $missing.Count | Should -Be 0 -Because "hidden or missing: $($missing -join ', ')"
+    }
+
     It 'leaves <_> greyed until there is something for it to act on' -ForEach @(
-        'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu', 'New disc'
+        'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu', 'New disc',
+        'Print artwork*', 'Burn to disc*'
     ) {
         Test-CtlEnabled $script:Win $_ | Should -BeFalse
     }
@@ -288,6 +307,10 @@ Describe 'Opening a disc that was already built' -Tag 'UI' -Skip:(-not $script:H
         Test-CtlEnabled $script:Win 'Add-on*'          | Should -BeTrue
         Test-CtlEnabled $script:Win 'Show disc folder' | Should -BeTrue
         Test-CtlEnabled $script:Win 'Preview menu'     | Should -BeTrue
+        # Artwork comes from the plan rather than from the ISO, so it is
+        # available as soon as there is a game and somewhere to write to,
+        # build or no build.
+        Test-CtlEnabled $script:Win 'Print artwork*'   | Should -BeTrue
     }
 
     It 'keeps Change... and Remove greyed while no row is selected' {
@@ -1354,5 +1377,115 @@ Describe 'The question a folder with no GOG installer asks' -Tag 'UI' -Skip:(-no
         $script:Question = Start-Question $script:AskSrc
         Invoke-CtlNamed $script:Question.Window 'Cancel' -SettleMs 800 | Out-Null
         Get-QuestionAnswer $script:Question | Should -Be 'CANCELLED'
+    }
+}
+
+Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The fields were covered only by a roll call: present, and greyed. What
+    # they are for is saying what a picture will cost before it is printed, and
+    # that had never been driven.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+
+        Add-Type -AssemblyName System.Drawing
+        $script:ArtDir = Join-Path ([IO.Path]::GetTempPath()) ('dwuiart_' + [Guid]::NewGuid().ToString('N').Substring(0, 6))
+        New-Item -ItemType Directory -Force -Path $script:ArtDir | Out-Null
+        function New-Pic([int]$w, [int]$h, [string]$name) {
+            $path = Join-Path $script:ArtDir "$name.png"
+            $b = New-Object System.Drawing.Bitmap $w, $h
+            $b.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose()
+            return $path
+        }
+        $script:WidePic = New-Pic 1920 1080 'wide'
+        $script:TallPic = New-Pic 1000 1420 'tall'
+        $script:SquarePic = New-Pic 1200 1200 'square'
+
+        # The note is one label holding a clause per picture, separated by a run
+        # of spaces. Asserting on the whole string would let the disc face's
+        # words answer a question about the cover, which is exactly what the
+        # first version of these tests did.
+        function Get-ArtNote {
+            $all = $script:Win.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.Condition]::TrueCondition)
+            for ($i = 0; $i -lt $all.Count; $i++) {
+                try {
+                    $n = $all.Item($i).Current.Name
+                    # A dimension has to follow, or this picks up the
+                    # field's own label, which is called 'Cover picture'.
+                    if ($n -match '^(Cover|Disc face) \d') { return $n }
+                } catch {}
+            }
+            return ''
+        }
+        function Get-NoteClause([string]$which) {
+            foreach ($part in ((Get-ArtNote) -split '\s{3,}')) {
+                if ($part.Trim().StartsWith($which)) { return $part.Trim() }
+            }
+            return ''
+        }
+    }
+
+    AfterAll {
+        Stop-DiscWright $script:App; $script:App = $null
+        if ($script:ArtDir -and (Test-Path $script:ArtDir)) {
+            Remove-Item -LiteralPath $script:ArtDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    BeforeEach {
+        # Taken again before every test: the driver refuses to type into a
+        # window that is not in front, and anything can have taken the
+        # foreground since the last one.
+        $null = Set-WindowFocus $script:Win
+    }
+
+    It 'has a box for the cover picture and one for the disc face' {
+        Get-BoxAfter $script:Win 'Cover picture*'     | Should -Not -BeNullOrEmpty
+        Get-BoxAfter $script:Win 'Disc face picture*' | Should -Not -BeNullOrEmpty
+    }
+
+    It 'says how much of a wide picture will be cut off a tall cover' {
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Cover picture*') -Text $script:WidePic
+        Start-Sleep -Milliseconds 600
+        $cover = Get-NoteClause 'Cover'
+        $cover | Should -Match '1920x1080'
+        $cover | Should -Match 'cut off'
+        $cover | Should -Match 'width'
+    }
+
+    It 'is content once a cover-shaped picture is chosen instead' {
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Cover picture*') -Text $script:TallPic
+        Start-Sleep -Milliseconds 600
+        $cover = Get-NoteClause 'Cover'
+        $cover | Should -Match 'good shape'
+        $cover | Should -Not -Match 'cut off'
+    }
+
+    It 'treats the disc face as its own question, because a circle is not a cover' {
+        # The same tall picture that suits a cover is wrong for a disc, and the
+        # app has to say so about the face while leaving the cover alone.
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Disc face picture*') -Text $script:TallPic
+        Start-Sleep -Milliseconds 600
+        (Get-NoteClause 'Disc face') | Should -Match 'cut off'
+        (Get-NoteClause 'Cover')     | Should -Match 'good shape'
+    }
+
+    It 'is content with a square picture on a round disc' {
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Disc face picture*') -Text $script:SquarePic
+        Start-Sleep -Milliseconds 600
+        (Get-NoteClause 'Disc face') | Should -Match 'good shape'
+    }
+
+    It 'claims nothing about a path that is not a picture at all' {
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Cover picture*') -Text 'Z:\gone\missing.png'
+        Start-Sleep -Milliseconds 600
+        # No file, no measurement. The app must not pretend to have opened
+        # something it could not, and the disc face clause stands untouched.
+        (Get-NoteClause 'Cover')     | Should -BeNullOrEmpty
+        (Get-NoteClause 'Disc face') | Should -Match 'good shape'
     }
 }
