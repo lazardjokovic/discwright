@@ -7,7 +7,15 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
-## [0.9.0] — 2026-10-01
+## [0.9.1] — 2026-10-01
+
+The version number skips 0.9.0. That tag was pushed, the build attached its
+artifacts to a draft, and unpacking the draft showed the zip had no `print\` or
+`burn\` folder in it: both of this release's headline buttons would have been
+dead ends for everybody who took the main download. The tag could not be moved
+or deleted, because released tags are protected here and that protection is
+worth more than the number, so 0.9.0 exists as a tag that was never released and
+this is the first release of what it was meant to contain.
 
 DiscWright used to stop at the ISO. It now prints the artwork and burns the disc.
 
@@ -72,6 +80,26 @@ DiscWright used to stop at the ISO. It now prints the artwork and burns the disc
 - **The project file is at schema 10**, adding the two pictures. A project
   written by an older version opens and behaves exactly as it did, with both
   fields empty.
+
+### Fixed
+
+- **The zip now ships the printing and burning modules.** Both buttons load a
+  module when they are pressed, the installer's file list carried them and the
+  zip's did not, so the zip held an app with two dead buttons. Four tests cover
+  it, one of which reads what the app loads straight out of the source, so a
+  third module added later is covered without anybody remembering to.
+
+### Known
+
+- **The installer may not run on a current Windows 11.** Smart App Control
+  blocks unsigned programs, it is on by default on clean installs of recent
+  builds, and it refuses the installer with "An Application Control policy has
+  blocked this file". Signing would not settle it either: Smart App Control
+  wants an established reputation as well as a signature. The zip is unaffected,
+  needs no installing, and is the download to use. Measured rather than assumed:
+  the same installer check passed in a Windows Sandbox on 27 September with
+  Smart App Control in evaluation mode, and was blocked on 1 October once it had
+  switched on.
 
 ### Measured on real discs
 
@@ -951,8 +979,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.9.0...HEAD
-[0.9.0]: https://github.com/lazardjokovic/discwright/compare/v0.8.1...v0.9.0
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/lazardjokovic/discwright/compare/v0.8.1...v0.9.1
 [0.8.1]: https://github.com/lazardjokovic/discwright/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/lazardjokovic/discwright/compare/v0.7.6...v0.8.0
 [0.7.6]: https://github.com/lazardjokovic/discwright/compare/v0.7.5...v0.7.6
