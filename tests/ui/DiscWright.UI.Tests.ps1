@@ -1489,3 +1489,131 @@ Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop)
         (Get-NoteClause 'Disc face') | Should -Match 'good shape'
     }
 }
+
+Describe 'Driving the menu of a disc that holds game files' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The menu suite above drives a GOG disc, where greying Play out and pointing
+    # at Install is correct. Every menu test was written that way, which is how a
+    # burned disc came to show PLAY greyed with "use Install first" on a disc
+    # where nothing can be installed. The suite was green throughout.
+    #
+    # So the same walk, on the other kind of disc. Three games rather than two,
+    # so the chooser and a game screen still have different button counts and
+    # arriving on the wrong screen cannot pass.
+
+    BeforeAll {
+        $script:FilesMshtaBefore = @(Get-Process mshta -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+
+        # Its own striped background rather than the one the GOG menu block
+        # makes. Borrowing that left this with no background at all when run on
+        # its own, Preview stayed greyed, and no menu ever opened: a failure
+        # that said nothing about the thing under test.
+        $bmp = New-Object System.Drawing.Bitmap(1280, 720)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        for ($y = 0; $y -lt 720; $y += 6) {
+            $c = if (($y / 6) % 2) { [System.Drawing.Color]::FromArgb(210, 190, 90) }
+                 else { [System.Drawing.Color]::FromArgb(70, 140, 210) }
+            $g.FillRectangle((New-Object System.Drawing.SolidBrush($c)), 0, $y, 1280, 6)
+        }
+        $g.Dispose()
+        $script:FilesArt = Join-Path $script:Sandbox 'files-stripes.png'
+        $bmp.Save($script:FilesArt, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+
+        # Folders of game files: an executable named as the game, with data
+        # beside it. Named nothing like setup_*, which is what makes them the
+        # other kind of entry.
+        $script:FilesSrc = Join-Path $script:Sandbox 'filesrc'
+        $entries = @()
+        foreach ($name in 'gothic', 'arcanum', 'fallout') {
+            $dir = Join-Path $script:FilesSrc $name
+            New-Item -ItemType Directory -Force -Path (Join-Path $dir 'data') | Out-Null
+            $exe = Join-Path $dir "$name.exe"
+            $fs = [IO.File]::Create($exe); $fs.SetLength(1MB); $fs.Close()
+            Set-Content -LiteralPath (Join-Path $dir 'data\textures.pak') -Value 'test data'
+            $info = Get-FolderInfo $dir $exe
+            if (-not $info.Ok) { throw "the fixture for $name was not read as a folder of game files: $($info.Msg)" }
+            $entries += , $info
+        }
+
+        $script:FilesOut = Join-Path $script:Sandbox 'filesproj'
+        New-Item -ItemType Directory -Force -Path $script:FilesOut | Out-Null
+        Save-Project @{
+            Games = $entries; Label = 'Files Disc'
+            IconPath = $script:FilesArt; IconIsIco = $false
+            Menu = $true; BgPath = $script:FilesArt; BgAsIs = $false; PanelSide = 'Right'
+            Divider = $false; ShowTitle = $false; TitleText = ''
+            WindowBorder = $true; ButtonStyle = 'Minimal'; MusicFile = $null
+            Buttons = @('Play', 'Install', 'Exit'); ManualPath = $null; ExtrasPath = $null
+            ExtraItems = @(); MediaKey = ''; OutDir = $script:FilesOut
+        } $script:FilesOut
+
+        $script:FilesApp = Start-DiscWright -AppPath $script:AppPath
+        $script:FilesWin = $script:FilesApp.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:FilesWin '6)  Output folder*') -Text $script:FilesOut
+        Invoke-CtlNamed $script:FilesWin 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:FilesWin | Out-Null
+        Start-Sleep -Seconds 2
+
+        $script:FilesMenu = [IntPtr]::Zero
+        if ((Test-CtlEnabled $script:FilesWin 'Preview menu') -eq $true) {
+            Invoke-CtlNamed $script:FilesWin 'Preview menu' | Out-Null
+            $proc = $null
+            for ($i = 0; $i -lt 40 -and -not $proc; $i++) {
+                $proc = Get-Process mshta -ErrorAction SilentlyContinue |
+                        Where-Object { $script:FilesMshtaBefore -notcontains $_.Id } | Select-Object -First 1
+                if (-not $proc) { Start-Sleep -Milliseconds 250 }
+            }
+            if ($proc) { $script:FilesMenu = Find-MenuWindow -ProcessId $proc.Id }
+        }
+    }
+
+    AfterAll {
+        Get-Process mshta -ErrorAction SilentlyContinue |
+            Where-Object { $script:FilesMshtaBefore -notcontains $_.Id } |
+            ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+        Stop-DiscWright $script:FilesApp; $script:FilesApp = $null
+    }
+
+    It 'reads the folders as game files rather than as GOG downloads' {
+        $raw = Get-Content -Raw -LiteralPath (Join-Path $script:FilesOut 'discproject.json') | ConvertFrom-Json
+        foreach ($g in $raw.Games) { $g.Source | Should -Be 'Files' }
+    }
+
+    It 'has a menu to preview at all, which is what the rest depends on' {
+        # Checked first and on its own: when this block borrowed another
+        # Describe's background it had none, Preview stayed greyed, and six
+        # tests failed saying the menu showed no buttons.
+        Test-CtlEnabled $script:FilesWin 'Preview menu' | Should -BeTrue
+    }
+
+    It 'opens on a chooser with one button per game, and Exit' {
+        $script:FilesMenu | Should -Not -Be ([IntPtr]::Zero)
+        Wait-MenuButtonCount -Menu $script:FilesMenu -Expected 4 | Should -Be 4
+    }
+
+    It 'offers Play from disc and Back and Exit on a game, and nothing to install' {
+        # Three buttons, not the four a GOG game shows. Install is absent rather
+        # than greyed: there is nothing on this disc to install.
+        Invoke-MenuButton -Menu $script:FilesMenu -Index 0
+        Wait-MenuButtonCount -Menu $script:FilesMenu -Expected 3 | Should -Be 3
+    }
+
+    It 'goes back to the chooser from Back' {
+        # Back is the second of the three, so index 1.
+        Invoke-MenuButton -Menu $script:FilesMenu -Index 1
+        Wait-MenuButtonCount -Menu $script:FilesMenu -Expected 4 | Should -Be 4
+    }
+
+    It 'shows the same three buttons on another game, not just the first' {
+        Invoke-MenuButton -Menu $script:FilesMenu -Index 1
+        Wait-MenuButtonCount -Menu $script:FilesMenu -Expected 3 | Should -Be 3
+        Invoke-MenuButton -Menu $script:FilesMenu -Index 1
+        Wait-MenuButtonCount -Menu $script:FilesMenu -Expected 4 | Should -Be 4
+    }
+
+    It 'closes when Exit is pressed' {
+        Invoke-MenuButton -Menu $script:FilesMenu -Index 3
+        Start-Sleep -Seconds 2
+        Test-MenuWindowOpen -Menu $script:FilesMenu | Should -BeFalse
+    }
+}
