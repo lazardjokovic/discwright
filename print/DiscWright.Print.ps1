@@ -316,3 +316,197 @@ function New-CalibrationSheet {
     $bmp.Dispose()
     return $OutPdf
 }
+
+# ---------------------------------------------------------------- the artwork
+
+<#
+    Type that fits, rather than type that is the size somebody guessed.
+
+    A game title can be "Gothic" or it can be "The Chronicles of Riddick:
+    Escape from Butcher Bay", and on a 14 mm spine the difference is whether
+    the words are there at all. So the size comes down until it fits, and the
+    caller says how small is too small.
+#>
+function Get-FittedFont {
+    param(
+        [Parameter(Mandatory)][System.Drawing.Graphics]$Graphics,
+        [Parameter(Mandatory)][string]$Text,
+        [Parameter(Mandatory)][double]$MaxWidthPx,
+        [Parameter(Mandatory)][double]$StartPt,
+        [double]$MinPt = 6,
+        [string]$Family = 'Bahnschrift SemiBold',
+        [System.Drawing.FontStyle]$Style = [System.Drawing.FontStyle]::Regular
+    )
+    # Bahnschrift ships with Windows 10 and later and is condensed, which buys
+    # room on a spine. Segoe UI is everywhere, so it catches the rest.
+    $chosen = $Family
+    try { $probe = New-Object System.Drawing.FontFamily $chosen; $probe.Dispose() }
+    catch { $chosen = 'Segoe UI' }
+
+    for ($pt = $StartPt; $pt -ge $MinPt; $pt -= 0.5) {
+        $font = New-Object System.Drawing.Font $chosen, $pt, $Style,
+                           ([System.Drawing.GraphicsUnit]::Point)
+        if ($Graphics.MeasureString($Text, $font).Width -le $MaxWidthPx) { return $font }
+        $font.Dispose()
+    }
+    return (New-Object System.Drawing.Font $chosen, $MinPt, $Style,
+                       ([System.Drawing.GraphicsUnit]::Point))
+}
+
+<#
+    Fill a rectangle with a picture without squashing it: scale to cover, then
+    crop what hangs over. Cover art is almost never the shape of the panel it
+    has to fill, and a stretched cover is the first thing that looks homemade.
+#>
+function Set-ImageCover {
+    param(
+        [Parameter(Mandatory)][System.Drawing.Graphics]$Graphics,
+        [Parameter(Mandatory)][System.Drawing.Image]$Image,
+        [Parameter(Mandatory)][System.Drawing.RectangleF]$Target
+    )
+    $scale = [Math]::Max($Target.Width / $Image.Width, $Target.Height / $Image.Height)
+    $srcW = $Target.Width / $scale
+    $srcH = $Target.Height / $scale
+    $src = New-Object System.Drawing.RectangleF(
+        ($Image.Width - $srcW) / 2, ($Image.Height - $srcH) / 2, $srcW, $srcH)
+    $Graphics.DrawImage($Image, $Target, $src, [System.Drawing.GraphicsUnit]::Pixel)
+}
+
+function ConvertFrom-HexColour([string]$hex) {
+    $h = $hex.TrimStart([char]35)
+    return [System.Drawing.Color]::FromArgb(
+        [Convert]::ToInt32($h.Substring(0, 2), 16),
+        [Convert]::ToInt32($h.Substring(2, 2), 16),
+        [Convert]::ToInt32($h.Substring(4, 2), 16))
+}
+
+<#
+    The face that goes on the disc.
+
+    Output is a square PNG of the whole 120 mm disc at 300 dpi, because that is
+    what Epson Photo+ and Canon Easy-PhotoPrint want: you hand them a picture
+    and they own the diameters and the tray. The hub is left transparent so
+    their circular mask and ours agree, and so the clear inner ring of the disc
+    does not come out covered in ink that then has to be wiped off.
+
+    The art is composed for the printable ring of the disc format asked for,
+    22 mm to 118 mm on a hub-printable disc and a much wider clear hub on an
+    ordinary one. Composing for the wrong one puts the title under the clamp.
+#>
+function New-DiscFace {
+    param(
+        [Parameter(Mandatory)][string]$OutPng,
+        [Parameter(Mandatory)][string]$Title,
+        [string]$Subtitle,
+        [string]$CoverImage,
+        [string]$Disc = 'hub',
+        [string]$Accent = '#1B2A41'
+    )
+    $fmt = Get-DiscFormat $Disc
+    $side = ConvertTo-Px 120.0
+    $bmp = New-Object System.Drawing.Bitmap $side, $side,
+                      ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $bmp.SetResolution($script:Dpi, $script:Dpi)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
+    $g.Clear([System.Drawing.Color]::Transparent)
+
+    # Not $accent: a local differing from a parameter only by case IS that
+    # parameter, and [string]$Accent would turn this Color back into text.
+    $accentColour = ConvertFrom-HexColour $Accent
+    $centre = $side / 2.0
+    $outerR = (ConvertTo-Px $fmt.OuterMm) / 2.0
+    $innerR = (ConvertTo-Px $fmt.InnerMm) / 2.0
+
+    # Everything is drawn inside the printable ring, so nothing lands on the
+    # clamp and nothing has to be wiped off afterwards.
+    $ring = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $ring.AddEllipse([single]($centre - $outerR), [single]($centre - $outerR),
+                     [single]($outerR * 2), [single]($outerR * 2))
+    $g.SetClip($ring)
+
+    $face = New-Object System.Drawing.RectangleF(
+        [single]($centre - $outerR), [single]($centre - $outerR),
+        [single]($outerR * 2), [single]($outerR * 2))
+
+    if ($CoverImage) {
+        if (-not (Test-Path -LiteralPath $CoverImage)) { throw "No cover image at '$CoverImage'" }
+        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $CoverImage).Path)
+        try { Set-ImageCover -Graphics $g -Image $img -Target $face } finally { $img.Dispose() }
+    } else {
+        $dark = [System.Drawing.Color]::FromArgb(
+            [Math]::Max(0, $accentColour.R - 40), [Math]::Max(0, $accentColour.G - 40),
+            [Math]::Max(0, $accentColour.B - 40))
+        # ::new rather than New-Object: PowerShell picks the Rectangle
+        # overload for a RectangleF and then fails converting a Color to an
+        # Int32, which it reports as a colour problem rather than an overload
+        # one.
+        $grad = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+            $face, $accentColour, $dark, [single]60.0)
+        $g.FillRectangle($grad, $face)
+        $grad.Dispose()
+    }
+
+    # A band behind the title, so the words stay readable over any cover. Its
+    # edges fade rather than stopping dead: a hard rectangle clipped to a
+    # circle reads as a stripe laid over the art instead of part of it.
+    $bandH = ConvertTo-Px 22.0
+    $bandY = $centre + ($outerR * 0.26)
+    $bandRect = New-Object System.Drawing.RectangleF(
+        [single]($centre - $outerR), [single]($bandY - 1),
+        [single]($outerR * 2), [single]($bandH + 2))
+    $scrim = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+        $bandRect, [System.Drawing.Color]::Black, [System.Drawing.Color]::Black, [single]90.0)
+    $blend = New-Object System.Drawing.Drawing2D.ColorBlend 4
+    $blend.Colors = @(
+        [System.Drawing.Color]::FromArgb(0, 0, 0, 0)
+        [System.Drawing.Color]::FromArgb(205, 0, 0, 0)
+        [System.Drawing.Color]::FromArgb(205, 0, 0, 0)
+        [System.Drawing.Color]::FromArgb(0, 0, 0, 0))
+    $blend.Positions = @([single]0.0, [single]0.16, [single]0.84, [single]1.0)
+    $scrim.InterpolationColors = $blend
+    $g.FillRectangle($scrim, $bandRect)
+    $scrim.Dispose()
+
+    $white = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::White)
+    $middle = New-Object System.Drawing.StringFormat
+    $middle.Alignment = [System.Drawing.StringAlignment]::Center
+    $middle.LineAlignment = [System.Drawing.StringAlignment]::Center
+
+    # The chord across the ring at the title's height, less a margin. This is
+    # narrower than the disc, and it is what the words really have to fit in.
+    $titleWidth = $outerR * 1.5
+    $titleFont = Get-FittedFont -Graphics $g -Text $Title -MaxWidthPx $titleWidth -StartPt 20 -MinPt 8
+    $titleBox = New-Object System.Drawing.RectangleF(
+        [single]($centre - ($titleWidth / 2)), [single]$bandY,
+        [single]$titleWidth, [single]($bandH * 0.58))
+    $g.DrawString($Title, $titleFont, $white, $titleBox, $middle)
+
+    if ($Subtitle) {
+        $subFont = Get-FittedFont -Graphics $g -Text $Subtitle -MaxWidthPx $titleWidth -StartPt 9 -MinPt 6
+        $subInk = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(225, 225, 225, 225))
+        $subBox = New-Object System.Drawing.RectangleF(
+            [single]($centre - ($titleWidth / 2)), [single]($bandY + ($bandH * 0.56)),
+            [single]$titleWidth, [single]($bandH * 0.34))
+        $g.DrawString($Subtitle, $subFont, $subInk, $subBox, $middle)
+        $subFont.Dispose(); $subInk.Dispose()
+    }
+
+    $g.ResetClip()
+
+    # Punch the hub back out to nothing, last, because the art and the band
+    # both cross it. SourceCopy rather than drawing transparent paint over the
+    # top, which would do nothing at all.
+    $g.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+    $clear = New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::Transparent)
+    $g.FillEllipse($clear, [single]($centre - $innerR), [single]($centre - $innerR),
+                   [single]($innerR * 2), [single]($innerR * 2))
+    $clear.Dispose()
+
+    foreach ($d in @($g, $ring, $white, $titleFont, $middle)) { $d.Dispose() }
+    $bmp.Save($OutPng, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+    return $OutPng
+}

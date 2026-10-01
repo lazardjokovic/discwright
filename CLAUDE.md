@@ -168,6 +168,17 @@ The owner's, and they are not negotiable in a hurry.
   with the focus message. Find it and kill it before investigating anything
   else.
 
+- **A local that differs from a parameter only by case is that parameter**, and
+  the parameter's type still applies. `$accent = ConvertFrom-HexColour $Accent`
+  inside a function taking `[string]$Accent` converted the Color straight back
+  to the string `Color [A=255, R=27...]`, and the error arrived later and
+  elsewhere, as a constructor refusing to convert a Color to a Color. Give the
+  local its own name. `print/DiscWright.Print.ps1` has the comment and
+  `tests/DiscWright.Print.Tests.ps1` has the pixel test that catches it.
+- **`New-Object` picks the wrong overload for `RectangleF`.** It chose the
+  `Rectangle` overload of `LinearGradientBrush` and then reported the failure as
+  a bad colour. `[Type]::new(...)` with explicit `[single]` casts resolves it.
+
 ## Where things stand
 
 **0.8.1, released 2026-09-27.** The Linux port is caught up with 0.8.0's feature

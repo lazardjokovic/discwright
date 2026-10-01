@@ -249,3 +249,146 @@ Describe 'Checking a printer before any paper moves' -Tag 'Unit' {
         @($rows).Count | Should -Be (@($script:CaseFormats).Count + 1)
     }
 }
+
+Describe 'Type that has to fit a disc or a spine' -Tag 'Unit' {
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Drawing
+        $script:Canvas = New-Object System.Drawing.Bitmap 100, 100
+        $script:G = [System.Drawing.Graphics]::FromImage($script:Canvas)
+    }
+
+    AfterAll {
+        if ($script:G) { $script:G.Dispose() }
+        if ($script:Canvas) { $script:Canvas.Dispose() }
+    }
+
+    It 'comes down in size until the words actually fit' {
+        $long = 'The Chronicles of Riddick: Escape from Butcher Bay'
+        $font = Get-FittedFont -Graphics $script:G -Text $long -MaxWidthPx 600 -StartPt 40 -MinPt 6
+        try {
+            $script:G.MeasureString($long, $font).Width | Should -BeLessOrEqual 600
+            $font.SizeInPoints | Should -BeLessThan 40
+        } finally { $font.Dispose() }
+    }
+
+    It 'leaves a short title at the size asked for' {
+        $font = Get-FittedFont -Graphics $script:G -Text 'Gothic' -MaxWidthPx 600 -StartPt 20 -MinPt 6
+        try { $font.SizeInPoints | Should -Be 20 } finally { $font.Dispose() }
+    }
+
+    It 'stops at the floor rather than shrinking to nothing' {
+        # No size fits this, so the caller gets the smallest it allowed and can
+        # decide, instead of getting a 0.5 pt font nobody can read.
+        $font = Get-FittedFont -Graphics $script:G -Text ('x' * 400) -MaxWidthPx 50 -StartPt 20 -MinPt 7
+        try { $font.SizeInPoints | Should -Be 7 } finally { $font.Dispose() }
+    }
+
+    It 'falls back to a font that exists when the one asked for does not' {
+        $font = Get-FittedFont -Graphics $script:G -Text 'Gothic' -MaxWidthPx 600 -StartPt 12 `
+                               -Family 'No Such Typeface Anywhere'
+        try { $font.Name | Should -Not -BeNullOrEmpty } finally { $font.Dispose() }
+    }
+}
+
+Describe 'Reading a colour the caller typed' -Tag 'Unit' {
+
+    It 'takes <Hex> as R<R> G<G> B<B>' -ForEach @(
+        @{ Hex = '#1B2A41'; R = 27;  G = 42;  B = 65 }
+        @{ Hex = '1B2A41';  R = 27;  G = 42;  B = 65 }
+        @{ Hex = '#FFFFFF'; R = 255; G = 255; B = 255 }
+    ) {
+        $c = ConvertFrom-HexColour $Hex
+        $c.R | Should -Be $R
+        $c.G | Should -Be $G
+        $c.B | Should -Be $B
+    }
+}
+
+Describe 'The face that goes on the disc' -Tag 'Unit' {
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Drawing
+
+        # Sampling the rendered pixels is the only honest check here: the
+        # printable ring, the clear hub and the accent colour are all things
+        # that either ended up in the image or did not.
+        function Get-FacePixel($bitmap, [double]$atMmFromCentre, [double]$angleDeg = 0) {
+            $centre = ($bitmap.Width - 1) / 2.0
+            $r = ConvertTo-Px $atMmFromCentre
+            $x = [int][Math]::Round($centre + ($r * [Math]::Cos($angleDeg * [Math]::PI / 180)))
+            $y = [int][Math]::Round($centre + ($r * [Math]::Sin($angleDeg * [Math]::PI / 180)))
+            return $bitmap.GetPixel($x, $y)
+        }
+    }
+
+    foreach ($disc in $script:DiscFormats) {
+        Context "on a $($disc.Name)" {
+
+            BeforeAll {
+                # Pester runs this in its own scope, so the format is looked up
+                # again by key rather than captured from the loop.
+                $script:Fmt = Get-DiscFormat $disc.Key
+                $script:Png = Join-Path $script:Sandbox "face-$($disc.Key).png"
+                $null = New-DiscFace -OutPng $script:Png -Title 'Gothic' -Subtitle 'GOG edition' `
+                                     -Disc $disc.Key
+                $script:Face = New-Object System.Drawing.Bitmap $script:Png
+            }
+
+            AfterAll { if ($script:Face) { $script:Face.Dispose() } }
+
+            It 'is a 120 mm square at 300 dpi, which is the whole disc' {
+                $script:Face.Width  | Should -Be (ConvertTo-Px 120.0)
+                $script:Face.Height | Should -Be (ConvertTo-Px 120.0)
+                [Math]::Round($script:Face.HorizontalResolution) | Should -Be 300
+            }
+
+            It 'leaves the hub clear, so no ink lands on the clamp' {
+                (Get-FacePixel $script:Face 0).A | Should -Be 0
+                # Just inside the printable edge of the hub, still clear.
+                (Get-FacePixel $script:Face (($script:Fmt.InnerMm / 2) - 1)).A | Should -Be 0
+            }
+
+            It 'puts ink where the disc can take it' {
+                # A millimetre outside the hub, and a millimetre inside the rim.
+                (Get-FacePixel $script:Face (($script:Fmt.InnerMm / 2) + 1)).A | Should -BeGreaterThan 0
+                (Get-FacePixel $script:Face (($script:Fmt.OuterMm / 2) - 1)).A | Should -BeGreaterThan 0
+            }
+
+            It 'puts no ink past the printable rim' {
+                (Get-FacePixel $script:Face (($script:Fmt.OuterMm / 2) + 1)).A | Should -Be 0
+                # The corner of the square is well outside any disc.
+                $script:Face.GetPixel(2, 2).A | Should -Be 0
+            }
+        }
+    }
+
+    It 'uses the accent colour it was given' {
+        # A local that differs from a typed parameter only by case IS that
+        # parameter, so this once rendered every disc in the default navy no
+        # matter what was asked for, silently. Pixels, not promises.
+        $png = Join-Path $script:Sandbox 'face-accent.png'
+        $null = New-DiscFace -OutPng $png -Title 'Gothic' -Accent '#B02020'
+        $face = New-Object System.Drawing.Bitmap $png
+        try {
+            $centre = ($face.Width - 1) / 2.0
+            $px = $face.GetPixel([int]$centre, [int]($centre - (ConvertTo-Px 30.0)))
+            $px.R | Should -BeGreaterThan $px.B -Because 'a red accent has to come out red'
+            $px.R | Should -BeGreaterThan 100
+        } finally { $face.Dispose() }
+    }
+
+    It 'says so when the cover image is not there, rather than drawing nothing' {
+        { New-DiscFace -OutPng (Join-Path $script:Sandbox 'x.png') -Title 'Gothic' `
+                       -CoverImage 'Z:\no\such\cover.jpg' } |
+            Should -Throw -ExpectedMessage '*No cover image*'
+    }
+
+    It 'fits a long title instead of running it off the disc' {
+        $png = Join-Path $script:Sandbox 'face-longtitle.png'
+        { New-DiscFace -OutPng $png -Disc 'hub' `
+                       -Title 'The Chronicles of Riddick: Escape from Butcher Bay' } |
+            Should -Not -Throw
+        (Get-Item $png).Length | Should -BeGreaterThan 1000
+    }
+}
