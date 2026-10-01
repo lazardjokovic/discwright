@@ -91,6 +91,44 @@ function ConvertTo-WriteSpeedKb {
     throw "Cannot read '$Speed' as a write speed. Use a multiple like 8x, or KB/s like 1199."
 }
 
+<#
+    Roughly how long a burn will take, so a locked window is an expected wait
+    rather than a hang.
+
+    Writing is bytes divided by speed, which is the easy part. Finalising is
+    not: closing a disc writes the lead-in and lead-out, takes most of a minute
+    on a CD regardless of how little was written, and is why a 50 MB disc still
+    takes longer than the arithmetic says.
+#>
+function Get-BurnEstimateSeconds {
+    param(
+        [Parameter(Mandatory)][long]$Bytes,
+        [Parameter(Mandatory)][int]$SpeedKb,
+        [int]$MediaType = 2,
+        [bool]$CloseMedia = $true
+    )
+    if ($SpeedKb -le 0) { return 0 }
+    # Drives rarely hold their rated speed for the whole write, so this is
+    # deliberately a little pessimistic. An estimate that runs under is worse
+    # than one that runs over: the first looks like a hang.
+    $write = $Bytes / ($SpeedKb * 1024.0) * 1.15
+    # Calibrated against the one real burn there has been: 241.7 MB to a CD-R
+    # on an ASUS DRW-24D5MT took 93 seconds all in, of which roughly 69 was the
+    # write itself. One measurement is not a curve, so this is deliberately a
+    # little over rather than a little under.
+    $finalise = if (-not $CloseMedia) { 5 }
+                elseif ($MediaType -in 1, 2, 3) { 25 }
+                else { 20 }
+    return [int][Math]::Ceiling($write + $finalise)
+}
+
+function Format-BurnEstimate([int]$seconds) {
+    if ($seconds -le 0) { return 'unknown' }
+    if ($seconds -lt 90) { return "about $seconds seconds" }
+    $m = [int][Math]::Round($seconds / 60.0)
+    return "about $m minute$(if ($m -ne 1) { 's' })"
+}
+
 function Get-WriteSpeeds($fmt, [int]$mediaType) {
     $out = @()
     try {
@@ -364,7 +402,8 @@ function Test-BurnedDisc {
     param(
         [Parameter(Mandatory)][string]$DiscRoot,
         [Parameter(Mandatory)][string]$StagingFolder,
-        [switch]$SkipHashes
+        [switch]$SkipHashes,
+        [scriptblock]$OnProgress
     )
     foreach ($p in $DiscRoot, $StagingFolder) {
         if (-not (Test-Path -LiteralPath $p)) { throw "Nothing at '$p'" }
@@ -383,6 +422,11 @@ function Test-BurnedDisc {
     $onDisc = Get-RelativeMap $DiscRoot
     $source = Get-RelativeMap $StagingFolder
 
+    # A callback, because reading a disc back is slow and silence for a minute
+    # looks like a hang. The burn itself cannot do this: it is one blocking call
+    # inside the drive, and this loop is ours.
+    $done = 0
+    $total = $source.Count
     $missing = @($source.Keys | Where-Object { -not $onDisc.ContainsKey($_) } | Sort-Object)
     $extra   = @($onDisc.Keys  | Where-Object { -not $source.ContainsKey($_) } | Sort-Object)
     $sizeOff = @()
@@ -398,6 +442,8 @@ function Test-BurnedDisc {
             $b = (Get-FileHash -LiteralPath $onDisc[$rel].FullName -Algorithm SHA256).Hash
             if ($a -ne $b) { $hashOff += $rel }
         }
+        $done++
+        if ($OnProgress) { & $OnProgress $done $total $rel }
     }
 
     return [pscustomobject]@{

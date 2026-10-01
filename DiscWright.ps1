@@ -4250,6 +4250,8 @@ $btnBurn.Add_Click({
     $pick = $d.Speeds | Where-Object { $_.Multiple -le $cap } | Select-Object -First 1
     if (-not $pick) { $pick = $d.Speeds | Select-Object -Last 1 }
     $speedText = if ($pick) { "$($pick.Multiple)x" } else { "the drive's own choice" }
+    $kb = if ($pick) { $pick.Kb } else { $(if ($d.Speeds.Count) { $d.Speeds[0].Kb } else { 0 }) }
+    $estimate = Format-BurnEstimate (Get-BurnEstimateSeconds -Bytes $iso.Length -SpeedKb $kb -MediaType $d.MediaType)
 
     $msg = @(
         "Write $($iso.Name) to the disc in $($d.Drive)?"
@@ -4257,8 +4259,10 @@ $btnBurn.Add_Click({
         ("  {0:N1} MB onto a $($d.MediaName) with {1:N1} MB free" -f ($iso.Length/1MB), ($d.FreeBytes/1MB))
         "  $($d.Vendor) $($d.Product), at $speedText"
         ''
+        "It should take $estimate."
         'This cannot be undone, and a write-once disc cannot be reused.'
-        'The window will stop responding while it writes. That is normal.'
+        'The window will stop responding for that long. That is normal:'
+        'the drive does the writing in one go and reports nothing until it ends.'
         ''
         'Every file is checked against what was built once it finishes.'
     ) -join "`r`n"
@@ -4271,7 +4275,9 @@ $btnBurn.Add_Click({
     Set-FormBusy $true
     $btnBurn.Enabled = $false
     try {
-        & $log "Burning $($iso.Name) to $($d.Drive) at $speedText..."
+        & $log "Burning $($iso.Name) to $($d.Drive) at $speedText, $estimate. The window will not respond until it finishes."
+        $lblElapsed.Text = 'Burning...'
+        [System.Windows.Forms.Application]::DoEvents()
         # Not $args: that is an automatic variable, and splatting over it is a
         # way to get a call that does something other than it reads.
         $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false }
@@ -4292,7 +4298,21 @@ $btnBurn.Add_Click({
             & $log "$root is not readable yet, so the disc was not checked."
         } else {
             & $log 'Checking every file on the disc against what was built...'
-            $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stage
+            # Reading a disc back is slow, so this one does report as it goes.
+            $checkWatch = [Diagnostics.Stopwatch]::StartNew()
+            $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stage -OnProgress {
+                # The file name is passed too, and deliberately not shown: the
+                # label has 160px before it runs under the log box, and a disc
+                # with thousands of files would scroll it into noise.
+                param($done, $total)
+                if ($total -gt 0) {
+                    $pbBuild.Value = [int](1000.0 * $done / $total)
+                    $lblElapsed.Text = 'Checking {0}/{1}   {2}' -f $done, $total, (Format-Elapsed $checkWatch.Elapsed)
+                }
+                [System.Windows.Forms.Application]::DoEvents()
+            }
+            $pbBuild.Value = 0
+            $lblElapsed.Text = ''
             if ($v.Ok) {
                 & $log "All $($v.FilesOnDisc) files match."
                 [System.Windows.Forms.MessageBox]::Show(

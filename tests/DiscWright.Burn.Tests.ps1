@@ -283,3 +283,69 @@ Describe 'The Burn to disc button' -Tag 'Unit' {
         }
     }
 }
+
+Describe 'Telling somebody how long a burn will take' -Tag 'Unit' {
+
+    # The window is locked and silent for the whole write, because the drive
+    # does it in one go and reports nothing until it ends. An expected wait is
+    # tolerable; an unexplained one looks like a hang.
+
+    It 'is in the right place against the only real burn there has been' {
+        # 241.7 MB to a CD-R took 93 seconds all in, at the drive's own speed.
+        $at24 = Get-BurnEstimateSeconds -Bytes 253458944 -SpeedKb 3599 -MediaType 2
+        $at24 | Should -BeGreaterThan 93 -Because 'an estimate that runs under looks like a hang'
+        $at24 | Should -BeLessThan 150   -Because 'and one that runs far over is not an estimate'
+    }
+
+    It 'takes longer at a slower speed, which is the whole point of choosing one' {
+        $fast = Get-BurnEstimateSeconds -Bytes 253458944 -SpeedKb 3599 -MediaType 2
+        $slow = Get-BurnEstimateSeconds -Bytes 253458944 -SpeedKb 1199 -MediaType 2
+        $slow | Should -BeGreaterThan $fast
+    }
+
+    It 'still allows for finalising when there is almost nothing to write' {
+        # Closing a disc writes a lead-in and lead-out whatever is on it, which
+        # is why a tiny disc is not instant.
+        Get-BurnEstimateSeconds -Bytes 1MB -SpeedKb 3599 -MediaType 2 | Should -BeGreaterThan 20
+    }
+
+    It 'says almost nothing is needed when the disc is left open' {
+        $closed = Get-BurnEstimateSeconds -Bytes 1MB -SpeedKb 3599 -MediaType 2 -CloseMedia $true
+        $open   = Get-BurnEstimateSeconds -Bytes 1MB -SpeedKb 3599 -MediaType 2 -CloseMedia $false
+        $open | Should -BeLessThan $closed
+    }
+
+    It 'gives up rather than inventing a number when the speed is unknown' {
+        Get-BurnEstimateSeconds -Bytes 1GB -SpeedKb 0 | Should -Be 0
+        Format-BurnEstimate 0 | Should -Be 'unknown'
+    }
+
+    It 'reads it out as <Text> for <Seconds> seconds' -ForEach @(
+        @{ Seconds = 45;  Text = 'about 45 seconds' }
+        @{ Seconds = 100; Text = 'about 2 minutes' }
+        @{ Seconds = 60;  Text = 'about 60 seconds' }
+        @{ Seconds = 420; Text = 'about 7 minutes' }
+    ) {
+        Format-BurnEstimate $Seconds | Should -Be $Text
+    }
+
+    It 'reports progress while a disc is read back, since that loop is ours' {
+        $a = Join-Path $script:Sandbox 'prog-src'
+        $b = Join-Path $script:Sandbox 'prog-disc'
+        foreach ($root in $a, $b) {
+            New-Item -ItemType Directory -Force -Path $root | Out-Null
+            foreach ($n in 1..5) { Set-Content -LiteralPath (Join-Path $root "f$n.bin") -Value "file $n" }
+        }
+        # An ArrayList, not @() with +=: the callback runs in a child scope, so
+        # += there makes a local copy and the outer variable stays empty. The
+        # app's own callback sets control properties, which does not have this
+        # problem, but a test that collects values does.
+        $seen = New-Object System.Collections.ArrayList
+        $null = Test-BurnedDisc -DiscRoot $b -StagingFolder $a -OnProgress {
+            param($done, $total, $file) $null = $seen.Add($done)
+        }
+        # Five files, so five reports, ending at five.
+        $seen.Count | Should -Be 5
+        $seen[-1] | Should -Be 5
+    }
+}
