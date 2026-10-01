@@ -124,7 +124,7 @@ PackageUrl: https://discwright.com
 License: MIT
 LicenseUrl: https://github.com/lazardjokovic/discwright/blob/main/LICENSE
 Copyright: Copyright (c) 2026 lazardjokovic
-ShortDescription: Turn a GOG offline installer into a real game disc, with the game's own icon and title in This PC and a menu when you double-click it.
+ShortDescription: Turn a GOG offline installer into a real game disc: the game's own icon and title in This PC, a menu when you double-click it, printed cover art, and burning with every file checked afterwards.
 Description: |-
   DiscWright turns a folder of GOG offline installers into a burnable ISO that
   behaves like a game disc from a box: the drive carries the game's own icon and
@@ -134,10 +134,19 @@ Description: |-
   It builds the ISO with the disc imaging support already in Windows, so there
   is nothing bundled and nothing to trust. More than one game fits on a disc,
   add-ons live under the game they belong to, and a set too big for one disc can
-  be split across several.
+  be split across several. A folder of loose game files works as well as a GOG
+  download, and plays straight from the disc.
 
-  Burning is out of scope on purpose. DiscWright writes the ISO and leaves
-  burning to the tools that already do it well.
+  It burns the disc too, refusing rather than guessing when the disc is not
+  blank or the image will not fit, keeping below the drive's top speed, and
+  reading every file back afterwards to compare it with what was built. A burn
+  that ends without an error is not the same thing as a disc holding the right
+  bytes.
+
+  And it prints the artwork: a case wrap as a PDF at its true size with crop
+  marks, and a disc face as a 300 dpi PNG with the hub left clear. Artwork you
+  already have is printed exactly as it is, placed at exact trim with nothing
+  added, cropped or stretched.
 Moniker: discwright
 Tags:
 - gog

@@ -102,17 +102,17 @@ stays the technical one.
 
 ## Later
 
-**Artwork without the detour through an image editor.** Two requests that meet in the
-middle. One: fetch the game's icon and cover art automatically rather than making you hunt
-for a PNG. Two: build printable case inserts as well as the disc face — cover on the
-front, screenshots on the back — so the printed result matches the disc.
-`extras/DiscLabel.ps1` already renders a printable 120 mm disc face at 300 dpi and sits
-parked in the repo, so the printing half is partly done.
+**Artwork fetched rather than hunted for.** Half of this shipped in 0.9.0: the case
+wrap and the disc face are built at their true sizes, and artwork you already have is
+printed exactly as it is. What is left is where that artwork comes from. Scraping a store
+page adds a dependency that breaks whenever the site is redesigned, on a tool whose whole
+point is that it runs offline with nothing installed, so artwork lifted out of the
+installer itself may be the better trade.
 
-The open question is where the artwork comes from. Scraping a store page adds a dependency
-that breaks whenever the site is redesigned, on a tool whose whole point is that it runs
-offline with nothing installed. A folder of images you point it at, or artwork lifted out
-of the installer itself, may be the better trade.
+**Label sheets.** Adhesive disc labels sit at brand-specific positions on an A4 sheet.
+The format table has a row waiting for them, and the positions should be measured off a
+real sheet rather than taken from a web page, which is how every other measurement in
+that table was settled.
 
 ## Considering
 
@@ -138,10 +138,11 @@ of the installer itself, may be the better trade.
 
 ## Not planned
 
-Stated plainly because these come up.
+Stated plainly because these come up. Burning used to sit here, on the reasoning that
+other tools did it well enough. It shipped in 0.9.0 instead, because the thing those tools
+do not do is read every file back off the disc afterwards and compare it with what was
+built.
 
-- **Burning.** DiscWright writes an ISO and stops. ImgBurn, Nero and the burner built
-  into Windows all do the rest well, and there is no reason to write a worse one.
 - **Anything that removes DRM.** GOG installers are DRM-free by design — that is the only
   reason a tool like this can exist. DiscWright circumvents nothing and never will.
 
