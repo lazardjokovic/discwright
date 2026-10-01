@@ -5102,11 +5102,17 @@ Describe "The installer's choice of launcher" -Tag 'Unit' {
     }
 }
 
-Describe 'Saying what a picture will lose before it is printed' -Tag 'Unit' {
+Describe 'Saying whether a picture is the right shape' -Tag 'Unit' {
 
-    # The menu background is wide because it sits behind buttons. A cover panel
-    # is 129.5 x 183 mm and tall. Using one for the other is not wrong so much
-    # as expensive, and it is only expensive after somebody has printed it.
+    # This used to report how much of a picture would be cut off, back when a
+    # picture was fitted into a layout. Nothing is cropped or stretched any
+    # more, so the question changed: is the picture the shape of the thing being
+    # printed? Close enough and it is printed exactly as it is. Anything else is
+    # not cover art, and a plain label is printed with the picture left alone.
+    #
+    # The change was found by regenerating a real project's artwork and looking
+    # at it: a 16:9 menu background was being printed across the whole wrap as
+    # though it were a finished cover.
 
     BeforeAll {
         Add-Type -AssemblyName System.Drawing
@@ -5130,7 +5136,7 @@ Describe 'Saying what a picture will lose before it is printed' -Tag 'Unit' {
             return $path
         }
 
-        # The real panel, in pixels at 300 dpi.
+        # The real panel and the real disc face, in pixels at 300 dpi.
         $script:PanelW = 1530
         $script:PanelH = 2161
     }
@@ -5141,34 +5147,40 @@ Describe 'Saying what a picture will lose before it is printed' -Tag 'Unit' {
         }
     }
 
-    It 'warns that a 16:9 background loses most of its width on a cover' {
+    It 'says a 16:9 background is not a cover shape, and that a label is printed instead' {
         $note = Get-ArtFitNote (New-SizedPicture 1920 1080) $script:PanelW $script:PanelH 'Cover'
         $note | Should -Match '1920x1080'
-        $note | Should -Match 'width'
-        # 60% is the real figure for 16:9 against this panel. Anything much
-        # smaller would mean the arithmetic has drifted.
-        [int]([regex]::Match($note, '(\d+)%').Groups[1].Value) | Should -BeGreaterThan 50
+        $note | Should -Match 'not that shape'
+        $note | Should -Match 'plain label'
     }
 
-    It 'warns about the menu background size DiscWright itself asks for' {
+    It 'says the same of the menu background size DiscWright itself asks for' {
         $note = Get-ArtFitNote (New-SizedPicture 760 480) $script:PanelW $script:PanelH 'Cover'
-        [int]([regex]::Match($note, '(\d+)%').Groups[1].Value) | Should -BeGreaterThan 50
+        $note | Should -Match 'not that shape'
     }
 
-    It 'is content with a portrait picture, which is what a case wants' {
+    It 'says a cover-shaped picture is printed exactly as it is' {
         $note = Get-ArtFitNote (New-SizedPicture 1000 1420) $script:PanelW $script:PanelH 'Cover'
-        $note | Should -Match 'good shape'
-        $note | Should -Not -Match 'cut off'
+        $note | Should -Match 'right shape'
+        $note | Should -Match 'exactly as it is'
+        $note | Should -Not -Match 'plain label'
     }
 
-    It 'is content with a square picture on a round disc face' {
+    It 'accepts a square picture for a round disc face' {
         $note = Get-ArtFitNote (New-SizedPicture 1200 1200) 1394 1394 'Disc face'
-        $note | Should -Match 'good shape'
+        $note | Should -Match 'right shape'
     }
 
-    It 'warns that a wide picture loses its sides on a disc face' {
+    It 'refuses a wide picture for a disc face, which is round' {
         $note = Get-ArtFitNote (New-SizedPicture 1920 1080) 1394 1394 'Disc face'
-        $note | Should -Match 'width'
+        $note | Should -Match 'not that shape'
+    }
+
+    It 'allows a few per cent either way, because a real cover is rarely exact' {
+        # 1530x2161 is the panel itself; 1500x2120 is a couple of per cent out
+        # and is plainly the same thing.
+        (Get-ArtFitNote (New-SizedPicture 1500 2120) $script:PanelW $script:PanelH 'Cover') |
+            Should -Match 'right shape'
     }
 
     It 'says nothing at all when there is no picture to talk about' {
