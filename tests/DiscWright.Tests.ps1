@@ -5472,3 +5472,92 @@ Describe 'What the zip ships' -Tag 'Unit' {
         $script:BuildSrc | Should -Match 'New-Item -ItemType Directory -Path \$dstDir'
     }
 }
+
+Describe 'The artwork the app draws when nothing was chosen' -Tag 'Unit' {
+
+    # Reported from the outside as two complaints: the app halts asking you to
+    # browse for an icon and a background, and there is no way to preview the
+    # menu. They were the same wall. The Preview button stayed disabled until a
+    # background had been chosen, so the people who had not chosen one could
+    # never see the feature that would have shown them why it mattered.
+    #
+    # The artwork is drawn rather than shipped. A picture in the zip is a
+    # picture to license, and one built from the menu's own palette looks
+    # deliberate rather than like a placeholder.
+
+    BeforeAll {
+        $script:ArtDir = Join-Path $script:Sandbox 'default-art'
+        New-Item -ItemType Directory -Force -Path $script:ArtDir | Out-Null
+    }
+
+    It 'draws a disc icon, square and large enough for the converter' {
+        $p = Get-DefaultArt -Kind Icon
+        Test-Path $p | Should -BeTrue
+        $img = [System.Drawing.Image]::FromFile($p)
+        try {
+            $img.Width | Should -Be 512
+            $img.Height | Should -Be $img.Width
+        } finally { $img.Dispose() }
+    }
+
+    It 'leaves the hub of that icon actually transparent' {
+        # Not cosmetic. A hub filled with the background colour looks like a
+        # hole on a dark page and like a blob on a light one, and Explorer
+        # draws icons on both.
+        $bmp = New-Object System.Drawing.Bitmap((Get-DefaultArt -Kind Icon))
+        try {
+            $bmp.GetPixel(($bmp.Width/2), ($bmp.Height/2)).A | Should -Be 0
+            $bmp.GetPixel(5, 5).A | Should -Be 0                       # outside the disc
+            $bmp.GetPixel(($bmp.Width/2), 110).A | Should -Be 255       # the disc face
+        } finally { $bmp.Dispose() }
+    }
+
+    It 'passes the icon through the real converter' {
+        $ico = Join-Path $script:ArtDir 'default.ico'
+        Convert-ToIco (Get-DefaultArt -Kind Icon) $ico
+        Test-Path $ico | Should -BeTrue
+        $i = New-Object System.Drawing.Icon($ico)
+        try { $i.Width | Should -BeGreaterThan 0 } finally { $i.Dispose() }
+    }
+
+    It 'draws a background that composes like any chosen picture' {
+        # It is a source image, not a finished background, so the panel, the
+        # divider and the title keep behaving exactly as they always have.
+        $out = Join-Path $script:ArtDir 'composed.png'
+        New-Background (Get-DefaultArt -Kind Background) 'DEFAULT' $out 'Right' $false $true
+        $img = [System.Drawing.Image]::FromFile($out)
+        try { $img.Width | Should -Be 760; $img.Height | Should -Be 480 } finally { $img.Dispose() }
+    }
+
+    It 'keeps the background symmetrical, because the panel can sit on either side' {
+        # Anything off-centre would be half covered on one of the two settings.
+        $bmp = New-Object System.Drawing.Bitmap((Get-DefaultArt -Kind Background))
+        try {
+            $y = [int]($bmp.Height/2)
+            # The gradient runs corner to corner, so the two sides are not
+            # identical. The rings are what must be centred, so compare points
+            # an equal distance either side of the middle.
+            $mid = [int]($bmp.Width/2)
+            $bmp.GetPixel(($mid-300), $y).A | Should -Be $bmp.GetPixel(($mid+300), $y).A
+        } finally { $bmp.Dispose() }
+    }
+
+    It 'redraws a file that was left empty' {
+        # An interrupted first run left a zero byte PNG behind, and a zero byte
+        # PNG fails later and further away, where it looks like a broken build.
+        $p = Get-DefaultArt -Kind Icon
+        Set-Content -LiteralPath $p -Value '' -NoNewline
+        (Get-Item $p).Length | Should -Be 0
+        $again = Get-DefaultArt -Kind Icon
+        (Get-Item $again).Length | Should -BeGreaterThan 0
+    }
+
+    It 'reuses what it already drew' {
+        $first = Get-DefaultArt -Kind Background
+        $stamp = (Get-Item $first).LastWriteTimeUtc
+        Start-Sleep -Milliseconds 20
+        $second = Get-DefaultArt -Kind Background
+        $second | Should -Be $first
+        (Get-Item $second).LastWriteTimeUtc | Should -Be $stamp
+    }
+}

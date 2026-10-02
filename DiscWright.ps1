@@ -1157,6 +1157,133 @@ function New-TitleFont([single]$size,[System.Drawing.GraphicsUnit]$unit=[System.
 
 # $panelSide = 'Right' (default) or 'Left' - which edge the button column sits on.
 # Pick the side OPPOSITE the focal point of the artwork, or the buttons cover it.
+# The built-in artwork, drawn here rather than shipped as files in the zip.
+#
+# A disc used to need a background and an icon before the app would build
+# anything, and the Preview button stayed dead until a background was chosen,
+# which hid the preview from anyone who had not picked one. Reported as two
+# separate complaints that turned out to be the same wall.
+#
+# Drawn rather than shipped for three reasons: a picture in the zip is a picture
+# to license, the zip stays small, and artwork built from the same palette as
+# the menu looks deliberate instead of like a placeholder. Written to a temp
+# folder and reused, so a second build does not redraw them.
+# The menu's own palette, so a disc built without choosing anything still looks
+# like the app that made it. A function rather than script variables, because
+# the tests load this file's functions and nothing else, and a constant they
+# cannot see is a constant they have to copy.
+function Get-ArtPalette {
+    return @{
+        Ink    = @(10, 21, 25)       # the menu's background
+        Mid    = @(22, 84, 90)       # its borders
+        Accent = @(0, 190, 200)      # its accent
+        Light  = @(230, 235, 239)    # its text
+    }
+}
+
+function New-ArtColour([int[]]$rgb, [int]$alpha = 255) {
+    [System.Drawing.Color]::FromArgb($alpha, $rgb[0], $rgb[1], $rgb[2])
+}
+
+# A background to compose the menu over. This is the source picture, not the
+# finished background: it goes through New-Background like any other image, so
+# the panel, the divider and the title behave exactly as they always have.
+#
+# Kept symmetrical on purpose. The panel can sit on either side, so anything
+# off-centre would be half covered on one of the two settings.
+function New-DefaultBackgroundImage([string]$outPng) {
+    $pal = Get-ArtPalette
+    $W = 1280; $H = 720
+    $bmp = New-Object System.Drawing.Bitmap($W, $H)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+    $grad = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+        (New-Object System.Drawing.Point(0, 0)),
+        (New-Object System.Drawing.Point($W, $H)),
+        (New-ArtColour $pal.Ink),
+        (New-ArtColour $pal.Mid))
+    $g.FillRectangle($grad, 0, 0, $W, $H)
+    $grad.Dispose()
+
+    # A disc, faintly, centred. Three rings rather than a filled circle: filled
+    # reads as a logo sitting on the artwork, rings read as texture behind it.
+    $cx = $W / 2.0; $cy = $H / 2.0
+    foreach ($r in @(300, 190, 70)) {
+        $pen = New-Object System.Drawing.Pen((New-ArtColour $pal.Accent 38), 2)
+        $g.DrawEllipse($pen, ($cx - $r), ($cy - $r), ($r * 2), ($r * 2))
+        $pen.Dispose()
+    }
+
+    $g.Dispose()
+    Save-PngAtomic $bmp $outPng
+    $bmp.Dispose()
+}
+
+# A disc icon, as a square PNG. Convert-ToIco turns it into the multi-size .ico
+# the disc carries, so this only has to be a good 512px drawing.
+function New-DefaultIconImage([string]$outPng) {
+    $pal = Get-ArtPalette
+    $S = 512
+    $bmp = New-Object System.Drawing.Bitmap($S, $S)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $g.Clear([System.Drawing.Color]::Transparent)
+
+    $pad = 16
+    $size = $S - ($pad * 2)
+    # The disc itself, darkest in the middle so the ring reads at small sizes.
+    $face = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+        (New-Object System.Drawing.Point(0, 0)),
+        (New-Object System.Drawing.Point($S, $S)),
+        (New-ArtColour $pal.Mid),
+        (New-ArtColour $pal.Ink))
+    $g.FillEllipse($face, $pad, $pad, $size, $size)
+    $face.Dispose()
+
+    $rim = New-Object System.Drawing.Pen((New-ArtColour $pal.Accent), 10)
+    $g.DrawEllipse($rim, $pad, $pad, $size, $size)
+    $rim.Dispose()
+
+    # The data edge, and the hub, which is what makes it read as a disc rather
+    # than a coin at 16px.
+    $inner = [int]($S * 0.30)
+    $io = ($S - $inner) / 2.0
+    $ring = New-Object System.Drawing.Pen((New-ArtColour $pal.Light 70), 6)
+    $g.DrawEllipse($ring, $io, $io, $inner, $inner)
+    $ring.Dispose()
+
+    $hole = [int]($S * 0.12)
+    $ho = ($S - $hole) / 2.0
+    # Punched clear, so the icon has a real hole at every size Convert-ToIco makes.
+    $g.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+    $clear = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::Transparent)
+    $g.FillEllipse($clear, $ho, $ho, $hole, $hole)
+    $clear.Dispose()
+
+    $g.Dispose()
+    Save-PngAtomic $bmp $outPng
+    $bmp.Dispose()
+}
+
+# The path to a built-in picture, drawn on first use and kept afterwards.
+# Returns a path, so every caller downstream treats it as an ordinary chosen
+# file and nothing else has to know it was generated.
+function Get-DefaultArt {
+    param([Parameter(Mandatory)][ValidateSet('Background','Icon')][string]$Kind)
+    $dir = Join-Path ([IO.Path]::GetTempPath()) 'DiscWrightDefaults'
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $out = Join-Path $dir ('default-' + $Kind.ToLower() + '.png')
+    # Redrawn when missing or empty. An interrupted first run used to leave a
+    # zero-byte file behind, and a zero-byte PNG fails later, further away.
+    $stale = $true
+    if (Test-Path $out) { $stale = ((Get-Item $out).Length -eq 0) }
+    if ($stale) {
+        if ($Kind -eq 'Background') { New-DefaultBackgroundImage $out } else { New-DefaultIconImage $out }
+    }
+    return $out
+}
+
 function New-Background([string]$imgPath,[string]$title,[string]$outPng,[string]$panelSide='Right',[bool]$divider=$false,[bool]$showTitle=$false) {
     $W=760;$H=480;$PW=290
     $left = ($panelSide -ieq 'Left')
@@ -2270,6 +2397,21 @@ function Get-IsoPath([string]$outDir, [string]$label) {
 }
 
 function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$null) {
+    # A missing picture no longer stops a build. A disc needs an icon and the
+    # menu needs a background, and when neither had been chosen the app refused
+    # to build at all, which also left the Preview button dead and hid the
+    # preview from exactly the people who had not got that far. Both now fall
+    # back to artwork the app draws itself, and the log says so, so nobody has
+    # to wonder where the disc face came from.
+    if (-not $s.IconPath) {
+        $s.IconPath  = Get-DefaultArt -Kind Icon
+        $s.IconIsIco = $false
+        & $log 'No disc icon chosen, using the built-in one.'
+    }
+    if ($s.Menu -and -not $s.BgPath) {
+        $s.BgPath = Get-DefaultArt -Kind Background
+        & $log 'No background chosen, using the built-in one.'
+    }
     $stage = Join-Path $s.OutDir 'disc'
     $tmpKeep = $null
     # Names the disc's own content puts at the root, filled in while copying and
@@ -3368,8 +3510,13 @@ function Update-ArtNote {
 function Update-ActionButtons {
     $t = $txtOut.Text.Trim()
     $hasOut  = $t -and (Test-Path $t)
-    # Preview renders current settings, so it needs no build - only a menu and a background.
-    $canPreview = $chkMenu.Checked -and $state.BgPath -and (Test-Path $state.BgPath)
+    # Preview renders current settings, so it needs no build. It used to need a
+    # background too, which is what hid the feature: somebody who had not chosen
+    # one found a dead button and no explanation, and the preview is the thing
+    # that would have shown them what a background is even for. A built-in
+    # background covers that now. It still waits for a game, because a preview of
+    # an empty disc shows a chooser with nothing in it.
+    $canPreview = $chkMenu.Checked -and ((Get-Games).Count -gt 0)
     $isDirty = Test-FormDirty
     $btnOpenDisc.Enabled = [bool]$hasOut
     # Artwork needs a name to print and somewhere to put it, and nothing else.
@@ -3391,7 +3538,7 @@ function Update-ActionButtons {
     $btnNew.Enabled      = [bool]$isDirty
     $tips.SetToolTip($btnNew, $(if($isDirty){'Clear everything and start a new disc. The output folder is kept.'}else{'Nothing to clear - this is already a new disc'}))
     $tips.SetToolTip($btnOpenDisc, $(if($hasOut){'Open the disc staging folder in Explorer'}else{'Set an output folder first (step 6)'}))
-    $tips.SetToolTip($btnPreview,  $(if($canPreview){'Show the menu using the current settings - no rebuild needed'}else{'Turn the menu on and choose a background first (step 4)'}))
+    $tips.SetToolTip($btnPreview,  $(if($canPreview){'Show the menu using the current settings - no rebuild needed'}else{'Add a game, and turn the menu on in step 4'}))
     $tips.SetToolTip($btnOpenProj, 'Load a disc you already built, to edit and rebuild it')
     $tips.SetToolTip($btnArtwork, $(if($canArt){'Make the case wrap and the disc face for this disc, ready to print'}
                                     else{'Add a game and set an output folder first'}))
@@ -3443,7 +3590,9 @@ function Update-ActionButtons {
 # in the preview folder - but Play still works, since it finds the game via the registry.
 function New-PreviewMenu {
     if (-not $chkMenu.Checked) { Show-Warn "The autorun menu is switched off in step 4, so there is nothing to preview."; return $null }
-    if (-not $state.BgPath -or -not (Test-Path $state.BgPath)) { Show-Warn "Choose a background image first (step 4)."; return $null }
+    # Previewing is how someone finds out what the menu even looks like, so it
+    # must not be the thing that demands a file first.
+    $bgSrc = if ($state.BgPath -and (Test-Path $state.BgPath)) { $state.BgPath } else { Get-DefaultArt -Kind Background }
 
     $btns=@(); if($cbPlay.Checked){$btns+='Play'}; if($cbInst.Checked){$btns+='Install'}
     if($cbMan.Checked){$btns+='Manual'}; if($cbExtra.Checked){$btns+='Extras'}; if($cbExit.Checked){$btns+='Exit'}
@@ -3461,8 +3610,8 @@ function New-PreviewMenu {
     $bgTitle = $txtTitle.Text.Trim(); if (-not $bgTitle) { $bgTitle = $title }
 
     $bgOut = Join-Path $prev 'AUTORUN\bg.png'
-    if ($chkBgAsIs.Checked) { Copy-Item $state.BgPath $bgOut -Force }
-    else { New-Background $state.BgPath $bgTitle $bgOut ([string]$cmbSide.SelectedItem) ([bool]$chkDivider.Checked) ([bool]$chkTitle.Checked) }
+    if ($chkBgAsIs.Checked) { Copy-Item $bgSrc $bgOut -Force }
+    else { New-Background $bgSrc $bgTitle $bgOut ([string]$cmbSide.SelectedItem) ([bool]$chkDivider.Checked) ([bool]$chkTitle.Checked) }
 
     $musicName=''
     if ($chkMusic.Checked -and $state.MusicFile -and (Test-Path $state.MusicFile)) {
@@ -4658,9 +4807,7 @@ $btnBuild.Add_Click({
     $txtLog.Clear()
     if ((Get-Games).Count -eq 0) { Deny-Build 'no valid GOG game folder.' 'Pick a valid GOG game folder first (step 1).'; return }
     if ([string]::IsNullOrWhiteSpace($txtLabel.Text)) { Deny-Build 'no disc label.' 'Enter a disc label (step 2). It is the name This PC shows for the disc.'; return }
-    if (-not $state.IconPath) { Deny-Build 'no disc icon.' 'Choose a disc icon (step 3).'; return }
     if ([string]::IsNullOrWhiteSpace($txtOut.Text)) { Deny-Build 'no output folder.' 'Choose an output folder (step 6). The disc folder and the ISO are written there.'; return }
-    if ($chkMenu.Checked -and -not $state.BgPath) { Deny-Build 'menu is on but no background chosen.' 'The autorun menu is switched on, so it needs a background image (step 4).'; return }
 
     # AutoRun has no Unicode mode, so a label Windows cannot encode reaches Explorer
     # as question marks. Nothing the tool can do about that, but shipping a disc
