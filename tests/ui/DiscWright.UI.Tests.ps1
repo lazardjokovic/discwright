@@ -1448,21 +1448,25 @@ Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop)
         Get-BoxAfter $script:Win 'Disc face picture*' | Should -Not -BeNullOrEmpty
     }
 
-    It 'says how much of a wide picture will be cut off a tall cover' {
+    It 'says a wide picture is the wrong shape for a tall cover, and prints a label instead' {
+        # Nothing is cropped any more, so the note no longer says how much is
+        # lost. It says the picture is not that shape and will be left alone.
         Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Cover picture*') -Text $script:WidePic
         Start-Sleep -Milliseconds 600
         $cover = Get-NoteClause 'Cover'
         $cover | Should -Match '1920x1080'
-        $cover | Should -Match 'cut off'
-        $cover | Should -Match 'width'
+        $cover | Should -Match 'is not that shape'
+        $cover | Should -Match 'plain label'
+        $cover | Should -Not -Match 'cut off'
     }
 
     It 'is content once a cover-shaped picture is chosen instead' {
         Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Cover picture*') -Text $script:TallPic
         Start-Sleep -Milliseconds 600
         $cover = Get-NoteClause 'Cover'
-        $cover | Should -Match 'good shape'
-        $cover | Should -Not -Match 'cut off'
+        $cover | Should -Match 'the right shape'
+        $cover | Should -Match 'printed exactly as it is'
+        $cover | Should -Not -Match 'plain label'
     }
 
     It 'treats the disc face as its own question, because a circle is not a cover' {
@@ -1470,14 +1474,14 @@ Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop)
         # app has to say so about the face while leaving the cover alone.
         Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Disc face picture*') -Text $script:TallPic
         Start-Sleep -Milliseconds 600
-        (Get-NoteClause 'Disc face') | Should -Match 'cut off'
-        (Get-NoteClause 'Cover')     | Should -Match 'good shape'
+        (Get-NoteClause 'Disc face') | Should -Match 'is not that shape'
+        (Get-NoteClause 'Cover')     | Should -Match 'the right shape'
     }
 
     It 'is content with a square picture on a round disc' {
         Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Disc face picture*') -Text $script:SquarePic
         Start-Sleep -Milliseconds 600
-        (Get-NoteClause 'Disc face') | Should -Match 'good shape'
+        (Get-NoteClause 'Disc face') | Should -Match 'the right shape'
     }
 
     It 'claims nothing about a path that is not a picture at all' {
@@ -1486,7 +1490,7 @@ Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop)
         # No file, no measurement. The app must not pretend to have opened
         # something it could not, and the disc face clause stands untouched.
         (Get-NoteClause 'Cover')     | Should -BeNullOrEmpty
-        (Get-NoteClause 'Disc face') | Should -Match 'good shape'
+        (Get-NoteClause 'Disc face') | Should -Match 'the right shape'
     }
 }
 
