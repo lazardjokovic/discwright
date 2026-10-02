@@ -126,6 +126,7 @@ One game, and the installer sits at the root:
 ```
 E:\
 ├─ autorun.inf              drive icon, drive label, menu launcher
+├─ Start Here.hta           opens the menu when AutoPlay does not
 ├─ HollowKnight.ico         named after the disc, not "disc.ico" (see below)
 ├─ setup_hollow_knight_....exe
 ├─ AUTORUN\
@@ -136,11 +137,14 @@ E:\
 └─ Extras\                  manual, bonus content, whatever you added
 ```
 
+**`Start Here.hta` is there because AutoPlay often is not.** It is switched off on a great many machines, and on those a disc looks like a folder of installers with no obvious way in, since the menu sits one level down in `AUTORUN` where nobody browsing a disc would think to open it. Double-clicking `Start Here.hta` opens the menu. It starts the real menu rather than being a second copy of it, and it needs nothing the disc did not already need.
+
 Two or more, and every entry moves into a numbered folder of its own:
 
 ```
 E:\
 ├─ autorun.inf
+├─ Start Here.hta
 ├─ MetroidvaniaNight.ico
 ├─ AUTORUN\                 as above
 ├─ Games\

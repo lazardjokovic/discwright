@@ -57,6 +57,17 @@ Add-Type -AssemblyName System.Drawing
 
 $PROJECT_FILE = 'discproject.json'
 
+# The one file on the disc meant to be double-clicked. AutoPlay is switched off
+# on a great many machines, and the menu sits in AUTORUN where nobody browsing a
+# disc would think to look for it.
+#
+# A function rather than a variable, for the same reason the artwork palette is
+# one: the tests load this file's functions and none of its top-level variables,
+# so a constant has to be copied into every test file by hand. The one file that
+# was missed built its disc with an empty name and failed thirty-four builds on
+# a path that ended in a backslash.
+function Get-MenuLauncherName { 'Start Here.hta' }
+
 # Kept in step with the git tag by a CI check that runs when a tag is pushed, so
 # this cannot quietly drift a release behind. Shown in the title bar and the log,
 # and written into every project file - a bug report that comes with a project
@@ -675,7 +686,7 @@ function Test-ReservedDiscName([string]$name,[string]$iconName='disc.ico') {
     if ($name -like 'setup_*') { return $true }
     $png = [IO.Path]::ChangeExtension($iconName,'png')
     return (@('autorun.inf','.xdg-volume-info','disc.ico','disc.png',$iconName,$png,
-              'AUTORUN','Extras','Games','Add-ons',$PROJECT_FILE) -contains $name)
+              (Get-MenuLauncherName),'AUTORUN','Extras','Games','Add-ons',$PROJECT_FILE) -contains $name)
 }
 
 # Folder name for one game on a multi-game disc. Numbered, so the order in the
@@ -1442,6 +1453,61 @@ function New-XdgVolumeInfo([string]$label,[string]$pngName,[string]$out) {
                             (New-Object System.Text.UTF8Encoding($false)))
 }
 
+# The file to double-click when AutoPlay does not offer itself. It starts the
+# real menu and closes; a second copy of the menu would be a second one to keep
+# in step.
+#
+# An .hta rather than a .cmd or a .lnk. A .cmd flashes a console on the way
+# past, and a .lnk stores an absolute path, so it breaks the moment the disc is
+# read on a machine that gives it another drive letter. An .hta needs mshta,
+# which the menu needs anyway, so the disc gains no new requirement.
+#
+# There is no backslash anywhere in the script it writes, deliberately. Three
+# bugs were written here in one sitting by generated backslashes: a separator
+# eaten into a filename, a pattern that ended up matching a plus sign, and a
+# newline escape that became a real newline and split a string in half. Built
+# from fromCharCode and BuildPath, there is nothing left to eat.
+function New-MenuLauncher([string]$out) {
+    $html = @'
+<html>
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>DiscWright</title>
+<hta:application id="launcher" showInTaskbar="no" scroll="no" caption="no"
+                 border="none" sysmenu="no" singleinstance="yes" windowState="minimize" />
+</head>
+<body>
+<script language="JScript">
+var BS=String.fromCharCode(92);
+// Where this file is, from its own URL. AutoRun can start a disc file with no
+// drive letter, and a relative path cannot be turned into the menu's path.
+function here(){
+  var u=""; try{ u=String(document.URL); }catch(e){ u=""; }
+  u=u.replace(/^file:/i,"").split("/").join(BS);
+  try{ u=decodeURIComponent(u); }catch(e){}
+  var n=0; while(u.charAt(n)==BS) n++;
+  if(n){ var rest=u.substring(n);
+         if(/^[A-Za-z]:/.test(rest)) u=rest;
+         else if(n>=3) u=BS+BS+rest; }
+  return u;
+}
+try{
+  var fso=new ActiveXObject("Scripting.FileSystemObject");
+  var sh=new ActiveXObject("WScript.Shell");
+  var dir=fso.GetParentFolderName(here());
+  var menu=fso.BuildPath(fso.BuildPath(dir,"AUTORUN"),"menu.hta");
+  if(fso.FileExists(menu)) sh.Run('mshta "'+menu+'"',1,false);
+  else alert("The menu is missing from this disc: "+menu);
+}catch(e){ alert(e.message); }
+window.close();
+</script>
+</body>
+</html>
+'@
+    $html = $html -replace "`r`n", "`n" -replace "`n", "`r`n"
+    [IO.File]::WriteAllText($out, $html, (New-Object System.Text.ASCIIEncoding))
+}
+
 function New-MenuHta([hashtable]$cfg,[string]$out) {
     # cfg: GameName (the disc's label), Games (array), Buttons (ordered array),
     #      MusicFile, ManualFile, PanelSide, IconName, WindowBorder, ButtonStyle
@@ -1592,13 +1658,26 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       if(m) return m[1]; }catch(e){}
     return "";
   }
+  // The disc root, whichever folder this menu is sitting in.
+  //
+  // It used to be two levels up without asking, which is right for the copy the
+  // build writes into AUTORUN and wrong for one anywhere else. Every button is a
+  // path built from this, and a root one level out does not fail loudly: it greys
+  // Install, Manual and Extras out as though the disc were empty, and Open Folder
+  // reports a folder that is not there.
+  function discRoot(hta){
+    var dir=fso.GetParentFolderName(hta);
+    var leaf=fso.GetFileName(dir);
+    if (leaf && leaf.toUpperCase()=="AUTORUN") return fso.GetParentFolderName(dir);
+    return dir;
+  }
   function init(){
     try{ window.resizeTo(760,480);
       var dw=760-document.body.clientWidth, dh=480-document.body.clientHeight;
       if(dw<0)dw=0; if(dh<0)dh=0; var ow=760+dw, oh=480+dh;
       window.resizeTo(ow,oh); window.moveTo(Math.max(0,(screen.availWidth-ow)/2),Math.max(0,(screen.availHeight-oh)/2));
     }catch(e){}
-    root=fso.GetParentFolderName(fso.GetParentFolderName(htaPath()));
+    root=discRoot(htaPath());
     document.onmousedown=startDrag; document.onmousemove=doDrag; document.onmouseup=endDrag;
     show();   // renders the panel, which calls setupHover and refreshButtons itself
     initMusic();
@@ -2684,6 +2763,9 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         New-MenuHta @{ GameName=$s.Label; Games=$menuGames; Buttons=$s.Buttons;
                        MusicFile=$musicName; ManualFile=$manualName; PanelSide=$s.PanelSide; IconName=$icoName
                        WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle } (Join-Path $stage 'AUTORUN\menu.hta')
+
+        New-MenuLauncher (Join-Path $stage (Get-MenuLauncherName))
+        & $log "Menu launcher at the disc root: $(Get-MenuLauncherName)"
     }
 
     # extra content - copied to the disc root, keeping its own name
