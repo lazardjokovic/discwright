@@ -115,6 +115,21 @@ BeforeAll {
         ExtraItems=@(); MediaKey=''; OutDir=$script:BigOut
     } $script:BigOut
 
+    # A project with a game and no artwork at all, which is what somebody who
+    # never browsed for an icon or a background has. Saved rather than built,
+    # because the point is what the window does on load, not what the ISO holds.
+    $script:NoArtOut = Join-Path $script:Sandbox 'noart'
+    New-Item -ItemType Directory -Force -Path $script:NoArtOut | Out-Null
+    Save-Project @{
+        Games=@((Get-GameInfo $script:GameA)); Label='No Art'
+        IconPath=$null; IconIsIco=$false
+        Menu=$true; BgPath=$null; BgAsIs=$false; PanelSide='Right'
+        Divider=$false; ShowTitle=$false; TitleText=''
+        WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+        Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
+        ExtraItems=@(); MediaKey=''; OutDir=$script:NoArtOut
+    } $script:NoArtOut
+
     # The same project again, but saved with a target disc on it. Reopening this
     # one has to bring the dropdown back with it.
     $script:BigOutSet = Join-Path $script:Sandbox 'bigproj-set'
@@ -1619,5 +1634,47 @@ Describe 'Driving the menu of a disc that holds game files' -Tag 'UI' -Skip:(-no
         Invoke-MenuButton -Menu $script:FilesMenu -Index 3
         Start-Sleep -Seconds 2
         Test-MenuWindowOpen -Menu $script:FilesMenu | Should -BeFalse
+    }
+}
+
+
+Describe 'A disc whose artwork was never chosen' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # Issue #98, points 6 and 8, which were one wall. Preview used to stay
+    # greyed until a background had been chosen, so the people who had not
+    # chosen one met a dead button with no explanation and concluded the
+    # preview did not exist. It is the feature that would have shown them what
+    # a background is for.
+    #
+    # Opened from a saved project rather than typed in, because the only paths
+    # in the window that clear a background also clear the games, and a test
+    # that cleared both would prove nothing about a disc that has one and not
+    # the other.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:NoArtOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'loads the game the project recorded' {
+        Get-EntryCount $script:Win | Should -Be 1
+    }
+
+    It 'leaves both artwork boxes empty, as the project left them' {
+        (Get-BoxAfter $script:Win '3)  Disc icon*').Current.Name | Should -BeNullOrEmpty
+    }
+
+    It 'offers Preview anyway, which is the whole of the fix' {
+        # A background is no longer the price of looking at the menu.
+        Test-CtlEnabled $script:Win 'Preview menu' | Should -BeTrue
+    }
+
+    It 'still offers to build, having refused to before' {
+        Test-CtlEnabled $script:Win 'BUILD ISO*' | Should -BeTrue
     }
 }

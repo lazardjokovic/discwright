@@ -5618,3 +5618,46 @@ Describe 'Building a disc when nobody chose an icon or a background' -Tag 'Build
         Test-Path $script:BareSettings.BgPath   | Should -BeTrue
     }
 }
+
+Describe 'The hint inside the empty artwork boxes' -Tag 'Unit' {
+
+    # The rendering cannot be asserted from outside the process. UI Automation
+    # does not expose a cue banner at all (measured: HelpText comes back
+    # empty), and EM_GETCUEBANNER writes into a buffer in the caller's address
+    # space, so reading one across processes returns nothing. Both were tried.
+    # What the window actually shows was checked by eye, in the window suite's
+    # own screenshot.
+    #
+    # So this asserts the wiring rather than the pixels: that the app still
+    # tells both boxes what to say, and still says the useful thing. That is
+    # enough to catch the realistic regression, which is somebody deleting the
+    # call or the import while tidying.
+
+    BeforeAll {
+        $script:AppText = Get-Content $appScript -Raw
+    }
+
+    It 'imports the message the hint is set with' {
+        $script:AppText | Should -Match 'SendMessageW'
+    }
+
+    It 'sets a hint on the disc icon box and on the background box' {
+        $script:AppText | Should -Match 'Set-CueText \$txtIcon'
+        $script:AppText | Should -Match 'Set-CueText \$txtBg'
+    }
+
+    It 'tells people the box can be left empty, in both of them' {
+        # The wording is what the person reads, so an empty or vague hint is
+        # the same bug as no hint at all.
+        @([regex]::Matches($script:AppText, "Set-CueText \`$txt\w+\s+'([^']+)'")) |
+            ForEach-Object { $_.Groups[1].Value } |
+            ForEach-Object { $_ | Should -Match 'built-in' }
+    }
+
+    It 'sets them only once the form is on screen' {
+        # A box has no window handle before that, and the message goes nowhere.
+        $shown = [regex]::Match($script:AppText, '\$form\.Add_Shown\(\{(?s).*?\}\)').Value
+        $shown | Should -Match 'Set-CueText \$txtIcon'
+        $shown | Should -Match 'Set-CueText \$txtBg'
+    }
+}
