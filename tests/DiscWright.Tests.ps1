@@ -5472,3 +5472,192 @@ Describe 'What the zip ships' -Tag 'Unit' {
         $script:BuildSrc | Should -Match 'New-Item -ItemType Directory -Path \$dstDir'
     }
 }
+
+Describe 'The artwork the app draws when nothing was chosen' -Tag 'Unit' {
+
+    # Reported from the outside as two complaints: the app halts asking you to
+    # browse for an icon and a background, and there is no way to preview the
+    # menu. They were the same wall. The Preview button stayed disabled until a
+    # background had been chosen, so the people who had not chosen one could
+    # never see the feature that would have shown them why it mattered.
+    #
+    # The artwork is drawn rather than shipped. A picture in the zip is a
+    # picture to license, and one built from the menu's own palette looks
+    # deliberate rather than like a placeholder.
+
+    BeforeAll {
+        $script:ArtDir = Join-Path $script:Sandbox 'default-art'
+        New-Item -ItemType Directory -Force -Path $script:ArtDir | Out-Null
+    }
+
+    It 'draws a disc icon, square and large enough for the converter' {
+        $p = Get-DefaultArt -Kind Icon
+        Test-Path $p | Should -BeTrue
+        $img = [System.Drawing.Image]::FromFile($p)
+        try {
+            $img.Width | Should -Be 512
+            $img.Height | Should -Be $img.Width
+        } finally { $img.Dispose() }
+    }
+
+    It 'leaves the hub of that icon actually transparent' {
+        # Not cosmetic. A hub filled with the background colour looks like a
+        # hole on a dark page and like a blob on a light one, and Explorer
+        # draws icons on both.
+        $bmp = New-Object System.Drawing.Bitmap((Get-DefaultArt -Kind Icon))
+        try {
+            $bmp.GetPixel(($bmp.Width/2), ($bmp.Height/2)).A | Should -Be 0
+            $bmp.GetPixel(5, 5).A | Should -Be 0                       # outside the disc
+            $bmp.GetPixel(($bmp.Width/2), 110).A | Should -Be 255       # the disc face
+        } finally { $bmp.Dispose() }
+    }
+
+    It 'passes the icon through the real converter' {
+        $ico = Join-Path $script:ArtDir 'default.ico'
+        Convert-ToIco (Get-DefaultArt -Kind Icon) $ico
+        Test-Path $ico | Should -BeTrue
+        $i = New-Object System.Drawing.Icon($ico)
+        try { $i.Width | Should -BeGreaterThan 0 } finally { $i.Dispose() }
+    }
+
+    It 'draws a background that composes like any chosen picture' {
+        # It is a source image, not a finished background, so the panel, the
+        # divider and the title keep behaving exactly as they always have.
+        $out = Join-Path $script:ArtDir 'composed.png'
+        New-Background (Get-DefaultArt -Kind Background) 'DEFAULT' $out 'Right' $false $true
+        $img = [System.Drawing.Image]::FromFile($out)
+        try { $img.Width | Should -Be 760; $img.Height | Should -Be 480 } finally { $img.Dispose() }
+    }
+
+    It 'keeps the background symmetrical, because the panel can sit on either side' {
+        # Anything off-centre would be half covered on one of the two settings.
+        $bmp = New-Object System.Drawing.Bitmap((Get-DefaultArt -Kind Background))
+        try {
+            $y = [int]($bmp.Height/2)
+            # The gradient runs corner to corner, so the two sides are not
+            # identical. The rings are what must be centred, so compare points
+            # an equal distance either side of the middle.
+            $mid = [int]($bmp.Width/2)
+            $bmp.GetPixel(($mid-300), $y).A | Should -Be $bmp.GetPixel(($mid+300), $y).A
+        } finally { $bmp.Dispose() }
+    }
+
+    It 'redraws a file that was left empty' {
+        # An interrupted first run left a zero byte PNG behind, and a zero byte
+        # PNG fails later and further away, where it looks like a broken build.
+        $p = Get-DefaultArt -Kind Icon
+        Set-Content -LiteralPath $p -Value '' -NoNewline
+        (Get-Item $p).Length | Should -Be 0
+        $again = Get-DefaultArt -Kind Icon
+        (Get-Item $again).Length | Should -BeGreaterThan 0
+    }
+
+    It 'reuses what it already drew' {
+        $first = Get-DefaultArt -Kind Background
+        $stamp = (Get-Item $first).LastWriteTimeUtc
+        Start-Sleep -Milliseconds 20
+        $second = Get-DefaultArt -Kind Background
+        $second | Should -Be $first
+        (Get-Item $second).LastWriteTimeUtc | Should -Be $stamp
+    }
+}
+
+Describe 'Building a disc when nobody chose an icon or a background' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    # The complaint this answers, in the reporter's words: the application halts
+    # and asks you to browse for the files. It did, twice, and the second refusal
+    # also kept the Preview button greyed, which is how the preview came to look
+    # like a missing feature rather than a blocked one.
+    #
+    # Checked by building a real disc with both left empty, because every other
+    # test here hands the build an icon and a background and so could never have
+    # caught this.
+
+    BeforeAll {
+        $script:BareGame = Get-GameInfo (New-FixtureGame -Slug 'bare_disc' -ExeMb 2)
+        $script:BareOut  = Join-Path $script:Sandbox 'build-bare'
+        New-Item -ItemType Directory -Force -Path $script:BareOut | Out-Null
+
+        $s = New-BuildSettings -Games @($script:BareGame) -Label 'Bare Disc' -OutDir $script:BareOut
+        $s.IconPath = $null
+        $s.IconIsIco = $false
+        $s.BgPath = $null
+
+        $script:BareSaid = @()
+        $script:BareIso   = Invoke-Build $s { param($m) $script:BareSaid += [string]$m }
+        $script:BareStage = Join-Path $script:BareOut 'disc'
+        $script:BareSettings = $s
+    }
+
+    It 'builds the ISO instead of refusing' {
+        Test-Path $script:BareIso | Should -BeTrue
+    }
+
+    It 'puts a disc icon on the disc anyway' {
+        Test-Path (Join-Path $script:BareStage (Get-DiscIconName 'Bare Disc')) | Should -BeTrue
+    }
+
+    It 'writes the menu background it was never given' {
+        Test-Path (Join-Path $script:BareStage 'AUTORUN\bg.png') | Should -BeTrue
+    }
+
+    It 'still writes the menu itself' {
+        Test-Path (Join-Path $script:BareStage 'AUTORUN\menu.hta') | Should -BeTrue
+    }
+
+    It 'says in the log that it used its own artwork' {
+        # Silence here would be worse than the refusal was. Somebody who never
+        # chose a disc face should be able to find out where this one came from.
+        ($script:BareSaid -join "`n") | Should -Match 'built-in'
+    }
+
+    It 'leaves the settings pointing at real files, not at nothing' {
+        # Invoke-Build fills these in. A project saved after a build must carry
+        # a usable path rather than the null it started with.
+        Test-Path $script:BareSettings.IconPath | Should -BeTrue
+        Test-Path $script:BareSettings.BgPath   | Should -BeTrue
+    }
+}
+
+Describe 'The hint inside the empty artwork boxes' -Tag 'Unit' {
+
+    # The rendering cannot be asserted from outside the process. UI Automation
+    # does not expose a cue banner at all (measured: HelpText comes back
+    # empty), and EM_GETCUEBANNER writes into a buffer in the caller's address
+    # space, so reading one across processes returns nothing. Both were tried.
+    # What the window actually shows was checked by eye, in the window suite's
+    # own screenshot.
+    #
+    # So this asserts the wiring rather than the pixels: that the app still
+    # tells both boxes what to say, and still says the useful thing. That is
+    # enough to catch the realistic regression, which is somebody deleting the
+    # call or the import while tidying.
+
+    BeforeAll {
+        $script:AppText = Get-Content $appScript -Raw
+    }
+
+    It 'imports the message the hint is set with' {
+        $script:AppText | Should -Match 'SendMessageW'
+    }
+
+    It 'sets a hint on the disc icon box and on the background box' {
+        $script:AppText | Should -Match 'Set-CueText \$txtIcon'
+        $script:AppText | Should -Match 'Set-CueText \$txtBg'
+    }
+
+    It 'tells people the box can be left empty, in both of them' {
+        # The wording is what the person reads, so an empty or vague hint is
+        # the same bug as no hint at all.
+        @([regex]::Matches($script:AppText, "Set-CueText \`$txt\w+\s+'([^']+)'")) |
+            ForEach-Object { $_.Groups[1].Value } |
+            ForEach-Object { $_ | Should -Match 'built-in' }
+    }
+
+    It 'sets them only once the form is on screen' {
+        # A box has no window handle before that, and the message goes nowhere.
+        $shown = [regex]::Match($script:AppText, '\$form\.Add_Shown\(\{(?s).*?\}\)').Value
+        $shown | Should -Match 'Set-CueText \$txtIcon'
+        $shown | Should -Match 'Set-CueText \$txtBg'
+    }
+}
