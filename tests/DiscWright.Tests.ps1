@@ -5979,3 +5979,79 @@ Describe 'Remembering whether the disc was asked to be checksummed' -Tag 'Unit' 
         [bool](Import-Project $old).Checksums | Should -BeFalse
     }
 }
+
+Describe 'A long game name on the menu' -Tag 'Unit' {
+
+    # Reported as: the title was not put on the artwork, but the game name still
+    # showed and was cut off. Both halves of that are real. The name on a game's
+    # screen is the caption above the buttons, which has nothing to do with the
+    # artwork title, and every name was cut at twenty characters by a clip in
+    # the menu's own script, so "The Witcher 3 Wild Hunt - Game of the Year
+    # Edition" arrived as "THE WITCHER 3 WILD ...".
+
+    BeforeAll {
+        $script:LongDir = Join-Path $script:Sandbox 'longname'
+        New-Item -ItemType Directory -Force -Path $script:LongDir | Out-Null
+        $menu = Join-Path $script:LongDir 'menu.hta'
+        New-MenuHta @{ GameName='The Witcher 3 Wild Hunt - Game of the Year Edition'
+                       Games=@(); Buttons=@('Play','Exit'); MusicFile=''; ManualFile=''
+                       PanelSide='Right'; IconName='x.ico'; WindowBorder=$true
+                       ButtonStyle='Minimal' } $menu
+        $script:LongJs = Get-Content $menu -Raw
+    }
+
+    It 'keeps the whole name in the file, however long it is' {
+        $script:LongJs | Should -Match 'Game of the Year Edition'
+    }
+
+    It 'no longer forces the spaces to non-breaking, which is what stopped it wrapping' {
+        $script:LongJs | Should -Not -Match 'replace\(/ /g,"&nbsp;"\)'
+    }
+
+    It 'lets the buttons and the caption wrap' {
+        # Both carried white-space:nowrap, so neither could ever use a second line.
+        $script:LongJs | Should -Match '\.btn\{[^}]*' 
+        ($script:LongJs -split "`n" | Where-Object { $_ -match 'white-space:nowrap' }).Count | Should -Be 0
+    }
+
+    It 'wraps and shrinks rather than cutting at twenty characters' {
+        # Run the menu's own two functions in a real JScript engine, because what
+        # matters is what they return, not that the source looks right.
+        $probe = Join-Path $script:LongDir 'probe.js'
+        $fit  = [regex]::Match($script:LongJs, '(?s)(function fitStyle\(s\)\{.*?\r?\n  \})').Groups[1].Value
+        $clip = [regex]::Match($script:LongJs, '(?m)^  (function clip\(s\).*)$').Groups[1].Value
+        $fit  | Should -Not -BeNullOrEmpty
+        $clip | Should -Not -BeNullOrEmpty
+
+        $witcher = 'The Witcher 3 Wild Hunt - Game of the Year Edition'   # 50
+        $monster = 'Tom Clancy Splinter Cell Chaos Theory Deluxe Anniversary Collection Remastered Edition'
+        $js = @"
+$fit
+$clip
+WScript.Echo("short|" + clip("Hollow Knight"));
+WScript.Echo("witcher|" + clip("$witcher"));
+WScript.Echo("monster|" + clip("$monster").length);
+WScript.Echo("size_short|" + fitStyle("Hollow Knight"));
+WScript.Echo("size_mid|" + fitStyle("Baldurs Gate II Enhanced"));
+WScript.Echo("size_long|" + fitStyle("$witcher"));
+"@
+        Set-Content -LiteralPath $probe -Value $js -Encoding Ascii
+        $out = @(& cscript.exe //nologo //E:JScript $probe 2>&1 | ForEach-Object { $_.ToString().Trim() })
+        $got = @{}
+        foreach ($line in $out) { $k, $v = $line -split '\|', 2; $got[$k] = $v }
+
+        $got['short']   | Should -Be 'Hollow Knight' -Because 'a short name is untouched'
+        $got['witcher'] | Should -Be $witcher -Because 'fifty characters now survive whole'
+        [int]$got['monster'] | Should -BeLessOrEqual 64 -Because 'something past two lines is still cut'
+        $got['size_short'] | Should -BeNullOrEmpty -Because 'a short name keeps the original size'
+        $got['size_mid']   | Should -Match '13px'
+        $got['size_long']  | Should -Match '12px'
+    }
+
+    It 'measures how many lines a label really took, rather than counting characters' {
+        # Bahnschrift is not on every machine and the fallback is wider, so the
+        # line count has to come from what was drawn.
+        $script:LongJs | Should -Match 'offsetHeight/16'
+        $script:LongJs | Should -Match 'Math\.floor\(bh/lines\)'
+    }
+}

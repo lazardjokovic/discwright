@@ -1640,13 +1640,14 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   html,body{margin:0;padding:0;width:760px;height:480px;overflow:hidden;background:#04080a;font-family:'Bahnschrift','Segoe UI',Arial,sans-serif;}
   #stage{position:absolute;left:0;top:0;width:760px;height:480px;background:#04080a url('bg.png') no-repeat 0 0;%%STAGEBORDER%%}
   .panel{position:absolute;left:%%PANELLEFT%%px;top:20px;width:250px;}
-  /* Game names are user data and some are long. nowrap+hidden keeps one that got
-     past the length clip from growing the 46px button and throwing the panel's
-     vertical centering out. */
+  /* Game names are user data and some are long. A name that needs it wraps onto
+     a second line and the button's line-height is reset to match, so one line and
+     two are both centred; overflow:hidden is the backstop for something past even
+     two lines. */
   .btn{display:block;width:250px;height:46px;margin:0 0 12px 0;line-height:46px;color:#e6ebef;text-decoration:none;
     font-size:15px;font-weight:600;letter-spacing:2px;text-transform:uppercase;cursor:pointer;background:#0a1519;
-    white-space:nowrap;overflow:hidden;
-    %%BTNBORDER%%padding-left:16px;}
+    white-space:normal;overflow:hidden;
+    %%BTNBORDER%%padding-left:16px;padding-right:10px;}
   .btn:hover{background:#12242b;border-color:#00bec8;color:#fff;}
   .btn.play{border-left-color:#35c46a;} .btn.play:hover{border-color:#66e090;}
   .btn.install{border-left-color:#ff781e;} .btn.install:hover{border-color:#ff9a4d;}
@@ -1657,12 +1658,14 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   #mute{position:absolute;right:44px;top:8px;width:28px;height:26px;line-height:26px;text-align:center;color:#e6ebef;
     font-family:'Segoe UI',Arial;font-size:15px;background:#0a1519;border:1px solid #16545a;cursor:pointer;display:none;}
   #mute:hover{color:#fff;border-color:#00bec8;}
-  /* The caption above the buttons: which game this screen is for, and which disc
-     of the set you are holding. Same nowrap+ellipsis rule as the buttons - game
-     names are user data and a long one must not push the panel around. */
+  /* The caption above the buttons: which game this screen is for. This is the
+     line that shows a game's name whether or not the title was put on the
+     artwork, so it is the one that was reported cut off. It wraps like the
+     buttons, and setPanel measures it, so two lines move the panel rather than
+     losing half a name. */
   #cap{width:250px;margin:0 0 10px 0;font-family:'Segoe UI',Arial;}
   #cap .capn{display:block;font-size:17px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
-    color:#dfe9ee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    color:#dfe9ee;white-space:normal;overflow:hidden;}
   #status{position:absolute;left:%%PANELLEFT%%px;bottom:18px;width:250px;text-align:center;display:none;
     color:#9fb3ba;font-size:12px;line-height:17px;}
 </style>
@@ -1818,12 +1821,23 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   function extrasOf(g){ if(g.ext) return g.ext; return "Extras"; }
   function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   // 250px of 15px uppercase with 2px letter-spacing runs out at about twenty
-  // characters. Clipping here rather than letting CSS do it keeps the ellipsis
-  // visible instead of shearing a letter in half; the full name is on the tooltip.
-  function clip(s){ s=String(s); return (s.length>20) ? s.substring(0,19)+"..." : s; }
+  // characters, and this used to simply cut the name there: "The Witcher 3 Wild
+  // Hunt - Game of the Year Edition" arrived as "THE WITCHER 3 WILD ...", which
+  // is the complaint this answers. A longer name now steps down a size and wraps
+  // onto a second line, and only something past two full lines is cut. The full
+  // name is still on the tooltip either way.
+  function fitStyle(s){
+    var n=String(s).length;
+    if(n>42) return "font-size:12px;letter-spacing:0;";
+    if(n>21) return "font-size:13px;letter-spacing:1px;";
+    return "";
+  }
+  // 64 counting the ellipsis, not 64 plus it: the old form promised twenty
+  // characters and returned twenty-two.
+  function clip(s){ s=String(s); return (s.length>64) ? s.substring(0,61)+"..." : s; }
   function btnHtml(id,cls,label,fn,tip){
-    return '<a id="'+id+'" class="btn '+cls+'" onclick="'+fn+'" title="'+esc(tip||"")+'">'+
-           esc(clip(label)).replace(/ /g,"&nbsp;")+'</a>';
+    return '<a id="'+id+'" class="btn '+cls+'" style="'+fitStyle(label)+'" onclick="'+fn+'" title="'+esc(tip||"")+'">'+
+           esc(clip(label))+'</a>';
   }
   // The panel is centred on however many buttons this screen happens to have, so
   // a three-game chooser and a six-button game screen both sit in the middle.
@@ -1836,7 +1850,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // relationship that did not exist.
   function capFor(name){
     if(!name) return "";
-    return '<span class="capn">'+name+'</span>';
+    return '<span class="capn" style="'+fitStyle(name)+'">'+clip(name)+'</span>';
   }
   function setPanel(h,cap){
     var p=document.getElementById("pan");
@@ -1859,6 +1873,21 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         a[i].style.height=bh+"px"; a[i].style.lineHeight=bh+"px"; a[i].style.marginBottom=gap+"px";
       }
     }
+    // One line or two, measured rather than counted. Bahnschrift is not on every
+    // machine, the fallback is wider, and a character count cannot know which
+    // one is drawing. The height goes to auto for the measurement and straight
+    // back, and line-height is then the button height divided by the lines, so
+    // one line and two are both centred without a second box to centre inside.
+    for(var j=0;j<n;j++){
+      var el=a[j];
+      el.style.height="auto"; el.style.lineHeight="16px";
+      var lines=Math.round(el.offsetHeight/16);
+      if(lines<1) lines=1;
+      if(lines>2) lines=2;
+      el.style.height=bh+"px";
+      el.style.lineHeight=Math.floor(bh/lines)+"px";
+    }
+
     var block=capH+n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
     if(t<10) t=10;
     p.style.top=t+"px";
