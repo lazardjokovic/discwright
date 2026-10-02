@@ -5661,3 +5661,83 @@ Describe 'The hint inside the empty artwork boxes' -Tag 'Unit' {
         $shown | Should -Match 'Set-CueText \$txtBg'
     }
 }
+
+Describe 'The thing to double-click when AutoPlay does not offer itself' -Tag 'Unit' {
+
+    # AutoPlay is switched off on a great many machines, and on those the disc
+    # looks like a folder of installers with no obvious way in: the menu sits in
+    # AUTORUN, which nobody browsing a disc would think to open. Reported from
+    # the outside by somebody holding the disc.
+    #
+    # The launcher is generated, and generated code full of backslashes is how
+    # three separate bugs got written in one sitting here: a path separator
+    # eaten into the filename, a regular expression that matched a plus sign,
+    # and a newline escape that became a real newline and split a string in
+    # half. So the rule is that the generated script contains no backslash at
+    # all, and this is what keeps it that way.
+
+    BeforeAll {
+        $script:LaunchDir = Join-Path $script:Sandbox 'launcher'
+        New-Item -ItemType Directory -Force -Path $script:LaunchDir | Out-Null
+        $script:LaunchFile = Join-Path $script:LaunchDir 'Start Here.hta'
+        New-MenuLauncher $script:LaunchFile
+        $script:LaunchText = Get-Content $script:LaunchFile -Raw
+        $script:LaunchJs = [regex]::Match($script:LaunchText,
+            '(?s)<script language="JScript">(.*?)</script>').Groups[1].Value
+    }
+
+    It 'writes a file at all, in pure ASCII like every other disc file' {
+        Test-Path $script:LaunchFile | Should -BeTrue
+        @([IO.File]::ReadAllBytes($script:LaunchFile) | Where-Object { $_ -gt 127 }).Count | Should -Be 0
+    }
+
+    It 'contains no backslash, which is the whole defence' {
+        # Every backslash bug here came from one surviving into the output.
+        $script:LaunchJs.Contains([char]92) | Should -BeFalse
+    }
+
+    It 'builds the separator and the path from parts instead' {
+        $script:LaunchJs | Should -Match 'String\.fromCharCode\(92\)'
+        $script:LaunchJs | Should -Match 'BuildPath'
+    }
+
+    It 'runs the menu rather than carrying a second copy of it' {
+        # Two menus would be two to keep in step.
+        $script:LaunchJs | Should -Match 'mshta'
+        $script:LaunchJs | Should -Match 'menu\.hta'
+    }
+
+    It 'works out the disc from its own location, for every spelling of the URL' {
+        # Run in a real JScript engine, because this is the part that cannot be
+        # proved by reading: a burned disc, both URL forms an HTA reports, a
+        # staged folder on a hard disk, and a share.
+        $probe = Join-Path $script:LaunchDir 'probe.js'
+        $here = [regex]::Match($script:LaunchJs, '(?s)^(.*?)(?=\r?\ntry\{)').Groups[1].Value
+        $cases = @(
+            @{ Url = 'file://D:/Start Here.hta';                       Menu = 'D:\AUTORUN\menu.hta' }
+            @{ Url = 'file:///D:/Start Here.hta';                      Menu = 'D:\AUTORUN\menu.hta' }
+            @{ Url = 'file://C:/out/disc/Start Here.hta';              Menu = 'C:\out\disc\AUTORUN\menu.hta' }
+            @{ Url = 'file://///server/share/d/Start Here.hta';        Menu = ([char]92 + [char]92 + 'server\share\d\AUTORUN\menu.hta') }
+        )
+        foreach ($c in $cases) {
+            $js = @"
+var document = { URL: "$($c.Url)" };
+$here
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+var dir = fso.GetParentFolderName(here());
+WScript.Echo(fso.BuildPath(fso.BuildPath(dir, "AUTORUN"), "menu.hta"));
+"@
+            Set-Content -LiteralPath $probe -Value $js -Encoding Ascii
+            $got = (& cscript.exe //nologo //E:JScript $probe 2>&1 | Select-Object -First 1).ToString().Trim()
+            $got | Should -Be $c.Menu -Because "a launcher at $($c.Url) has to find the menu beside it"
+        }
+    }
+
+    It 'is a name the disc owns, so extra content cannot overwrite it' {
+        # Assert the name first. An earlier version of this passed while the
+        # name was empty, because the list it checks was built from the same empty
+        # value and empty matched empty.
+        Get-MenuLauncherName | Should -Be 'Start Here.hta'
+        Test-ReservedDiscName (Get-MenuLauncherName) | Should -BeTrue
+    }
+}
