@@ -4992,7 +4992,21 @@ $btnBuild.Add_Click({
 Add-Type -Namespace GDA -Name Win -MemberDefinition @'
 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr SendMessageW(IntPtr hWnd, int msg, IntPtr wParam, string lParam);
 '@
+
+# Grey hint text drawn inside an empty box (EM_SETCUEBANNER). The icon and the
+# background used to be demanded before anything would build, and the fix for
+# that is only half the job: an empty box that no longer stops you still looks
+# like an empty box you have to fill. The hint says otherwise, and it shows
+# only while the box is empty, which is exactly when it is true.
+#
+# A hint inside the box rather than a label beside it, because the window is
+# already taller than some screens and two more labels would make that worse.
+function Set-CueText([System.Windows.Forms.TextBox]$box, [string]$text) {
+    # Never worth failing a launch over: a window with no hint still works.
+    try { [void][GDA.Win]::SendMessageW($box.Handle, 0x1501, [IntPtr]1, $text) } catch { }
+}
 # "New disc" greys itself out when there is nothing to clear, so every edit that
 # can make the form dirty has to refresh it. Most already run through
 # Update-ActionButtons for their own reasons - the background, the output folder,
@@ -5024,6 +5038,10 @@ $form.Add_Shown({
     [void][GDA.Win]::ShowWindow($form.Handle,5)      # SW_SHOW
     [void][GDA.Win]::SetForegroundWindow($form.Handle)
     $form.Activate()
+    # Set here rather than at creation: the box needs a window handle before it
+    # can be told anything, and it has none until the form is shown.
+    Set-CueText $txtIcon 'Leave empty to use the built-in disc icon'
+    Set-CueText $txtBg   'Leave empty to use the built-in background'
 })
 
 [void]$form.ShowDialog()

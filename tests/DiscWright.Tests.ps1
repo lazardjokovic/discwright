@@ -5561,3 +5561,60 @@ Describe 'The artwork the app draws when nothing was chosen' -Tag 'Unit' {
         (Get-Item $second).LastWriteTimeUtc | Should -Be $stamp
     }
 }
+
+Describe 'Building a disc when nobody chose an icon or a background' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    # The complaint this answers, in the reporter's words: the application halts
+    # and asks you to browse for the files. It did, twice, and the second refusal
+    # also kept the Preview button greyed, which is how the preview came to look
+    # like a missing feature rather than a blocked one.
+    #
+    # Checked by building a real disc with both left empty, because every other
+    # test here hands the build an icon and a background and so could never have
+    # caught this.
+
+    BeforeAll {
+        $script:BareGame = Get-GameInfo (New-FixtureGame -Slug 'bare_disc' -ExeMb 2)
+        $script:BareOut  = Join-Path $script:Sandbox 'build-bare'
+        New-Item -ItemType Directory -Force -Path $script:BareOut | Out-Null
+
+        $s = New-BuildSettings -Games @($script:BareGame) -Label 'Bare Disc' -OutDir $script:BareOut
+        $s.IconPath = $null
+        $s.IconIsIco = $false
+        $s.BgPath = $null
+
+        $script:BareSaid = @()
+        $script:BareIso   = Invoke-Build $s { param($m) $script:BareSaid += [string]$m }
+        $script:BareStage = Join-Path $script:BareOut 'disc'
+        $script:BareSettings = $s
+    }
+
+    It 'builds the ISO instead of refusing' {
+        Test-Path $script:BareIso | Should -BeTrue
+    }
+
+    It 'puts a disc icon on the disc anyway' {
+        Test-Path (Join-Path $script:BareStage (Get-DiscIconName 'Bare Disc')) | Should -BeTrue
+    }
+
+    It 'writes the menu background it was never given' {
+        Test-Path (Join-Path $script:BareStage 'AUTORUN\bg.png') | Should -BeTrue
+    }
+
+    It 'still writes the menu itself' {
+        Test-Path (Join-Path $script:BareStage 'AUTORUN\menu.hta') | Should -BeTrue
+    }
+
+    It 'says in the log that it used its own artwork' {
+        # Silence here would be worse than the refusal was. Somebody who never
+        # chose a disc face should be able to find out where this one came from.
+        ($script:BareSaid -join "`n") | Should -Match 'built-in'
+    }
+
+    It 'leaves the settings pointing at real files, not at nothing' {
+        # Invoke-Build fills these in. A project saved after a build must carry
+        # a usable path rather than the null it started with.
+        Test-Path $script:BareSettings.IconPath | Should -BeTrue
+        Test-Path $script:BareSettings.BgPath   | Should -BeTrue
+    }
+}
