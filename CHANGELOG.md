@@ -7,6 +7,53 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [0.9.2] — 2026-10-02
+
+A disc no longer has to have artwork before DiscWright will do anything with it,
+and a picture that is not a cover is no longer printed as though it were.
+
+### Fixed
+
+- **The app stopped asking for files it can make itself.** It refused to build
+  without a disc icon, and refused again without a background whenever the menu
+  was switched on, so a first disc began with two trips to a file picker. Both
+  are now drawn from the menu's own palette when nothing was chosen, and the
+  build log says where they came from. Reported from the outside, along with
+  nine other things, by somebody who had simply wanted to click through.
+
+- **The menu preview was hidden rather than missing.** The **Preview menu**
+  button has existed since 0.1.0, and stayed greyed out until a background had
+  been chosen, so anybody who had not chosen one met a dead button with no
+  explanation and reasonably concluded the preview did not exist. It is the one
+  thing that would have shown them what a background is for. It now waits only
+  for a game, and the two artwork boxes say in so many words that they can be
+  left empty.
+
+- **A menu background was being printed as a cover.** Removing the cropping path
+  in 0.9.1 went a step too far and left every picture treated as finished
+  artwork, so a 16:9 background was stretched across the whole 273 mm wrap with
+  no spine, no back panel and no game list. The shape decides now: within a few
+  per cent of a wrap or a panel is somebody's cover and is printed exactly as it
+  is, and anything else gets the plain label with the picture left alone.
+
+### Changed
+
+- **The README's account of Smart App Control was wrong and is corrected.** It
+  said signing would not settle the installer being blocked. Microsoft's own
+  documentation says otherwise: where the app intelligence service cannot make a
+  prediction, an app signed with a certificate from a CA in the Trusted Root
+  Program is still allowed, with no reputation needed. The honest position is
+  that signing would fix this and the project has not taken that cost on.
+
+- **The demo films show the app you actually download.** They had been recorded
+  on 13 September against a window three releases old.
+
+### Internal
+
+- Five window tests had been failing locally since 0.9.0, asking the question the
+  app stopped asking when cropping was removed. CI never saw it, because CI runs
+  the logic tests only and the window suite is local by design.
+
 ## [0.9.1] — 2026-10-01
 
 The version number skips 0.9.0. That tag was pushed, the build attached its
@@ -981,6 +1028,7 @@ First public release.
   keep the tool to one job.
 
 [Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.9.1...HEAD
+[0.9.2]: https://github.com/lazardjokovic/discwright/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/lazardjokovic/discwright/compare/v0.8.1...v0.9.1
 [0.8.1]: https://github.com/lazardjokovic/discwright/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/lazardjokovic/discwright/compare/v0.7.6...v0.8.0
