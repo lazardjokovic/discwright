@@ -114,7 +114,8 @@ BeforeAll {
         # LinuxInfo defaults to $false here for the same reason the checkbox does:
         # every test written before it existed has to keep describing the disc it
         # was written about.
-        param([array]$Games, [string]$Label, [string]$OutDir, [switch]$LinuxInfo, [switch]$LegacyFs)
+        param([array]$Games, [string]$Label, [string]$OutDir, [switch]$LinuxInfo, [switch]$LegacyFs,
+              [switch]$Checksums)
         return @{
             Games=$Games; Label=$Label; IconPath=$script:Art; IconIsIco=$false
             Menu=$true; BgPath=$script:Bg; BgAsIs=$false; PanelSide='Right'
@@ -122,7 +123,7 @@ BeforeAll {
             WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
             Buttons=@('Play','Install','Exit'); ManualPath=$null; ExtrasPath=$null
             ExtraItems=@(); OutDir=$OutDir; LinuxInfo=[bool]$LinuxInfo
-            LegacyFs=[bool]$LegacyFs
+            LegacyFs=[bool]$LegacyFs; Checksums=[bool]$Checksums
         }
     }
 
@@ -730,8 +731,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 10' {
-            $script:PJson.Version | Should -Be 10
+        It 'declares schema version 11' {
+            $script:PJson.Version | Should -Be 11
         }
 
         It 'records where each entry came from' {
@@ -4124,8 +4125,8 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
         }
 
-        It 'writes schema version 10' {
-            $script:RenameRaw.Version | Should -Be 10
+        It 'writes schema version 11' {
+            $script:RenameRaw.Version | Should -Be 11
         }
 
         It 'stores the registered name beside the chosen one' {
@@ -5012,7 +5013,7 @@ Describe 'The older-Windows setting in a project file' -Tag 'Unit' {
                 ExtraItems=@(); MediaKey=''; LinuxInfo=$false; LegacyFs=$true }
         Save-Project $s $script:LegProj
         $raw = Get-Content -Raw (Join-Path $script:LegProj 'discproject.json') | ConvertFrom-Json
-        $raw.Version  | Should -Be 10
+        $raw.Version  | Should -Be 11
         $raw.LegacyFs | Should -BeTrue
         (Import-Project (Join-Path $script:LegProj 'discproject.json')).LegacyFs | Should -BeTrue
     }
@@ -5210,7 +5211,7 @@ Describe 'Keeping the printed pictures in the project' -Tag 'Unit' {
             CoverPath = 'C:\art\cover.png'; DiscArtPath = 'C:\art\face.png'
         } $out
         $raw = Get-Content (Join-Path $out 'discproject.json') -Raw | ConvertFrom-Json
-        $raw.Version     | Should -Be 10
+        $raw.Version     | Should -Be 11
         $raw.CoverPath   | Should -Be 'C:\art\cover.png'
         $raw.DiscArtPath | Should -Be 'C:\art\face.png'
     }
@@ -5822,5 +5823,159 @@ WScript.Echo(discRoot("$($c.Hta.Replace([string][char]92, [string][char]92 + [st
             $got = (& cscript.exe //nologo //E:JScript $probe 2>&1 | Select-Object -First 1).ToString().Trim()
             $got | Should -Be $c.Root -Because "a menu at $($c.Hta) sees the disc at $($c.Root)"
         }
+    }
+}
+
+Describe 'A list of what every file on the disc should hash to' -Tag 'Unit' {
+
+    # Asked for as being able to restore a disc back to its original bin and exe
+    # structure, matching the original hash values. The structure already comes
+    # back byte for byte; what was missing was any way to prove it.
+    #
+    # sha256sum format so that nothing from DiscWright is needed to check it,
+    # which is the whole point of a file meant to be read in twenty years.
+
+    BeforeAll {
+        $script:SumDir = Join-Path $script:Sandbox 'sums'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:SumDir 'AUTORUN') | Out-Null
+        Set-Content (Join-Path $script:SumDir 'setup_game_(64bit)_(1).exe') 'installer' -Encoding Ascii
+        Set-Content (Join-Path $script:SumDir 'AUTORUN\menu.hta') 'menu' -Encoding Ascii
+        $script:SumFile = New-ChecksumManifest $script:SumDir 'HASH TEST' $null
+        $script:SumText = [IO.File]::ReadAllText($script:SumFile)
+        $script:SumLines = @(($script:SumText -split "`n") | Where-Object { $_ -and $_ -notmatch '^#' })
+    }
+
+    It 'lists every file, and does not try to list itself' {
+        $script:SumLines.Count | Should -Be 2
+        # The header names the file, in the line telling you how to check it, so
+        # the claim is about the hashed lines rather than the whole text.
+        @($script:SumLines | Where-Object { $_ -match 'checksums\.sha256' }).Count | Should -Be 0
+    }
+
+    It 'writes the hash the rest of the world computes' {
+        foreach ($line in $script:SumLines) {
+            $h, $rel = $line -split ' \*', 2
+            $full = Join-Path $script:SumDir ($rel -replace '/', [string][char]92)
+            # Checked against the shipped cmdlet, not against the same code path
+            # that wrote it, which would agree with itself whatever it did.
+            $h | Should -Be (Get-FileHash $full -Algorithm SHA256).Hash.ToLower()
+        }
+    }
+
+    It 'is laid out the way sha256sum writes it' {
+        foreach ($line in $script:SumLines) {
+            $line | Should -Match '^[0-9a-f]{64} \*'
+        }
+    }
+
+    It 'separates folders with a forward slash, which both sides accept' {
+        $script:SumText | Should -Match 'AUTORUN/menu\.hta'
+    }
+
+    It 'ends its lines with a newline alone' {
+        # Not a detail. sha256sum -c reads a carriage return as part of the
+        # filename and then reports every single line as a missing file, which
+        # is exactly what the first version of this did.
+        $script:SumText | Should -Not -Match "`r"
+    }
+
+    It 'says in its header how to check it without DiscWright' {
+        $script:SumText | Should -Match 'sha256sum -c'
+        $script:SumText | Should -Match 'Get-FileHash'
+    }
+
+    It 'is a name the disc owns, so extra content cannot overwrite it' {
+        Get-ChecksumFileName | Should -Be 'checksums.sha256'
+        Test-ReservedDiscName (Get-ChecksumFileName) | Should -BeTrue
+    }
+
+    It 'notices a file that changed by a single byte' {
+        $copy = Join-Path $script:Sandbox 'sums-tamper'
+        Copy-Item $script:SumDir $copy -Recurse -Force
+        Add-Content (Join-Path $copy 'AUTORUN\menu.hta') 'x'
+        $line = @(($script:SumText -split "`n") | Where-Object { $_ -match 'menu\.hta' })[0]
+        $h, $rel = $line -split ' \*', 2
+        $now = Get-FileSha256 (Join-Path $copy ($rel -replace '/', [string][char]92))
+        $now | Should -Not -Be $h
+    }
+}
+
+Describe 'The checksum list on a disc that was really built' -Tag 'Build' -Skip:(-not $script:CanBuildIso) {
+
+    BeforeAll {
+        $script:CsGame = Get-GameInfo (New-FixtureGame -Slug 'checksum_disc' -ExeMb 2)
+        $script:CsOn  = Join-Path $script:Sandbox 'build-sums-on'
+        $script:CsOff = Join-Path $script:Sandbox 'build-sums-off'
+        New-Item -ItemType Directory -Force -Path $script:CsOn, $script:CsOff | Out-Null
+        $script:CsSaid = @()
+        $null = Invoke-Build (New-BuildSettings -Games @($script:CsGame) -Label 'Sums On' -OutDir $script:CsOn -Checksums) { param($m) $script:CsSaid += [string]$m }
+        $null = Invoke-Build (New-BuildSettings -Games @($script:CsGame) -Label 'Sums Off' -OutDir $script:CsOff) $script:LogSink
+        $script:CsOnStage  = Join-Path $script:CsOn 'disc'
+        $script:CsOffStage = Join-Path $script:CsOff 'disc'
+    }
+
+    It 'is on the disc when it was asked for' {
+        Test-Path (Join-Path $script:CsOnStage (Get-ChecksumFileName)) | Should -BeTrue
+    }
+
+    It 'is not on the disc when it was not' {
+        # Off by default, like the other two things a disc can also be: what
+        # every disc carries is not a decision to make on somebody's behalf.
+        Test-Path (Join-Path $script:CsOffStage (Get-ChecksumFileName)) | Should -BeFalse
+    }
+
+    It 'covers every file the disc ends up carrying' {
+        $onDisc = @(Get-ChildItem $script:CsOnStage -Recurse -File |
+                    Where-Object { $_.Name -ne (Get-ChecksumFileName) })
+        $listed = @((Get-Content (Join-Path $script:CsOnStage (Get-ChecksumFileName))) |
+                    Where-Object { $_ -and $_ -notmatch '^#' })
+        $listed.Count | Should -Be $onDisc.Count
+    }
+
+    It 'matches the files that are actually sitting there' {
+        $root = $script:CsOnStage
+        foreach ($line in @((Get-Content (Join-Path $root (Get-ChecksumFileName))) | Where-Object { $_ -and $_ -notmatch '^#' })) {
+            $h, $rel = $line -split ' \*', 2
+            $full = Join-Path $root ($rel -replace '/', [string][char]92)
+            Test-Path -LiteralPath $full | Should -BeTrue -Because "$rel is listed"
+            (Get-FileSha256 $full) | Should -Be $h
+        }
+    }
+
+    It 'says what it did in the log' {
+        ($script:CsSaid -join "`n") | Should -Match 'Checksum list written'
+    }
+}
+
+Describe 'Remembering whether the disc was asked to be checksummed' -Tag 'Unit' {
+
+    BeforeAll {
+        $script:CsProj = Join-Path $script:Sandbox 'proj-sums'
+        New-Item -ItemType Directory -Force -Path $script:CsProj | Out-Null
+    }
+
+    It 'saves the answer and reads it back' {
+        $s = @{ Games=@(); Label='Sums'; IconPath=''; IconIsIco=$false; Menu=$true
+                BgPath=''; BgAsIs=$false; PanelSide='Right'
+                Divider=$false; ShowTitle=$false; TitleText=''
+                WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+                Buttons=@('Play'); ManualPath=$null; ExtrasPath=$null
+                ExtraItems=@(); MediaKey=''; LinuxInfo=$false; LegacyFs=$false
+                Checksums=$true }
+        Save-Project $s $script:CsProj
+        $raw = Get-Content -Raw (Join-Path $script:CsProj 'discproject.json') | ConvertFrom-Json
+        $raw.Version   | Should -Be 11
+        $raw.Checksums | Should -BeTrue
+        (Import-Project (Join-Path $script:CsProj 'discproject.json')).Checksums | Should -BeTrue
+    }
+
+    It 'reads back as off from a project saved before it existed' {
+        # Reopening an old project and rebuilding has to produce the disc it
+        # produced before, not one with a file quietly added to it.
+        $old = Join-Path $script:CsProj 'older.json'
+        @{ Version=10; Label='Older'; Games=@(); Buttons=@('Play'); Menu=$true
+           BgAsIs=$true; PanelSide='Right'; ButtonStyle='Minimal'; WindowBorder=$true
+        } | ConvertTo-Json -Depth 4 | Set-Content $old -Encoding UTF8
+        [bool](Import-Project $old).Checksums | Should -BeFalse
     }
 }

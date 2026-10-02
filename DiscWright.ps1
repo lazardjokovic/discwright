@@ -686,7 +686,7 @@ function Test-ReservedDiscName([string]$name,[string]$iconName='disc.ico') {
     if ($name -like 'setup_*') { return $true }
     $png = [IO.Path]::ChangeExtension($iconName,'png')
     return (@('autorun.inf','.xdg-volume-info','disc.ico','disc.png',$iconName,$png,
-              (Get-MenuLauncherName),'AUTORUN','Extras','Games','Add-ons',$PROJECT_FILE) -contains $name)
+              (Get-MenuLauncherName),(Get-ChecksumFileName),'AUTORUN','Extras','Games','Add-ons',$PROJECT_FILE) -contains $name)
 }
 
 # Folder name for one game on a multi-game disc. Numbered, so the order in the
@@ -1508,6 +1508,80 @@ window.close();
     [IO.File]::WriteAllText($out, $html, (New-Object System.Text.ASCIIEncoding))
 }
 
+# The one file on the disc that is not part of the disc: what every other file
+# should hash to, so a copy taken off it years from now can be proved identical
+# to what went on. Asked for as "restore it back to its original bin / exe
+# structure, matching the original hash values".
+#
+# sha256sum format, so nothing from here is needed to read it: GNU coreutils
+# checks it directly with sha256sum -c, and the header lines are comments that
+# format already skips. Paths use forward slashes for the same reason, and
+# because Windows accepts them in a path just as happily.
+#
+# A function rather than a constant, like the launcher's name, because the
+# tests load this file's functions and none of its variables.
+function Get-ChecksumFileName { 'checksums.sha256' }
+
+# Read once, hash as it goes. Get-FileHash is the obvious call and it runs at
+# roughly half the speed on this runtime, which on a filled Blu-ray is the
+# difference between four minutes and eight.
+function Get-FileSha256([string]$path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $st = [IO.File]::Open($path, 'Open', 'Read', 'Read')
+    try {
+        $buf = New-Object byte[] (1MB)
+        while (($n = $st.Read($buf, 0, $buf.Length)) -gt 0) {
+            [void]$sha.TransformBlock($buf, 0, $n, $null, 0)
+        }
+        [void]$sha.TransformFinalBlock((New-Object byte[] 0), 0, 0)
+        return (-join ($sha.Hash | ForEach-Object { $_.ToString('x2') }))
+    } finally { $st.Dispose(); $sha.Dispose() }
+}
+
+function New-ChecksumManifest([string]$stage, [string]$label, [scriptblock]$log) {
+    $name = Get-ChecksumFileName
+    $out = Join-Path $stage $name
+    # Everything that will be on the disc except this file, which cannot list
+    # its own hash. That includes the menu and the icon: a disc verifies whole,
+    # and a game restored out of it still has its own lines to check against.
+    $files = @(Get-ChildItem -LiteralPath $stage -Recurse -File |
+               Where-Object { $_.FullName -ne $out } |
+               Sort-Object FullName)
+    $sep = [string][char]92
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("# DiscWright checksum list for $label")
+    $lines.Add("# $($files.Count) files, SHA-256, sha256sum format.")
+    $lines.Add('#')
+    $lines.Add('# To check a copy, from the folder holding these files:')
+    $lines.Add('#   sha256sum -c ' + $name)
+    $lines.Add('# or in PowerShell, with no extra tools:')
+    $lines.Add('#   Get-Content ' + $name + ' | Where-Object { $_ -notmatch ' + "'^#'" + ' } | ForEach-Object {')
+    $lines.Add('#     $h, $f = $_ -split '  + "' \*', 2" + '')
+    $lines.Add('#     $a = (Get-FileHash $f -Algorithm SHA256).Hash')
+    $lines.Add('#     "{0}  {1}" -f $(if ($a -eq $h) { "OK  " } else { "FAIL" }), $f }')
+    $lines.Add('#')
+    $done = 0
+    $bytes = [double]0
+    foreach ($f in $files) {
+        $rel = $f.FullName.Substring($stage.Length).TrimStart([char]92).Replace($sep, '/')
+        $lines.Add((Get-FileSha256 $f.FullName) + ' *' + $rel)
+        $done++
+        $bytes += $f.Length
+        if ($log -and ($done % 25 -eq 0)) { & $log "  hashed $done of $($files.Count) ..." }
+    }
+    # Newlines, not carriage returns. Every other file this writes is CRLF,
+    # and this one cannot be: sha256sum -c takes the carriage return as part
+    # of the filename and reports every line as a missing file. Checked with
+    # the real tool, which is the only way that would have shown up. Notepad
+    # has handled a bare newline since 2018, and nothing else ever minded.
+    [IO.File]::WriteAllText($out, (($lines -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding $false))
+    if ($log) {
+        & $log ("Checksum list written: $name ($($files.Count) files, " +
+                "$([math]::Round($bytes / 1MB, 1)) MB hashed)")
+    }
+    return $out
+}
+
 function New-MenuHta([hashtable]$cfg,[string]$out) {
     # cfg: GameName (the disc's label), Games (array), Buttons (ordered array),
     #      MusicFile, ManualFile, PanelSide, IconName, WindowBorder, ButtonStyle
@@ -2277,7 +2351,11 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # 129 x 183 mm panel, so using it for both was a guess that usually
         # guessed wrong. Absent in anything older, which reads back as empty and
         # falls back to the background exactly as those versions did.
-        Version      = 10
+        # Version 11 adds Checksums - whether the disc also carries a list of
+        # what every file on it hashes to. Absent in anything older, which reads
+        # back as off, so reopening an old project and rebuilding produces the
+        # disc it produced before rather than quietly adding a file to it.
+        Version      = 11
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -2325,6 +2403,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         MediaKey     = [string]$s.MediaKey
         LinuxInfo    = [bool]$s.LinuxInfo
         LegacyFs     = [bool]$s.LegacyFs
+        Checksums    = [bool]$s.Checksums
         OutDir       = $outDir
     }
     $o | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outDir $PROJECT_FILE) -Encoding UTF8
@@ -2375,6 +2454,7 @@ function Import-Project([string]$jsonPath) {
             Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
             LinuxInfo=[bool]$j.LinuxInfo
             LegacyFs=[bool]$j.LegacyFs
+            Checksums=[bool]$j.Checksums
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             CoverPath=$j.CoverPath; DiscArtPath=$j.DiscArtPath
             PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
@@ -2836,6 +2916,13 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     # in the window only knows about the installers, and step 5 can drop anything
     # at the disc root. A disc that quietly lost a file to a 32-bit length field
     # would be far worse than one that is simply not readable on Windows XP.
+    # Last, because it hashes what is on the disc and everything has to be on
+    # it by now: the games, the menu, the icon, the launcher.
+    if ($s.Checksums) {
+        & $log 'Hashing the disc ...'
+        $null = New-ChecksumManifest $stage $s.Label $log
+    }
+
     $fsMask = 4
     if ($s.LegacyFs) {
         $big = @(Get-ChildItem -Recurse -File -Force $stage -EA SilentlyContinue |
@@ -3130,11 +3217,17 @@ $chkLegacy.Location=New-Object System.Drawing.Point(265,342)
 $chkLegacy.Size=New-Object System.Drawing.Size(240,22)
 $chkLegacy.Checked=$false
 $form.Controls.Add($chkLegacy)
+$chkSums=New-Object System.Windows.Forms.CheckBox
+$chkSums.Text='checksummed'
+$chkSums.Location=New-Object System.Drawing.Point(510,342)
+$chkSums.Size=New-Object System.Drawing.Size(105,22)
+$chkSums.Checked=$false
+$form.Controls.Add($chkSums)
 # Below the Browse button, not beside it: at y=290 this 44px-tall preview sat on
 # top of a 24px-tall button in the same 110px column, and whichever Windows drew
 # last won. Nothing lines up on this row at x=560, and 318+44 clears the step 4
 # group box at y=372.
-$picIcon=New-Object System.Windows.Forms.PictureBox; $picIcon.Location=New-Object System.Drawing.Point(560,318); $picIcon.Size=New-Object System.Drawing.Size(44,44); $picIcon.SizeMode='Zoom'; $picIcon.BorderStyle='FixedSingle'; $form.Controls.Add($picIcon)
+$picIcon=New-Object System.Windows.Forms.PictureBox; $picIcon.Location=New-Object System.Drawing.Point(620,318); $picIcon.Size=New-Object System.Drawing.Size(44,44); $picIcon.SizeMode='Zoom'; $picIcon.BorderStyle='FixedSingle'; $form.Controls.Add($picIcon)
 
 $grp=New-Object System.Windows.Forms.GroupBox; $grp.Text='4)  Autorun menu'; $grp.Location=New-Object System.Drawing.Point(15,372); $grp.Size=New-Object System.Drawing.Size(645,286); $form.Controls.Add($grp)
 $chkMenu=New-Object System.Windows.Forms.CheckBox; $chkMenu.Text='Run splash menu when disc is inserted'; $chkMenu.Location=New-Object System.Drawing.Point(15,24); $chkMenu.Size=New-Object System.Drawing.Size(400,22); $chkMenu.Checked=$true; $grp.Controls.Add($chkMenu)
@@ -4390,6 +4483,7 @@ function Open-Project([string]$folder) {
     $chkMenu.Checked = $p.Menu
     $chkLinux.Checked = [bool]$p.LinuxInfo
     $chkLegacy.Checked = [bool]$p.LegacyFs
+    $chkSums.Checked = [bool]$p.Checksums
     if ($p.BgPath -and (Test-Path $p.BgPath)) { Set-BgFile $p.BgPath } else { $txtBg.Text=''; $state.BgPath=$null }
     $chkBgAsIs.Checked = [bool]$p.BgAsIs
     $cmbSide.SelectedItem = $(if($p.PanelSide -ieq 'Left'){'Left'}else{'Right'})
@@ -5039,7 +5133,7 @@ $btnBuild.Add_Click({
          MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null});
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
          ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey
-         LinuxInfo=$chkLinux.Checked; LegacyFs=$chkLegacy.Checked }
+         LinuxInfo=$chkLinux.Checked; LegacyFs=$chkLegacy.Checked; Checksums=$chkSums.Checked }
     $btnBuild.Enabled=$false
     Set-FormBusy $true
     $script:BuildDiscTag = ''
