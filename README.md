@@ -174,6 +174,21 @@ The second checkbox on the **Extra compatibility** row, **Readable on Windows XP
 
 The filename limit turned out not to matter. Joliet holds names to 64 characters, but IMAPI writes long names into the ISO9660 tree regardless, and a real 96-character GOG patch filename survives intact.
 
+## Proving a disc is still what you burned
+
+The third checkbox on that row, **Checksummed**, writes `checksums.sha256` at the disc root: one line per file, with the SHA-256 of everything else the disc carries. It is there so a copy taken off the disc years from now can be proved identical to what went on it, which is the part a disc cannot tell you by itself.
+
+It is written in the format `sha256sum` uses, so **nothing from DiscWright is needed to check it**, which rather matters for a file whose whole job is to still be useful in twenty years. On any Linux or macOS machine, and on Windows with Git or WSL installed:
+
+```
+sha256sum -c checksums.sha256
+```
+
+and on a bare Windows machine with nothing installed at all, the file prints a short PowerShell loop in its own header that does the same thing. A file that changed by a single byte comes back as `FAIL`.
+
+It covers the menu and the icon as well as the games, so a disc verifies whole, and a game restored out of it still has its own lines to check against. **It is off by default**, like the other two, because what every disc carries is not a decision to make on somebody's behalf. The cost is one pass over the data: a few seconds for a CD, around twenty for a full DVD, and a few minutes for a Blu-ray filled to the brim.
+
+
 If something added in step 5 slips past the greyed box, the build checks the finished disc folder again and falls back to UDF alone, saying so in the log, rather than writing an image that has lost a file.
 
 Old DVD players and other appliances that only speak ISO9660 benefit from the same box.
