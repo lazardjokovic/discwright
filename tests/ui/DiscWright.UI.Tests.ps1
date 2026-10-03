@@ -241,6 +241,38 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         $missing.Count | Should -Be 0 -Because "hidden or missing: $($missing -join ', ')"
     }
 
+    It 'shows every checkbox the script creates' {
+        # The same guard as the buttons above, for the other control the window
+        # keeps gaining. Two checkboxes were added in one week, "checksummed"
+        # and "Game name", and nothing here would have noticed if either had
+        # landed underneath something else: the button test does not look at
+        # checkboxes, and the overlap test cannot see a control hidden exactly
+        # behind another. Written so the next one is covered on the day it is
+        # added rather than the day somebody notices it missing.
+        $src = Get-Content -Raw -LiteralPath $script:AppPath
+        # Declared as a checkbox, given a caption, and added to the window or to
+        # one of its group boxes. A checkbox inside a dialog is not on this form
+        # and is not what this is about.
+        $vars = @([regex]::Matches($src, '\$(\w+)\s*=\s*New-Object System\.Windows\.Forms\.CheckBox') |
+                  ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+        $wanted = @()
+        foreach ($v in $vars) {
+            if ($src -notmatch ('\$' + [regex]::Escape($v) + '\)')) { continue }
+            $onForm = [regex]::IsMatch($src, '\$(?:form|grp|grpX)\.Controls\.Add\(\$' + [regex]::Escape($v) + '\)')
+            if (-not $onForm) { continue }
+            $t = [regex]::Match($src, '\$' + [regex]::Escape($v) + "\.Text\s*=\s*'([^']+)'")
+            if ($t.Success) { $wanted += $t.Groups[1].Value }
+        }
+        $wanted = @($wanted | Sort-Object -Unique)
+        $wanted.Count | Should -BeGreaterThan 8 -Because 'the window has a good many checkboxes'
+
+        $missing = @()
+        foreach ($n in $wanted) {
+            if (-not (Find-Ctl $script:Win $n)) { $missing += $n }
+        }
+        $missing.Count | Should -Be 0 -Because "hidden or missing: $($missing -join ', ')"
+    }
+
     It 'leaves <_> greyed until there is something for it to act on' -ForEach @(
         'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu', 'New disc',
         'Print artwork*', 'Burn to disc*'
@@ -1676,5 +1708,80 @@ Describe 'A disc whose artwork was never chosen' -Tag 'UI' -Skip:(-not $script:H
 
     It 'still offers to build, having refused to before' {
         Test-CtlEnabled $script:Win 'BUILD ISO*' | Should -BeTrue
+    }
+}
+
+Describe 'Double-clicking the launcher on a finished disc' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # Everything else about Start Here.hta is checked without running it: the
+    # script is generated, read back, and its path logic exercised in a JScript
+    # engine across every spelling of the URL an HTA reports. All of that can
+    # pass while the file itself does nothing at all, because none of it ever
+    # asks mshta to open it.
+    #
+    # This is the disc the reporter would hold: AutoPlay off, no menu offered,
+    # so they open the folder and double-click the one file that invites it.
+
+    BeforeAll {
+        $script:LaunchBefore = @(Get-Process mshta -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+
+        $bmp = New-Object System.Drawing.Bitmap(1280, 720)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.Clear([System.Drawing.Color]::FromArgb(24, 48, 64)); $g.Dispose()
+        $art = Join-Path $script:Sandbox 'launch-art.png'
+        $bmp.Save($art, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+
+        $src = Join-Path $script:Sandbox 'launchsrc'
+        New-Item -ItemType Directory -Force -Path $src | Out-Null
+        $exe = Join-Path $src 'setup_launch_game.exe'
+        $fs = [IO.File]::Create($exe); $fs.SetLength(256KB); $fs.Close()
+
+        $script:LaunchOut = Join-Path $script:Sandbox 'launchout'
+        New-Item -ItemType Directory -Force -Path $script:LaunchOut | Out-Null
+        $null = Invoke-Build @{
+            Games = @((Get-FolderInfo $src $exe)); OutDir = $script:LaunchOut
+            Label = 'Launch Test'; IconPath = $art; IconIsIco = $false; Menu = $true
+            BgPath = $art; BgAsIs = $false; PanelSide = 'Right'; Divider = $false
+            ShowTitle = $false; TitleText = ''; WindowBorder = $true; ButtonStyle = 'Minimal'
+            Buttons = @('Install', 'Exit'); MusicFile = ''; ManualPath = $null
+            ExtrasPath = $null; ExtraItems = @(); LinuxInfo = $false; LegacyFs = $false
+            Checksums = $false
+        } { param($m) }
+        $script:LaunchDisc = Join-Path $script:LaunchOut 'disc'
+    }
+
+    AfterAll {
+        Get-Process mshta -ErrorAction SilentlyContinue |
+            Where-Object { $script:LaunchBefore -notcontains $_.Id } |
+            ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+    }
+
+    It 'is sitting at the disc root where somebody browsing would find it' {
+        Test-Path (Join-Path $script:LaunchDisc (Get-MenuLauncherName)) | Should -BeTrue
+    }
+
+    It 'opens the menu when it is run, which nothing else here proves' {
+        $launcher = Join-Path $script:LaunchDisc (Get-MenuLauncherName)
+        $proc = Start-Process mshta.exe -ArgumentList "`"$launcher`"" -PassThru
+
+        # The launcher starts a second mshta for the menu and closes itself, so
+        # the window to wait for belongs to a process that does not exist yet.
+        $menu = [IntPtr]::Zero
+        $deadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $deadline -and $menu -eq [IntPtr]::Zero) {
+            foreach ($p in @(Get-Process mshta -ErrorAction SilentlyContinue |
+                             Where-Object { $script:LaunchBefore -notcontains $_.Id })) {
+                $h = Find-MenuWindow -ProcessId $p.Id -TimeoutSec 1
+                if ($h -ne [IntPtr]::Zero) { $menu = $h; break }
+            }
+            if ($menu -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 400 }
+        }
+        try { if (-not $proc.HasExited) { $proc.Kill() } } catch { }
+        $menu | Should -Not -Be ([IntPtr]::Zero) -Because 'double-clicking the launcher has to open the menu'
+    }
+
+    It 'leaves the menu where autorun.inf still points, so AutoPlay is unchanged' {
+        Test-Path (Join-Path $script:LaunchDisc 'AUTORUN\menu.hta') | Should -BeTrue
+        (Get-Content (Join-Path $script:LaunchDisc 'autorun.inf') -Raw) | Should -Match 'shellexecute=AUTORUN'
     }
 }
