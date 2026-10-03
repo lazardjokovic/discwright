@@ -3664,6 +3664,83 @@ function Show-Choice([string]$msg,[string]$title='DiscWright') {
 function Deny-Build([string]$logMsg,[string]$dlgMsg) { & $log "ERROR: $logMsg"; Show-Warn $dlgMsg }
 
 $tips = New-Object System.Windows.Forms.ToolTip
+# Hover text for everything that needed explaining and did not have it.
+# Thirteen of the eighteen tick boxes and lists on this form had none, which
+# included both of the ones added last. The wording says what the thing does
+# and what it costs, because a caption like "checksummed" tells nobody that.
+#
+# The pop-up has to outlast reading: the default five seconds cuts the longer
+# ones off mid-sentence.
+$tips.AutoPopDelay = 32000
+$tips.InitialDelay = 450
+$tips.ReshowDelay  = 150
+
+$tips.SetToolTip($chkMenu, (
+    "Writes the splash menu onto the disc and points autorun.inf at it." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Untick it and the disc is just files: no menu, and nothing happens" + [Environment]::NewLine +
+    "when the disc goes in."))
+$tips.SetToolTip($chkBgAsIs, (
+    "Uses your picture exactly as it is: no panel, no darkening, no title" + [Environment]::NewLine +
+    "drawn over it." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Only offered for a picture that is already 760 by 480, which is the" + [Environment]::NewLine +
+    "size of the menu window."))
+$tips.SetToolTip($chkMusic, (
+    "Plays a track while the menu is open. The file is copied into AUTORUN" + [Environment]::NewLine +
+    "and the menu gets a mute button."))
+$tips.SetToolTip($cbPlay, (
+    "Adds a Play button." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "For a GOG download it looks the game up and runs the installed copy." + [Environment]::NewLine +
+    "For a folder of game files it runs the game straight off the disc."))
+$tips.SetToolTip($cbInst, (
+    "Adds an Install button that runs the installer from the disc." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "A folder of game files has nothing to install, so it is given Open" + [Environment]::NewLine +
+    "Folder instead."))
+$tips.SetToolTip($cbMan, (
+    "Adds a Manual button." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Each game can carry its own manual; one that has none falls back to" + [Environment]::NewLine +
+    "the disc-wide manual set below."))
+$tips.SetToolTip($cbExtra, (
+    "Adds an Extras button that opens the extras folder on the disc." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Each game can carry its own, falling back to the disc-wide one below."))
+$tips.SetToolTip($cbExit, (
+    "Adds an Exit button." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Without it the menu still closes with the X in the corner, or Escape."))
+$tips.SetToolTip($chkWinBorder, (
+    "Draws a thin line around the edge of the menu window, which separates" + [Environment]::NewLine +
+    "it from whatever is behind it."))
+$tips.SetToolTip($chkSums, (
+    "Writes checksums.sha256 at the disc root: the SHA-256 of every other" + [Environment]::NewLine +
+    "file on the disc." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "A disc cannot tell you it has gone bad. This is how a copy taken off" + [Environment]::NewLine +
+    "it years from now is proved to be exactly what went on." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Readable by sha256sum, and the file itself explains how to check it" + [Environment]::NewLine +
+    "with PowerShell alone. Costs one pass over the data: seconds for a CD," + [Environment]::NewLine +
+    "a few minutes for a full Blu-ray."))
+$tips.SetToolTip($chkCaption, (
+    "Prints the game's name above the buttons on its own screen." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "This is not the title on the artwork set above, which draws onto the" + [Environment]::NewLine +
+    "picture itself. On a one-game disc this is the only place the name" + [Environment]::NewLine +
+    "appears."))
+$tips.SetToolTip($cmbBtnStyle, (
+    "Minimal draws the menu buttons as flat blocks." + [Environment]::NewLine +
+    "Bordered gives each one an outline."))
+$tips.SetToolTip($cmbMedia, (
+    "Which blank disc you mean to burn." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Left on 'Recommend a disc for me', the smallest disc the payload fits" + [Environment]::NewLine +
+    "on is chosen, and the line under the installer list says whether it" + [Environment]::NewLine +
+    "fits."))
+
 $tips.SetToolTip($chkLegacy, (
     "Writes ISO9660 and Joliet filesystems beside the UDF one, so the disc can be" + [Environment]::NewLine +
     "read by Windows XP, 2000, ME, 98 and 95. They read UDF 2.01 at best and cannot" + [Environment]::NewLine +

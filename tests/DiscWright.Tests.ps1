@@ -6333,3 +6333,57 @@ Describe 'Nothing is added to the form and then forgotten' -Tag 'Unit' {
         ($out -join "`n") | Should -Match 'b\.bin: OK'
     }
 }
+
+Describe 'Every tick box and list says what it is for' -Tag 'Unit' {
+
+    # A caption has about three words to work with, and "checksummed" is not
+    # three words that explain anything. Thirteen of the eighteen tick boxes and
+    # drop-downs on this form had no hover text at all, including both of the
+    # ones added most recently, which is how the gap keeps happening: a control
+    # is added, it works, and nothing ever says it is unexplained.
+
+    BeforeAll {
+        $app = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
+        $script:TipSrc = Get-Content -Raw -LiteralPath $app
+        $script:Tipped = @([regex]::Matches($script:TipSrc, 'SetToolTip\(\$(\w+)') |
+                           ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+    }
+
+    It 'has hover text on every checkbox and dropdown the window shows' {
+        $want = @()
+        foreach ($m in [regex]::Matches($script:TipSrc,
+                 '\$(\w+)\s*=\s*New-Object System\.Windows\.Forms\.(CheckBox|ComboBox)')) {
+            $n = $m.Groups[1].Value
+            # Only the ones on the main window. A control inside a dialog is
+            # explained by the dialog it is in.
+            if ($script:TipSrc -match ('\$(?:form|grp|grpX)\.Controls\.Add\(\$' + [regex]::Escape($n) + '\)')) {
+                $want += $n
+            }
+        }
+        $want = @($want | Sort-Object -Unique)
+        $want.Count | Should -BeGreaterThan 12 -Because 'the form has a good many of them'
+
+        $bare = @($want | Where-Object { $script:Tipped -notcontains $_ })
+        $bare.Count | Should -Be 0 -Because "no hover text on: $($bare -join ', ')"
+    }
+
+    It 'gives the pop-up long enough to be read' {
+        # The default is five seconds, which cuts the longer explanations off
+        # part way through a sentence.
+        $m = [regex]::Match($script:TipSrc, '\$tips\.AutoPopDelay\s*=\s*(\d+)')
+        $m.Success | Should -BeTrue -Because 'the pop-up timeout should be set deliberately'
+        [int]$m.Groups[1].Value | Should -BeGreaterThan 15000
+    }
+
+    It 'explains the two that a caption cannot' {
+        # These two were reported as baffling, in as many words: "all I see is a
+        # checkbox, what is the exact point", and the artwork title confusion
+        # that produced half of issue 98 item 5.
+        $sums = [regex]::Match($script:TipSrc, '(?s)SetToolTip\(\$chkSums,(.*?)\)\)').Groups[1].Value
+        $sums | Should -Match 'checksums\.sha256'
+        $sums | Should -Match 'sha256sum'
+
+        $cap = [regex]::Match($script:TipSrc, '(?s)SetToolTip\(\$chkCaption,(.*?)\)\)').Groups[1].Value
+        $cap | Should -Match 'not the title on the artwork'
+    }
+}
