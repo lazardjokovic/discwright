@@ -7,6 +7,70 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [0.10.0] — 2026-10-03
+
+Almost everything in this release came from one person's list of suggestions,
+and the one real bug among them had been there since folders of game files were
+first supported.
+
+### Added
+
+- **A file to double-click when AutoPlay does not offer itself.** AutoPlay is
+  switched off on a great many machines, and on those a disc looked like a folder
+  of installers with no obvious way in: the menu sits one level down in `AUTORUN`,
+  where nobody browsing a disc would think to open it. Every disc now carries
+  **Start Here.hta** at its root, which opens the menu. It starts the real menu
+  rather than being a second copy of it, and `autorun.inf` is untouched, so discs
+  behave exactly as before wherever AutoPlay does work.
+
+- **A disc can now prove it is still what you burned.** A new **checksummed** tick
+  writes `checksums.sha256` at the disc root, listing the SHA-256 of every other
+  file. A disc cannot tell you it has gone bad, and a copy taken off one years
+  later gives no sign either way. This is how you check. It is written in the
+  format `sha256sum` has used for decades, so nothing from DiscWright is needed to
+  read it, and the file explains in its own header how to check it with PowerShell
+  alone. Off by default, because it costs one pass over the data: a few seconds
+  for a CD, a few minutes for a full Blu-ray.
+
+- **The game's name above the menu buttons can be turned off.** A **Game name**
+  tick. It is a different thing from the title on the artwork, which draws onto
+  the picture, and confusing the two is how this was reported in the first place.
+
+- **Every tick box and list on the window now explains itself.** Hover over one
+  and it says what it does and what it costs. Thirteen of the eighteen had
+  nothing at all, including the two added in this release.
+
+### Fixed
+
+- **A folder of game files with no installer offered a button that could never
+  work.** Choosing *no installer* was supposed to give the menu an **Open Folder**
+  button. Instead the menu offered **Play**, which built its path from an
+  installer that did not exist, landed on the disc root, and said the game was not
+  on the disc. Every single time. The Open Folder button meant to replace it was
+  written behind a condition that excluded the only kind of entry that could ever
+  need it, so it had never once appeared. Reported from a disc of nine games where
+  all nine failed this way.
+
+- **A long game name lost its tail.** The menu cut every name at twenty
+  characters, so "The Witcher 3 Wild Hunt - Game of the Year Edition" arrived as
+  "THE WITCHER 3 WILD ...". A longer name now steps down a size and wraps onto a
+  second line. Fifty characters fit whole.
+
+### Changed
+
+- The project file moves to schema 12, for the two new settings. Projects written
+  by older versions open as they always did: the disc they describe is the disc
+  they still build.
+
+### Thanks
+
+- To [xniwo](https://github.com/xniwo) on GitHub, who opened
+  [issue #98](https://github.com/lazardjokovic/discwright/issues/98) with ten
+  suggestions and then went to the trouble of reproducing the worst of them in
+  detail, with screenshots, after being asked. Six of the changes above are his.
+  The Open Folder bug in particular was invisible from the inside, because every
+  test written for that button used a single GOG game, which always has an
+  installer. He built a disc of nine folders that had none. Thank you.
 ## [0.9.2] — 2026-10-02
 
 A disc no longer has to have artwork before DiscWright will do anything with it,
@@ -1027,7 +1091,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/lazardjokovic/discwright/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/lazardjokovic/discwright/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/lazardjokovic/discwright/compare/v0.8.1...v0.9.1
 [0.8.1]: https://github.com/lazardjokovic/discwright/compare/v0.8.0...v0.8.1
