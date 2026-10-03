@@ -67,10 +67,11 @@ first supported.
 - To [xniwo](https://github.com/xniwo) on GitHub, who opened
   [issue #98](https://github.com/lazardjokovic/discwright/issues/98) with ten
   suggestions and then went to the trouble of reproducing the worst of them in
-  detail, with screenshots, after being asked. Six of the changes above are his.
-  The Open Folder bug in particular was invisible from the inside, because every
-  test written for that button used a single GOG game, which always has an
-  installer. He built a disc of nine folders that had none. Thank you.
+  detail, with screenshots, after being asked. Five of the changes above are his,
+  and two more went out in 0.9.2. The Open Folder bug in particular was invisible
+  from the inside: there were tests driving a disc of three folders of game
+  files, but every one of those folders had an executable to run, so the one
+  setting he picked, no installer at all, had never been tried. Thank you.
 ## [0.9.2] — 2026-10-02
 
 A disc no longer has to have artwork before DiscWright will do anything with it,
