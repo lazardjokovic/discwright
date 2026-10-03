@@ -6246,3 +6246,90 @@ WScript.Echo(out ? out.replace(/<[^>]*>/g,"") : "");
         (Get-Content $menu -Raw) | Should -Match 'var SHOWCAP=true'
     }
 }
+
+Describe 'Nothing is added to the form and then forgotten' -Tag 'Unit' {
+
+    # These do not test a feature. They test that a feature added next year
+    # cannot quietly arrive without being saved, reloaded, or checked.
+    #
+    # The repository already works this way in two places: the window suite
+    # reads every AddBtn out of the source and insists each one is on screen,
+    # and the menu template test keeps its own substitution table so a new
+    # %%TOKEN%% fails loudly rather than being parse-checked as literal text.
+    # That second one caught %%SHOWCAP%% the day it was written. These extend
+    # the same idea to settings, which is where the gaps have actually been.
+
+    It 'writes every setting the form collects into the project file' {
+        # Catches: a new checkbox wired into the build and forgotten in
+        # Save-Project, so the disc builds correctly and reopening the project
+        # silently rebuilds a different one.
+        # Worked out here rather than borrowed: the harness keeps its copy in a
+        # local that does not reach this far.
+        $app = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
+        $src = Get-Content -Raw -LiteralPath $app
+        $gather = [regex]::Match($src,
+            '(?s)\$s=@\{ Games=\(Get-Games\);(.*?)\r?\n    \$btnBuild\.Enabled').Groups[1].Value
+        $gather | Should -Not -BeNullOrEmpty -Because 'the settings the form builds must be findable'
+        $gathered = @([regex]::Matches($gather, '(?:^|[;\s{])([A-Za-z]\w*)=') |
+                      ForEach-Object { $_.Groups[1].Value }) + 'Games' | Sort-Object -Unique
+
+        $saveBody = [regex]::Match($src, '(?s)\$o = \[ordered\]@\{(.*?)\r?\n    \}').Groups[1].Value
+        $saveBody = [regex]::Replace($saveBody, '(?m)^\s*#.*$', '')
+        $saved = @([regex]::Matches($saveBody, '(?m)^\s*(\w+)\s*=') | ForEach-Object { $_.Groups[1].Value })
+
+        $missing = @($gathered | Where-Object { $saved -notcontains $_ })
+        $missing.Count | Should -Be 0 -Because "collected from the form but never written to the project file: $($missing -join ', ')"
+    }
+
+    It 'reads back every setting it writes' {
+        # Catches the other half: written by Save-Project and forgotten in
+        # Import-Project, so reopening a project loses it.
+        $dir = Join-Path $script:Sandbox 'roundtrip-all'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $s = @{ Games=@(); Label='Round Trip'; IconPath='C:\art\icon.png'; IconIsIco=$false
+                Menu=$true; BgPath='C:\art\bg.png'; BgAsIs=$true; PanelSide='Left'
+                Divider=$true; ShowTitle=$true; TitleText='A Title'; ShowCaption=$false
+                WindowBorder=$false; ButtonStyle='Bordered'; MusicFile='C:\a\music.mp3'
+                Buttons=@('Play','Exit'); ManualPath='C:\a\manual.pdf'; ExtrasPath='C:\a\extras'
+                ExtraItems=@('C:\a\readme.txt'); MediaKey='DVD'; LinuxInfo=$true
+                LegacyFs=$true; Checksums=$true }
+        Save-Project $s $dir
+        $json = Get-Content -Raw (Join-Path $dir 'discproject.json') | ConvertFrom-Json
+        $back = Import-Project (Join-Path $dir 'discproject.json')
+
+        # Everything else in the file is bookkeeping or belongs to a game entry,
+        # and a new one has to be added here on purpose rather than by accident.
+        $notSettings = @('Version','AppVersion','SavedUtc','SourceFolder','GameName',
+                         'Games','OutDir','CoverPath','DiscArtPath')
+        $checked = 0
+        foreach ($k in $json.PSObject.Properties.Name) {
+            if ($notSettings -contains $k) { continue }
+            $back.ContainsKey($k) | Should -BeTrue -Because "$k is saved, so reopening a project must bring it back"
+            $want = $s[$k]
+            if ($want -is [array]) { @($back[$k]) | Should -Be @($want) -Because "$k must survive the round trip" }
+            else                   { $back[$k]   | Should -Be $want   -Because "$k must survive the round trip" }
+            $checked++
+        }
+        $checked | Should -BeGreaterThan 15 -Because 'this should be checking most of the settings, not two of them'
+    }
+
+    It 'checks the checksum list with the tool it claims to be compatible with' -Skip:(-not (Get-Command sha256sum -ErrorAction SilentlyContinue)) {
+        # The format claim is the whole point of the file, and the first version
+        # failed it: CRLF made sha256sum read the carriage return as part of
+        # every filename. A test on the line endings is a proxy; this is the
+        # real thing, run whenever the real tool happens to be present.
+        $dir = Join-Path $script:Sandbox 'sha-real'
+        New-Item -ItemType Directory -Force -Path (Join-Path $dir 'sub') | Out-Null
+        Set-Content (Join-Path $dir 'a.bin') 'one' -Encoding Ascii
+        Set-Content (Join-Path $dir 'sub\b.bin') 'two' -Encoding Ascii
+        $null = New-ChecksumManifest $dir 'REAL TOOL' $null
+        Push-Location $dir
+        try {
+            $out = & sha256sum -c (Get-ChecksumFileName) 2>&1
+            $code = $LASTEXITCODE
+        } finally { Pop-Location }
+        $code | Should -Be 0 -Because "sha256sum -c rejected it: $($out -join '; ')"
+        ($out -join "`n") | Should -Match 'a\.bin: OK'
+        ($out -join "`n") | Should -Match 'b\.bin: OK'
+    }
+}
