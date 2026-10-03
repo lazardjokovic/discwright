@@ -118,8 +118,29 @@ if (-not (Test-Path $result)) {
 Start-Sleep -Seconds 3
 Get-Content -LiteralPath $result | ForEach-Object { Write-Host "  $_" }
 
-$failed = @(Get-Content -LiteralPath $result | Where-Object { $_ -match '^\s*FAIL' })
+$lines   = @(Get-Content -LiteralPath $result)
+$failed  = @($lines | Where-Object { $_ -match '^\s*FAIL' })
+$blocked = @($lines | Where-Object { $_ -match '^\s*BLOCKED' })
 Write-Host ""
+
+# A sandbox that will not run an unsigned installer has not found a fault, it
+# has declined to look. Reporting "5 check(s) failed" there brought a good
+# release to a halt, and the same wording would have buried a real failure in
+# the same noise. Exit 2 keeps it distinct from a pass and from a real fail.
+if ($blocked.Count) {
+    Write-Host "Could not test: this sandbox would not run an unsigned installer." -ForegroundColor Yellow
+    Write-Host "Smart App Control comes up ON in some sandboxes and in evaluation in"
+    Write-Host "others, and only the second will start the file. Nothing here says the"
+    Write-Host "build is broken, and nothing here says it is sound either."
+    Write-Host ""
+    Write-Host "Test it where the policy allows it, such as the Windows test VM: copy the"
+    Write-Host "installer and Install-Check.ps1 across and run the script there. It leaves"
+    Write-Host "a machine that is not a sandbox running."
+    Write-Host "The full log is $work\out"
+    try { if (-not $proc.HasExited) { $null = $proc.WaitForExit(60000) } } catch {}
+    exit 2
+}
+
 if ($failed.Count) {
     Write-Host "$($failed.Count) check(s) failed." -ForegroundColor Red
 } else {

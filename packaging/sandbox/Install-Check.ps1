@@ -30,12 +30,41 @@ function Say([string]$text) {
     # had reached.
     Set-Content -LiteralPath (Join-Path $out 'progress.txt') -Value $lines -Encoding UTF8
 }
-function Check([string]$what, [bool]$ok, [string]$detail = '') {
+# Smart App Control refuses to run an unsigned binary at all. That is a fact
+# about the image this is running on, not about the installer, and calling it a
+# failure is a lie that stops a release: it happened on 0.9.0, on 0.9.1 and
+# again on 0.10.0, while 0.9.2 passed only because that sandbox came up with the
+# policy in evaluation mode instead. The same build, the same installer, three
+# fails and a pass.
+#
+# Matched on the wording Windows actually produced, which is recorded here
+# rather than guessed at:
+#   This command cannot be run due to the error: An Application Control policy
+#   has blocked this file.
+function Test-PolicyBlocked([string]$message) {
+    if (-not $message) { return $false }
+    return [bool]($message -match 'Application Control policy' -or
+                  $message -match 'blocked by your administrator')
+}
+
+# Set when the installer never ran. Everything downstream then reports SKIP
+# rather than FAIL, because none of it was tested either way.
+$script:Blocked = $false
+
+function Check([string]$what, [bool]$ok, [string]$detail = '', [switch]$Always) {
+    if ($script:Blocked -and -not $Always) {
+        Say ("SKIP  {0}  [not tested: the installer never ran]" -f $what)
+        return $false
+    }
     Say (("{0}  {1}" -f $(if ($ok) { 'PASS' } else { 'FAIL' }), $what) + $(if ($detail) { "  [$detail]" } else { '' }))
     return $ok
 }
 
-Say "DiscWright installer check, inside Windows Sandbox"
+# Windows Sandbox always runs as this account, which is how the script knows
+# whether it is in one. It is also what decides, at the very end, whether it
+# is allowed to shut the machine down.
+$script:InSandbox = ($env:USERNAME -eq 'WDAGUtilityAccount')
+Say "DiscWright installer check, $(if ($script:InSandbox) { 'inside Windows Sandbox' } else { "on $env:COMPUTERNAME" })"
 Say "windows : $((Get-CimInstance Win32_OperatingSystem).Caption) $((Get-CimInstance Win32_OperatingSystem).Version)"
 $sac = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy' -Name VerifiedAndReputablePolicyState -ErrorAction SilentlyContinue).VerifiedAndReputablePolicyState
 Say "smart app control here : $(switch ($sac) { 0 {'off'} 1 {'ON'} 2 {'evaluation'} default {'not reported'} })"
@@ -66,7 +95,16 @@ try {
     $p = Start-Process $setup.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru -Wait
     $null = Check "the installer runs and exits cleanly" ($p.ExitCode -eq 0) "exit $($p.ExitCode)"
 } catch {
-    $null = Check "the installer runs and exits cleanly" $false $_.Exception.Message
+    if (Test-PolicyBlocked $_.Exception.Message) {
+        $script:Blocked = $true
+        Say "BLOCKED  this image will not run an unsigned installer"
+        Say "         Smart App Control is $(if ($sac -eq 1) { 'ON' } else { 'enforcing' }) here, so the file never"
+        Say "         started. Nothing below was tested and none of it is known to be"
+        Say "         broken. Run the installer somewhere the policy allows it, such as"
+        Say "         the Windows test VM, before believing anything about this build."
+    } else {
+        $null = Check "the installer runs and exits cleanly" $false $_.Exception.Message
+    }
 }
 
 # 2. What it left behind, as Windows records it.
@@ -124,7 +162,7 @@ if ($start) {
 #    Microsoft has said it goes away; the disc's menu needs mshta with JScript
 #    and Scripting.FileSystemObject, which is a separate question.
 Say ""
-$null = Check "mshta and JScript are on this image, which every disc's menu needs" `
+$null = Check -Always "mshta and JScript are on this image, which every disc's menu needs" `
     ((Test-Path 'C:\Windows\System32\mshta.exe') -and (Test-Path 'C:\Windows\System32\jscript.dll') `
      -and (Test-Path 'C:\Windows\System32\scrrun.dll'))
 
@@ -185,5 +223,11 @@ Say ""
 Say "done $(Get-Date -Format s)"
 Set-Content -LiteralPath (Join-Path $out 'result.txt') -Value $lines -Encoding UTF8
 Start-Sleep -Seconds 3
-# Closes the sandbox, which is what lets the host know it is finished.
-shutdown /s /t 0
+# Closes the sandbox, which is what lets the host know it is finished. Only in a
+# sandbox: run anywhere else, this used to shut that machine down instead, which
+# is exactly what it did to the test VM the one time it was borrowed.
+if ($script:InSandbox) {
+    shutdown /s /t 0
+} else {
+    Say "not in a sandbox, so this machine is left running."
+}

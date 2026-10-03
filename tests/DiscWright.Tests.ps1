@@ -6387,3 +6387,81 @@ Describe 'Every tick box and list says what it is for' -Tag 'Unit' {
         $cap | Should -Match 'not the title on the artwork'
     }
 }
+
+Describe 'The installer check tells the truth about what it tested' -Tag 'Unit' {
+
+    # Smart App Control refuses to start an unsigned binary. Whether a given
+    # Windows Sandbox comes up with it ON or in evaluation varies run to run,
+    # and only the second will run the installer. The check reported the first
+    # as five failures, which is false: it had not found a fault, it had
+    # declined to look.
+    #
+    # The record, from this machine's own sandbox logs:
+    #   0.9.0   SAC ON           "5 check(s) failed"
+    #   0.9.1   SAC ON           "5 check(s) failed"
+    #   0.9.2   SAC evaluation   every check passed
+    #   0.10.0  SAC ON           "5 check(s) failed"
+    #
+    # Same installer shape every time. Two of those releases shipped anyway,
+    # which is what a gate that cries wolf buys you.
+
+    BeforeAll {
+        $pkg = Join-Path (Split-Path $PSScriptRoot -Parent) 'packaging\sandbox'
+        $script:CheckSrc = Get-Content -Raw -LiteralPath (Join-Path $pkg 'Install-Check.ps1')
+        $script:HostSrc  = Get-Content -Raw -LiteralPath (Join-Path $pkg 'Test-Installer.ps1')
+        # Lifted out and loaded on its own, because the script around it
+        # installs things and is not something a test suite should run.
+        $fn = [regex]::Match($script:CheckSrc,
+            '(?s)(function Test-PolicyBlocked\(\[string\]\$message\) \{.*?\r?\n\})').Groups[1].Value
+        if (-not $fn) { throw 'Test-PolicyBlocked was not found in Install-Check.ps1' }
+        . ([scriptblock]::Create($fn))
+    }
+
+    It 'knows the refusal Windows actually produced' {
+        # Copied from the log of the run that stopped the 0.10.0 release.
+        Test-PolicyBlocked 'This command cannot be run due to the error: An Application Control policy has blocked this file.' |
+            Should -BeTrue
+    }
+
+    It 'does not mistake an ordinary failure for a policy block' {
+        Test-PolicyBlocked 'The system cannot find the file specified.' | Should -BeFalse
+        Test-PolicyBlocked 'exit 1'                                      | Should -BeFalse
+        Test-PolicyBlocked ''                                            | Should -BeFalse
+        Test-PolicyBlocked $null                                         | Should -BeFalse
+    }
+
+    It 'reports what it could not test as skipped, not as failed' {
+        # One guard in Check covers every downstream check at once, so a new
+        # check added later is covered without anybody remembering to.
+        $script:CheckSrc | Should -Match 'SKIP'
+        $script:CheckSrc | Should -Match 'not tested: the installer never ran'
+        $script:CheckSrc | Should -Match '\$script:Blocked -and -not \$Always'
+    }
+
+    It 'still reports the image checks, which a block does not affect' {
+        # Whether mshta and JScript are present is true or false regardless of
+        # whether the installer was allowed to run, so that one is not skipped.
+        $script:CheckSrc | Should -Match "Check -Always .mshta and JScript"
+    }
+
+    It 'only shuts the machine down when the machine is disposable' {
+        # Run on the test VM once, it turned the VM off. The shutdown now sits
+        # behind the one thing that identifies a sandbox.
+        $script:CheckSrc | Should -Match "WDAGUtilityAccount"
+        $shutdown = [regex]::Match($script:CheckSrc, '(?s)if \(\$script:InSandbox\) \{\s*\r?\n\s*shutdown /s /t 0')
+        $shutdown.Success | Should -BeTrue -Because 'the shutdown must be inside the sandbox test'
+        # And nowhere else in the file.
+        @([regex]::Matches($script:CheckSrc, 'shutdown /s')).Count | Should -Be 1
+    }
+
+    It 'says where it is running rather than asserting a sandbox' {
+        $script:CheckSrc | Should -Not -Match 'Say "DiscWright installer check, inside Windows Sandbox"'
+        $script:CheckSrc | Should -Match 'InSandbox'
+    }
+
+    It 'gives a blocked run its own answer, distinct from pass and from fail' {
+        $script:HostSrc | Should -Match 'BLOCKED'
+        $script:HostSrc | Should -Match 'Could not test'
+        $script:HostSrc | Should -Match 'exit 2'
+    }
+}
