@@ -1700,6 +1700,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var root="";
   var GAMES=%%GAMES%%;       // [{n:name, m:registry match, s:setup, man:manual, ext:extras, a:[{n,s}]}]
   var BTNS=%%BTNS%%;         // which of Play/Install/Manual/Extras/Exit the disc was built with
+  var SHOWCAP=%%SHOWCAP%%;
   var MANUAL="%%MANUAL%%"; var MUSIC="%%MUSIC%%";
   var PREVIEW=%%PREVIEW%%;   // true only for the app's Preview - see refreshButtons
   // Which screen is showing: -1 is the game chooser, otherwise an index into GAMES.
@@ -1849,6 +1850,12 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // ever depended on another, so a caption implying otherwise described a
   // relationship that did not exist.
   function capFor(name){
+    // The game's name above the buttons. It is not the artwork title and never
+    // was, which is what the reporter who asked for this had assumed: unticking
+    // "title on artwork" draws nothing on the picture and leaves this alone. On
+    // a one-game disc it is the only place the name appears, so it stays on by
+    // default and this turns it off for anyone who finds it redundant.
+    if(!SHOWCAP) return "";
     if(!name) return "";
     return '<span class="capn" style="'+fitStyle(name)+'">'+clip(name)+'</span>';
   }
@@ -2210,6 +2217,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         STAGEBORDER=$stageBorder; BTNBORDER=$btnBorder; TITLE=(ConvertTo-HtmlText $cfg.GameName)
         PANELLEFT="$panelLeft"; GAMES=$gamesJs; BTNS=$btnsJs
         MANUAL=(ConvertTo-JsString $cfg.ManualFile); MUSIC=$musicJs
+        # Absent means yes: a project written before this existed described a
+        # menu that showed the name, and reopening it must still describe that.
+        SHOWCAP=$(if ($null -eq $cfg.ShowCaption -or $cfg.ShowCaption) { 'true' } else { 'false' })
     }
     # One pass over the template, so text filled in is never filled in again.
     # This used to chain eleven replaces, and a game renamed "Game %%BTNS%%
@@ -2406,7 +2416,12 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # what every file on it hashes to. Absent in anything older, which reads
         # back as off, so reopening an old project and rebuilding produces the
         # disc it produced before rather than quietly adding a file to it.
-        Version      = 11
+        # Version 12 adds ShowCaption - whether the menu prints the game's name
+        # above its buttons. This one reads back as ON when absent, the opposite
+        # of the flags above, because every project written before it described
+        # a menu that showed the name and reopening one must not silently take
+        # it away.
+        Version      = 12
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -2455,6 +2470,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         LinuxInfo    = [bool]$s.LinuxInfo
         LegacyFs     = [bool]$s.LegacyFs
         Checksums    = [bool]$s.Checksums
+        ShowCaption  = $(if ($null -eq $s.ShowCaption) { $true } else { [bool]$s.ShowCaption })
         OutDir       = $outDir
     }
     $o | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $outDir $PROJECT_FILE) -Encoding UTF8
@@ -2506,6 +2522,7 @@ function Import-Project([string]$jsonPath) {
             LinuxInfo=[bool]$j.LinuxInfo
             LegacyFs=[bool]$j.LegacyFs
             Checksums=[bool]$j.Checksums
+            ShowCaption=$(if ($null -eq $j.ShowCaption) { $true } else { [bool]$j.ShowCaption })
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             CoverPath=$j.CoverPath; DiscArtPath=$j.DiscArtPath
             PanelSide=$(if($j.PanelSide){$j.PanelSide}else{'Right'})
@@ -2540,7 +2557,7 @@ function Import-DiscFolder([string]$discDir) {
             LinuxInfo=(Test-Path (Join-Path $discDir '.xdg-volume-info'))
             Menu=$menu; BgPath=$null; BgAsIs=$true; PanelSide='Right'; MusicFile=$null
             Buttons=@(); ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
-            Divider=$false; ShowTitle=$false; TitleText=''
+            Divider=$false; ShowTitle=$false; TitleText=''; ShowCaption=$true
             WindowBorder=$true; ButtonStyle='Bordered'
             OutDir=(Split-Path $discDir -Parent); Origin='disc folder' }
 
@@ -2893,7 +2910,8 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         }
         New-MenuHta @{ GameName=$s.Label; Games=$menuGames; Buttons=$s.Buttons;
                        MusicFile=$musicName; ManualFile=$manualName; PanelSide=$s.PanelSide; IconName=$icoName
-                       WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle } (Join-Path $stage 'AUTORUN\menu.hta')
+                       WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle
+                       ShowCaption=$(if ($null -eq $s.ShowCaption) { $true } else { [bool]$s.ShowCaption }) } (Join-Path $stage 'AUTORUN\menu.hta')
 
         New-MenuLauncher (Join-Path $stage (Get-MenuLauncherName))
         & $log "Menu launcher at the disc root: $(Get-MenuLauncherName)"
@@ -3318,7 +3336,8 @@ $lblStyle=New-Object System.Windows.Forms.Label; $lblStyle.Text='Look:'; $lblSty
 $chkDivider=New-Object System.Windows.Forms.CheckBox; $chkDivider.Text='Divider line'; $chkDivider.Location=New-Object System.Drawing.Point(150,248); $chkDivider.Size=New-Object System.Drawing.Size(100,22); $grp.Controls.Add($chkDivider)
 $chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Window border'; $chkWinBorder.Checked=$true; $chkWinBorder.Location=New-Object System.Drawing.Point(255,248); $chkWinBorder.Size=New-Object System.Drawing.Size(115,22); $grp.Controls.Add($chkWinBorder)
 $lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,250); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
-$cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,247); $cmbBtnStyle.Size=New-Object System.Drawing.Size(130,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
+$cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,247); $cmbBtnStyle.Size=New-Object System.Drawing.Size(100,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
+$chkCaption=New-Object System.Windows.Forms.CheckBox; $chkCaption.Text='Game name'; $chkCaption.Checked=$true; $chkCaption.Location=New-Object System.Drawing.Point(545,248); $chkCaption.Size=New-Object System.Drawing.Size(95,22); $grp.Controls.Add($chkCaption)
 
 $grpX=New-Object System.Windows.Forms.GroupBox; $grpX.Text='5)  Extra content (copied to the disc root as-is)'; $grpX.Location=New-Object System.Drawing.Point(15,668); $grpX.Size=New-Object System.Drawing.Size(645,124); $form.Controls.Add($grpX)
 $lstExtra=New-Object System.Windows.Forms.ListBox; $lstExtra.Location=New-Object System.Drawing.Point(15,22); $lstExtra.Size=New-Object System.Drawing.Size(480,72); $lstExtra.SelectionMode='MultiExtended'; $lstExtra.HorizontalScrollbar=$true; $grpX.Controls.Add($lstExtra)
@@ -3863,6 +3882,7 @@ function New-PreviewMenu {
     New-MenuHta @{ GameName=$title; Games=$prevGames; Buttons=$btns
                    MusicFile=$musicName; ManualFile=''; PanelSide=[string]$cmbSide.SelectedItem; IconName=$prevIco
                    WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem
+                   ShowCaption=$chkCaption.Checked
                    Preview=$true } "$prev\AUTORUN\menu.hta"
     return "$prev\AUTORUN\menu.hta"
 }
@@ -4535,6 +4555,7 @@ function Open-Project([string]$folder) {
     $chkLinux.Checked = [bool]$p.LinuxInfo
     $chkLegacy.Checked = [bool]$p.LegacyFs
     $chkSums.Checked = [bool]$p.Checksums
+    $chkCaption.Checked = $(if ($null -eq $p.ShowCaption) { $true } else { [bool]$p.ShowCaption })
     if ($p.BgPath -and (Test-Path $p.BgPath)) { Set-BgFile $p.BgPath } else { $txtBg.Text=''; $state.BgPath=$null }
     $chkBgAsIs.Checked = [bool]$p.BgAsIs
     $cmbSide.SelectedItem = $(if($p.PanelSide -ieq 'Left'){'Left'}else{'Right'})
@@ -5180,6 +5201,7 @@ $btnBuild.Add_Click({
     $s=@{ Games=(Get-Games); Label=$txtLabel.Text.Trim(); IconPath=$state.IconPath; IconIsIco=$state.IconIsIco;
          Menu=$chkMenu.Checked; BgPath=$state.BgPath; BgAsIs=$chkBgAsIs.Checked; PanelSide=[string]$cmbSide.SelectedItem;
          Divider=$chkDivider.Checked; ShowTitle=$chkTitle.Checked; TitleText=$txtTitle.Text.Trim();
+         ShowCaption=$chkCaption.Checked;
          WindowBorder=$chkWinBorder.Checked; ButtonStyle=[string]$cmbBtnStyle.SelectedItem;
          MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null});
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});

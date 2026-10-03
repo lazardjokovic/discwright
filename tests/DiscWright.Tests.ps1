@@ -731,8 +731,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 11' {
-            $script:PJson.Version | Should -Be 11
+        It 'declares schema version 12' {
+            $script:PJson.Version | Should -Be 12
         }
 
         It 'records where each entry came from' {
@@ -3743,6 +3743,7 @@ Describe "The menu's JavaScript is valid JavaScript" {
             '%%GAMES%%'    = '[{n:"A",m:"A",s:"setup.exe",man:"",ext:"",a:[]}]'
             '%%BTNS%%'     = '["Play","Install","Exit"]'
             '%%MANUAL%%'   = 'manual.pdf'; '%%MUSIC%%' = 'music.mp3'; '%%PREVIEW%%' = 'false'
+            '%%SHOWCAP%%'  = 'true'
         }
         foreach ($k in $subs.Keys) { $tpl = $tpl.Replace($k, $subs[$k]) }
         $script:MenuLeftover = [regex]::Match($tpl, '%%[A-Z]+%%').Value
@@ -4125,8 +4126,8 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
         }
 
-        It 'writes schema version 11' {
-            $script:RenameRaw.Version | Should -Be 11
+        It 'writes schema version 12' {
+            $script:RenameRaw.Version | Should -Be 12
         }
 
         It 'stores the registered name beside the chosen one' {
@@ -5013,7 +5014,7 @@ Describe 'The older-Windows setting in a project file' -Tag 'Unit' {
                 ExtraItems=@(); MediaKey=''; LinuxInfo=$false; LegacyFs=$true }
         Save-Project $s $script:LegProj
         $raw = Get-Content -Raw (Join-Path $script:LegProj 'discproject.json') | ConvertFrom-Json
-        $raw.Version  | Should -Be 11
+        $raw.Version  | Should -Be 12
         $raw.LegacyFs | Should -BeTrue
         (Import-Project (Join-Path $script:LegProj 'discproject.json')).LegacyFs | Should -BeTrue
     }
@@ -5211,7 +5212,7 @@ Describe 'Keeping the printed pictures in the project' -Tag 'Unit' {
             CoverPath = 'C:\art\cover.png'; DiscArtPath = 'C:\art\face.png'
         } $out
         $raw = Get-Content (Join-Path $out 'discproject.json') -Raw | ConvertFrom-Json
-        $raw.Version     | Should -Be 11
+        $raw.Version     | Should -Be 12
         $raw.CoverPath   | Should -Be 'C:\art\cover.png'
         $raw.DiscArtPath | Should -Be 'C:\art\face.png'
     }
@@ -5964,7 +5965,7 @@ Describe 'Remembering whether the disc was asked to be checksummed' -Tag 'Unit' 
                 Checksums=$true }
         Save-Project $s $script:CsProj
         $raw = Get-Content -Raw (Join-Path $script:CsProj 'discproject.json') | ConvertFrom-Json
-        $raw.Version   | Should -Be 11
+        $raw.Version   | Should -Be 12
         $raw.Checksums | Should -BeTrue
         (Import-Project (Join-Path $script:CsProj 'discproject.json')).Checksums | Should -BeTrue
     }
@@ -6152,5 +6153,96 @@ WScript.Echo(CAPTURED);
     It 'offers it once, not twice' {
         $b = Get-ScreenButtons @{ Name='GOG1'; Files=$true; Setup=''; AddOns=@() }
         @($b | Where-Object { $_ -eq 'Open Folder' }).Count | Should -Be 1
+    }
+}
+
+Describe 'Hiding the game name above the menu buttons' -Tag 'Unit' {
+
+    # Asked for after the long-name fix, by the same reporter, once he worked
+    # out what "title on artwork" actually meant: "Can the text directly above
+    # the menu buttons be hidden?"
+    #
+    # It is a different thing from the artwork title and always was. Unticking
+    # that box draws nothing on the picture and leaves this line alone, which is
+    # why he thought the box was broken. On a one-game disc this is the only
+    # place the name appears, so it stays on unless somebody turns it off.
+
+    BeforeAll {
+        $script:CapDir = Join-Path $script:Sandbox 'caption'
+        New-Item -ItemType Directory -Force -Path $script:CapDir | Out-Null
+
+        function Get-MenuCaption {
+            param($ShowCaption = '__absent__')
+            $cfg = @{ GameName='Disc'; Games=@(); Buttons=@('Play','Exit'); MusicFile=''
+                      ManualFile=''; PanelSide='Right'; IconName='x.ico'
+                      WindowBorder=$true; ButtonStyle='Minimal' }
+            if ($ShowCaption -ne '__absent__') { $cfg.ShowCaption = $ShowCaption }
+            $menu = Join-Path $script:CapDir 'menu.hta'
+            New-MenuHta $cfg $menu
+            $js = Get-Content $menu -Raw
+            $flag = [regex]::Match($js, 'var SHOWCAP=(\w+);').Groups[1].Value
+            $fn = [regex]::Match($js, '(?s)(  function capFor\(name\)\{.*?\r?\n  \})').Groups[1].Value
+            $probe = Join-Path $script:CapDir 'probe.js'
+            $t = @"
+var SHOWCAP=$flag;
+function esc(s){ return s; }
+function clip(s){ return s; }
+function fitStyle(s){ return ""; }
+$fn
+var out = capFor("Hollow Knight");
+WScript.Echo(out ? out.replace(/<[^>]*>/g,"") : "");
+"@
+            Set-Content -LiteralPath $probe -Value $t -Encoding Ascii
+            return ([string](& cscript.exe //nologo //E:JScript $probe 2>&1 | Select-Object -First 1)).Trim()
+        }
+    }
+
+    It 'prints the name when it is on' {
+        Get-MenuCaption $true | Should -Be 'Hollow Knight'
+    }
+
+    It 'prints nothing at all when it is off' {
+        Get-MenuCaption $false | Should -BeNullOrEmpty
+    }
+
+    It 'prints the name when nothing said either way' {
+        # A disc built by code that never heard of this option.
+        Get-MenuCaption | Should -Be 'Hollow Knight'
+    }
+
+    It 'saves the answer, and an older project still shows the name' {
+        $proj = Join-Path $script:CapDir 'proj'
+        New-Item -ItemType Directory -Force -Path $proj | Out-Null
+        $s = @{ Games=@(); Label='P'; IconPath=''; IconIsIco=$false; Menu=$true; BgPath=''
+                BgAsIs=$false; PanelSide='Right'; Divider=$false; ShowTitle=$false; TitleText=''
+                WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null; Buttons=@('Play')
+                ManualPath=$null; ExtrasPath=$null; ExtraItems=@(); MediaKey=''
+                LinuxInfo=$false; LegacyFs=$false; Checksums=$false; ShowCaption=$false }
+        Save-Project $s $proj
+        $raw = Get-Content -Raw (Join-Path $proj 'discproject.json') | ConvertFrom-Json
+        $raw.Version | Should -Be 12
+        $raw.ShowCaption | Should -BeFalse
+        (Import-Project (Join-Path $proj 'discproject.json')).ShowCaption | Should -BeFalse
+
+        # The opposite default to every other flag here, and the reason this
+        # test exists: absent must mean on, or reopening a project written
+        # before today would quietly take the name off the menu.
+        $old = Join-Path $proj 'older.json'
+        @{ Version=11; Label='Old'; Games=@(); Buttons=@('Play'); Menu=$true; BgAsIs=$true
+           PanelSide='Right'; ButtonStyle='Minimal'; WindowBorder=$true
+        } | ConvertTo-Json -Depth 4 | Set-Content $old -Encoding UTF8
+        (Import-Project $old).ShowCaption | Should -BeTrue
+    }
+
+    It 'is not the artwork title, which is a separate setting' {
+        # The confusion that produced the report: these two are unrelated, and
+        # turning the artwork title off must not touch this line.
+        Get-MenuCaption $true | Should -Be 'Hollow Knight'
+        $cfg = @{ GameName='Disc'; Games=@(); Buttons=@('Play'); MusicFile=''; ManualFile=''
+                  PanelSide='Right'; IconName='x.ico'; WindowBorder=$true
+                  ButtonStyle='Minimal'; ShowCaption=$true }
+        $menu = Join-Path $script:CapDir 'notitle.hta'
+        New-MenuHta $cfg $menu
+        (Get-Content $menu -Raw) | Should -Match 'var SHOWCAP=true'
     }
 }
