@@ -1906,10 +1906,25 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // A folder of game files holds the game itself, so it is played from the
     // disc and there is nothing to install. The button says so rather than
     // leaving somebody to work out why Install is missing.
-    if(has("Play")){
+    //
+    // Unless it was given "no installer", in which case there is nothing to run
+    // either. Play was offered anyway and could only ever fail: doPlay builds
+    // its path from an empty setup, which resolves to the disc root, and a folder
+    // is not a file, so every click said the game was not on this disc. The Open
+    // Folder fallback that should have replaced it sat behind !g.files, so the
+    // one kind of entry that can be given no installer was the one kind that
+    // never saw the button. Reported from a nine-game disc where every game
+    // failed this way.
+    var folderOnly = g.files && !g.s;
+    if(has("Play") && !folderOnly){
       if(g.files) h+=btnHtml("btn_Play","play","Play from disc","doPlay()",
                              "Run "+g.n+" straight from this disc. Nothing is installed.");
       else        h+=btnHtml("btn_Play","play","Play","doPlay()","");
+    }
+    // Offered when either button is on the menu, because here it stands in for
+    // both, and it takes the colour of the one it is standing in for.
+    if(folderOnly && (has("Play") || has("Install"))){
+      h+=btnHtml("btn_Open","play","Open Folder","doOpenFolder()","Open "+g.n+" on this disc");
     }
     if(has("Install") && !g.files){
       // A game with no installer is a folder of files: an unpacked zip, a
@@ -1978,6 +1993,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // button was the state a burned disc arrived in.
     setEnabled("btn_Play", (g.files ? true : parentOn),
                g.n+" is not installed yet - use Install first.");
+    // Located by its folder rather than by an installer, exactly as the chooser
+    // locates an entry that has no installer to look for.
+    setEnabled("btn_Open", (PREVIEW || fso.FolderExists(fso.BuildPath(root,g.d))),
+               "This game's folder is not on this disc.");
     if(PREVIEW){
       var ids=["btn_Install","btn_Manual","btn_Extras"];
       for(var k=0;k<g.a.length;k++){ ids[ids.length]="btn_addon_"+k; }
@@ -2141,6 +2160,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // up in the registry and nothing to install first.
     if(g.files){
       if(PREVIEW){ previewStop("Play from disc"); return; }
+      // Nothing recorded to launch: open the folder instead of complaining
+      // about a path that was never going to exist.
+      if(!g.s){ openItem(g.d,true); return; }
       var exe=fso.BuildPath(root,g.s);
       if(!fso.FileExists(exe)){ alert(g.n+" is not on this disc where the menu expected it:\n\n"+g.s); return; }
       launchExe(exe,"",fso.GetParentFolderName(exe));

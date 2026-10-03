@@ -6055,3 +6055,102 @@ WScript.Echo("size_long|" + fitStyle("$witcher"));
         $script:LongJs | Should -Match 'Math\.floor\(bh/lines\)'
     }
 }
+
+Describe 'Which buttons a game screen offers' -Tag 'Unit' {
+
+    # Reported as: adding nine folders of game files, choosing "no installer" for
+    # each, then pressing Play on the built disc and being told the game was not
+    # on the disc. It was: every one of them was there.
+    #
+    # Two faults, next to each other. Play was offered for an entry with nothing
+    # to run, and doPlay builds its path from the entry's setup, which is empty
+    # for such an entry, so it resolved to the disc root and a folder is not a
+    # file. And the Open Folder button meant to replace it was written behind
+    # !g.files, so the only kind of entry that can be given no installer was the
+    # only kind that never saw it.
+    #
+    # The existing menu tests drive by counting buttons, and both the broken and
+    # the fixed screen show three, so they could not have caught this. These run
+    # the real renderGame and read the buttons back by name.
+
+    BeforeAll {
+        $script:BtnDir = Join-Path $script:Sandbox 'buttons'
+        New-Item -ItemType Directory -Force -Path $script:BtnDir | Out-Null
+        $menu = Join-Path $script:BtnDir 'menu.hta'
+        New-MenuHta @{ GameName='Button Test'; Games=@(); Buttons=@('Play','Install','Exit')
+                       MusicFile=''; ManualFile=''; PanelSide='Right'; IconName='x.ico'
+                       WindowBorder=$true; ButtonStyle='Minimal' } $menu
+        $script:BtnJs = Get-Content $menu -Raw
+
+        function Get-ScreenButtons {
+            param([hashtable]$Game, [string[]]$OnMenu = @('Play','Install','Exit'))
+            $fn = [regex]::Match($script:BtnJs,
+                '(?s)(  function renderGame\(\)\{.*?\r?\n  \})').Groups[1].Value
+            if (-not $fn) { throw 'renderGame was not found in the generated menu' }
+            $addOns = (@($Game.AddOns) | ForEach-Object { '{n:"' + $_ + '"}' }) -join ','
+            $probe = Join-Path $script:BtnDir 'probe.js'
+            $js = @"
+var GAMES=[{ n:"$($Game.Name)", files:$(if($Game.Files){'true'}else{'false'}),
+             s:"$($Game.Setup)", d:"disc/folder", a:[$addOns], m:"$($Game.Name)" }];
+var cur=0;
+var ON="$($OnMenu -join ',')";
+function has(b){ return (","+ON+",").indexOf(","+b+",") >= 0; }
+var CAPTURED="";
+function setPanel(h,cap){ CAPTURED=h; }
+function capFor(n){ return ""; }
+function btnHtml(id,cls,label,fn,tip){ return "|"+label; }
+$fn
+renderGame();
+WScript.Echo(CAPTURED);
+"@
+            Set-Content -LiteralPath $probe -Value $js -Encoding Ascii
+            $out = (& cscript.exe //nologo //E:JScript $probe 2>&1 | Select-Object -First 1)
+            return @(([string]$out).Split('|') | Where-Object { $_ })
+        }
+    }
+
+    It 'offers Open Folder, and no Play, for a folder of files with no installer' {
+        # The reported case, exactly.
+        $b = Get-ScreenButtons @{ Name='GOG1'; Files=$true; Setup=''; AddOns=@() }
+        $b | Should -Contain 'Open Folder'
+        $b | Should -Not -Contain 'Play from disc'
+        $b | Should -Not -Contain 'Play'
+    }
+
+    It 'still offers Play from disc when the folder does have an executable' {
+        # The case the existing menu tests cover, which must not change.
+        $b = Get-ScreenButtons @{ Name='Gothic'; Files=$true; Setup='Games/01 - Gothic/gothic.exe'; AddOns=@() }
+        $b | Should -Contain 'Play from disc'
+        $b | Should -Not -Contain 'Open Folder'
+    }
+
+    It 'still offers Play and Install for a GOG download' {
+        $b = Get-ScreenButtons @{ Name='Hollow Knight'; Files=$false; Setup='setup_hk.exe'; AddOns=@() }
+        $b | Should -Contain 'Play'
+        $b | Should -Contain 'Install'
+    }
+
+    It 'offers the folder for a GOG entry that somehow has no installer' {
+        # The branch that always worked, kept honest.
+        $b = Get-ScreenButtons @{ Name='Odd'; Files=$false; Setup=''; AddOns=@() }
+        $b | Should -Contain 'Open Folder'
+        $b | Should -Not -Contain 'Install'
+    }
+
+    It 'still offers the folder when only Install is on the menu' {
+        # Open Folder stands in for both buttons here, so unticking one must not
+        # leave the disc with no way to reach the files.
+        $b = Get-ScreenButtons -Game @{ Name='GOG1'; Files=$true; Setup=''; AddOns=@() } -OnMenu @('Install','Exit')
+        $b | Should -Contain 'Open Folder'
+    }
+
+    It 'still offers the folder when only Play is on the menu' {
+        $b = Get-ScreenButtons -Game @{ Name='GOG1'; Files=$true; Setup=''; AddOns=@() } -OnMenu @('Play','Exit')
+        $b | Should -Contain 'Open Folder'
+    }
+
+    It 'offers it once, not twice' {
+        $b = Get-ScreenButtons @{ Name='GOG1'; Files=$true; Setup=''; AddOns=@() }
+        @($b | Where-Object { $_ -eq 'Open Folder' }).Count | Should -Be 1
+    }
+}
