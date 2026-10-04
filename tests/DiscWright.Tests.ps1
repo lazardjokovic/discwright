@@ -3744,6 +3744,9 @@ Describe "The menu's JavaScript is valid JavaScript" {
             '%%BTNS%%'     = '["Play","Install","Exit"]'
             '%%MANUAL%%'   = 'manual.pdf'; '%%MUSIC%%' = 'music.mp3'; '%%PREVIEW%%' = 'false'
             '%%SHOWCAP%%'  = 'true'
+            # A disc that is not part of a set, which is what the template
+            # produces for every disc built before sets existed.
+            '%%SET%%'      = 'null'; '%%SETFILE%%' = 'Disc set.txt'
         }
         foreach ($k in $subs.Keys) { $tpl = $tpl.Replace($k, $subs[$k]) }
         $script:MenuLeftover = [regex]::Match($tpl, '%%[A-Z]+%%').Value
@@ -6084,7 +6087,8 @@ Describe 'Which buttons a game screen offers' -Tag 'Unit' {
         $script:BtnJs = Get-Content $menu -Raw
 
         function Get-ScreenButtons {
-            param([hashtable]$Game, [string[]]$OnMenu = @('Play','Install','Exit'))
+            param([hashtable]$Game, [string[]]$OnMenu = @('Play','Install','Exit'),
+                  [string]$Set = 'null')
             $fn = [regex]::Match($script:BtnJs,
                 '(?s)(  function renderGame\(\)\{.*?\r?\n  \})').Groups[1].Value
             if (-not $fn) { throw 'renderGame was not found in the generated menu' }
@@ -6094,6 +6098,9 @@ Describe 'Which buttons a game screen offers' -Tag 'Unit' {
 var GAMES=[{ n:"$($Game.Name)", files:$(if($Game.Files){'true'}else{'false'}),
              s:"$($Game.Setup)", d:"disc/folder", a:[$addOns], m:"$($Game.Name)" }];
 var cur=0;
+// Declared because renderGame reads it, the same as the real menu does.
+var SET=$Set;
+function renderSet(){ CAPTURED="|SETPANEL"; }
 var ON="$($OnMenu -join ',')";
 function has(b){ return (","+ON+",").indexOf(","+b+",") >= 0; }
 var CAPTURED="";
@@ -6153,6 +6160,28 @@ WScript.Echo(CAPTURED);
     It 'offers it once, not twice' {
         $b = Get-ScreenButtons @{ Name='GOG1'; Files=$true; Setup=''; AddOns=@() }
         @($b | Where-Object { $_ -eq 'Open Folder' }).Count | Should -Be 1
+    }
+
+    It 'offers none of it on a disc that holds part of a set' {
+        # A set disc cannot play or install anything until every disc has been
+        # copied into one folder, so it must not offer either. This is item 7
+        # again in a new place: a button that cannot work is worse than no
+        # button, because the person presses it and is told the game is not
+        # there when it is.
+        $b = Get-ScreenButtons -Game @{ Name='Split'; Files=$false; Setup='setup.exe'; AddOns=@() } `
+                               -Set '{n:2,of:3,label:"Split"}'
+        $b | Should -Not -Contain 'Play'
+        $b | Should -Not -Contain 'Install'
+        $b | Should -Not -Contain 'Open Folder'
+        # It draws its own panel instead.
+        $b | Should -Contain 'SETPANEL'
+    }
+
+    It 'offers all of it again on a disc that is not part of a set' {
+        # The same entry, with no set, has to behave exactly as it always did.
+        $b = Get-ScreenButtons -Game @{ Name='Split'; Files=$false; Setup='setup.exe'; AddOns=@() }
+        $b | Should -Contain 'Install'
+        $b | Should -Not -Contain 'SETPANEL'
     }
 }
 
@@ -7202,5 +7231,144 @@ Describe 'Where the manual and the extras go in a set' -Tag 'Unit' {
         foreach ($st in (Get-DiscSetSteps $s $p $ent)) {
             $st.MusicFile | Should -Be 'C:\art\tune.mp3'
         }
+    }
+}
+
+
+Describe 'The set-mode code in the menu, run by a real script engine' -Tag 'Unit' {
+
+    # The menu is JScript in an HTA running in IE7 mode, and nothing in the
+    # PowerShell suite can execute it. Asserting on the text of the generated
+    # file would only prove the text was generated.
+    #
+    # So the block between the two markers is lifted out of the menu this build
+    # produces and run under cscript, which has the same JScript engine and a
+    # real FileSystemObject. What decides whether a set is complete is therefore
+    # the code that ships, against a folder on disk.
+
+    BeforeAll {
+        $script:JsDir = Join-Path $script:Sandbox 'jsset'
+        $script:JsDisc = Join-Path $script:JsDir 'disc'
+        $script:JsRest = Join-Path $script:JsDir 'restore'
+        New-Item -ItemType Directory -Force -Path $script:JsDisc | Out-Null
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:JsRest 'data') | Out-Null
+
+        # A set of three discs. Disc 2 is the one we are pretending to be in.
+        $script:JsEntries = @(
+            @{ Disc = 1; Rel = 'setup.exe';          Bytes = [double]9; Sha256 = ('a' * 64) }
+            @{ Disc = 2; Rel = 'part-1.bin';         Bytes = [double]9; Sha256 = ('b' * 64) }
+            @{ Disc = 2; Rel = 'data\textures.pak';  Bytes = [double]9; Sha256 = ('c' * 64) }
+            @{ Disc = 3; Rel = 'part-2.bin';         Bytes = [double]9; Sha256 = ('d' * 64) }
+        )
+        Set-Content (Join-Path $script:JsDisc (Get-DiscSetFileName)) `
+            (New-DiscSetManifest $script:JsEntries 'Split Game' 2 3) -Encoding Ascii -NoNewline
+
+        # The real menu for a disc in a set, then the block out of it.
+        $hta = Join-Path $script:JsDir 'menu.hta'
+        New-MenuHta @{ GameName='Split Game D2'
+                       Games=@(@{ n='Split Game'; m='split'; s='setup.exe'; man=''; ext=''; a=@() })
+                       Buttons=@('Install','Exit'); MusicFile=''; ManualFile=''; PanelSide='Right'
+                       IconName='i.ico'; WindowBorder=$true; ButtonStyle='Minimal'; ShowCaption=$true
+                       DiscNum=2; DiscOf=3; SetLabel='Split Game' } $hta
+        $all = Get-Content $hta
+        $from = ($all | Select-String -SimpleMatch 'disc set: begin').LineNumber
+        $to   = ($all | Select-String -SimpleMatch 'disc set: end').LineNumber - 2
+        $script:JsBlock = ($all[$from..$to]) -join "`r`n"
+
+        function Invoke-SetJs([string]$restoreDir, [string]$tail) {
+            # cscript is given the block exactly as the menu carries it, with
+            # only the globals the menu would have supplied around it.
+            $js = @()
+            $js += 'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+            $js += 'var root = ' + (ConvertTo-Json $script:JsDisc) + ';'
+            $js += 'var SETFILE = ' + (ConvertTo-Json (Get-DiscSetFileName)) + ';'
+            $js += 'var SET = {n:2, of:3, label:"Split Game"};'
+            $js += $script:JsBlock
+            $js += 'var DIR = ' + (ConvertTo-Json $restoreDir) + ';'
+            $js += $tail
+            $f = Join-Path $script:JsDir 'harness.js'
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            $out = & cscript.exe //Nologo //E:JScript $f 2>&1
+            return (@($out) -join "`n")
+        }
+    }
+
+    It 'reads every row of the set file, whatever the disc' {
+        $r = Invoke-SetJs $script:JsRest 'WScript.Echo("rows=" + setRows().length);'
+        $r | Should -Match 'rows=4'
+    }
+
+    It 'keeps a name that has a folder in it, turning the slashes round' {
+        $r = Invoke-SetJs $script:JsRest @'
+var rows = setRows();
+for (var i = 0; i < rows.length; i++) {
+  if (rows[i].f.indexOf("textures") >= 0) { WScript.Echo("rel=" + rows[i].f); }
+}
+WScript.Echo("built=" + setPath("C:" + String.fromCharCode(92) + "x", "data/textures.pak"));
+'@
+        $r | Should -Match 'rel=data/textures\.pak'
+        $r | Should -Match ([regex]::Escape('built=C:\x\data\textures.pak'))
+    }
+
+    It 'counts an empty folder as nothing present and every disc still needed' {
+        $empty = Join-Path $script:JsDir 'empty'
+        New-Item -ItemType Directory -Force -Path $empty | Out-Null
+        $r = Invoke-SetJs $empty 'var s=setScan(DIR); WScript.Echo("ok="+s.ok+" missing="+s.missing+" need="+s.need+" complete="+s.complete);'
+        $r | Should -Match 'ok=0 missing=4'
+        $r | Should -Match 'need=1, 2, 3'
+        $r | Should -Match 'complete=false'
+    }
+
+    It 'counts what is there and names only the discs still missing' {
+        # Disc 2's two files copied, disc 1 and 3 not yet.
+        Set-Content (Join-Path $script:JsRest 'part-1.bin') 'nine char' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:JsRest 'data\textures.pak') 'nine char' -Encoding Ascii -NoNewline
+        $r = Invoke-SetJs $script:JsRest 'var s=setScan(DIR); WScript.Echo("ok="+s.ok+" missing="+s.missing+" need="+s.need);'
+        $r | Should -Match 'ok=2 missing=2'
+        $r | Should -Match 'need=1, 3'
+    }
+
+    It 'calls a half-copied file bad rather than present' {
+        # The whole reason the sizes are in the set file.
+        Set-Content (Join-Path $script:JsRest 'part-1.bin') 'short' -Encoding Ascii -NoNewline
+        $r = Invoke-SetJs $script:JsRest 'var s=setScan(DIR); WScript.Echo("ok="+s.ok+" bad="+s.bad+" need="+s.need);'
+        Set-Content (Join-Path $script:JsRest 'part-1.bin') 'nine char' -Encoding Ascii -NoNewline
+        $r | Should -Match 'bad=1'
+        $r | Should -Match 'need=1, 2, 3'
+    }
+
+    It 'says complete only when every file in the set is there and the right size' {
+        Set-Content (Join-Path $script:JsRest 'setup.exe') 'nine char' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:JsRest 'part-2.bin') 'nine char' -Encoding Ascii -NoNewline
+        $r = Invoke-SetJs $script:JsRest 'var s=setScan(DIR); WScript.Echo("complete="+s.complete+" ok="+s.ok+" sentence="+setSentence(s));'
+        $r | Should -Match 'complete=true'
+        $r | Should -Match 'ok=4'
+        $r | Should -Match 'All 4 files are here'
+    }
+
+    It 'proposes a folder named for the game, on a drive that exists' {
+        $r = Invoke-SetJs $script:JsRest 'WScript.Echo("dir=" + setDefaultDir());'
+        $r | Should -Match 'dir=[A-Z]:'
+        $r | Should -Match ([regex]::Escape('DiscWright restore'))
+        $r | Should -Match 'Split Game'
+    }
+
+    It 'survives a set file that is not there at all' {
+        # A disc whose set file was deleted must not throw: it has to say so.
+        $bare = Join-Path $script:JsDir 'bare'
+        New-Item -ItemType Directory -Force -Path $bare | Out-Null
+        $js = @('var fso = new ActiveXObject("Scripting.FileSystemObject");',
+                'var root = ' + (ConvertTo-Json $bare) + ';',
+                'var SETFILE = ' + (ConvertTo-Json (Get-DiscSetFileName)) + ';',
+                'var SET = {n:1, of:2, label:"Gone"};',
+                $script:JsBlock,
+                'var s = setScan(' + (ConvertTo-Json $bare) + ');',
+                'WScript.Echo("rows=" + setRows().length + " total=" + s.total);',
+                'WScript.Echo("sentence=" + setSentence(s));') -join "`r`n"
+        $f = Join-Path $script:JsDir 'bare.js'
+        Set-Content -LiteralPath $f -Value $js -Encoding Ascii
+        $out = (@(& cscript.exe //Nologo //E:JScript $f 2>&1) -join "`n")
+        $out | Should -Match 'rows=0 total=0'
+        $out | Should -Match 'list of files is missing'
     }
 }

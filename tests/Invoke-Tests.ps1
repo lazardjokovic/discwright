@@ -116,11 +116,27 @@ $failed = 0
 foreach ($pair in @(@('logic', $unit), @('window', $ui))) {
     $name = $pair[0]; $res = $pair[1]
     if (-not $res) { Write-Host ("  {0,-8} not run" -f $name); continue }
-    $failed += $res.FailedCount
-    $colour = if ($res.FailedCount) { 'Red' } else { 'Green' }
+    # A failed BeforeAll is not a failed test, and Pester counts it nowhere
+    # near FailedCount. The whole block it belongs to simply does not run,
+    # so the count goes DOWN and the summary used to say 'all good' while a
+    # Describe had not executed at all. That happened: nine tests sat out a
+    # run and the runner called it clean, which is the one thing a runner
+    # must never do.
+    $broken = @($res.Failed).Count
+    $blocks = @()
+    foreach ($c in @($res.Containers)) {
+        foreach ($b in @($c.Blocks)) {
+            if ($b.ErrorRecord -and @($b.ErrorRecord).Count) { $blocks += $b.Path -join ' > ' }
+        }
+    }
+    $failed += $res.FailedCount + @($blocks).Count
+    $colour = if ($res.FailedCount -or @($blocks).Count) { 'Red' } else { 'Green' }
     Write-Host ("  {0,-8} {1} passed, {2} failed, {3} skipped" -f
         $name, $res.PassedCount, $res.FailedCount, $res.SkippedCount) -ForegroundColor $colour
     foreach ($f in $res.Failed) { Write-Host "     FAILED: $($f.ExpandedPath)" -ForegroundColor Red }
+    foreach ($b in $blocks) {
+        Write-Host "     DID NOT RUN: $b (its setup failed)" -ForegroundColor Red
+    }
 }
 
 if ($failed) { exit 1 }
