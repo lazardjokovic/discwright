@@ -7688,3 +7688,75 @@ Describe 'Building a real set from end to end' -Tag 'Build' {
         $r.Why | Should -Match 'Choose the disc'
     }
 }
+
+Describe 'What a restored set offers for a game that is not a GOG download' -Tag 'Unit' {
+
+    # A GOG download is an installer and its parts, so a finished restore
+    # installs. A folder of game files IS the game: it is played from the
+    # folder, or just opened when nothing in it was picked to run.
+    #
+    # The set panel said "Install" for all three and then opened Explorer for
+    # the last one. That is item 7 in a third place, and it was spotted by
+    # being asked how a non-GOG game works rather than by any test here.
+
+    BeforeAll {
+        $script:VerbDir = Join-Path $script:Sandbox 'verbs'
+        New-Item -ItemType Directory -Force -Path $script:VerbDir | Out-Null
+        $hta = Join-Path $script:VerbDir 'menu.hta'
+        New-MenuHta @{ GameName='Verb Test D1'
+                       Games=@(@{ n='Verb Test'; m='verb'; s='setup.exe'; man=''; ext=''; a=@() })
+                       Buttons=@('Install','Exit'); MusicFile=''; ManualFile=''; PanelSide='Right'
+                       IconName='i.ico'; WindowBorder=$true; ButtonStyle='Minimal'; ShowCaption=$true
+                       DiscNum=1; DiscOf=2; SetLabel='Verb Test' } $hta
+        $all = Get-Content $hta
+        $from = ($all | Select-String -SimpleMatch 'disc set: begin').LineNumber
+        $to   = ($all | Select-String -SimpleMatch 'disc set: end').LineNumber - 2
+        $block = ($all[$from..$to]) -join "`r`n"
+
+        function Get-DoneVerb([string]$GameJs) {
+            $js = @('var fso = new ActiveXObject("Scripting.FileSystemObject");',
+                    'var root = ' + (ConvertTo-Json $script:VerbDir) + ';',
+                    'var SETFILE = "Disc set.txt";',
+                    'var SET = {n:1, of:2, label:"Verb Test"};',
+                    $block,
+                    'var g = ' + $GameJs + ';',
+                    'WScript.Echo("verb=" + setDoneVerb(g));',
+                    'WScript.Echo("tip=" + setDoneTip(g, "D:/here"));') -join "`r`n"
+            $f = Join-Path $script:VerbDir 'verb.js'
+            Set-Content -LiteralPath $f -Value $js -Encoding Ascii
+            return ((@(& cscript.exe //Nologo //E:JScript $f 2>&1) -join "`n"))
+        }
+    }
+
+    It 'installs a GOG download' {
+        $r = Get-DoneVerb '{files:false, s:"setup_game.exe"}'
+        $r | Should -Match 'verb=Install'
+        $r | Should -Match 'tip=Run the installer from'
+    }
+
+    It 'plays a folder of game files that has something to run' {
+        # Nothing to install: the folder is the game.
+        $r = Get-DoneVerb '{files:true, s:"Game.exe"}'
+        $r | Should -Match 'verb=Play'
+        $r | Should -Match 'tip=Run the game from'
+    }
+
+    It 'opens the folder when nothing in it was picked to run' {
+        # The "no installer" case, which is the one that used to say Install and
+        # then open Explorer.
+        $r = Get-DoneVerb '{files:true, s:""}'
+        $r | Should -Match 'verb=Open Folder'
+        $r | Should -Match 'tip=Open the rebuilt game in'
+    }
+
+    It 'says Install rather than nothing when the entry is missing' {
+        $r = Get-DoneVerb 'null'
+        $r | Should -Match 'verb=Install'
+    }
+
+    It 'does not promise an install in the status line either' {
+        $hta = Join-Path $script:VerbDir 'menu.hta'
+        (Get-Content $hta -Raw) | Should -Not -Match 'can be installed from that folder'
+        (Get-Content $hta -Raw) | Should -Match 'ready in that folder'
+    }
+}

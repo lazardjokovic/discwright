@@ -2290,10 +2290,27 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     r.complete=(r.total>0&&r.ok==r.total);
     return r;
   }
+  // What the button at the end of a restore should say. A GOG download
+  // installs; a folder of game files is the game, so it is played from the
+  // folder, or opened when nothing in it was picked to run. The panel used to
+  // say Install for all three and then open Explorer for the last one, which
+  // is the same mistake as the Play button on a disc that could not play.
+  function setDoneVerb(g){
+    if(!g) return "Install";
+    if(g.files && !g.s) return "Open Folder";
+    if(g.files) return "Play";
+    return "Install";
+  }
+  function setDoneTip(g,dir){
+    var v=setDoneVerb(g);
+    if(v=="Open Folder") return "Open the rebuilt game in "+dir;
+    if(v=="Play") return "Run the game from "+dir;
+    return "Run the installer from "+dir;
+  }
   // One sentence about where the set stands, for the panel.
   function setSentence(s){
     if(!s.total) return "This disc says it is part of a set, but its list of files is missing.";
-    if(s.complete) return "All "+s.total+" files are here. The game can be installed from that folder.";
+    if(s.complete) return "All "+s.total+" files are here. The game is ready in that folder.";
     var m=s.ok+" of "+s.total+" files are in that folder.";
     if(s.bad>0) m+=" "+s.bad+" copied badly.";
     if(s.need.length) m+=" Still needed: disc "+s.need+".";
@@ -2475,8 +2492,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
                  "Copy this disc's share of the game into "+dir);
     }
     if(s.complete){
-      h+=btnHtml("btn_SetInstall","install","Install","setInstall()",
-                 "Run the installer from "+dir);
+      h+=btnHtml("btn_SetInstall","install",setDoneVerb(GAMES[cur]),"setInstall()",
+                 setDoneTip(GAMES[cur],dir));
     }
     if(s.ok>0){
       h+=btnHtml("btn_SetVerify","","Check every file","setVerify()",
