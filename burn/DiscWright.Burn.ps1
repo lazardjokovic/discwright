@@ -457,3 +457,110 @@ function Test-BurnedDisc {
                          -not $sizeOff.Count -and -not $hashOff.Count)
     }
 }
+
+# --- handing the ISO to something else ----------------------------------------
+#
+# Asked for as "being able to link your software to ImgBurn or similar software
+# for an instant burn". Not ImgBurn in particular, and nothing to configure:
+# Windows already knows what can open an ISO, and the answer differs per machine.
+# On the machine this was written on it is Nero, which is a decent argument
+# against hardcoding anybody's favourite.
+#
+# Windows.IsoFile always carries burn and mount, whatever else is installed, so
+# there is always something here even on a machine with nothing added.
+
+function Get-ExeFriendlyName([string]$exe) {
+    # What the program calls itself, which is better than a path and better than
+    # a registry key: "Nero Burning ROM" rather than Nero.BurningROM.2023.iso.1.
+    if (-not $exe -or -not (Test-Path -LiteralPath $exe)) { return '' }
+    try {
+        $v = (Get-Item -LiteralPath $exe).VersionInfo
+        foreach ($n in @($v.FileDescription, $v.ProductName)) {
+            if ($n -and $n.Trim()) { return $n.Trim() }
+        }
+    } catch { }
+    return [IO.Path]::GetFileNameWithoutExtension($exe)
+}
+
+function Get-ShellCommand([string]$key) {
+    try { return (Get-ItemProperty -LiteralPath $key -EA Stop).'(default)' } catch { return '' }
+}
+
+function Split-ShellCommand([string]$cmd) {
+    # A shell command is an exe and its arguments, with %1 where the file goes.
+    # Quoted path first, bare path otherwise.
+    if (-not $cmd) { return $null }
+    $m = [regex]::Match($cmd, '^\s*"([^"]+)"\s*(.*)$')
+    if (-not $m.Success) { $m = [regex]::Match($cmd, '^\s*(\S+)\s*(.*)$') }
+    if (-not $m.Success) { return $null }
+    return @{ Exe = $m.Groups[1].Value; Args = $m.Groups[2].Value.Trim() }
+}
+
+function Get-IsoHandoffs {
+    <#  .SYNOPSIS
+        The programs on this machine that can take an ISO, as Windows records
+        them. Nothing is configured and nothing is guessed: each entry comes
+        from a registry key that exists.  #>
+    $out = @()
+
+    # Windows' own, which is on every machine since 7.
+    $burn = Split-ShellCommand (Get-ShellCommand 'HKLM:\SOFTWARE\Classes\Windows.IsoFile\shell\burn\command')
+    if ($burn -and (Test-Path -LiteralPath $burn.Exe)) {
+        $out += @{ Name = (Get-ExeFriendlyName $burn.Exe)
+                   What = 'writes it to a blank disc'
+                   Exe = $burn.Exe; Args = $burn.Args; Verb = '' }
+    }
+
+    # Whatever the machine has registered for .iso, when it is something else.
+    $progid = ''
+    foreach ($k in @('HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.iso\UserChoice',
+                     'HKLM:\SOFTWARE\Classes\.iso')) {
+        try {
+            $p = Get-ItemProperty -LiteralPath $k -EA Stop
+            $v = if ($p.PSObject.Properties.Name -contains 'ProgId') { $p.ProgId } else { $p.'(default)' }
+            if ($v) { $progid = $v; break }
+        } catch { }
+    }
+    if ($progid -and $progid -ne 'Windows.IsoFile') {
+        $open = Split-ShellCommand (Get-ShellCommand "HKLM:\SOFTWARE\Classes\$progid\shell\Open\command")
+        if (-not $open) { $open = Split-ShellCommand (Get-ShellCommand "HKLM:\SOFTWARE\Classes\$progid\shell\open\command") }
+        if ($open -and (Test-Path -LiteralPath $open.Exe) -and
+            ($out | Where-Object { $_.Exe -ieq $open.Exe }).Count -eq 0) {
+            $out += @{ Name = (Get-ExeFriendlyName $open.Exe)
+                       What = 'opens it, and burns it its own way'
+                       Exe = $open.Exe; Args = $open.Args; Verb = '' }
+        }
+    }
+
+    # Not burning, and worth having anyway: look inside the disc without
+    # spending one. Explorer's own, so it is listed last and labelled honestly.
+    if (Get-ShellCommand 'HKLM:\SOFTWARE\Classes\Windows.IsoFile\shell\mount\command') {
+        $out += @{ Name = 'Windows Explorer'
+                   What = 'mounts it as a drive, without burning anything'
+                   Exe = ''; Args = ''; Verb = 'mount' }
+    }
+    # Returned plain, not as ,@($out). Wrapping it hands the caller one
+    # element that is itself the list, and the chooser then offers a single
+    # row of nonsense. Callers wrap with @() themselves.
+    return $out
+}
+
+function Start-IsoHandoff([hashtable]$handoff, [string]$isoPath) {
+    <#  .SYNOPSIS
+        Hand the ISO over and return. The other program takes it from there:
+        this does not drive somebody else's command line, because every burner
+        spells its switches differently and the failure is a wasted disc.  #>
+    if (-not (Test-Path -LiteralPath $isoPath)) { throw "There is no ISO at $isoPath" }
+    if ($handoff.Verb) {
+        Start-Process -FilePath $isoPath -Verb $handoff.Verb
+        return
+    }
+    # %1 is where the shell puts the file. A command with no %1 at all still
+    # gets the path, because that is what every one of them expects.
+    if ($handoff.Args -and $handoff.Args -match '%1') {
+        $argLine = $handoff.Args -replace '%1', $isoPath
+        Start-Process -FilePath $handoff.Exe -ArgumentList $argLine
+    } else {
+        Start-Process -FilePath $handoff.Exe -ArgumentList @("`"$isoPath`"")
+    }
+}

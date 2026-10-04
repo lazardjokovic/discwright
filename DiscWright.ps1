@@ -3375,6 +3375,7 @@ $lblArtNote = AddLabel '' 15 1074 645
 $lblArtNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
 $btnArtwork = AddBtn 'Print artwork' 15 1100 150
 $btnBurn    = AddBtn 'Burn to disc...' 180 1100 150
+$btnHandoff = AddBtn 'Burn with...' 345 1100 150
 
 $pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,894); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
 $lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
@@ -3856,12 +3857,19 @@ function Update-ActionButtons {
         $canBurn = @(Get-ChildItem -LiteralPath $txtOut.Text.Trim() -Filter '*.iso' -File -EA SilentlyContinue).Count -gt 0
     }
     $btnBurn.Enabled = $canBurn
+    $btnHandoff.Enabled = $canBurn
     $btnPreview.Enabled  = [bool]$canPreview
     $btnNew.Enabled      = [bool]$isDirty
     $tips.SetToolTip($btnNew, $(if($isDirty){'Clear everything and start a new disc. The output folder is kept.'}else{'Nothing to clear - this is already a new disc'}))
     $tips.SetToolTip($btnOpenDisc, $(if($hasOut){'Open the disc staging folder in Explorer'}else{'Set an output folder first (step 6)'}))
     $tips.SetToolTip($btnPreview,  $(if($canPreview){'Show the menu using the current settings - no rebuild needed'}else{'Add a game, and turn the menu on in step 4'}))
     $tips.SetToolTip($btnOpenProj, 'Load a disc you already built, to edit and rebuild it')
+    $tips.SetToolTip($btnHandoff, $(if($canBurn){(
+        "Hand the ISO to another program instead of burning it here." + [Environment]::NewLine +
+        [Environment]::NewLine +
+        "Lists what this machine already has: Windows' own burner, whatever is" + [Environment]::NewLine +
+        "registered for .iso, and mounting it to look inside without spending a" + [Environment]::NewLine +
+        "disc. Nothing to set up.")}else{'Build an ISO first'}))
     $tips.SetToolTip($btnArtwork, $(if($canArt){'Make the case wrap and the disc face for this disc, ready to print'}
                                     else{'Add a game and set an output folder first'}))
     $tips.SetToolTip($btnBurn, $(if($canBurn){'Write the built ISO to a blank disc, then check every file against what was built'}
@@ -4718,6 +4726,80 @@ $btnDiscArt.Add_Click({
 # to work exactly as well as browsing for one.
 $txtCover.Add_TextChanged({ $state.CoverPath = $txtCover.Text.Trim(); Update-ArtNote })
 $txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Update-ArtNote })
+
+# Hand the ISO to something else, rather than burning it here.
+#
+# Asked for as linking to ImgBurn or similar for an instant burn. Nothing is
+# hardcoded and nothing is configured: Windows already records what can open an
+# ISO, and the answer differs per machine. On the machine this was written on it
+# is Nero, which is a decent argument against picking somebody's favourite.
+#
+# The ISO is handed over and that is all. Driving another burner's command line
+# would mean knowing every one of them, and getting it wrong costs a disc.
+$btnHandoff.Add_Click({
+    $t = $txtOut.Text.Trim()
+    if (-not $t -or -not (Test-Path $t)) { Show-Warn 'No output folder is set yet.'; return }
+    $burner = Join-Path $PSScriptRoot 'burn\DiscWright.Burn.ps1'
+    if (-not (Test-Path $burner)) {
+        Show-Warn "The burning files are not installed:`r`n`r`n$burner"
+        return
+    }
+    . $burner
+
+    $iso = Get-ChildItem -LiteralPath $t -Filter '*.iso' -File -EA SilentlyContinue |
+           Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $iso) { Show-Warn "There is no ISO in:`r`n`r`n$t"; return }
+
+    $picks = @(Get-IsoHandoffs)
+    if (-not $picks.Count) {
+        Show-Warn 'Nothing on this machine is registered to open an ISO.'
+        return
+    }
+
+    $dlg=New-Object System.Windows.Forms.Form
+    $dlg.Text='Burn with'; $dlg.Font=$form.Font
+    $dlg.FormBorderStyle='FixedDialog'; $dlg.MaximizeBox=$false; $dlg.MinimizeBox=$false
+    $dlg.StartPosition='CenterParent'; $dlg.ShowInTaskbar=$false
+    $dlg.ClientSize=New-Object System.Drawing.Size(460,172)
+
+    $l=New-Object System.Windows.Forms.Label
+    $l.Text="Hand $($iso.Name) to which program?"
+    $l.Location=New-Object System.Drawing.Point(15,14); $l.Size=New-Object System.Drawing.Size(430,20)
+    $dlg.Controls.Add($l)
+
+    $lst=New-Object System.Windows.Forms.ListBox
+    $lst.Location=New-Object System.Drawing.Point(15,40); $lst.Size=New-Object System.Drawing.Size(430,62)
+    foreach ($h in $picks) { [void]$lst.Items.Add("$($h.Name)  -  $($h.What)") }
+    $lst.SelectedIndex = 0
+    $dlg.Controls.Add($lst)
+
+    $note=New-Object System.Windows.Forms.Label
+    $note.Text='DiscWright only opens it. What happens next is that program''s business.'
+    $note.Location=New-Object System.Drawing.Point(15,108); $note.Size=New-Object System.Drawing.Size(430,20)
+    $note.ForeColor=[System.Drawing.Color]::DimGray
+    $dlg.Controls.Add($note)
+
+    $ok=New-Object System.Windows.Forms.Button; $ok.Text='Open'
+    $ok.Location=New-Object System.Drawing.Point(275,136); $ok.Size=New-Object System.Drawing.Size(80,26)
+    $ok.DialogResult='OK'; $dlg.Controls.Add($ok)
+    $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'
+    $cancel.Location=New-Object System.Drawing.Point(365,136); $cancel.Size=New-Object System.Drawing.Size(80,26)
+    $cancel.DialogResult='Cancel'; $dlg.Controls.Add($cancel)
+    $dlg.AcceptButton=$ok; $dlg.CancelButton=$cancel
+
+    $r = $dlg.ShowDialog($form)
+    $i = $lst.SelectedIndex
+    $dlg.Dispose()
+    if ($r -ne [System.Windows.Forms.DialogResult]::OK -or $i -lt 0) { return }
+
+    $chosen = $picks[$i]
+    try {
+        Start-IsoHandoff $chosen $iso.FullName
+        & $log "Handed $($iso.Name) to $($chosen.Name)."
+    } catch {
+        Show-Warn "$($chosen.Name) could not be started:`r`n`r`n$($_.Exception.Message)"
+    }
+})
 
 $btnBurn.Add_Click({
     $t = $txtOut.Text.Trim()
