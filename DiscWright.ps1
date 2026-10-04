@@ -2299,14 +2299,167 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(s.need.length) m+=" Still needed: disc "+s.need+".";
     return m;
   }
+  // The rows that belong to the disc in the drive.
+  function setMine(){
+    var rows=setRows(), out=[];
+    for(var i=0;i<rows.length;i++){ if(rows[i].d==SET.n){ out[out.length]=rows[i]; } }
+    return out;
+  }
+  function setMineBytes(){
+    var mine=setMine(), n=0;
+    for(var i=0;i<mine.length;i++){ n+=parseFloat(mine[i].b); }
+    return n;
+  }
+  // One file, with robocopy rather than a copy in script. Robocopy shows what it
+  // is doing and how far through it is, and a 4 GiB file copied by script looks
+  // exactly like a menu that has hung.
+  //
+  // One call per file because the disc holds a subset of the game: copying the
+  // folder would bring AUTORUN, the set file and the disc icon along with it,
+  // and the installer has to run in a folder holding nothing but the game.
+  function setCopyCmd(srcDir,dstDir,rel){
+    var q=String.fromCharCode(34), parts=rel.split("/"), name=parts[parts.length-1];
+    var sub="", i;
+    for(i=0;i<parts.length-1;i++){ sub=(sub.length?sub+SEP:"")+parts[i]; }
+    var from=srcDir, to=dstDir;
+    if(sub.length){ from=fso.BuildPath(srcDir,sub); to=fso.BuildPath(dstDir,sub); }
+    return "robocopy "+q+from+q+" "+q+to+q+" "+q+name+q+" /R:1 /W:1 /NJH /NJS";
+  }
+  // Every folder on the way down, because robocopy makes the last one but the
+  // drive may not have the ones above it.
+  function setMakeDir(dir){
+    if(!dir.length||fso.FolderExists(dir)) return true;
+    var up=fso.GetParentFolderName(dir);
+    if(up.length&&!fso.FolderExists(up)){ if(!setMakeDir(up)) return false; }
+    try{ fso.CreateFolder(dir); }catch(ex){ return false; }
+    return true;
+  }
+  // What a delete would remove: only the files the set file names, and only the
+  // folders that are left empty once they are gone. A mistyped folder cannot
+  // take anything with it that this set did not put there.
+  function setDeleteList(dir){
+    var rows=setRows(), files=[], dirs=[], seen={}, i, p, d;
+    for(i=0;i<rows.length;i++){
+      p=setPath(dir,rows[i].f);
+      if(fso.FileExists(p)){ files[files.length]=p; }
+      d=fso.GetParentFolderName(p);
+      if(d.length&&d!=dir&&!seen[d]){ seen[d]=true; dirs[dirs.length]=d; }
+    }
+    return {files:files,dirs:dirs};
+  }
+  // Is there room for this disc's share, where the game is being put back?
+  function setRoomFor(dir){
+    var need=setMineBytes();
+    try{
+      var d=fso.GetDrive(fso.GetDriveName(dir));
+      return {need:need,free:d.FreeSpace,ok:(d.FreeSpace>need)};
+    }catch(ex){ return {need:need,free:-1,ok:true}; }
+  }
   // ---- disc set: end --------------------------------------------------------
+  // The folder the game is being put back into. Held for as long as the menu is
+  // open and nowhere else: the folder itself is the state, so there is nothing
+  // to go stale and nothing to clean up. Every disc in the set proposes the same
+  // one, so disc 2 does not have to be told where disc 1 went.
+  var SETDIR="";
+  var SETARM=false;   // the delete button's second press
+  function setDir(){ if(!SETDIR.length) SETDIR=setDefaultDir(); return SETDIR; }
+  function setChoose(){
+    // Shell.Application is used rather than a file dialog because the menu has
+    // no form to hang one on, and BrowseForFolder is on every Windows the rest
+    // of this menu supports.
+    try{
+      var f=new ActiveXObject("Shell.Application").BrowseForFolder(0,"Where is the game being put back together?",0);
+      if(f){ SETDIR=f.Self.Path; SETARM=false; show(); }
+    }catch(ex){ alert("This machine will not show the folder picker.\n\nType the folder into the set file instructions instead, or copy the discs by hand."); }
+  }
+  function setCopy(){
+    var dir=setDir();
+    if(!dir.length){ alert("No hard drive was found to copy to."); return; }
+    var room=setRoomFor(dir);
+    if(!room.ok){
+      alert("There is not enough room on that drive for this disc.\n\nThis disc needs "+
+            Math.round(room.need/1048576)+" MB and the drive has "+
+            Math.round(room.free/1048576)+" MB free.");
+      return;
+    }
+    if(!setMakeDir(dir)){ alert("That folder could not be created:\n\n"+dir); return; }
+    var mine=setMine(), sh=new ActiveXObject("WScript.Shell"), bad=0, i, code;
+    for(i=0;i<mine.length;i++){
+      // Waited on one at a time, with the window shown, so the person can see
+      // the copy running and can tell a slow disc from a stuck menu.
+      code=sh.Run(setCopyCmd(root,dir,mine[i].f),1,true);
+      if(code>=8){ bad++; }
+    }
+    SETARM=false;
+    if(bad>0){ alert(bad+" of "+mine.length+" files would not copy from this disc.\n\nIt may be scratched. Try it again, or copy them in Explorer."); }
+    show();
+  }
+  function setVerify(){
+    // The sizes are checked on every redraw; this is the slow, certain one, and
+    // it is a separate button because hashing a game takes minutes and nobody
+    // should have that happen to them by surprise.
+    var dir=setDir(), rows=setRows(), sh=new ActiveXObject("WScript.Shell");
+    if(!dir.length){ return; }
+    var bad=[], i, full, out, f, line, hash;
+    var tmp=fso.BuildPath(sh.ExpandEnvironmentStrings("%TEMP%"),"dwverify.txt");
+    for(i=0;i<rows.length;i++){
+      full=setPath(dir,rows[i].f);
+      if(!fso.FileExists(full)){ continue; }
+      // certutil is on every Windows this menu runs on, and hashing in script
+      // is not possible at all.
+      sh.Run('cmd /c certutil -hashfile "'+full+'" SHA256 > "'+tmp+'"',0,true);
+      hash="";
+      try{
+        f=fso.OpenTextFile(tmp,1);
+        while(!f.AtEndOfStream){
+          line=f.ReadLine();
+          if(line.length>=64&&line.indexOf(" ")<0){ hash=line; break; }
+        }
+        f.Close();
+      }catch(ex){}
+      if(hash.length&&hash.toUpperCase()!=rows[i].h.toUpperCase()){ bad[bad.length]=rows[i].f; }
+    }
+    try{ if(fso.FileExists(tmp)) fso.DeleteFile(tmp); }catch(ex){}
+    if(!bad.length){ alert("Every file in that folder is byte for byte what was burned."); }
+    else{ alert(bad.length+" file(s) do not match what was burned:\n\n"+bad.join("\n")+
+                "\n\nCopy them again from the disc they are on."); }
+  }
+  function setInstall(){
+    var dir=setDir(), s=setScan(dir);
+    if(!s.complete){ alert("The set is not complete yet.\n\n"+setSentence(s)); return; }
+    var g=GAMES[cur], exe=setPath(dir,g.s.split(String.fromCharCode(92)).join("/"));
+    if(!g.s.length||!fso.FileExists(exe)){
+      // Nothing recorded to run, or it is not where the set file said: open the
+      // folder rather than complain about a path nobody can see.
+      openItem(dir,true);
+      return;
+    }
+    launchExe(exe,"",dir);
+  }
+  function setDelete(){
+    // Two presses rather than a confirm box. A modal dialog in an HTA blocks
+    // everything behind it, and the second press reads as plainly.
+    var dir=setDir(), list=setDeleteList(dir), i;
+    if(!list.files.length){ alert("There is nothing of this set in that folder to remove."); return; }
+    if(!SETARM){ SETARM=true; show(); return; }
+    for(i=0;i<list.files.length;i++){ try{ fso.DeleteFile(list.files[i],true); }catch(ex){} }
+    // Only folders this set filled, and only if nothing else ended up in them.
+    for(i=list.dirs.length-1;i>=0;i--){
+      try{
+        var d=fso.GetFolder(list.dirs[i]);
+        if(d.Files.Count===0&&d.SubFolders.Count===0){ fso.DeleteFolder(list.dirs[i],true); }
+      }catch(ex){}
+    }
+    SETARM=false;
+    show();
+  }
 
   // A disc that holds part of a set offers none of it. Play and Install can
   // only work once every disc has been copied into one folder, and a button
   // that cannot work is worse than no button: the whole reason item 7 was a
   // bug was a Play button on a disc that could never play anything.
   function renderSet(){
-    var dir=setDefaultDir(), s=setScan(dir), h="";
+    var dir=setDir(), s=setScan(dir), h="";
     h+='<div class="setinfo">'+
        "Disc "+SET.n+" of "+SET.of+". "+
        "No disc in this set can install the game on its own."+
@@ -2315,6 +2468,23 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
        (dir.length ? "<br><br>Suggested folder:<br>"+dir : "")+
        "<br><br>"+setSentence(s)+
        "</div>";
+    // The copy is offered while anything of this disc is still missing from
+    // the folder, and the install only once the whole set is there.
+    if(s.mineHere<s.mineTotal){
+      h+=btnHtml("btn_SetCopy","install","Copy this disc","setCopy()",
+                 "Copy this disc's share of the game into "+dir);
+    }
+    if(s.complete){
+      h+=btnHtml("btn_SetInstall","install","Install","setInstall()",
+                 "Run the installer from "+dir);
+    }
+    if(s.ok>0){
+      h+=btnHtml("btn_SetVerify","","Check every file","setVerify()",
+                 "Hash every file in the folder against what was burned. This takes a while.");
+      h+=btnHtml("btn_SetDelete","exit",(SETARM?"Really delete?":"Delete the copied files"),"setDelete()",
+                 "Remove only the files this set put in "+dir);
+    }
+    h+=btnHtml("btn_SetWhere","","Choose folder...","setChoose()","Put the game back somewhere else");
     if(has("Manual")) h+=btnHtml("btn_Manual","","Game Manual","doManual()","");
     if(has("Extras")) h+=btnHtml("btn_Extras","","Extras","doExtras()","");
     if(has("Exit"))   h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
