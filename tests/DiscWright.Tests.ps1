@@ -6691,13 +6691,14 @@ Describe 'The file that tells you what the whole set holds' -Tag 'Unit' {
         $rows = @()
         foreach ($line in ($script:Man -split "`r`n")) {
             if ($line -notmatch '^[0-9]') { continue }
-            $d, $h, $f = $line -split ' +', 3
-            $rows += @{ Disc = [int]$d; Sha256 = $h; Rel = $f.Substring(1) }
+            $d, $h, $b, $f = $line -split ' +', 4
+            $rows += @{ Disc = [int]$d; Sha256 = $h; Bytes = [long]$b; Rel = $f.Substring(1) }
         }
         $rows.Count | Should -Be $script:Entries.Count
         for ($i = 0; $i -lt $rows.Count; $i++) {
             $rows[$i].Disc | Should -Be $script:Entries[$i].Disc
             $rows[$i].Sha256 | Should -Be $script:Entries[$i].Sha256
+            $rows[$i].Bytes | Should -Be ([long]$script:Entries[$i].Bytes)
         }
     }
 
@@ -7031,5 +7032,81 @@ Describe 'Building a disc that carries part of a set' -Tag 'Build' {
         $inside = @(Get-IsoEntries -IsoPath $script:SetIso -SevenZip $script:SevenZip)
         ($inside -join '|') | Should -Not -Match 'part-1\.bin'
         ($inside -join '|') | Should -Match 'part-2\.bin'
+    }
+}
+
+
+Describe 'The check the set file tells people to paste' -Tag 'Unit' {
+
+    # Published text somebody will paste into PowerShell on a machine that has
+    # never heard of DiscWright, so it is lifted out of the file and run rather
+    # than read. A retyped copy would not prove anything about what the disc
+    # actually says.
+
+    BeforeAll {
+        $script:SnipDir = Join-Path $script:Sandbox 'snippet'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:SnipDir 'docs') | Out-Null
+        Set-Content (Join-Path $script:SnipDir 'setup.exe') 'installer' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:SnipDir 'docs\manual.pdf') 'the manual' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:SnipDir 'part-1.bin') 'first part' -Encoding Ascii -NoNewline
+
+        $ent = @()
+        foreach ($rel in 'setup.exe', 'docs\manual.pdf', 'part-1.bin') {
+            $f = Join-Path $script:SnipDir $rel
+            $ent += , @{ Disc = $(if ($rel -eq 'part-1.bin') { 2 } else { 1 }); Rel = $rel
+                         Bytes = (Get-Item $f).Length; Sha256 = (Get-FileSha256 $f) }
+        }
+        Set-Content (Join-Path $script:SnipDir (Get-DiscSetFileName)) `
+            (New-DiscSetManifest $ent 'SNIPPET TEST' 1 2) -Encoding Ascii -NoNewline
+
+        # Out of the file, between the line that starts it and the lone brace
+        # that ends it, with the two-space indent taken off.
+        $all = (Get-Content (Join-Path $script:SnipDir (Get-DiscSetFileName)) -Raw) -split "`r`n"
+        $from = ($all | Select-String -SimpleMatch "Get-Content '$(Get-DiscSetFileName)'").LineNumber - 1
+        $to = $from
+        while ($all[$to].Trim() -ne '}') { $to++ }
+        $script:Snippet = (($all[$from..$to]) | ForEach-Object { $_ -replace '^  ', '' }) -join "`n"
+    }
+
+    It 'is a complete, parseable piece of PowerShell' {
+        { [scriptblock]::Create($script:Snippet) } | Should -Not -Throw
+        $script:Snippet | Should -Match 'Get-FileHash'
+    }
+
+    It 'says nothing at all when every file is there and right' {
+        Push-Location $script:SnipDir
+        try { $out = & ([scriptblock]::Create($script:Snippet)) } finally { Pop-Location }
+        $out | Should -BeNullOrEmpty
+    }
+
+    It 'names a file that is not there, and which disc it was on' {
+        $gone = Join-Path $script:SnipDir 'docs\manual.pdf'
+        $keep = Get-Content $gone -Raw
+        Remove-Item $gone -Force
+        Push-Location $script:SnipDir
+        try { $out = @(& ([scriptblock]::Create($script:Snippet))) } finally { Pop-Location }
+        Set-Content $gone $keep -Encoding Ascii -NoNewline
+        ($out -join '|') | Should -Match 'MISSING \(disc 1\)'
+        ($out -join '|') | Should -Match 'docs/manual\.pdf'
+    }
+
+    It 'catches a file that grew, before bothering to hash it' {
+        $f = Join-Path $script:SnipDir 'part-1.bin'
+        Set-Content $f 'first part plus junk' -Encoding Ascii -NoNewline
+        Push-Location $script:SnipDir
+        try { $out = @(& ([scriptblock]::Create($script:Snippet))) } finally { Pop-Location }
+        Set-Content $f 'first part' -Encoding Ascii -NoNewline
+        ($out -join '|') | Should -Match 'WRONG SIZE \(disc 2\)'
+    }
+
+    It 'catches a file changed without changing size, which the size cannot' {
+        # The reason the hashes are in the file at all. A disc read error or a
+        # bad cable changes bytes, not length.
+        $f = Join-Path $script:SnipDir 'setup.exe'
+        Set-Content $f 'INSTALLER' -Encoding Ascii -NoNewline
+        Push-Location $script:SnipDir
+        try { $out = @(& ([scriptblock]::Create($script:Snippet))) } finally { Pop-Location }
+        Set-Content $f 'installer' -Encoding Ascii -NoNewline
+        ($out -join '|') | Should -Match 'DAMAGED \(disc 1\)'
     }
 }
