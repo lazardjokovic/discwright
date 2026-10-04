@@ -7372,3 +7372,182 @@ WScript.Echo("built=" + setPath("C:" + String.fromCharCode(92) + "x", "data/text
         $out | Should -Match 'list of files is missing'
     }
 }
+
+
+Describe 'What a set disc does when asked to put the game back' -Tag 'Unit' {
+
+    # The same arrangement as the scan tests: the block out of the real menu,
+    # run under cscript. These cover the parts that decide WHAT to do, which is
+    # where quoting and path joining go wrong. Pressing the buttons needs a
+    # window and belongs to the window suite.
+
+    BeforeAll {
+        $script:AcDir  = Join-Path $script:Sandbox 'jsact'
+        $script:AcDisc = Join-Path $script:AcDir 'disc'
+        $script:AcRest = Join-Path $script:AcDir 'put back here'   # a space, on purpose
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:AcDisc 'data') | Out-Null
+        New-Item -ItemType Directory -Force -Path $script:AcRest | Out-Null
+
+        $ent = @(
+            @{ Disc = 1; Rel = 'setup.exe';         Bytes = [double]9; Sha256 = ('a' * 64) }
+            @{ Disc = 2; Rel = 'part-1.bin';        Bytes = [double]9; Sha256 = ('b' * 64) }
+            @{ Disc = 2; Rel = 'data\textures.pak'; Bytes = [double]9; Sha256 = ('c' * 64) }
+        )
+        Set-Content (Join-Path $script:AcDisc (Get-DiscSetFileName)) `
+            (New-DiscSetManifest $ent 'Split Game' 2 2) -Encoding Ascii -NoNewline
+
+        $hta = Join-Path $script:AcDir 'menu.hta'
+        New-MenuHta @{ GameName='Split Game D2'
+                       Games=@(@{ n='Split Game'; m='split'; s='setup.exe'; man=''; ext=''; a=@() })
+                       Buttons=@('Install','Exit'); MusicFile=''; ManualFile=''; PanelSide='Right'
+                       IconName='i.ico'; WindowBorder=$true; ButtonStyle='Minimal'; ShowCaption=$true
+                       DiscNum=2; DiscOf=2; SetLabel='Split Game' } $hta
+        $all = Get-Content $hta
+        $from = ($all | Select-String -SimpleMatch 'disc set: begin').LineNumber
+        $to   = ($all | Select-String -SimpleMatch 'disc set: end').LineNumber - 2
+        $script:AcBlock = ($all[$from..$to]) -join "`r`n"
+
+        function Invoke-ActJs([string]$tail) {
+            $js = @('var fso = new ActiveXObject("Scripting.FileSystemObject");',
+                    'var root = ' + (ConvertTo-Json $script:AcDisc) + ';',
+                    'var SETFILE = ' + (ConvertTo-Json (Get-DiscSetFileName)) + ';',
+                    'var SET = {n:2, of:2, label:"Split Game"};',
+                    $script:AcBlock,
+                    'var DIR = ' + (ConvertTo-Json $script:AcRest) + ';',
+                    $tail) -join "`r`n"
+            $f = Join-Path $script:AcDir 'act.js'
+            Set-Content -LiteralPath $f -Value $js -Encoding Ascii
+            return ((@(& cscript.exe //Nologo //E:JScript $f 2>&1) -join "`n"))
+        }
+    }
+
+    It 'knows which files are its own share' {
+        $r = Invoke-ActJs 'var m=setMine(); WScript.Echo("mine="+m.length+" bytes="+setMineBytes());'
+        $r | Should -Match 'mine=2'
+        $r | Should -Match 'bytes=18'
+    }
+
+    It 'quotes every path in the copy command, so a folder with a space survives' {
+        # The restore folder in this test has a space in it on purpose. An
+        # unquoted robocopy argument would take the first word and fail.
+        $r = Invoke-ActJs 'WScript.Echo("cmd=" + setCopyCmd(root, DIR, "part-1.bin"));'
+        $r | Should -Match 'cmd=robocopy "'
+        $r | Should -Match ([regex]::Escape('put back here'))
+        # Three quoted arguments: from, to, and the file name on its own.
+        ([regex]::Matches($r, '"')).Count | Should -BeGreaterOrEqual 6
+    }
+
+    It 'copies a file in a subfolder into the same subfolder, not the root' {
+        $r = Invoke-ActJs 'WScript.Echo("cmd=" + setCopyCmd(root, DIR, "data/textures.pak"));'
+        $r | Should -Match ([regex]::Escape('disc\data'))
+        $r | Should -Match ([regex]::Escape('put back here\data'))
+        $r | Should -Match '"textures\.pak"'
+    }
+
+    It 'makes every folder on the way down, not just the last' {
+        $deep = Join-Path $script:AcDir 'a\b\c'
+        $r = Invoke-ActJs ('WScript.Echo("made=" + setMakeDir(' + (ConvertTo-Json $deep) + '));')
+        $r | Should -Match 'made=true'
+        Test-Path $deep | Should -BeTrue
+    }
+
+    It 'lists only the files the set file names when asked to delete' {
+        # The safety property. Anything else in that folder is somebody else's.
+        # The subfolder has to exist before a file can be put in it: robocopy
+        # makes it on a real copy, and nothing here has run robocopy.
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:AcRest 'data') | Out-Null
+        Set-Content (Join-Path $script:AcRest 'part-1.bin') 'nine char' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:AcRest 'data\textures.pak') 'nine char' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:AcRest 'my tax return.pdf') 'not yours' -Encoding Ascii -NoNewline
+        $r = Invoke-ActJs @'
+var l = setDeleteList(DIR);
+WScript.Echo("files=" + l.files.length);
+for (var i = 0; i < l.files.length; i++) { WScript.Echo("rm=" + l.files[i]); }
+'@
+        $r | Should -Match 'files=2'
+        $r | Should -Match 'part-1\.bin'
+        $r | Should -Match 'textures\.pak'
+        $r | Should -Not -Match 'tax return'
+    }
+
+    It 'leaves a file it never put there alone, even with the same name as a folder' {
+        $r = Invoke-ActJs 'var l=setDeleteList(DIR); WScript.Echo("dirs=" + l.dirs.length + " first=" + (l.dirs.length?l.dirs[0]:""));'
+        # Only the data subfolder the set filled, never the restore folder itself.
+        $r | Should -Match 'dirs=1'
+        $r | Should -Match ([regex]::Escape('put back here\data'))
+        $r | Should -Not -Match ([regex]::Escape('first=' + $script:AcRest) + '$')
+    }
+
+    It 'measures the room needed against the drive being copied to' {
+        $r = Invoke-ActJs 'var k=setRoomFor(DIR); WScript.Echo("need="+k.need+" ok="+k.ok);'
+        $r | Should -Match 'need=18'
+        $r | Should -Match 'ok=true'
+    }
+
+    It 'does not claim there is no room when the drive cannot be read' {
+        # An unreadable drive must not block a copy that would have worked.
+        $r = Invoke-ActJs 'var k=setRoomFor("\\\\nowhere\\share\\x"); WScript.Echo("ok=" + k.ok + " free=" + k.free);'
+        $r | Should -Match 'ok=true'
+        $r | Should -Match 'free=-1'
+    }
+}
+
+Describe 'The test file is shaped the way Pester needs' -Tag 'Unit' {
+
+    # An It inside another It is valid PowerShell and meaningless to Pester: the
+    # inner one never runs, the outer one reports nothing wrong, and the whole
+    # Describe is recorded as a block error with no failed tests. That happened
+    # here, and the runner called the run "all good" while nine tests sat out.
+    #
+    # The runner now catches it after the fact. This catches it at the source,
+    # which is cheaper than reading a NotRun count and noticing it moved by two.
+
+    BeforeAll {
+        $script:SuiteAst = [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PSScriptRoot 'DiscWright.Tests.ps1'), [ref]$null, [ref]$null)
+        function Get-Commands([string]$name) {
+            return @($script:SuiteAst.FindAll({
+                param($n) $n -is [System.Management.Automation.Language.CommandAst] -and
+                          $n.GetCommandName() -eq $name }, $true))
+        }
+    }
+
+    It 'has no test nested inside another test' {
+        $bad = @()
+        foreach ($it in (Get-Commands 'It')) {
+            $p = $it.Parent
+            while ($p) {
+                if ($p -is [System.Management.Automation.Language.CommandAst] -and
+                    $p.GetCommandName() -eq 'It') {
+                    $bad += ($it.CommandElements[1].Extent.Text)
+                    break
+                }
+                $p = $p.Parent
+            }
+        }
+        $bad | Should -BeNullOrEmpty -Because 'a nested It never runs and nothing reports it'
+    }
+
+    It 'has no setup block nested inside a test' {
+        # Same class of mistake: a BeforeAll inside an It runs nothing useful.
+        $bad = @()
+        foreach ($name in 'BeforeAll', 'BeforeEach', 'AfterAll', 'AfterEach') {
+            foreach ($b in (Get-Commands $name)) {
+                $p = $b.Parent
+                while ($p) {
+                    if ($p -is [System.Management.Automation.Language.CommandAst] -and
+                        $p.GetCommandName() -eq 'It') { $bad += $name; break }
+                    $p = $p.Parent
+                }
+            }
+        }
+        $bad | Should -BeNullOrEmpty
+    }
+
+    It 'finds the tests it claims to be checking' {
+        # Without this the two guards above pass on an empty list for ever if the
+        # AST walk ever stops matching.
+        (Get-Commands 'It').Count | Should -BeGreaterThan 400
+        (Get-Commands 'Describe').Count | Should -BeGreaterThan 40
+    }
+}
