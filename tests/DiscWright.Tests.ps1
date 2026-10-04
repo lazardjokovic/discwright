@@ -7760,3 +7760,44 @@ Describe 'What a restored set offers for a game that is not a GOG download' -Tag
         (Get-Content $hta -Raw) | Should -Match 'ready in that folder'
     }
 }
+
+Describe 'The set panel does not dress as a button' -Tag 'Unit' {
+
+    # The menu's buttons are one exact flat colour, and the GIF recorder finds
+    # them by scanning three columns of the panel for it. An information box
+    # painted the same colour was found as a fourth button, which would have
+    # driven a click into a paragraph of text.
+    #
+    # The recorder is the cheap reason. The real one is that a person reads a
+    # flat dark block in a column of flat dark blocks as something to press.
+
+    BeforeAll {
+        $script:MenuCss = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+    }
+
+    It 'keeps the buttons on their own colour' {
+        # If this changes, the recorder's scan colours change with it.
+        $script:MenuCss | Should -Match '\.btn\{[^}]*background:#0a1519'
+    }
+
+    It 'paints the set information box something else' {
+        $m = [regex]::Match($script:MenuCss, '\.setinfo\{[^}]*background:(#[0-9a-f]{6})')
+        $m.Success | Should -BeTrue -Because 'the set panel must declare its own background'
+        $m.Groups[1].Value | Should -Not -Be '#0a1519'
+    }
+
+    It 'stays clear of the colour the recorder scans for, hover included' {
+        # The scan matches within eight per channel of either button state, so
+        # being merely different is not enough.
+        $m = [regex]::Match($script:MenuCss, '\.setinfo\{[^}]*background:#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})')
+        $r = [Convert]::ToInt32($m.Groups[1].Value, 16)
+        $g = [Convert]::ToInt32($m.Groups[2].Value, 16)
+        $b = [Convert]::ToInt32($m.Groups[3].Value, 16)
+        foreach ($btn in @(@(10, 21, 25), @(18, 36, 43))) {
+            $near = ([Math]::Abs($r - $btn[0]) -le 8) -and
+                    ([Math]::Abs($g - $btn[1]) -le 8) -and
+                    ([Math]::Abs($b - $btn[2]) -le 8)
+            $near | Should -BeFalse -Because "rgb($r,$g,$b) is within the scan tolerance of rgb($($btn -join ','))"
+        }
+    }
+}
