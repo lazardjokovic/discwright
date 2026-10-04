@@ -6808,3 +6808,228 @@ Describe 'The volume id of a disc that belongs to a set' -Tag 'Unit' {
         }
     }
 }
+
+
+Describe 'Deciding what each disc in a set gets built with' -Tag 'Unit' {
+
+    # The decisions, checked without writing any discs. The building itself is
+    # the ordinary single-disc build, run once per disc, so what is worth
+    # testing here is what it gets told each time.
+
+    BeforeAll {
+        function Step-Set([int]$discs) {
+            # A plan shaped like the real one, without needing files that size.
+            $plan = @{ Ok = $true; Discs = @() }
+            for ($i = 1; $i -le $discs; $i++) {
+                $plan.Discs += , @{ Number = $i; Bytes = [double]1000
+                                    Files = @(@{ Rel = "part-$i.bin"; Bytes = [double]1000
+                                                 Path = "C:\src\part-$i.bin" }) }
+            }
+            $entries = @()
+            foreach ($d in $plan.Discs) {
+                foreach ($f in $d.Files) {
+                    $entries += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes; Sha256 = ('a' * 64) }
+                }
+            }
+            $s = @{ Label = 'The Witcher Enhanced Edition'; OutDir = 'C:\out'; Games = @(); MediaKey = 'DVD5'
+                    IconPath = 'C:\art\i.png'; Menu = $true; BgPath = 'C:\art\b.png' }
+            return @(Get-DiscSetSteps $s $plan $entries)
+        }
+        $script:Three = Step-Set 3
+    }
+
+    It 'makes one build out of each disc in the plan' {
+        @($script:Three).Count | Should -Be 3
+        @(Step-Set 1).Count | Should -Be 1
+    }
+
+    It 'gives every disc its own ISO filename' {
+        # The ISO name comes from the label, so without this all three discs
+        # would be written to the same file and only the last would survive.
+        $names = @($script:Three | ForEach-Object { Split-Path (Get-IsoPath $_.OutDir $_.Label) -Leaf })
+        $names | Should -Be @('The Witcher Enhanced Edition D1.iso',
+                              'The Witcher Enhanced Edition D2.iso',
+                              'The Witcher Enhanced Edition D3.iso')
+    }
+
+    It 'gives every disc its own staging folder' {
+        # Sharing one would leave the last disc standing and nothing to look at
+        # for the others.
+        $dirs = @($script:Three | ForEach-Object { $_.StageDir })
+        ($dirs | Sort-Object -Unique).Count | Should -Be 3
+        $dirs[0] | Should -BeLike '*disc D1'
+    }
+
+    It 'gives every disc its own icon filename' {
+        # Explorer caches disc icons by filename, so two discs sharing one name
+        # show the first disc's face for the second disc.
+        $icons = @($script:Three | ForEach-Object { Get-DiscIconName $_.Label })
+        ($icons | Sort-Object -Unique).Count | Should -Be 3
+    }
+
+    It 'gives every disc its own volume id, with the number kept' {
+        $vols = @($script:Three | ForEach-Object { $_.VolumeLabel })
+        ($vols | Sort-Object -Unique).Count | Should -Be 3
+        foreach ($v in $vols) { $v.Length | Should -BeLessOrEqual 16 }
+        $vols[1] | Should -Match '_D2$'
+    }
+
+    It 'tells each build only the files that belong on that disc' {
+        foreach ($i in 0..2) {
+            $only = $script:Three[$i].OnlyFiles
+            $only.Count | Should -Be 1
+            $only.ContainsKey("C:\src\part-$($i + 1).bin") | Should -BeTrue
+            $only.ContainsKey("C:\src\part-$(($i + 2) % 3 + 1).bin") | Should -BeFalse
+        }
+    }
+
+    It 'puts the same whole-set file on every disc, with the disc number changed' {
+        # Any disc has to be able to answer what the whole set is, so the list
+        # is identical everywhere and only "disc N of M" differs.
+        foreach ($i in 0..2) {
+            $script:Three[$i].SetManifest | Should -Match ("disc {0} of 3" -f ($i + 1))
+            foreach ($part in 1..3) {
+                $script:Three[$i].SetManifest | Should -Match "part-$part\.bin"
+            }
+        }
+    }
+
+    It "does not let one disc's settings leak into the next" {
+        # The build fills in defaults on the hashtable it is handed, so each
+        # disc has to get its own copy or disc 1's answers become disc 2's.
+        $script:Three[0].IconPath = 'CHANGED'
+        $script:Three[1].IconPath | Should -Be 'C:\art\i.png'
+    }
+
+    It 'tells each disc which number it is, and how many there are' {
+        @($script:Three | ForEach-Object { $_.DiscNum }) | Should -Be @(1, 2, 3)
+        @($script:Three | ForEach-Object { $_.DiscOf }) | Should -Be @(3, 3, 3)
+    }
+}
+
+Describe 'Refusing to build a set that would not make sense' -Tag 'Unit' {
+
+    BeforeAll {
+        $script:Quiet = { param($m) }
+        function Fake-Game([string]$folder) {
+            return @{ Folder = $folder; SetupExe = $null; Files = @(); Buttons = @('Install') }
+        }
+    }
+
+    It 'will not put several games across a set' {
+        # The 2026 disc sets did exactly this, packing whatever order the rows
+        # sat in. Which games belong together is the person's call.
+        $s = @{ Games = @((Fake-Game 'C:\a'), (Fake-Game 'C:\b')); Label = 'Two'; MediaKey = 'DVD5' }
+        $r = Invoke-BuildDiscSet $s $script:Quiet
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -Match 'one game'
+        @($r.Isos).Count | Should -Be 0
+    }
+
+    It 'asks which disc is going to be burned before working out a set' {
+        $g = Fake-Game 'C:\a'
+        $g.Files = @([IO.FileInfo]'C:\a\setup.exe')
+        $s = @{ Games = @($g); Label = 'One'; MediaKey = '' }
+        $r = Invoke-BuildDiscSet $s $script:Quiet
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -Match 'Choose the disc'
+    }
+
+    It 'says so when the game has no files at all' {
+        $s = @{ Games = @((Fake-Game 'C:\a')); Label = 'Empty'; MediaKey = 'DVD5' }
+        $r = Invoke-BuildDiscSet $s $script:Quiet
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -Match 'no files'
+    }
+}
+
+Describe 'Building a disc that carries part of a set' -Tag 'Build' {
+
+    # The two changes a set needs from the ordinary build: stage somewhere of
+    # its own, and copy only the files it was given. Tested on a real ISO with
+    # small files rather than on a real set, because what is in question is the
+    # filtering, not the arithmetic.
+
+    BeforeAll {
+        $script:SetSrc = Join-Path $script:Sandbox 'setsrc'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:SetSrc 'data') | Out-Null
+        foreach ($n in 'setup.exe', 'part-1.bin', 'part-2.bin') {
+            Set-Content (Join-Path $script:SetSrc $n) "contents of $n" -Encoding Ascii -NoNewline
+        }
+        Set-Content (Join-Path $script:SetSrc 'data\textures.pak') 'pak' -Encoding Ascii -NoNewline
+
+        $script:SetGame = @{
+            Folder = $script:SetSrc; SetupExe = $null
+            Files = @(Get-ChildItem -Recurse -File $script:SetSrc)
+            Buttons = @('Install'); Name = 'Split Game'
+            # Source is what tells the build that a folder of game files keeps
+            # its subfolders, where a GOG download has no shape to keep. Left
+            # out of this fixture at first, which made the test claim the build
+            # had flattened a subfolder when it was doing exactly as told.
+            Source = 'Files'
+        }
+        $script:SetOut = Join-Path $script:Sandbox 'setout'
+        New-Item -ItemType Directory -Force -Path $script:SetOut | Out-Null
+
+        # Disc 2 of an imagined pair: the installer stays behind on disc 1.
+        $keep = @{}
+        foreach ($f in $script:SetGame.Files) {
+            if ($f.Name -in 'part-2.bin', 'textures.pak') { $keep[$f.FullName] = $true }
+        }
+        $s = New-BuildSettings -Games @($script:SetGame) -Label 'Split Game D2' -OutDir $script:SetOut -Checksums
+        $s.StageDir    = Join-Path $script:SetOut 'disc D2'
+        $s.OnlyFiles   = $keep
+        $s.SetManifest = "DiscWright disc set`r`nthis is disc 2`r`n"
+        $script:SetIso = Invoke-Build $s $script:LogSink
+        $script:SetStage = $s.StageDir
+    }
+
+    It 'stages into the folder it was told to, not the usual one' {
+        Test-Path $script:SetStage | Should -BeTrue
+        Test-Path (Join-Path $script:SetOut 'disc') | Should -BeFalse
+    }
+
+    It 'copies only the files it was given' {
+        $got = @(Get-ChildItem -Recurse -File $script:SetStage |
+                 ForEach-Object { $_.Name } | Sort-Object)
+        $got | Should -Not -Contain 'setup.exe'
+        $got | Should -Not -Contain 'part-1.bin'
+        $got | Should -Contain 'part-2.bin'
+        $got | Should -Contain 'textures.pak'
+    }
+
+    It 'keeps the shape of the folders it does copy' {
+        # A game that wants data\textures.pak beside its exe arrives broken if
+        # the filter flattens what it keeps.
+        Test-Path (Join-Path $script:SetStage 'data\textures.pak') | Should -BeTrue
+    }
+
+    It 'writes the set file onto the disc' {
+        $f = Join-Path $script:SetStage (Get-DiscSetFileName)
+        Test-Path $f | Should -BeTrue
+        (Get-Content $f -Raw) | Should -Match 'this is disc 2'
+    }
+
+    It 'includes the set file in the checksum list, so it is covered too' {
+        $sums = Get-Content (Join-Path $script:SetStage (Get-ChecksumFileName)) -Raw
+        $sums | Should -Match ([regex]::Escape((Get-DiscSetFileName)))
+    }
+
+    It 'leaves the files it skipped out of the checksum list as well' {
+        $sums = Get-Content (Join-Path $script:SetStage (Get-ChecksumFileName)) -Raw
+        $sums | Should -Not -Match 'part-1\.bin'
+        $sums | Should -Match 'part-2\.bin'
+    }
+
+    It 'writes an ISO named for this disc' {
+        $script:SetIso | Should -Match 'Split Game D2\.iso$'
+        Test-Path $script:SetIso | Should -BeTrue
+    }
+
+    It "puts only this disc's files inside the image" {
+        if (-not $script:SevenZip) { Set-ItResult -Skipped -Because '7-Zip is not installed'; return }
+        $inside = @(Get-IsoEntries -IsoPath $script:SetIso -SevenZip $script:SevenZip)
+        ($inside -join '|') | Should -Not -Match 'part-1\.bin'
+        ($inside -join '|') | Should -Match 'part-2\.bin'
+    }
+}
