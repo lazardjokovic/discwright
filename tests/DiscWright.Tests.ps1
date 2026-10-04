@@ -6465,3 +6465,78 @@ Describe 'The installer check tells the truth about what it tested' -Tag 'Unit' 
         $script:HostSrc | Should -Match 'exit 2'
     }
 }
+
+Describe 'Handing the ISO to another program' -Tag 'Unit' {
+
+    # Asked for as "being able to link your software to ImgBurn or similar
+    # software for an instant burn". Not ImgBurn in particular: Windows already
+    # records what can open an ISO and the answer differs per machine. On the
+    # machine this was written on the registered program is Nero, which is a
+    # decent argument against hardcoding anybody's favourite, and on the test VM
+    # there is nothing installed at all and two entries still come back.
+
+    BeforeAll {
+        $burn = Join-Path (Split-Path $PSScriptRoot -Parent) 'burn\DiscWright.Burn.ps1'
+        . $burn
+        $script:BurnSrc = Get-Content -Raw -LiteralPath $burn
+    }
+
+    It 'finds something on any machine, because Windows always has two' {
+        # Windows.IsoFile carries burn and mount whatever else is installed, so
+        # an empty list means the discovery is broken rather than the machine
+        # being bare.
+        $found = @(Get-IsoHandoffs)
+        $found.Count | Should -BeGreaterThan 1
+        @($found | Where-Object { $_.Name -match 'Disc Image' }).Count | Should -Be 1
+        @($found | Where-Object { $_.Verb -eq 'mount' }).Count | Should -Be 1
+    }
+
+    It 'names each one the way the program names itself' {
+        # Not a path and not a registry key: "Nero Burning ROM", not
+        # Nero.BurningROM.2023.iso.1 and not nero.exe.
+        foreach ($h in Get-IsoHandoffs) {
+            $h.Name | Should -Not -BeNullOrEmpty
+            $h.Name | Should -Not -Match '\.exe$'
+            $h.Name | Should -Not -Match ('^[A-Za-z]:' + [char]92 + [char]92)
+            $h.What | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    It 'points every entry at a program that is really there' {
+        foreach ($h in Get-IsoHandoffs) {
+            if ($h.Verb) { continue }   # a shell verb has no exe of its own
+            Test-Path -LiteralPath $h.Exe | Should -BeTrue -Because "$($h.Name) was listed"
+        }
+    }
+
+    It 'reads a shell command the way the shell does' {
+        $q = Split-ShellCommand '"C:\Program Files\A B\tool.exe" /burn "%1"'
+        $q.Exe  | Should -Be 'C:\Program Files\A B\tool.exe'
+        $q.Args | Should -Be '/burn "%1"'
+        $bare = Split-ShellCommand 'C:\Windows\System32\isoburn.exe "%1"'
+        $bare.Exe | Should -Be 'C:\Windows\System32\isoburn.exe'
+        Split-ShellCommand '' | Should -BeNullOrEmpty
+    }
+
+    It 'falls back to the filename when a program has no description' {
+        $tmp = Join-Path $script:Sandbox 'nodesc.exe'
+        Set-Content -LiteralPath $tmp -Value 'not really an exe' -Encoding Ascii
+        Get-ExeFriendlyName $tmp | Should -Be 'nodesc'
+        Get-ExeFriendlyName 'C:\nope\missing.exe' | Should -Be ''
+    }
+
+    It 'lists the same program once, not twice' {
+        # The registered handler can be Windows' own burner, and then it would
+        # appear under both rules.
+        $names = @(Get-IsoHandoffs | ForEach-Object { $_.Exe } | Where-Object { $_ })
+        ($names | Sort-Object -Unique).Count | Should -Be $names.Count
+    }
+
+    It 'hands the file over and does not drive the other program' {
+        # Every burner spells its switches differently and getting one wrong
+        # costs a disc, so nothing here builds somebody else's command line
+        # beyond the %1 the shell itself would fill in.
+        $script:BurnSrc | Should -Match "replace '%1'"
+        $script:BurnSrc | Should -Not -Match '/MODE|/WRITE|/START|--burn'
+    }
+}
