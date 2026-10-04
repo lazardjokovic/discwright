@@ -3011,7 +3011,11 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # of the flags above, because every project written before it described
         # a menu that showed the name and reopening one must not silently take
         # it away.
-        Version      = 12
+        # Version 13 adds DiscSet - whether a game too big for the chosen disc is
+        # split across a set of them. Absent in anything older, which reads back
+        # as off: those versions refused such a payload outright, and reopening
+        # one of their projects must not quietly turn one disc into five.
+        Version      = 13
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -3060,6 +3064,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         LinuxInfo    = [bool]$s.LinuxInfo
         LegacyFs     = [bool]$s.LegacyFs
         Checksums    = [bool]$s.Checksums
+        DiscSet      = [bool]$s.DiscSet
         ShowCaption  = $(if ($null -eq $s.ShowCaption) { $true } else { [bool]$s.ShowCaption })
         OutDir       = $outDir
     }
@@ -3111,7 +3116,7 @@ function Import-Project([string]$jsonPath) {
             Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
             LinuxInfo=[bool]$j.LinuxInfo
             LegacyFs=[bool]$j.LegacyFs
-            Checksums=[bool]$j.Checksums
+            Checksums=[bool]$j.Checksums; DiscSet=[bool]$j.DiscSet
             ShowCaption=$(if ($null -eq $j.ShowCaption) { $true } else { [bool]$j.ShowCaption })
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             CoverPath=$j.CoverPath; DiscArtPath=$j.DiscArtPath
@@ -3861,8 +3866,14 @@ $txtLabel=AddText 15 232 300
 
 # Which disc you are actually going to burn. Until now DiscWright only ever
 # recommended a size; a payload past the biggest disc was simply refused. Saying
-# which medium you own turns that into a set: the games are packed onto as many
-# discs as it takes, in the order they sit in the list.
+# which medium you own turns a payload that will not fit into a question worth
+# asking: it can be split across a set of discs.
+#
+# This comment used to end "the games are packed onto as many discs as it takes,
+# in the order they sit in the list", which described the disc sets built in
+# 2026 and removed again. Packing whichever games happened to sit next to each
+# other is the curation decision that got them removed. A set now splits ONE
+# game that will not fit, and nothing is ever installed from a disc in it.
 AddLabel 'Target disc:' 330 210 200 | Out-Null
 $cmbMedia=New-Object System.Windows.Forms.ComboBox
 $cmbMedia.DropDownStyle='DropDownList'
@@ -3893,6 +3904,13 @@ $chkLegacy.Location=New-Object System.Drawing.Point(265,342)
 $chkLegacy.Size=New-Object System.Drawing.Size(240,22)
 $chkLegacy.Checked=$false
 $form.Controls.Add($chkLegacy)
+$chkSet=New-Object System.Windows.Forms.CheckBox
+$chkSet.Text='disc set'
+$chkSet.Location=New-Object System.Drawing.Point(380,342)
+$chkSet.Size=New-Object System.Drawing.Size(120,22)
+$chkSet.Checked=$false
+$form.Controls.Add($chkSet)
+
 $chkSums=New-Object System.Windows.Forms.CheckBox
 $chkSums.Text='checksummed'
 $chkSums.Location=New-Object System.Drawing.Point(510,342)
@@ -4333,6 +4351,17 @@ $tips.SetToolTip($chkSums, (
     "Readable by sha256sum, and the file itself explains how to check it" + [Environment]::NewLine +
     "with PowerShell alone. Costs one pass over the data: seconds for a CD," + [Environment]::NewLine +
     "a few minutes for a full Blu-ray."))
+$tips.SetToolTip($chkSet, (
+    "Splits a game too big for the chosen disc across as many as it takes." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Every disc carries a list of the whole set. The menu on any of them" + [Environment]::NewLine +
+    "copies the discs back into one folder, installs from there, and then" + [Environment]::NewLine +
+    "offers to delete the copies." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Nothing is ever installed FROM a disc in a set. That is the whole" + [Environment]::NewLine +
+    "reason this works where swapping discs mid-install does not." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "A game that fits on one disc is built as one disc, ticked or not."))
 $tips.SetToolTip($chkCaption, (
     "Prints the game's name above the buttons on its own screen." + [Environment]::NewLine +
     "" + [Environment]::NewLine +
@@ -5247,6 +5276,7 @@ function Open-Project([string]$folder) {
     $chkLinux.Checked = [bool]$p.LinuxInfo
     $chkLegacy.Checked = [bool]$p.LegacyFs
     $chkSums.Checked = [bool]$p.Checksums
+    $chkSet.Checked = [bool]$p.DiscSet
     $chkCaption.Checked = $(if ($null -eq $p.ShowCaption) { $true } else { [bool]$p.ShowCaption })
     if ($p.BgPath -and (Test-Path $p.BgPath)) { Set-BgFile $p.BgPath } else { $txtBg.Text=''; $state.BgPath=$null }
     $chkBgAsIs.Checked = [bool]$p.BgAsIs
@@ -5972,7 +6002,8 @@ $btnBuild.Add_Click({
          MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null});
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
          ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey
-         LinuxInfo=$chkLinux.Checked; LegacyFs=$chkLegacy.Checked; Checksums=$chkSums.Checked }
+         LinuxInfo=$chkLinux.Checked; LegacyFs=$chkLegacy.Checked; Checksums=$chkSums.Checked
+         DiscSet=$chkSet.Checked }
     $btnBuild.Enabled=$false
     Set-FormBusy $true
     $script:BuildDiscTag = ''
@@ -5980,7 +6011,15 @@ $btnBuild.Add_Click({
     $buildWatch.Restart()
     $lblElapsed.Text='Starting...'
     try {
-        $isos = @(Invoke-Build $s $log $buildProgress)
+        if ($s.DiscSet) {
+            $set = Invoke-BuildDiscSet $s $log $buildProgress
+            # Thrown rather than reported here, so a refusal reaches the same
+            # message box every other build failure already uses.
+            if (-not $set.Ok) { throw $set.Why }
+            $isos = @($set.Isos)
+        } else {
+            $isos = @(Invoke-Build $s $log $buildProgress)
+        }
         $buildWatch.Stop()
         $took = Format-Elapsed $buildWatch.Elapsed
         $script:BuildDiscTag = ''
