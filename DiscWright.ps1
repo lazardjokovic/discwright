@@ -713,6 +713,10 @@ function Get-DiscSetSteps([hashtable]$s, $plan, [array]$entries) {
         $ds.SetManifest = New-DiscSetManifest $entries $s.Label $d.Number $n
         $ds.DiscNum     = $d.Number
         $ds.DiscOf      = $n
+        # The label without the disc number on it. The menu's title shows
+        # "NAME D2", which is right for a disc, but the restore folder is for
+        # the whole set and has to be named for the game.
+        $ds.SetLabel    = [string]$s.Label
         # Every other disc in the set gets none of them. Without this each
         # disc would carry its own copy of a manual and an extras folder that
         # the arithmetic only ever counted once.
@@ -1945,6 +1949,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
      buttons, and setPanel measures it, so two lines move the panel rather than
      losing half a name. */
   #cap{width:250px;margin:0 0 10px 0;font-family:'Segoe UI',Arial;}
+  /* The disc-set note, in the panel above the buttons. No flexbox and no
+     border-radius: the menu runs in IE7 mode, which has neither. */
+  .setinfo{width:250px;margin:0 0 12px 0;font-family:'Segoe UI',Arial;font-size:12px;
+    line-height:16px;color:#cfdce3;background:#0a1519;border:1px solid #16545a;
+    padding:8px;word-wrap:break-word;}
   #cap .capn{display:block;font-size:17px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
     color:#dfe9ee;white-space:normal;overflow:hidden;}
   #status{position:absolute;left:%%PANELLEFT%%px;bottom:18px;width:250px;text-align:center;display:none;
@@ -1982,6 +1991,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var GAMES=%%GAMES%%;       // [{n:name, m:registry match, s:setup, man:manual, ext:extras, a:[{n,s}]}]
   var BTNS=%%BTNS%%;         // which of Play/Install/Manual/Extras/Exit the disc was built with
   var SHOWCAP=%%SHOWCAP%%;
+  var SET=%%SET%%;           // null, or {n,of,label} on a disc holding part of a set
+  var SETFILE="%%SETFILE%%";
   var MANUAL="%%MANUAL%%"; var MUSIC="%%MUSIC%%";
   var PREVIEW=%%PREVIEW%%;   // true only for the app's Preview - see refreshButtons
   // Which screen is showing: -1 is the game chooser, otherwise an index into GAMES.
@@ -2189,7 +2200,128 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // The chooser lists the games itself, so it needs only the disc line.
     setPanel(h,capFor(""));
   }
+  // ---- disc set: begin ------------------------------------------------------
+  // Everything between these two markers is lifted out by the tests and run
+  // under cscript against a real folder, so the code that decides whether a set
+  // is complete is the code that gets tested, not a retyped copy of it. Keep it
+  // free of anything to do with the document.
+  //
+  // SET is null on an ordinary disc. On a disc holding part of one game it is
+  // {n:2,of:3,label:"NAME"}, and the menu stops offering to play or install,
+  // because no disc in a set can do either on its own.
+  var SEP=String.fromCharCode(92);
+  function setRows(){
+    // Read off the disc's own set file rather than baked into this menu, so the
+    // two can never disagree about what the set holds.
+    var out=[], p=fso.BuildPath(root,SETFILE);
+    if(!fso.FileExists(p)) return out;
+    var t=fso.OpenTextFile(p,1), line, parts, star;
+    while(!t.AtEndOfStream){
+      line=t.ReadLine();
+      if(line.length<1) continue;
+      if(line.charAt(0)<"0"||line.charAt(0)>"9") continue;
+      star=line.indexOf("*");
+      if(star<0) continue;
+      parts=line.substring(0,star).split(" ");
+      var kept=[];
+      for(var i=0;i<parts.length;i++){ if(parts[i].length) kept[kept.length]=parts[i]; }
+      if(kept.length<3) continue;
+      // The name is everything after the star, because a file name can hold
+      // spaces and splitting on them would cut it in half.
+      out[out.length]={d:parseInt(kept[0],10),h:kept[1],b:kept[2],
+                       f:line.substring(star+1)};
+    }
+    t.Close();
+    return out;
+  }
+  // The set file writes forward slashes, the way the checksum list does.
+  function setPath(dir,rel){
+    var parts=rel.split("/"), p=dir;
+    for(var i=0;i<parts.length;i++){ p=fso.BuildPath(p,parts[i]); }
+    return p;
+  }
+  function setFolderOf(full){ return fso.GetParentFolderName(full); }
+  // Where to propose putting the game back. The drive with the most room,
+  // because a set is by definition bigger than one disc, and a name derived
+  // from the game and nothing else, so every disc in the set proposes the same
+  // folder without anything having to be remembered between them.
+  function setDefaultDir(){
+    var best="", most=-1, e=new Enumerator(fso.Drives), d;
+    for(;!e.atEnd();e.moveNext()){
+      d=e.item();
+      try{
+        if(d.DriveType==2&&d.IsReady&&d.FreeSpace>most){ most=d.FreeSpace; best=d.DriveLetter; }
+      }catch(ex){}
+    }
+    if(!best.length) return "";
+    return best+":"+SEP+"DiscWright restore"+SEP+SET.label;
+  }
+  // What the folder somebody has been copying the discs into holds so far.
+  // The folder is the only state there is: nothing is written down anywhere
+  // else and nothing is remembered between sessions.
+  function setScan(dir){
+    var rows=setRows();
+    var r={total:rows.length,ok:0,missing:0,bad:0,here:0,need:"",bytes:0,mineTotal:0,mineHere:0};
+    var needed={}, i, row, full, want, got;
+    for(i=0;i<rows.length;i++){
+      row=rows[i];
+      r.bytes+=parseFloat(row.b);
+      if(row.d==SET.n){ r.mineTotal++; }
+      full=setPath(dir,row.f);
+      if(!dir.length||!fso.FileExists(full)){
+        r.missing++; needed[row.d]=true;
+        continue;
+      }
+      want=parseFloat(row.b);
+      got=fso.GetFile(full).Size;
+      if(got!=want){
+        // A half-copied file is the likeliest thing to go wrong, and it is a
+        // different problem from a disc nobody has put in yet.
+        r.bad++; needed[row.d]=true;
+        continue;
+      }
+      r.ok++;
+      if(row.d==SET.n){ r.mineHere++; }
+    }
+    r.here=r.ok;
+    var list=[];
+    for(i=1;i<=SET.of;i++){ if(needed[i]){ list[list.length]=i; } }
+    r.need=list.join(", ");
+    r.complete=(r.total>0&&r.ok==r.total);
+    return r;
+  }
+  // One sentence about where the set stands, for the panel.
+  function setSentence(s){
+    if(!s.total) return "This disc says it is part of a set, but its list of files is missing.";
+    if(s.complete) return "All "+s.total+" files are here. The game can be installed from that folder.";
+    var m=s.ok+" of "+s.total+" files are in that folder.";
+    if(s.bad>0) m+=" "+s.bad+" copied badly.";
+    if(s.need.length) m+=" Still needed: disc "+s.need+".";
+    return m;
+  }
+  // ---- disc set: end --------------------------------------------------------
+
+  // A disc that holds part of a set offers none of it. Play and Install can
+  // only work once every disc has been copied into one folder, and a button
+  // that cannot work is worse than no button: the whole reason item 7 was a
+  // bug was a Play button on a disc that could never play anything.
+  function renderSet(){
+    var dir=setDefaultDir(), s=setScan(dir), h="";
+    h+='<div class="setinfo">'+
+       "Disc "+SET.n+" of "+SET.of+". "+
+       "No disc in this set can install the game on its own."+
+       "<br><br>Copy every disc in the set into one folder on a hard drive, "+
+       "then run the installer from there."+
+       (dir.length ? "<br><br>Suggested folder:<br>"+dir : "")+
+       "<br><br>"+setSentence(s)+
+       "</div>";
+    if(has("Manual")) h+=btnHtml("btn_Manual","","Game Manual","doManual()","");
+    if(has("Extras")) h+=btnHtml("btn_Extras","","Extras","doExtras()","");
+    if(has("Exit"))   h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
+    setPanel(h,capFor(GAMES[cur]?GAMES[cur].n:""));
+  }
   function renderGame(){
+    if(SET){ renderSet(); return; }
     var g=GAMES[cur], h="";
     // A folder of game files holds the game itself, so it is played from the
     // disc and there is nothing to install. The button says so rather than
@@ -2501,6 +2633,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         # Absent means yes: a project written before this existed described a
         # menu that showed the name, and reopening it must still describe that.
         SHOWCAP=$(if ($null -eq $cfg.ShowCaption -or $cfg.ShowCaption) { 'true' } else { 'false' })
+        # A disc that is not part of a set says so with null, so every menu
+        # built before sets existed comes out exactly as it did.
+        SET=$(if ([int]$cfg.DiscOf -gt 1) {
+                  '{{n:{0},of:{1},label:"{2}"}}' -f [int]$cfg.DiscNum, [int]$cfg.DiscOf,
+                                               (ConvertTo-JsString $cfg.SetLabel)
+              } else { 'null' })
+        SETFILE=(ConvertTo-JsString (Get-DiscSetFileName))
     }
     # One pass over the template, so text filled in is never filled in again.
     # This used to chain eleven replaces, and a game renamed "Game %%BTNS%%
@@ -3200,7 +3339,9 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         New-MenuHta @{ GameName=$s.Label; Games=$menuGames; Buttons=$s.Buttons;
                        MusicFile=$musicName; ManualFile=$manualName; PanelSide=$s.PanelSide; IconName=$icoName
                        WindowBorder=[bool]$s.WindowBorder; ButtonStyle=$s.ButtonStyle
-                       ShowCaption=$(if ($null -eq $s.ShowCaption) { $true } else { [bool]$s.ShowCaption }) } (Join-Path $stage 'AUTORUN\menu.hta')
+                       ShowCaption=$(if ($null -eq $s.ShowCaption) { $true } else { [bool]$s.ShowCaption })
+                       DiscNum=[int]$s.DiscNum; DiscOf=[int]$s.DiscOf
+                       SetLabel=[string]$s.SetLabel } (Join-Path $stage 'AUTORUN\menu.hta')
 
         New-MenuLauncher (Join-Path $stage (Get-MenuLauncherName))
         & $log "Menu launcher at the disc root: $(Get-MenuLauncherName)"
