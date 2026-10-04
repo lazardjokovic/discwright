@@ -731,8 +731,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 12' {
-            $script:PJson.Version | Should -Be 12
+        It 'declares schema version 13' {
+            $script:PJson.Version | Should -Be 13
         }
 
         It 'records where each entry came from' {
@@ -4129,8 +4129,8 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
         }
 
-        It 'writes schema version 12' {
-            $script:RenameRaw.Version | Should -Be 12
+        It 'writes schema version 13' {
+            $script:RenameRaw.Version | Should -Be 13
         }
 
         It 'stores the registered name beside the chosen one' {
@@ -5017,7 +5017,7 @@ Describe 'The older-Windows setting in a project file' -Tag 'Unit' {
                 ExtraItems=@(); MediaKey=''; LinuxInfo=$false; LegacyFs=$true }
         Save-Project $s $script:LegProj
         $raw = Get-Content -Raw (Join-Path $script:LegProj 'discproject.json') | ConvertFrom-Json
-        $raw.Version  | Should -Be 12
+        $raw.Version  | Should -Be 13
         $raw.LegacyFs | Should -BeTrue
         (Import-Project (Join-Path $script:LegProj 'discproject.json')).LegacyFs | Should -BeTrue
     }
@@ -5215,7 +5215,7 @@ Describe 'Keeping the printed pictures in the project' -Tag 'Unit' {
             CoverPath = 'C:\art\cover.png'; DiscArtPath = 'C:\art\face.png'
         } $out
         $raw = Get-Content (Join-Path $out 'discproject.json') -Raw | ConvertFrom-Json
-        $raw.Version     | Should -Be 12
+        $raw.Version     | Should -Be 13
         $raw.CoverPath   | Should -Be 'C:\art\cover.png'
         $raw.DiscArtPath | Should -Be 'C:\art\face.png'
     }
@@ -5968,7 +5968,7 @@ Describe 'Remembering whether the disc was asked to be checksummed' -Tag 'Unit' 
                 Checksums=$true }
         Save-Project $s $script:CsProj
         $raw = Get-Content -Raw (Join-Path $script:CsProj 'discproject.json') | ConvertFrom-Json
-        $raw.Version   | Should -Be 12
+        $raw.Version   | Should -Be 13
         $raw.Checksums | Should -BeTrue
         (Import-Project (Join-Path $script:CsProj 'discproject.json')).Checksums | Should -BeTrue
     }
@@ -6249,7 +6249,7 @@ WScript.Echo(out ? out.replace(/<[^>]*>/g,"") : "");
                 LinuxInfo=$false; LegacyFs=$false; Checksums=$false; ShowCaption=$false }
         Save-Project $s $proj
         $raw = Get-Content -Raw (Join-Path $proj 'discproject.json') | ConvertFrom-Json
-        $raw.Version | Should -Be 12
+        $raw.Version | Should -Be 13
         $raw.ShowCaption | Should -BeFalse
         (Import-Project (Join-Path $proj 'discproject.json')).ShowCaption | Should -BeFalse
 
@@ -6321,7 +6321,8 @@ Describe 'Nothing is added to the form and then forgotten' -Tag 'Unit' {
                 WindowBorder=$false; ButtonStyle='Bordered'; MusicFile='C:\a\music.mp3'
                 Buttons=@('Play','Exit'); ManualPath='C:\a\manual.pdf'; ExtrasPath='C:\a\extras'
                 ExtraItems=@('C:\a\readme.txt'); MediaKey='DVD'; LinuxInfo=$true
-                LegacyFs=$true; Checksums=$true }
+                LegacyFs=$true; Checksums=$true
+                DiscSet=$true }
         Save-Project $s $dir
         $json = Get-Content -Raw (Join-Path $dir 'discproject.json') | ConvertFrom-Json
         $back = Import-Project (Join-Path $dir 'discproject.json')
@@ -7549,5 +7550,141 @@ Describe 'The test file is shaped the way Pester needs' -Tag 'Unit' {
         # AST walk ever stops matching.
         (Get-Commands 'It').Count | Should -BeGreaterThan 400
         (Get-Commands 'Describe').Count | Should -BeGreaterThan 40
+    }
+}
+
+
+Describe 'Asking for a disc set from the window' -Tag 'Unit' {
+
+    # The setting has to survive the whole round trip, which is what the
+    # structural guards in this file already insist on for every other setting.
+    # These add the parts those cannot see: the schema number, what an older
+    # project reads back as, and that asking for a set actually builds one.
+
+    It 'is version 13 of the project file' {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $src | Should -Match 'Version\s+=\s+13'
+        $src | Should -Match 'Version 13 adds DiscSet'
+    }
+
+    It 'reads back as off in a project written before it existed' {
+        # Those versions refused a payload past the biggest disc outright, so
+        # reopening one of their projects must not quietly turn one disc into
+        # five. Off is the only answer that describes what they did.
+        $dir = Join-Path $script:Sandbox 'v12project'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $old = Join-Path $dir 'discproject.json'
+        @{ Version = 12; Games = @(); Label = 'Old'; Checksums = $true } |
+            ConvertTo-Json -Depth 6 | Set-Content $old -Encoding UTF8
+        # Import-Project is the reader with no window attached. Open-Project is
+        # the one the button calls, and it clears the log box.
+        $p = Import-Project $old
+        [bool]$p.DiscSet | Should -BeFalse
+        # And the setting beside it still reads back as it did.
+        [bool]$p.Checksums | Should -BeTrue
+    }
+
+    It 'survives being written and read back' {
+        $dir = Join-Path $script:Sandbox 'setproject'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Save-Project @{ Games = @(); Label = 'Set Test'; DiscSet = $true } $dir
+        [bool](Import-Project (Join-Path $dir 'discproject.json')).DiscSet | Should -BeTrue
+    }
+}
+
+Describe 'Building a real set from end to end' -Tag 'Build' {
+
+    # The whole way through: a payload that will not fit one disc, asked for as
+    # a set, producing two ISOs that each hold their own share and both carry
+    # the same list of the whole thing.
+    #
+    # A CD is the smallest disc DiscWright offers, so two files of 400 MB are
+    # the cheapest honest way to need two of them. It writes ~800 MB, which is
+    # why it is tagged Build and not Unit.
+
+    BeforeAll {
+        $script:E2E = Join-Path $script:Sandbox 'e2e'
+        $script:E2ESrc = Join-Path $script:E2E 'src'
+        $script:E2EOut = Join-Path $script:E2E 'out'
+        New-Item -ItemType Directory -Force -Path $script:E2ESrc | Out-Null
+        New-Item -ItemType Directory -Force -Path $script:E2EOut | Out-Null
+
+        # Two files that cannot share a CD, written as sparse-ish blocks rather
+        # than 800 MB of random, which would dominate the run.
+        foreach ($n in 'part-1.bin', 'part-2.bin') {
+            $fs = [IO.File]::Create((Join-Path $script:E2ESrc $n))
+            $fs.SetLength(400MB)
+            $fs.Close()
+        }
+        $script:E2EGame = @{
+            Folder = $script:E2ESrc; SetupExe = $null; Source = 'Files'
+            Files = @(Get-ChildItem -File $script:E2ESrc)
+            Buttons = @('Install'); Name = 'Two Disc Game'
+        }
+        $s = New-BuildSettings -Games @($script:E2EGame) -Label 'Two Disc Game' -OutDir $script:E2EOut
+        $s.MediaKey = 'CD'
+        $s.DiscSet  = $true
+        $script:E2EResult = Invoke-BuildDiscSet $s $script:LogSink
+    }
+
+    It 'says it worked, and says how many discs' {
+        $script:E2EResult.Ok | Should -BeTrue
+        $script:E2EResult.Discs | Should -Be 2
+        @($script:E2EResult.Isos).Count | Should -Be 2
+    }
+
+    It 'writes an ISO per disc, each named for its own disc' {
+        foreach ($n in 1, 2) {
+            $iso = Join-Path $script:E2EOut "Two Disc Game D$n.iso"
+            Test-Path $iso | Should -BeTrue -Because "disc $n should have been written"
+            (Get-Item $iso).Length | Should -BeGreaterThan 100MB
+        }
+    }
+
+    It 'puts each file on exactly one of the discs' {
+        $d1 = @(Get-ChildItem -Recurse -File (Join-Path $script:E2EOut 'disc D1') | ForEach-Object { $_.Name })
+        $d2 = @(Get-ChildItem -Recurse -File (Join-Path $script:E2EOut 'disc D2') | ForEach-Object { $_.Name })
+        $d1 | Should -Contain 'part-1.bin'
+        $d1 | Should -Not -Contain 'part-2.bin'
+        $d2 | Should -Contain 'part-2.bin'
+        $d2 | Should -Not -Contain 'part-1.bin'
+    }
+
+    It 'puts the same whole-set list on both discs' {
+        $a = Get-Content (Join-Path $script:E2EOut ('disc D1\' + (Get-DiscSetFileName))) -Raw
+        $b = Get-Content (Join-Path $script:E2EOut ('disc D2\' + (Get-DiscSetFileName))) -Raw
+        foreach ($t in $a, $b) {
+            $t | Should -Match 'part-1\.bin'
+            $t | Should -Match 'part-2\.bin'
+            $t | Should -Match 'cannot install the game on its own'
+        }
+        $a | Should -Match 'disc 1 of 2'
+        $b | Should -Match 'disc 2 of 2'
+    }
+
+    It 'gives the two discs different volume ids' {
+        # Identical ids would show as two indistinguishable drives in Explorer.
+        $v1 = Get-VolumeLabel 'Two Disc Game' 1 2
+        $v2 = Get-VolumeLabel 'Two Disc Game' 2 2
+        $v1 | Should -Not -Be $v2
+        $v1.Length | Should -BeLessOrEqual 16
+        $v2.Length | Should -BeLessOrEqual 16
+    }
+
+    It 'tells each menu which disc it is on' {
+        foreach ($n in 1, 2) {
+            $hta = Join-Path $script:E2EOut "disc D$n\AUTORUN\menu.hta"
+            Test-Path $hta | Should -BeTrue
+            (Get-Content $hta -Raw) | Should -Match "var SET=\{n:$n,of:2,"
+        }
+    }
+
+    It 'refuses the same payload with no disc chosen' {
+        $s = New-BuildSettings -Games @($script:E2EGame) -Label 'No Disc' -OutDir $script:E2EOut
+        $s.DiscSet = $true
+        $s.MediaKey = ''
+        $r = Invoke-BuildDiscSet $s $script:LogSink
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -Match 'Choose the disc'
     }
 }
