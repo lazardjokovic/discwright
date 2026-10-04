@@ -519,6 +519,141 @@ function Get-MediaRec([double]$bytes) {
     return @{ Fit=$false; Key=''; Text=("too big for any disc ({0:N1} GB) - leave something off" -f $gib) }
 }
 
+# --- one game across several discs --------------------------------------------
+#
+# Asked for as splitting large games across more than one disc, for archiving.
+#
+# This is NOT the spanning that docs/research/spanning refused. That was running
+# GOG's installer straight off a set of discs, swapping as it asks, and it was
+# tested and refused: Inno wants the slices out of order and an unknowable
+# number of times, and a RAR-packed game cannot span at all, failing silently
+# while reporting success. None of that applies here, because nothing is ever
+# installed from a disc. The parts are copied back into one folder first, and
+# only then does the installer run, from a hard drive, with every part present.
+#
+# Whole files only. A file bigger than the disc is refused by name rather than
+# cut in two: a join step has to be byte perfect, the pieces look like broken
+# files to anybody browsing the disc, and it is a new way to lose a game. GOG
+# splits its own downloads into parts just under 4 GiB, so on a DVD5 and up
+# there is nothing to cut. If cutting is ever added it wants its own decision
+# and its own evidence, the way spanning got one.
+
+function Get-DiscSetFileName { 'Disc set.txt' }
+
+# What goes on which disc.
+#
+# First fit, in the order given, rather than anything cleverer. Packing them
+# optimally is a harder problem for a smaller prize: GOG parts are all nearly
+# 4 GiB so there is little slack to win, and a cleverer order would scatter an
+# installer and its parts across the set for no reason a person could follow.
+# Filling each disc until the next file does not fit is a rule that can be
+# explained in one sentence and checked by eye.
+function Get-DiscSetPlan([array]$files, [double]$capacityBytes, [double]$overheadBytes = 0) {
+    $room = $capacityBytes - $overheadBytes
+    if ($room -le 0) {
+        return @{ Ok = $false; Discs = @(); Room = $room
+                  Why = 'A disc that size has no room left once the menu and artwork are on it.' }
+    }
+    $discs = @()
+    $cur = @(); $curBytes = [double]0
+    foreach ($f in @($files)) {
+        $size = [double]$f.Bytes
+        # Every disc carries the same overhead, so a file that will not fit one
+        # will not fit any of them. Named, because the answer is a bigger blank
+        # and the person needs to know which file decided that.
+        if ($size -gt $room) {
+            $why = '{0} is {1:N2} GB and a disc this size leaves {2:N2} GB for files. Choose a larger disc.'
+            return @{ Ok = $false; Discs = @(); Room = $room
+                      Why = ($why -f $f.Rel, ($size / 1GB), ($room / 1GB)) }
+        }
+        if ($cur.Count -and ($curBytes + $size) -gt $room) {
+            $discs += , @{ Number = ($discs.Count + 1); Files = @($cur); Bytes = $curBytes }
+            $cur = @(); $curBytes = [double]0
+        }
+        $cur += $f
+        $curBytes += $size
+    }
+    if ($cur.Count) { $discs += , @{ Number = ($discs.Count + 1); Files = @($cur); Bytes = $curBytes } }
+    return @{ Ok = $true; Why = ''; Discs = @($discs); Room = $room }
+}
+
+# The same file on every disc in the set, so any disc can answer every question:
+# what this set is, what is on this disc, what is still missing, and whether the
+# folder somebody copied the discs into is complete and undamaged.
+#
+# Human first, because somebody will open it in Notepad on a machine that has
+# never heard of DiscWright. Machine-readable second, in the shape
+# checksums.sha256 already uses, so the menu reads it with parsing it has.
+function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [int]$discCount) {
+    $total = [double]0
+    foreach ($e in $entries) { $total += [double]$e.Bytes }
+    $mine = @($entries | Where-Object { [int]$_.Disc -eq $thisDisc })
+    $sep = [string][char]92
+    $q = [string][char]39
+
+    $o = New-Object System.Collections.Generic.List[string]
+    $o.Add('DiscWright disc set')
+    $o.Add('===================')
+    $o.Add('')
+    $o.Add("  $label")
+    $o.Add(("  disc {0} of {1}.  {2} files in the set, {3:N2} GB in all." -f `
+            $thisDisc, $discCount, $entries.Count, ($total / 1GB)))
+    $o.Add('')
+    $o.Add('This disc cannot install the game on its own, and neither can any other')
+    $o.Add("disc in the set. The parts are spread across $discCount discs.")
+    $o.Add('')
+    $o.Add('To put the game back:')
+    $o.Add('')
+    $o.Add('  1. Make one empty folder on a hard drive.')
+    $o.Add('  2. Copy the contents of every disc in the set into that one folder.')
+    $o.Add('     The order does not matter.')
+    $o.Add('  3. Run the installer from that folder, never from a disc.')
+    $o.Add('')
+    $o.Add('The menu on any disc in the set does all of that for you and checks every')
+    $o.Add('file afterwards. This file is here so it can be done by hand as well.')
+    $o.Add('')
+    $o.Add(("On this disc: {0} of the {1} files." -f $mine.Count, $entries.Count))
+    $o.Add('')
+    $o.Add('Every file in the set')
+    $o.Add('---------------------')
+    $o.Add('')
+    $o.Add('disc  sha256                                                            file')
+    foreach ($e in $entries) {
+        $rel = ([string]$e.Rel).Replace($sep, '/')
+        $o.Add(("{0,-5} {1} *{2}" -f [int]$e.Disc, $e.Sha256, $rel))
+    }
+    $o.Add('')
+    $o.Add('Each line above is the disc number, the SHA-256, then the file. To check a')
+    $o.Add('folder you have copied the discs into, run this from inside that folder:')
+    $o.Add('')
+    $o.Add('  Get-Content ' + $q + (Get-DiscSetFileName) + $q + ' | Where-Object { $_ -match ' + $q + '^[0-9]' + $q + ' } | ForEach-Object {')
+    $o.Add('    $d, $h, $f = $_ -split ' + $q + ' +' + $q + ', 3')
+    $o.Add('    $f = $f.Substring(1)')
+    $o.Add('    if (-not (Test-Path $f)) { "MISSING (disc $d)  $f" }')
+    $o.Add('    elseif ((Get-FileHash $f -Algorithm SHA256).Hash -ne $h) { "DAMAGED (disc $d)  $f" }')
+    $o.Add('  }')
+    $o.Add('')
+    $o.Add('Silence means every file is there and every one of them is right.')
+    return (($o -join "`r`n") + "`r`n")
+}
+
+# The other half: is the folder somebody copied the discs into complete? Answered
+# from the manifest alone, so no note has to be kept anywhere between sessions.
+# The folder is the state.
+function Test-DiscSetRestore([string]$folder, [array]$entries) {
+    $sep = [string][char]92
+    $missing = @(); $damaged = @(); $ok = 0
+    foreach ($e in $entries) {
+        $p = Join-Path $folder (([string]$e.Rel).Replace('/', $sep))
+        if (-not (Test-Path -LiteralPath $p)) { $missing += $e; continue }
+        if ((Get-FileSha256 $p) -ne $e.Sha256) { $damaged += $e; continue }
+        $ok++
+    }
+    $need = @(@($missing + $damaged) | ForEach-Object { [int]$_.Disc } | Sort-Object -Unique)
+    return @{ Complete = ($missing.Count -eq 0 -and $damaged.Count -eq 0)
+              Ok = $ok; Missing = @($missing); Damaged = @($damaged); DiscsNeeded = $need }
+}
+
 # Total bytes of a mixed list of files and folders.
 # The largest single file the ISO9660 and Joliet filesystems can be given here.
 #
@@ -630,13 +765,21 @@ function Get-BuildTargets([string]$outDir, [string]$label) {
 # not lose the disc number and hand every disc in a set the same volume id. Sets
 # are gone and so is the suffix: one build writes one disc, and the label the
 # user typed is the only thing that has to fit.
-function Get-VolumeLabel([string]$label) {
+function Get-VolumeLabel([string]$label, [int]$n = 0, [int]$of = 0) {
+    # A disc in a set reserves its number before the name is cut, not after.
+    # Truncating "LONG NAME D2" at sixteen takes the number off the end and
+    # hands every disc in the set the same volume id. The set DiscWright built
+    # in 2026 and removed had exactly that, and the fix is recovered here from
+    # the version that was deleted.
+    $sfx = if ($of -le 1) { '' } else { "_D$n" }
+    $max = 16 - $sfx.Length
+    if ($max -lt 1) { $max = 1 }
     $base = (("$label" -replace '[^A-Za-z0-9_]','_')).Trim('_')
-    # Trim again after truncating, not only before: cutting at 16 can land on a
+    # Trim again after truncating, not only before: cutting can land on a
     # folded space and leave 'THE WITCHER ENH EDITION' as 'THE_WITCHER_ENH_'.
-    if ($base.Length -gt 16) { $base = $base.Substring(0, 16).TrimEnd('_') }
+    if ($base.Length -gt $max) { $base = $base.Substring(0, $max).TrimEnd('_') }
     if ([string]::IsNullOrEmpty($base)) { $base = 'DISC' }
-    return $base
+    return ($base + $sfx)
 }
 
 # Every disc used to ship its icon as "disc.ico". Explorer caches icon bitmaps
@@ -2738,6 +2881,12 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
             $srcRoot = if ($g.SetupExe) { $g.SetupExe.DirectoryName } else { [string]$g.Folder }
             $sameVol = ([IO.Path]::GetPathRoot($srcRoot) -eq $stageRoot)
             foreach ($f in $g.Files) {
+                # A disc in a set carries only the files the plan put on it.
+                # Skipped here rather than by handing this a trimmed entry, so
+                # that everything downstream, the root-collision notes and the
+                # stale-icon sweep included, sees exactly what landed on THIS
+                # disc and nothing the rest of the set holds.
+                if ($s.OnlyFiles -and -not $s.OnlyFiles.ContainsKey($f.FullName)) { continue }
                 # A GOG download is an installer and its parts, all in one folder,
                 # so the file's own name is where it goes. A folder of game files
                 # keeps its shape instead: subfolders and all, or a game that

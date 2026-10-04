@@ -6540,3 +6540,271 @@ Describe 'Handing the ISO to another program' -Tag 'Unit' {
         $script:BurnSrc | Should -Not -Match '/MODE|/WRITE|/START|--burn'
     }
 }
+
+
+Describe 'Laying one game out across several discs' -Tag 'Unit' {
+
+    # Asked for as splitting large games across more than one disc, for
+    # archiving. Not the spanning in docs/research/spanning, which was running
+    # the installer off the discs and was tested and refused: nothing here is
+    # ever installed from a disc, the parts are copied back into one folder
+    # first.
+    #
+    # Whole files only, so the plan never has to be joined back together. A file
+    # bigger than the disc is refused by name.
+
+    BeforeAll {
+        function F([string]$rel, [double]$gb) { @{ Rel = $rel; Bytes = [double]($gb * 1GB) } }
+        # A real GOG shape: an installer, then parts just under 4 GiB, which is
+        # where GOG cuts them to stay under the FAT32 ceiling.
+        $script:Gog = @(
+            (F 'setup_big_game.exe'   0.96),
+            (F 'setup_big_game-1.bin' 3.99),
+            (F 'setup_big_game-2.bin' 3.99),
+            (F 'setup_big_game-3.bin' 3.99),
+            (F 'setup_big_game-4.bin' 1.20)
+        )
+    }
+
+    It 'fills each disc until the next file does not fit' {
+        $plan = Get-DiscSetPlan $script:Gog (Get-MediaCapacity 'DVD9') 6MB
+        $plan.Ok | Should -BeTrue
+        # 0.96 + 3.99 fits; adding another 3.99 does not, and so on.
+        @($plan.Discs).Count | Should -Be 3
+        @($plan.Discs[0].Files | ForEach-Object { $_.Rel }) |
+            Should -Be @('setup_big_game.exe', 'setup_big_game-1.bin')
+    }
+
+    It 'keeps the files in the order they were given' {
+        # A cleverer packing would scatter an installer and its parts for no
+        # reason anybody could follow.
+        $plan = Get-DiscSetPlan $script:Gog (Get-MediaCapacity 'DVD5') 6MB
+        $flat = @($plan.Discs | ForEach-Object { $_.Files } | ForEach-Object { $_.Rel })
+        $flat | Should -Be @($script:Gog | ForEach-Object { $_.Rel })
+    }
+
+    It 'puts every file on exactly one disc' {
+        $plan = Get-DiscSetPlan $script:Gog (Get-MediaCapacity 'DVD5') 6MB
+        $flat = @($plan.Discs | ForEach-Object { $_.Files } | ForEach-Object { $_.Rel })
+        $flat.Count | Should -Be $script:Gog.Count
+        ($flat | Sort-Object -Unique).Count | Should -Be $script:Gog.Count
+    }
+
+    It 'never overfills a disc' {
+        foreach ($key in 'DVD5', 'DVD9', 'BD25') {
+            $plan = Get-DiscSetPlan $script:Gog (Get-MediaCapacity $key) 6MB
+            foreach ($d in $plan.Discs) {
+                $d.Bytes | Should -BeLessOrEqual $plan.Room -Because "disc $($d.Number) of a $key set"
+            }
+        }
+    }
+
+    It 'numbers the discs from one, with no gaps' {
+        # On a DVD9, not a DVD5. Five files onto DVD5 happen to make five discs
+        # whether the packing works or not, so the DVD5 version of this passed
+        # with the packing deliberately broken and proved nothing.
+        $plan = Get-DiscSetPlan $script:Gog (Get-MediaCapacity 'DVD9') 6MB
+        @($plan.Discs | ForEach-Object { $_.Number }) | Should -Be @(1, 2, 3)
+    }
+
+    It 'refuses a file no disc of that size could hold, and names it' {
+        # The answer is a bigger blank, so the person has to be told which file
+        # decided that rather than just "it will not fit".
+        $plan = Get-DiscSetPlan $script:Gog (Get-MediaCapacity 'CD') 6MB
+        $plan.Ok | Should -BeFalse
+        $plan.Why | Should -Match 'setup_big_game\.exe'
+        $plan.Why | Should -Match 'larger disc'
+        @($plan.Discs).Count | Should -Be 0
+    }
+
+    It 'counts the room the menu and artwork take' {
+        # Same payload, same blank, more overhead: it has to need more discs.
+        # Both fit the room on their own either way, so the only thing that can
+        # change the disc count is the overhead.
+        $one = @((F 'a.bin' 2.0), (F 'b.bin' 2.2))
+        $tight = Get-DiscSetPlan $one (Get-MediaCapacity 'DVD5') 0
+        $loose = Get-DiscSetPlan $one (Get-MediaCapacity 'DVD5') 400MB
+        @($tight.Discs).Count | Should -Be 1
+        @($loose.Discs).Count | Should -Be 2
+    }
+
+    It 'says so rather than dividing by nothing when there is no room at all' {
+        $plan = Get-DiscSetPlan $script:Gog (Get-MediaCapacity 'CD') 5GB
+        $plan.Ok | Should -BeFalse
+        $plan.Why | Should -Match 'no room'
+    }
+
+    It 'handles a payload that needs only one disc, and an empty one' {
+        # One disc is a plan, not a set. Whoever asked decides that.
+        $plan = Get-DiscSetPlan $script:Gog (Get-MediaCapacity 'BD25') 6MB
+        $plan.Ok | Should -BeTrue
+        @($plan.Discs).Count | Should -Be 1
+        $empty = Get-DiscSetPlan @() (Get-MediaCapacity 'DVD5') 6MB
+        $empty.Ok | Should -BeTrue
+        @($empty.Discs).Count | Should -Be 0
+    }
+}
+
+Describe 'The file that tells you what the whole set holds' -Tag 'Unit' {
+
+    # The same file goes on every disc, so any disc can say what the set is,
+    # what is on this one, what is still missing and whether the folder somebody
+    # copied the discs into is complete. The folder is the only state there is:
+    # nothing is remembered between sessions anywhere else.
+
+    BeforeAll {
+        $script:Entries = @(
+            @{ Disc = 1; Rel = 'setup_game.exe';   Bytes = [double]1000; Sha256 = ('a' * 64) }
+            @{ Disc = 1; Rel = 'docs\manual.pdf';  Bytes = [double]2000; Sha256 = ('b' * 64) }
+            @{ Disc = 2; Rel = 'setup_game-1.bin'; Bytes = [double]3000; Sha256 = ('c' * 64) }
+        )
+        $script:Man = New-DiscSetManifest $script:Entries 'BIG GAME' 2 2
+    }
+
+    It 'says which disc this is, and how many there are' {
+        $script:Man | Should -Match 'BIG GAME'
+        $script:Man | Should -Match 'disc 2 of 2'
+    }
+
+    It 'says plainly that this disc cannot install the game' {
+        # The old disc sets labelled discs D1 and D2 as though one continued the
+        # other, which described a relationship that did not exist. This one
+        # really is part of a set, and has to say what that costs.
+        $script:Man | Should -Match 'cannot install the game on its own'
+        $script:Man | Should -Match 'never from a disc'
+    }
+
+    It 'lists every file in the set, not just the ones on this disc' {
+        foreach ($e in $script:Entries) {
+            $leaf = Split-Path $e.Rel -Leaf
+            $script:Man | Should -Match ([regex]::Escape($leaf))
+        }
+    }
+
+    It 'separates folders with a forward slash, like the checksum list' {
+        $script:Man | Should -Match 'docs/manual\.pdf'
+        $script:Man | Should -Not -Match ([regex]::Escape('docs' + [char]92 + 'manual'))
+    }
+
+    It 'can be read back to the same answer it was written from' {
+        # The machine-readable half, parsed the way the menu will parse it.
+        $rows = @()
+        foreach ($line in ($script:Man -split "`r`n")) {
+            if ($line -notmatch '^[0-9]') { continue }
+            $d, $h, $f = $line -split ' +', 3
+            $rows += @{ Disc = [int]$d; Sha256 = $h; Rel = $f.Substring(1) }
+        }
+        $rows.Count | Should -Be $script:Entries.Count
+        for ($i = 0; $i -lt $rows.Count; $i++) {
+            $rows[$i].Disc | Should -Be $script:Entries[$i].Disc
+            $rows[$i].Sha256 | Should -Be $script:Entries[$i].Sha256
+        }
+    }
+
+    It 'is plain ASCII, so it opens anywhere' {
+        [int[]][char[]]$script:Man | Where-Object { $_ -gt 127 } | Should -BeNullOrEmpty
+    }
+
+    It 'is a name the disc owns' {
+        Get-DiscSetFileName | Should -Be 'Disc set.txt'
+    }
+}
+
+Describe 'Checking the folder the discs were copied into' -Tag 'Unit' {
+
+    BeforeAll {
+        $script:RestDir = Join-Path $script:Sandbox 'restore'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:RestDir 'docs') | Out-Null
+        Set-Content (Join-Path $script:RestDir 'setup_game.exe') 'one' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:RestDir 'docs\manual.pdf') 'two' -Encoding Ascii -NoNewline
+        $script:Want = @(
+            @{ Disc = 1; Rel = 'setup_game.exe'; Bytes = [double]3
+               Sha256 = (Get-FileSha256 (Join-Path $script:RestDir 'setup_game.exe')) }
+            @{ Disc = 1; Rel = 'docs/manual.pdf'; Bytes = [double]3
+               Sha256 = (Get-FileSha256 (Join-Path $script:RestDir 'docs\manual.pdf')) }
+            @{ Disc = 2; Rel = 'setup_game-1.bin'; Bytes = [double]3; Sha256 = ('c' * 64) }
+        )
+    }
+
+    It 'knows which discs are still needed' {
+        $r = Test-DiscSetRestore $script:RestDir $script:Want
+        $r.Complete | Should -BeFalse
+        $r.Ok | Should -Be 2
+        @($r.Missing).Count | Should -Be 1
+        $r.DiscsNeeded | Should -Be @(2)
+    }
+
+    It 'says complete only when every file is there and right' {
+        $all = @($script:Want[0], $script:Want[1])
+        (Test-DiscSetRestore $script:RestDir $all).Complete | Should -BeTrue
+    }
+
+    It 'calls a file that changed damaged rather than missing' {
+        # A disc that copied badly is a different problem from a disc nobody has
+        # put in yet, and it needs a different sentence.
+        $bent = @(@{ Disc = 3; Rel = 'setup_game.exe'; Bytes = [double]3; Sha256 = ('d' * 64) })
+        $r = Test-DiscSetRestore $script:RestDir $bent
+        $r.Complete | Should -BeFalse
+        @($r.Damaged).Count | Should -Be 1
+        @($r.Missing).Count | Should -Be 0
+        $r.DiscsNeeded | Should -Be @(3)
+    }
+}
+
+
+Describe 'The volume id of a disc that belongs to a set' -Tag 'Unit' {
+
+    # The ISO9660 volume identifier is sixteen characters. Truncating a finished
+    # "LONG NAME D2" at sixteen takes the number off the end, and then every
+    # disc in the set carries the same volume id, so Windows shows three
+    # identical drives and nothing can tell them apart. The disc sets DiscWright
+    # built in 2026 and removed had this handled; the fix is recovered here from
+    # the deleted version rather than rediscovered the hard way.
+
+    BeforeAll {
+        $script:LongName = 'The Witcher Enhanced Edition Directors Cut'
+    }
+
+    It 'gives every disc in a set a different id, even for a long name' {
+        $ids = 1..3 | ForEach-Object { Get-VolumeLabel $script:LongName $_ 3 }
+        @($ids | Sort-Object -Unique).Count | Should -Be 3
+    }
+
+    It 'keeps every one of them inside the sixteen characters' {
+        foreach ($n in 1..9) {
+            (Get-VolumeLabel $script:LongName $n 9).Length | Should -BeLessOrEqual 16
+        }
+    }
+
+    It 'keeps the number, cutting the name instead' {
+        # The number is what makes the ids different, so it is the part that
+        # cannot be the one that gets cut.
+        foreach ($n in 1..3) {
+            Get-VolumeLabel $script:LongName $n 3 | Should -Match "_D$n$"
+        }
+    }
+
+    It 'leaves a single disc exactly as it was' {
+        # Everything that is not a set must come out byte for byte the same, or
+        # rebuilding an old project would produce a differently named disc.
+        Get-VolumeLabel $script:LongName | Should -Be 'The_Witcher_Enha'
+        Get-VolumeLabel 'ALPHA' | Should -Be 'ALPHA'
+        Get-VolumeLabel '' | Should -Be 'DISC'
+    }
+
+    It 'treats a set of one as not a set' {
+        Get-VolumeLabel $script:LongName 1 1 | Should -Be (Get-VolumeLabel $script:LongName)
+    }
+
+    It 'still folds anything that is not a letter or a digit' {
+        Get-VolumeLabel 'Tom Clancy: Splinter Cell!' 2 3 | Should -Match '^[A-Za-z0-9_]+$'
+    }
+
+    It 'does not leave a trailing underscore where the cut landed on a space' {
+        # 'THE_WITCHER_ENH_' was the bug this guards, and a set has to keep that
+        # fixed as well: the underscore is trimmed before the number goes on.
+        foreach ($n in 1..3) {
+            Get-VolumeLabel $script:LongName $n 3 | Should -Not -Match '__D[0-9]+$'
+        }
+    }
+}
