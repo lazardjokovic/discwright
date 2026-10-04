@@ -654,6 +654,102 @@ function Test-DiscSetRestore([string]$folder, [array]$entries) {
               Ok = $ok; Missing = @($missing); Damaged = @($damaged); DiscsNeeded = $need }
 }
 
+# What each disc in the set gets built with.
+#
+# Separate from the building so the decisions can be checked without writing
+# gigabytes: every disc's label, volume id, staging folder, file list and set
+# file are worked out here, and the function that follows only calls the
+# ordinary single-disc build once per disc. A set cannot drift away from a
+# single disc, because it IS the single-disc build, run N times.
+function Get-DiscSetSteps([hashtable]$s, $plan, [array]$entries) {
+    $n = @($plan.Discs).Count
+    $steps = @()
+    foreach ($d in $plan.Discs) {
+        # Full paths, because that is what the staging copy has in hand when it
+        # asks whether this file belongs on this disc.
+        $only = @{}
+        foreach ($f in $d.Files) { $only[[string]$f.Path] = $true }
+        # A copy per disc. The build fills in defaults on the hashtable it is
+        # given - a missing icon, a missing background - and without a copy
+        # disc 1's answers would quietly become disc 2's.
+        $ds = @{}
+        foreach ($k in $s.Keys) { $ds[$k] = $s[$k] }
+        # " D2" on the end of the label gives this disc its own ISO filename,
+        # its own icon filename and its own title, all of which already derive
+        # from the label. The icon filename matters more than it looks: Explorer
+        # caches disc icons by name, so two discs sharing one would show the
+        # first one's face for the second one's disc.
+        $ds.Label       = '{0} D{1}' -f $s.Label, $d.Number
+        $ds.VolumeLabel = Get-VolumeLabel $s.Label $d.Number $n
+        $ds.StageDir    = Join-Path $s.OutDir ('disc D{0}' -f $d.Number)
+        $ds.OnlyFiles   = $only
+        $ds.SetManifest = New-DiscSetManifest $entries $s.Label $d.Number $n
+        $ds.DiscNum     = $d.Number
+        $ds.DiscOf      = $n
+        $steps += , $ds
+    }
+    return @($steps)
+}
+
+# Build every disc in the set.
+function Invoke-BuildDiscSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progress = $null) {
+    # One game. Which games belong together on a disc is curation: a compilation
+    # is something a person assembles, and the disc sets DiscWright built in 2026
+    # were removed for making that call themselves, packing games in whatever
+    # order the rows happened to sit in. A set splits one game that will not fit.
+    # It does not assemble a compilation.
+    $games = @($s.Games)
+    if ($games.Count -ne 1) {
+        return @{ Ok = $false; Isos = @(); Discs = 0
+                  Why = 'A disc set holds one game. Which games belong together on a disc is a decision for the person making it.' }
+    }
+
+    $cap = Get-MediaCapacity $s.MediaKey
+    if ($cap -le 0) {
+        return @{ Ok = $false; Isos = @(); Discs = 0
+                  Why = 'Choose the disc you are going to burn, so the set can be worked out for that size.' }
+    }
+
+    # Sizes and destinations from the same helper the staging copy uses, so the
+    # plan is made of the paths that will actually be copied.
+    $g = $games[0]
+    $files = @()
+    foreach ($f in @($g.Files)) {
+        $files += , @{ Rel = (Get-EntryFileRelative $g $f); Bytes = [double]$f.Length; Path = [string]$f.FullName }
+    }
+    if (-not $files.Count) {
+        return @{ Ok = $false; Isos = @(); Discs = 0; Why = 'That game has no files to put on a disc.' }
+    }
+
+    $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s)
+    if (-not $plan.Ok) { return @{ Ok = $false; Isos = @(); Discs = 0; Why = $plan.Why } }
+
+    $n = @($plan.Discs).Count
+    & $log ("This game needs {0} discs at {1}." -f $n, $s.MediaKey)
+
+    # Hashed once, here, rather than per disc: every disc carries the list for
+    # the whole set, so the same numbers are needed N times and reading the
+    # game N times to get them would be the slowest part of the build.
+    & $log 'Hashing the game so every disc can list the whole set ...'
+    $entries = @()
+    foreach ($d in $plan.Discs) {
+        foreach ($f in $d.Files) {
+            $entries += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes
+                             Sha256 = (Get-FileSha256 $f.Path) }
+        }
+    }
+
+    $isos = @()
+    foreach ($ds in (Get-DiscSetSteps $s $plan $entries)) {
+        & $log ''
+        & $log ('--- disc {0} of {1}: {2} ---' -f $ds.DiscNum, $n, $ds.VolumeLabel)
+        $isos += , (Invoke-Build $ds $log $progress)
+    }
+    & $log ''
+    & $log ("The set is {0} discs. Burn each ISO to its own disc, and label them." -f $n)
+    return @{ Ok = $true; Why = ''; Isos = @($isos); Discs = $n }
+}
+
 # Total bytes of a mixed list of files and folders.
 # The largest single file the ISO9660 and Joliet filesystems can be given here.
 #
@@ -2782,7 +2878,9 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
         $s.BgPath = Get-DefaultArt -Kind Background
         & $log 'No background chosen, using the built-in one.'
     }
-    $stage = Join-Path $s.OutDir 'disc'
+    # A disc in a set stages into its own folder. Sharing one would leave only
+    # the last disc standing, with nothing to inspect for the others.
+    $stage = if ($s.StageDir) { [string]$s.StageDir } else { Join-Path $s.OutDir 'disc' }
     $tmpKeep = $null
     # Names the disc's own content puts at the root, filled in while copying and
     # read by the stale-icon cleanup at the end.
@@ -3136,6 +3234,13 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     # would be far worse than one that is simply not readable on Windows XP.
     # Last, because it hashes what is on the disc and everything has to be on
     # it by now: the games, the menu, the icon, the launcher.
+    # Before the checksum list, so the list covers this file too.
+    if ($s.SetManifest) {
+        [IO.File]::WriteAllText((Join-Path $stage (Get-DiscSetFileName)), [string]$s.SetManifest,
+                                (New-Object System.Text.ASCIIEncoding))
+        & $log "Disc set file written: $(Get-DiscSetFileName)"
+    }
+
     if ($s.Checksums) {
         & $log 'Hashing the disc ...'
         $null = New-ChecksumManifest $stage $s.Label $log
