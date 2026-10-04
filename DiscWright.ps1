@@ -1949,10 +1949,15 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
      buttons, and setPanel measures it, so two lines move the panel rather than
      losing half a name. */
   #cap{width:250px;margin:0 0 10px 0;font-family:'Segoe UI',Arial;}
+  /* Not the button fill. The buttons are #0a1519 and this panel is not one,
+     so it must not look like one: the GIF recorder finds the menu's buttons
+     by scanning three columns for that exact flat colour and found this box
+     as a fourth button. A person would make the same mistake, which is the
+     better reason to change it. */
   /* The disc-set note, in the panel above the buttons. No flexbox and no
      border-radius: the menu runs in IE7 mode, which has neither. */
   .setinfo{width:250px;margin:0 0 12px 0;font-family:'Segoe UI',Arial;font-size:12px;
-    line-height:16px;color:#cfdce3;background:#0a1519;border:1px solid #16545a;
+    line-height:16px;color:#cfdce3;background:#0d3038;border:1px solid #16545a;
     padding:8px;word-wrap:break-word;}
   #cap .capn{display:block;font-size:17px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
     color:#dfe9ee;white-space:normal;overflow:hidden;}
