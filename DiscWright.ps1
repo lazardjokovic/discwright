@@ -548,10 +548,11 @@ function Get-DiscSetFileName { 'Disc set.txt' }
 # installer and its parts across the set for no reason a person could follow.
 # Filling each disc until the next file does not fit is a rule that can be
 # explained in one sentence and checked by eye.
-function Get-DiscSetPlan([array]$files, [double]$capacityBytes, [double]$overheadBytes = 0) {
+function Get-DiscSetPlan([array]$files, [double]$capacityBytes, [double]$overheadBytes = 0,
+                         [double]$extraBytes = 0) {
     $room = $capacityBytes - $overheadBytes
     if ($room -le 0) {
-        return @{ Ok = $false; Discs = @(); Room = $room
+        return @{ Ok = $false; Discs = @(); Room = $room; ExtrasDisc = 0
                   Why = 'A disc that size has no room left once the menu and artwork are on it.' }
     }
     $discs = @()
@@ -563,7 +564,7 @@ function Get-DiscSetPlan([array]$files, [double]$capacityBytes, [double]$overhea
         # and the person needs to know which file decided that.
         if ($size -gt $room) {
             $why = '{0} is {1:N2} GB and a disc this size leaves {2:N2} GB for files. Choose a larger disc.'
-            return @{ Ok = $false; Discs = @(); Room = $room
+            return @{ Ok = $false; Discs = @(); Room = $room; ExtrasDisc = 0
                       Why = ($why -f $f.Rel, ($size / 1GB), ($room / 1GB)) }
         }
         if ($cur.Count -and ($curBytes + $size) -gt $room) {
@@ -574,7 +575,31 @@ function Get-DiscSetPlan([array]$files, [double]$capacityBytes, [double]$overhea
         $curBytes += $size
     }
     if ($cur.Count) { $discs += , @{ Number = ($discs.Count + 1); Files = @($cur); Bytes = $curBytes } }
-    return @{ Ok = $true; Why = ''; Discs = @($discs); Room = $room }
+
+    # The manual, the extras and the loose files go on ONE disc in the set,
+    # not on all of them. The music is different and rides every disc, because
+    # every disc has its own menu to play it.
+    #
+    # The last disc rather than the first, because the last disc is where the
+    # slack is: first fit fills every disc before it to the brim, so putting
+    # them at the front would push a file onto a disc that did not need to
+    # exist. If they do not fit even there, they get a disc of their own.
+    $extrasDisc = 0
+    if ($extraBytes -gt 0) {
+        if ($extraBytes -gt $room) {
+            $why = 'The manual and extras come to {0:N2} GB, and a disc this size holds {1:N2} GB. Leave some of them off, or choose a larger disc.'
+            return @{ Ok = $false; Discs = @(); Room = $room; ExtrasDisc = 0
+                      Why = ($why -f ($extraBytes / 1GB), ($room / 1GB)) }
+        }
+        $last = $(if ($discs.Count) { $discs[$discs.Count - 1] } else { $null })
+        if ($last -and (($last.Bytes + $extraBytes) -le $room)) {
+            $extrasDisc = [int]$last.Number
+        } else {
+            $discs += , @{ Number = ($discs.Count + 1); Files = @(); Bytes = [double]0 }
+            $extrasDisc = $discs.Count
+        }
+    }
+    return @{ Ok = $true; Why = ''; Discs = @($discs); Room = $room; ExtrasDisc = $extrasDisc }
 }
 
 # The same file on every disc in the set, so any disc can answer every question:
@@ -688,6 +713,12 @@ function Get-DiscSetSteps([hashtable]$s, $plan, [array]$entries) {
         $ds.SetManifest = New-DiscSetManifest $entries $s.Label $d.Number $n
         $ds.DiscNum     = $d.Number
         $ds.DiscOf      = $n
+        # Every other disc in the set gets none of them. Without this each
+        # disc would carry its own copy of a manual and an extras folder that
+        # the arithmetic only ever counted once.
+        if ($d.Number -ne [int]$plan.ExtrasDisc) {
+            $ds.ManualPath = $null; $ds.ExtrasPath = $null; $ds.ExtraItems = @()
+        }
         $steps += , $ds
     }
     return @($steps)
@@ -723,7 +754,16 @@ function Invoke-BuildDiscSet([hashtable]$s, [scriptblock]$log, [scriptblock]$pro
         return @{ Ok = $false; Isos = @(); Discs = 0; Why = 'That game has no files to put on a disc.' }
     }
 
-    $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s)
+    # The manual, the extras and the loose files, measured the same way the
+    # form measures them for its own advice line. The music is not here: it is
+    # already in the overhead, because every disc has a menu that plays it.
+    $side = @()
+    $side += @($s.ExtraItems)
+    if ($s.ManualPath) { $side += [string]$s.ManualPath }
+    if ($s.ExtrasPath) { $side += [string]$s.ExtrasPath }
+    $extraBytes = [double](Get-ItemsSize $side)
+
+    $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s) $extraBytes
     if (-not $plan.Ok) { return @{ Ok = $false; Isos = @(); Discs = 0; Why = $plan.Why } }
 
     $n = @($plan.Discs).Count

@@ -7110,3 +7110,97 @@ Describe 'The check the set file tells people to paste' -Tag 'Unit' {
         ($out -join '|') | Should -Match 'DAMAGED \(disc 1\)'
     }
 }
+
+
+Describe 'Where the manual and the extras go in a set' -Tag 'Unit' {
+
+    # The music rides every disc, because every disc has its own menu to play
+    # it, and it is already counted in the overhead. The manual, the extras and
+    # the loose files are different: one copy for the set.
+    #
+    # The form has always treated them as overhead, and the comment on that code
+    # says the "on every disc" and "on disc 1 alone" split was removed as a
+    # distinction only a set could have. A set exists again, so it is back - on
+    # the LAST disc, where first fit leaves the slack.
+
+    BeforeAll {
+        function X([string]$rel, [double]$gb) { @{ Rel = $rel; Bytes = [double]($gb * 1GB); Path = "C:\src\$rel" } }
+        $script:Pay = @((X 'setup.exe' 0.96), (X 'p1.bin' 3.99), (X 'p2.bin' 3.99),
+                        (X 'p3.bin' 3.99), (X 'p4.bin' 1.20))
+        $script:Cap = Get-MediaCapacity 'DVD9'
+    }
+
+    It 'says nobody carries them when there are none' {
+        (Get-DiscSetPlan $script:Pay $script:Cap 6MB 0).ExtrasDisc | Should -Be 0
+    }
+
+    It 'puts them on the last disc when they fit the slack there' {
+        $p = Get-DiscSetPlan $script:Pay $script:Cap 6MB 1GB
+        @($p.Discs).Count | Should -Be 3
+        $p.ExtrasDisc | Should -Be 3
+    }
+
+    It 'does not add a disc it did not need' {
+        # The whole reason for choosing the last disc over the first.
+        $bare = Get-DiscSetPlan $script:Pay $script:Cap 6MB 0
+        $with = Get-DiscSetPlan $script:Pay $script:Cap 6MB 1GB
+        @($with.Discs).Count | Should -Be @($bare.Discs).Count
+    }
+
+    It 'gives them a disc of their own when they do not fit the slack' {
+        $p = Get-DiscSetPlan $script:Pay $script:Cap 6MB 4GB
+        @($p.Discs).Count | Should -Be 4
+        $p.ExtrasDisc | Should -Be 4
+        @($p.Discs[3].Files).Count | Should -Be 0
+    }
+
+    It 'refuses extras no disc could hold, and says what they came to' {
+        $p = Get-DiscSetPlan $script:Pay $script:Cap 6MB 9GB
+        $p.Ok | Should -BeFalse
+        $p.Why | Should -Match 'manual and extras'
+        $p.Why | Should -Match 'larger disc'
+    }
+
+    It 'still answers with a disc when there is nothing but extras' {
+        $p = Get-DiscSetPlan @() $script:Cap 6MB 1GB
+        $p.Ok | Should -BeTrue
+        @($p.Discs).Count | Should -Be 1
+        $p.ExtrasDisc | Should -Be 1
+    }
+
+    It 'leaves them off every disc except the one that carries them' {
+        $p = Get-DiscSetPlan $script:Pay $script:Cap 6MB 1GB
+        $ent = @()
+        foreach ($d in $p.Discs) {
+            foreach ($f in $d.Files) {
+                $ent += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes; Sha256 = ('a' * 64) }
+            }
+        }
+        $s = @{ Label = 'Big Game'; OutDir = 'C:\out'; Games = @(); MediaKey = 'DVD9'
+                ManualPath = 'C:\art\manual.pdf'; ExtrasPath = 'C:\art\extras'
+                ExtraItems = @('C:\art\readme.txt'); IconPath = 'C:\art\i.png'; BgPath = 'C:\art\b.png' }
+        $steps = @(Get-DiscSetSteps $s $p $ent)
+        for ($i = 0; $i -lt $steps.Count; $i++) {
+            if (($i + 1) -eq $p.ExtrasDisc) {
+                $steps[$i].ManualPath | Should -Be 'C:\art\manual.pdf'
+                $steps[$i].ExtrasPath | Should -Be 'C:\art\extras'
+                @($steps[$i].ExtraItems).Count | Should -Be 1
+            } else {
+                $steps[$i].ManualPath | Should -BeNullOrEmpty
+                $steps[$i].ExtrasPath | Should -BeNullOrEmpty
+                @($steps[$i].ExtraItems).Count | Should -Be 0
+            }
+        }
+    }
+
+    It 'keeps the music on every disc, because every disc has a menu' {
+        $s = @{ Label = 'Big Game'; OutDir = 'C:\out'; Games = @(); MediaKey = 'DVD9'
+                MusicFile = 'C:\art\tune.mp3'; IconPath = 'C:\art\i.png'; BgPath = 'C:\art\b.png' }
+        $p = Get-DiscSetPlan $script:Pay $script:Cap 6MB 0
+        $ent = @()
+        foreach ($d in $p.Discs) { foreach ($f in $d.Files) { $ent += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes; Sha256 = ('a' * 64) } } }
+        foreach ($st in (Get-DiscSetSteps $s $p $ent)) {
+            $st.MusicFile | Should -Be 'C:\art\tune.mp3'
+        }
+    }
+}
