@@ -2345,12 +2345,26 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     return "Run the installer from "+dir;
   }
   // One sentence about where the set stands, for the panel.
+  // One sentence about where the set stands, for the panel.
+  //
+  // It ends on what to do next, not on a fact. "Still needed: disc 2" is a
+  // status line and leaves somebody to work out that they should go and get
+  // disc 2; "Now put disc 2 in" is the same information as an instruction,
+  // which is what a person standing at a drive with a disc in their hand
+  // actually wants.
   function setSentence(s){
+    // Not "ready to install": a folder of game files has nothing to install,
+    // and the button below already says whether it installs, plays or opens.
+    // Saying it twice is how one of them comes to be wrong.
     if(!s.total) return "This disc says it is part of a set, but its list of files is missing.";
     if(s.complete) return "All "+s.total+" files are here. The game is ready in that folder.";
-    var m=s.ok+" of "+s.total+" files are in that folder.";
-    if(s.bad>0) m+=" "+s.bad+" copied badly.";
-    if(s.need.length) m+=" Still needed: disc "+s.need+".";
+    var m=s.ok+" of "+s.total+" files copied so far.";
+    if(s.bad>0) m+=" "+s.bad+" copied badly and will be done again.";
+    if(s.need.length){
+      var list=s.need.split(", ");
+      if(list.length==1) m+=" Now put disc "+list[0]+" in.";
+      else m+=" Still to come: discs "+s.need+".";
+    }
     return m;
   }
   // The rows that belong to the disc in the drive.
@@ -5462,14 +5476,21 @@ $txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Upda
 # Returns nothing. Every exit is a sentence in the log, because a set half
 # burned is a thing somebody will come back to tomorrow needing to know where
 # they stopped.
-function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent) {
+# $picks and $burnerPath are here so this can be RUN by a test. Without them it
+# finds its burner from $PSScriptRoot, which is the application's folder and not
+# anywhere a test can reach, so every test of this would have been a test of its
+# source text rather than of what it does. Production passes neither.
+function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks = $null, [string]$burnerPath = '') {
     $n = @($isos).Count
     if ($n -lt 2) { return }
 
-    $burner = Join-Path $PSScriptRoot 'burn\DiscWright.Burn.ps1'
-    if (-not (Test-Path $burner)) { & $log 'The burning files are not installed, so the discs were not offered.'; return }
-    . $burner
-    $picks = @(Get-IsoHandoffs)
+    if ($null -eq $picks) {
+        $burner = $(if ($burnerPath) { $burnerPath } else { Join-Path $PSScriptRoot ('burn' + [char]92 + 'DiscWright.Burn.ps1') })
+        if (-not (Test-Path $burner)) { & $log 'The burning files are not installed, so the discs were not offered.'; return }
+        . $burner
+        $picks = @(Get-IsoHandoffs)
+    }
+    $picks = @($picks)
     if (-not $picks.Count) {
         & $log 'Nothing on this machine is registered to open an ISO, so the discs were not offered.'
         return

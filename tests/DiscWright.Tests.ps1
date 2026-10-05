@@ -8093,3 +8093,114 @@ Describe 'Walking a set to the burner, one disc at a time' -Tag 'Unit' {
         $script:WalkText | Should -Match 'Burn each one to its own disc, in order, and label them'
     }
 }
+
+
+Describe 'Running the burn walk, not just reading it' -Tag 'Unit' {
+
+    # The nine tests above this one read the source. That is a weak way to test
+    # anything, and it was the only way available while the walk found its
+    # burner from $PSScriptRoot. It takes that as an argument now, so this runs
+    # it for real: the questions it asks, in order, and what it hands over.
+    #
+    # The dialogs and the handoff are stubs, because the point is the sequence,
+    # not whether Windows can start Nero.
+
+    BeforeAll {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+        $fn = ($ast.FindAll({ param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $n.Name -eq 'Invoke-SetBurnWalk' }, $false) | Select-Object -First 1)
+        . ([scriptblock]::Create($fn.Extent.Text))
+
+        # Answers are handed out in order, so a test says what the person did.
+        function Show-Confirm([string]$msg, [string]$title = 'DiscWright') {
+            $script:Asked += , $msg
+            if ($script:Answers.Count -eq 0) { return $false }
+            $a = $script:Answers[0]
+            $script:Answers = @($script:Answers | Select-Object -Skip 1)
+            return $a
+        }
+        function Show-Warn([string]$m) { $script:Warned += , $m }
+        function Select-IsoHandoff($picks, $parent) {
+            $script:Chose++
+            return @{ Name = 'Fake Burner'; What = 'opens an ISO' }
+        }
+        function Start-IsoHandoff($chosen, [string]$iso) { $script:Handed += , $iso }
+
+        function Walk([int]$discs, [bool[]]$answers) {
+            $script:Asked = @(); $script:Handed = @(); $script:Warned = @(); $script:Chose = 0
+            $script:Lines = @()
+            $script:Answers = @($answers)
+            $isos = @(1..$discs | ForEach-Object { "D:\out\GAME D$_.iso" })
+            Invoke-SetBurnWalk $isos { param($m) $script:Lines += , $m } $null `
+                               @(@{ Name = 'Fake Burner'; What = 'opens an ISO' })
+        }
+    }
+
+    It 'asks nothing at all for a single disc' {
+        # One disc is not a set, and must not grow a burning interview.
+        Walk 1 @($true)
+        @($script:Asked).Count | Should -Be 0
+        @($script:Handed).Count | Should -Be 0
+    }
+
+    It 'hands every disc over, in order, when the answer is always yes' {
+        # Three discs: the opening question, then per disc one "put a blank in",
+        # with a "that one done?" between them. Seven questions, three handoffs.
+        Walk 3 @($true, $true, $true, $true, $true, $true, $true)
+        $script:Handed | Should -Be @('D:\out\GAME D1.iso', 'D:\out\GAME D2.iso', 'D:\out\GAME D3.iso')
+        $script:Chose | Should -Be 1 -Because 'the program is chosen once, not once per disc'
+    }
+
+    It 'says which disc each question is about' {
+        Walk 2 @($true, $true, $true, $true)
+        ($script:Asked -join '|') | Should -Match 'Disc 1 of 2'
+        ($script:Asked -join '|') | Should -Match 'Disc 2 of 2'
+        ($script:Asked -join '|') | Should -Match 'GAME D1\.iso'
+        ($script:Asked -join '|') | Should -Match 'GAME D2\.iso'
+    }
+
+    It 'does not ask whether the last disc is done' {
+        # There is nothing after it, so asking would be a question with no point.
+        Walk 2 @($true, $true, $true, $true)
+        ($script:Asked -join '|') | Should -Match 'Ready for disc 2 of 2'
+        ($script:Asked -join '|') | Should -Not -Match 'Ready for disc 3'
+    }
+
+    It 'hands over nothing when the opening question is declined' {
+        Walk 3 @($false)
+        @($script:Handed).Count | Should -Be 0
+        ($script:Lines -join '|') | Should -Match 'Burn each one to its own disc, in order'
+    }
+
+    It 'stops where it was told, and the log says which disc' {
+        # Yes to the opening question, yes to disc 1, then no when asked whether
+        # disc 1 is done. One disc handed over, and a line saying so.
+        Walk 3 @($true, $true, $false)
+        @($script:Handed).Count | Should -Be 1
+        ($script:Lines -join '|') | Should -Match 'Stopped after disc 1 of 3'
+        ($script:Lines -join '|') | Should -Match 'can be burned later'
+    }
+
+    It 'stops before handing over when a disc is declined' {
+        Walk 3 @($true, $true, $true, $false)
+        @($script:Handed).Count | Should -Be 1
+        ($script:Lines -join '|') | Should -Match 'Stopped at disc 2 of 3'
+    }
+
+    It 'says so when nothing on the machine opens an ISO' {
+        $script:Asked = @(); $script:Handed = @(); $script:Lines = @(); $script:Answers = @($true)
+        Invoke-SetBurnWalk @('D:\a.iso', 'D:\b.iso') { param($m) $script:Lines += , $m } $null @()
+        @($script:Asked).Count | Should -Be 0
+        ($script:Lines -join '|') | Should -Match 'Nothing on this machine is registered to open an ISO'
+    }
+
+    It 'records every disc it handed over, by number' {
+        # The log is what somebody reads tomorrow to find where they stopped.
+        Walk 2 @($true, $true, $true, $true)
+        ($script:Lines -join '|') | Should -Match 'Handed disc 1 of 2 to Fake Burner'
+        ($script:Lines -join '|') | Should -Match 'Handed disc 2 of 2 to Fake Burner'
+        ($script:Lines -join '|') | Should -Match 'All 2 discs have been handed over'
+    }
+}
