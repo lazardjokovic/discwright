@@ -146,11 +146,17 @@ built.
 - **Anything that removes DRM.** GOG installers are DRM-free by design — that is the only
   reason a tool like this can exist. DiscWright circumvents nothing and never will.
 
-### Splitting one game across a set
+### Installing a game straight off a set of discs
 
-This sat under *Next* for a while and was dropped in August 2026 after the research came
-back. It was tested properly rather than abandoned on a guess, so here is what was found
-and why the answer is no.
+**Splitting one game across a set was built, in October 2026.** It is not what this
+entry refuses, and the distinction is the whole reason it could be built: a disc set is
+copied back into one folder on a hard drive first, and the installer runs from there
+with every part present. Nothing is ever installed from a disc.
+
+What stays refused is *spanning*: running GOG's installer off the discs and swapping
+them as it asks. That sat under *Next* for a while and was dropped in August 2026 after
+the research came back. It was tested properly rather than abandoned on a guess, so
+here is what was found and why the answer to that is still no.
 
 **It works, for some games.** GOG ships two packaging formats, and the first eight bytes
 of the first `.bin` tell them apart: `idska32` is Inno Setup's own disk slices, `Rar!` is
@@ -190,15 +196,19 @@ RAR is **unknown** — it cannot be determined from GOG's public metadata, which
 that game's own part sizes wrongly. So per game it would be a coin flip that cannot be
 sized in advance.
 
-**What refusing costs is small.** The fallback is a bigger blank. BD-R XL holds 100 GB;
-of the games measured only Baldur's Gate 3 at 137 GB exceeds it. DiscWright already
-refuses a set by naming the game that will not fit, which stays the behaviour.
+**What refusing costs is now nothing.** It used to be a bigger blank. Since disc sets
+exist, a game too big for the disc you own is split across as many as it takes and put
+back together by the menu, so the only thing spanning would add is skipping the copy,
+which is the part that does not work.
 
 **What it saves is the interface.** Spanning would have added format detection surfaced
 per game, a continuation-disc menu mode with Install and Play disabled, a screen
 explaining the swap, and format-specific refusal messaging. That is a lot of new surface
 for a feature that applies to few games and works poorly on those. Keeping the app simple
 was the original idea and it outranks this.
+
+A disc set needed the continuation-disc menu mode anyway, with Play and Install
+withheld until every disc is in, so that part exists now and is no longer a cost.
 
 This would be reconsidered if GOG's installers ever asked for slices in order, or if the
 number of swaps became something that could be stated up front.

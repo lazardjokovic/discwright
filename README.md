@@ -106,11 +106,18 @@ the installer list says whether it fits: *fits DVD5 4.7 GB*, or *1.17 GB too big
 DVD9 8.5 GB*. The dropdown annotates every row the same way, so you can see at a glance
 which blank you need.
 
-If it does not fit, remove an entry or pick a larger disc. **DiscWright will not split
-the list across several discs for you.** It used to, and that was a mistake: it packed
-in whatever order the rows happened to sit in, which made a curation decision — which
-games belong together on a disc — that is yours to make, and labelled the results `D1`
-and `D2` as though one continued the other when neither ever needed the other.
+If one game does not fit, DiscWright offers to write it as a **disc set**: as many
+discs as it takes, each carrying a list of the whole set, and a menu on every one of
+them that copies the discs back into a single folder and installs from there. Nothing
+is ever installed from a disc, which is what makes it work. See *A game across several
+discs* below.
+
+Several games are a different question, and the answer there is still no. **DiscWright
+will not pack a list of games across discs for you.** It used to, and that was a
+mistake: it packed in whatever order the rows happened to sit in, which made a curation
+decision, which games belong together on a disc, that is yours to make, and labelled the
+results `D1` and `D2` as though one continued the other when neither ever needed the
+other. A set holds one game.
 
 To make a second disc, reopen the project, swap the games and rebuild. The icon,
 background, music and buttons all carry over, so only the list and the label change.
@@ -118,6 +125,47 @@ background, music and buttons all carry over, so only the list and the label cha
 **A single game bigger than the disc is refused by name.** Spreading one game's `.bin`
 parts across several discs was tested and deliberately not built — see the
 [roadmap](ROADMAP.md) under *Not planned*.
+
+### A game across several discs
+
+A GOG download can run to 14 GB and a DVD holds 4.7. When the game you added will not
+fit the blank you chose, DiscWright works out whether splitting it would help and asks:
+
+> This disc comes to 8.13 GB and a DVD5 4.7 GB holds 4.37 GB. It can be written as a set
+> of 2 discs instead. Write 2 discs?
+
+Saying yes ticks the **disc set** box, so the form shows what is about to happen and the
+project remembers it. You can tick it yourself beforehand instead.
+
+It writes one ISO per disc, then offers to burn them one at a time, in order, handing
+each to whichever program you use. It asks you between discs rather than claiming to
+know when a burn has finished, because it hands the ISO over and gets nothing back.
+
+![Building a two disc set](docs/set-build.gif)
+
+Every disc carries `Disc set.txt`, which lists every file in the **whole** set with its
+disc number, size and SHA-256, and a few lines of PowerShell that check a folder by hand
+on a machine that has never heard of DiscWright.
+
+Put any disc of the set in and its menu offers no Play and no Install, because neither
+can work yet. It says which disc it is, proposes a folder on the drive with the most
+room, and the button says **Copy disc 1 of 2**. After copying it says what to do next:
+*2 of 4 files copied so far. Now put disc 2 in.*
+
+![Putting the set back together](docs/set-restore.gif)
+
+When every file is present and the right size, **Install** appears and runs the
+installer from that folder. For a folder of game files it says **Play**, and **Open
+Folder** when nothing in it was picked to run. Afterwards it will delete the copies, and
+it removes only the files `Disc set.txt` names, so anything else in that folder is left
+alone.
+
+Whole files only. A single file larger than one disc is refused by name rather than cut
+in two: a join has to be byte perfect, the pieces look like broken files to anybody
+browsing the disc, and it is a new way to lose a game.
+
+A set holds one game. Which games belong together on a disc is a decision for the person
+making it.
 
 ## What ends up on the disc
 
@@ -300,12 +348,16 @@ Stated up front rather than discovered later.
 - **AutoPlay has to be allowed.** If you have previously told Windows to "Take no action" for this drive, the menu will not launch on insert. Double-clicking the drive still opens it.
 - **Paths longer than 260 characters** will fail during the copy. PowerShell 5.1 limitation.
 - **One music track** per disc, by design. Manuals are per game.
-- **One game bigger than one disc cannot be split.** Several games are packed across a
-  set happily, but a single installer larger than the disc you picked is refused by
-  name. Spreading one game's `.bin` parts across a set was tested and deliberately not
-  built: the installer asks for parts out of order, a different number of times each run,
-  and keeps going back to discs it has already read — which is not the disc swap it looks
-  like. The [roadmap](ROADMAP.md) records the evidence under *Not planned*. Use a larger
+- **A single file bigger than the disc cannot be split.** One game across several discs
+  is built: DiscWright offers it when the payload will not fit. But it places whole
+  files, so a single file larger than the blank is refused by name, and the answer is a
+  larger blank. GOG splits its own downloads just under 4 GiB, so on a DVD5 and up there
+  is rarely anything to cut.
+- **A game cannot be installed straight off a set of discs.** The discs are copied back
+  into one folder first and the installer runs from there. Swapping discs while the
+  installer asks was tested and deliberately not built: it asks for parts out of order, a
+  different number of times each run, and keeps going back to discs it has already read.
+  The [roadmap](ROADMAP.md) records the evidence.
   blank instead.
 - **Disc labels are limited to what Windows can encode.** AutoRun reads `autorun.inf` in the system ANSI codepage and has no Unicode mode at all, so accented Latin characters are fine but Cyrillic, Greek and CJK are not. DiscWright shows you exactly what This PC will display and asks before building one it cannot represent.
 
