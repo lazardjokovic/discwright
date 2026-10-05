@@ -2536,7 +2536,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // The copy is offered while anything of this disc is still missing from
     // the folder, and the install only once the whole set is there.
     if(s.mineHere<s.mineTotal){
-      h+=btnHtml("btn_SetCopy","install","Copy this disc","setCopy()",
+      // Numbered, so the sequence reads itself: a person who has just put
+      // disc 1 in sees "Copy disc 1 of 2" and knows there is a disc 2 coming
+      // without having to read the paragraph above it.
+      h+=btnHtml("btn_SetCopy","install","Copy disc "+SET.n+" of "+SET.of,"setCopy()",
                  "Copy this disc's share of the game into "+dir);
     }
     if(s.complete){
@@ -5444,6 +5447,129 @@ $txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Upda
 #
 # The ISO is handed over and that is all. Driving another burner's command line
 # would mean knowing every one of them, and getting it wrong costs a disc.
+
+# Hand a set to a burner, one disc at a time, in order.
+#
+# A set is only a set once every disc is burned, and the thing most likely to
+# go wrong is burning them out of order or losing count. So this walks them:
+# disc 1, then ask, disc 2, then ask.
+#
+# It asks rather than detects, and says so. DiscWright hands the ISO to another
+# program and that program says nothing back - there is no way to know a burn
+# finished, or worked. Pretending otherwise would be the one thing worse than
+# asking: a set reported as burned when disc 2 never wrote.
+#
+# Returns nothing. Every exit is a sentence in the log, because a set half
+# burned is a thing somebody will come back to tomorrow needing to know where
+# they stopped.
+function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent) {
+    $n = @($isos).Count
+    if ($n -lt 2) { return }
+
+    $burner = Join-Path $PSScriptRoot 'burn\DiscWright.Burn.ps1'
+    if (-not (Test-Path $burner)) { & $log 'The burning files are not installed, so the discs were not offered.'; return }
+    . $burner
+    $picks = @(Get-IsoHandoffs)
+    if (-not $picks.Count) {
+        & $log 'Nothing on this machine is registered to open an ISO, so the discs were not offered.'
+        return
+    }
+
+    $start = "The set is $n discs." + [Environment]::NewLine + [Environment]::NewLine +
+             'They can be burned one at a time from here, in order.' + [Environment]::NewLine + [Environment]::NewLine +
+             'DiscWright hands each ISO to your burning program and cannot tell when it has' +
+             ' finished, so it will ask you before moving on to the next one.' + [Environment]::NewLine + [Environment]::NewLine +
+             'Burn them now?'
+    if (-not (Show-Confirm $start "Burn $n discs")) {
+        & $log "The $n ISOs are written. Burn each one to its own disc, in order, and label them."
+        return
+    }
+
+    # Chosen once. Being asked which program to use before every disc would be
+    # the kind of help nobody wants.
+    $chosen = Select-IsoHandoff $picks $parent
+    if (-not $chosen) {
+        & $log "Cancelled. The $n ISOs are written and can be burned by hand."
+        return
+    }
+
+    for ($i = 0; $i -lt $n; $i++) {
+        $d = $i + 1
+        $name = Split-Path $isos[$i] -Leaf
+        $ask = "Disc $d of $n" + [Environment]::NewLine + [Environment]::NewLine + $name +
+               [Environment]::NewLine + [Environment]::NewLine +
+               'Put a blank disc in, then press Yes to open it in ' + $chosen.Name + '.'
+        if (-not (Show-Confirm $ask "Disc $d of $n")) {
+            & $log "Stopped at disc $d of $n. The rest are written and can be burned later."
+            return
+        }
+        try {
+            Start-IsoHandoff $chosen $isos[$i]
+            & $log "Handed disc $d of $n to $($chosen.Name): $name"
+        }
+        catch {
+            Show-Warn "$($chosen.Name) could not be started:$([Environment]::NewLine + [Environment]::NewLine)$($_.Exception.Message)"
+            & $log "ERROR: disc $d of $n could not be handed over: $($_.Exception.Message)"
+            return
+        }
+
+        # The wait. Nothing here knows whether that burn worked, so the only
+        # honest thing is to stop and be told.
+        if ($d -lt $n) {
+            $next = "Disc $d of $n has been handed to $($chosen.Name)." + [Environment]::NewLine + [Environment]::NewLine +
+                    'When it has finished and you have labelled it, put the next blank in and' +
+                    ' press Yes for disc ' + ($d + 1) + '.' + [Environment]::NewLine + [Environment]::NewLine +
+                    'Ready for disc ' + ($d + 1) + ' of ' + $n + '?'
+            if (-not (Show-Confirm $next "Disc $d of $n done?")) {
+                & $log "Stopped after disc $d of $n. The rest are written and can be burned later."
+                return
+            }
+        }
+    }
+    & $log "All $n discs have been handed over. Label them 1 to $n if you have not already."
+}
+
+# Which program opens the ISO. Lifted out of the Burn with... button so the
+# walk above can ask once and reuse the answer.
+function Select-IsoHandoff($picks, $parent) {
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = 'Burn with'; $dlg.Font = $form.Font
+    $dlg.FormBorderStyle = 'FixedDialog'; $dlg.MaximizeBox = $false; $dlg.MinimizeBox = $false
+    $dlg.StartPosition = 'CenterParent'; $dlg.ShowInTaskbar = $false
+    $dlg.ClientSize = New-Object System.Drawing.Size(460, 172)
+
+    $l = New-Object System.Windows.Forms.Label
+    $l.Text = 'Hand each disc to which program?'
+    $l.Location = New-Object System.Drawing.Point(15, 14); $l.Size = New-Object System.Drawing.Size(430, 20)
+    $dlg.Controls.Add($l)
+
+    $lst = New-Object System.Windows.Forms.ListBox
+    $lst.Location = New-Object System.Drawing.Point(15, 40); $lst.Size = New-Object System.Drawing.Size(430, 62)
+    foreach ($h in $picks) { [void]$lst.Items.Add("$($h.Name)  -  $($h.What)") }
+    $lst.SelectedIndex = 0
+    $dlg.Controls.Add($lst)
+
+    $note = New-Object System.Windows.Forms.Label
+    $note.Text = 'DiscWright only opens it. What happens next is that program''s business.'
+    $note.Location = New-Object System.Drawing.Point(15, 108); $note.Size = New-Object System.Drawing.Size(430, 20)
+    $note.ForeColor = [System.Drawing.Color]::DimGray
+    $dlg.Controls.Add($note)
+
+    $ok = New-Object System.Windows.Forms.Button; $ok.Text = 'Use this'
+    $ok.Location = New-Object System.Drawing.Point(275, 136); $ok.Size = New-Object System.Drawing.Size(80, 26)
+    $ok.DialogResult = 'OK'; $dlg.Controls.Add($ok)
+    $cancel = New-Object System.Windows.Forms.Button; $cancel.Text = 'Cancel'
+    $cancel.Location = New-Object System.Drawing.Point(365, 136); $cancel.Size = New-Object System.Drawing.Size(80, 26)
+    $cancel.DialogResult = 'Cancel'; $dlg.Controls.Add($cancel)
+    $dlg.AcceptButton = $ok; $dlg.CancelButton = $cancel
+
+    $r = $dlg.ShowDialog($parent)
+    $i = $lst.SelectedIndex
+    $dlg.Dispose()
+    if ($r -ne [System.Windows.Forms.DialogResult]::OK -or $i -lt 0) { return $null }
+    return $picks[$i]
+}
+
 $btnHandoff.Add_Click({
     $t = $txtOut.Text.Trim()
     if (-not $t -or -not (Test-Path $t)) { Show-Warn 'No output folder is set yet.'; return }
@@ -6140,6 +6266,13 @@ $btnBuild.Add_Click({
         & $log "Total time: $took"
         $what = $(if ($isos.Count -gt 1) { "$($isos.Count) discs built in $took" } else { "Build complete in $took" })
         [System.Windows.Forms.MessageBox]::Show(($what + "`n`n" + ($isos -join "`n")),"DiscWright") | Out-Null
+
+        # A set is only a set once every disc is burned, and burning them out of
+        # order or losing count is the easy mistake. Offered here, one at a time,
+        # rather than left as a line in the log saying to burn them all.
+        if ($s.DiscSet -and @($isos).Count -gt 1) {
+            Invoke-SetBurnWalk @($isos) $log $form
+        }
     }
     catch {
         $buildWatch.Stop(); $script:BuildDiscTag = ''; $lblElapsed.Text='Failed'

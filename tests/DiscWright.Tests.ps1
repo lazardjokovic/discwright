@@ -8024,3 +8024,72 @@ Describe 'Working out whether a set would help, before refusing' -Tag 'Unit' {
         Get-DiscSetWouldNeed $s | Should -Be 0
     }
 }
+
+Describe 'Walking a set to the burner, one disc at a time' -Tag 'Unit' {
+
+    # A set is only a set once every disc is burned, and the easy mistake is
+    # burning them out of order or losing count. The build offers to walk them.
+    #
+    # It asks rather than detects, on purpose: DiscWright hands an ISO to
+    # another program and that program says nothing back, so there is no way to
+    # know a burn finished or worked. Reporting a set as burned when disc 2
+    # never wrote would be worse than asking.
+    #
+    # The walk itself puts dialogs on the screen, so what can be checked here
+    # is its shape and the sentences it leaves behind. The dialogs themselves
+    # belong to the window suite.
+
+    BeforeAll {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+        $script:Walk = ($ast.FindAll({ param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $n.Name -eq 'Invoke-SetBurnWalk' }, $false) | Select-Object -First 1)
+        $script:WalkText = [string]$script:Walk.Extent.Text
+        $script:Src = $src
+    }
+
+    It 'exists, and the build calls it only for a set of more than one disc' {
+        $script:Walk | Should -Not -BeNullOrEmpty
+        $script:Src | Should -Match 'if \(\$s\.DiscSet -and @\(\$isos\)\.Count -gt 1\) \{'
+    }
+
+    It 'does nothing for a single disc' {
+        # Called with one ISO it must return before asking anything at all: a
+        # one-disc build is not a set and must not grow a burning interview.
+        $script:WalkText | Should -Match 'if \(\$n -lt 2\) \{ return \}'
+    }
+
+    It 'asks which program once, not once per disc' {
+        # Being asked before every disc is the kind of help nobody wants.
+        ([regex]::Matches($script:WalkText, 'Select-IsoHandoff')).Count | Should -Be 1
+    }
+
+    It 'says it cannot tell when a burn has finished' {
+        # The whole reason it asks. If this sentence goes, somebody will assume
+        # the app knows, and a set reported as burned is a set that may not be.
+        $script:WalkText | Should -Match 'cannot tell when it has'
+    }
+
+    It 'stops where it was told to stop, and says so' {
+        # Every way out writes a line saying which disc it reached, because a
+        # set half burned is something somebody comes back to tomorrow.
+        $script:WalkText | Should -Match 'Stopped at disc \$d of \$n'
+        $script:WalkText | Should -Match 'Stopped after disc \$d of \$n'
+        $script:WalkText | Should -Match 'can be burned later'
+    }
+
+    It 'does not ask about the disc after the last one' {
+        $script:WalkText | Should -Match 'if \(\$d -lt \$n\) \{'
+    }
+
+    It 'gives up quietly when there is nothing registered to open an ISO' {
+        # Not an error: the ISOs are written and can be burned by hand.
+        $script:WalkText | Should -Match 'Nothing on this machine is registered to open an ISO'
+        $script:WalkText | Should -Match 'The burning files are not installed'
+    }
+
+    It 'tells the person where the discs are when they decline' {
+        $script:WalkText | Should -Match 'Burn each one to its own disc, in order, and label them'
+    }
+}
