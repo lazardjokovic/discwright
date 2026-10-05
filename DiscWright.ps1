@@ -729,6 +729,32 @@ function Get-DiscSetSteps([hashtable]$s, $plan, [array]$entries) {
 }
 
 # Build every disc in the set.
+# Could this payload be a set, and how many discs would it take? Zero when it
+# could not: several games, no disc chosen, a single file bigger than the disc,
+# or extras no disc could hold.
+#
+# Here so the build button can OFFER a set when a payload will not fit, rather
+# than only refusing it and leaving the person to find the tick box. Knowing
+# the feature exists should not be a condition of using it.
+function Get-DiscSetWouldNeed([hashtable]$s) {
+    if (@($s.Games).Count -ne 1) { return 0 }
+    $cap = Get-MediaCapacity $s.MediaKey
+    if ($cap -le 0) { return 0 }
+    $g = @($s.Games)[0]
+    $files = @()
+    foreach ($f in @($g.Files)) {
+        $files += , @{ Rel = (Get-EntryFileRelative $g $f); Bytes = [double]$f.Length; Path = [string]$f.FullName }
+    }
+    if (-not $files.Count) { return 0 }
+    $side = @()
+    $side += @($s.ExtraItems)
+    if ($s.ManualPath) { $side += [string]$s.ManualPath }
+    if ($s.ExtrasPath) { $side += [string]$s.ExtrasPath }
+    $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s) ([double](Get-ItemsSize $side))
+    if (-not $plan.Ok) { return 0 }
+    return @($plan.Discs).Count
+}
+
 function Invoke-BuildDiscSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progress = $null) {
     # One game. Which games belong together on a disc is curation: a compilation
     # is something a person assembles, and the disc sets DiscWright built in 2026
@@ -5954,6 +5980,35 @@ $btnBuild.Add_Click({
     # makes a set worth having is exactly the payload this stops. The tests
     # called the build directly and never saw it. Driving the real window to
     # record a demonstration did, on the first take.
+    # Before refusing a payload for being too big, see whether splitting it
+    # across discs would work, and offer that. Nobody should have to know the
+    # tick box exists to be told their game needs three discs.
+    #
+    # Saying yes ticks the box rather than quietly building something else, so
+    # the form shows what is about to happen and the project remembers it.
+    if (-not $chkSet.Checked -and $fit -and -not $fit.Ok) {
+        $wouldBe = Get-DiscSetWouldNeed @{
+            Games = (Get-Games); MediaKey = $mediaKey; IconPath = $state.IconPath
+            BgPath = $state.BgPath; Menu = $chkMenu.Checked
+            MusicFile = $(if ($chkMusic.Checked) { $state.MusicFile } else { $null })
+            ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
+            ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
+            ExtraItems = @($lstExtra.Items)
+        }
+        if ($wouldBe -gt 1) {
+            $ask = ("This disc comes to {0:N2} GB and a {1} holds {2:N2} GB." -f
+                        ($fit.Need/1GB), (Get-MediaNameFromKey $mediaKey), ($fit.Capacity/1GB)) +
+                   "`r`n`r`nIt can be written as a set of $wouldBe discs instead." +
+                   "`r`n`r`nEvery disc carries a list of the whole set, and the menu on any of" +
+                   " them copies them all back into one folder and installs from there." +
+                   "`r`n`r`nWrite $wouldBe discs?"
+            if (Show-Confirm $ask 'This game needs more than one disc') {
+                $chkSet.Checked = $true
+                & $log "Building as a set of $wouldBe discs."
+            }
+        }
+    }
+
     if (-not $chkSet.Checked) {
         if ($fit -and -not $fit.Ok) {
             $mName = Get-MediaNameFromKey $mediaKey

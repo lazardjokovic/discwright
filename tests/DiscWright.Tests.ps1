@@ -7943,3 +7943,84 @@ Describe 'The set panel fits the window, and says when it cannot tidy up' -Tag '
         $script:App | Should -Match 'if\(d\.Files\.Count===0&&d\.SubFolders\.Count===0\)'
     }
 }
+
+Describe 'Working out whether a set would help, before refusing' -Tag 'Unit' {
+
+    # The build used to answer "too big for that disc" and stop there, leaving
+    # the person to discover the tick box for themselves. Knowing a feature
+    # exists should not be a condition of using it, so the button asks this
+    # first and offers the set.
+    #
+    # Zero means "do not offer", and every reason for that is its own case
+    # below: offering a set that would then be refused is worse than not
+    # offering one.
+
+    BeforeAll {
+        $script:WouldDir = Join-Path $script:Sandbox 'would'
+        New-Item -ItemType Directory -Force -Path $script:WouldDir | Out-Null
+        function New-Sparse([string]$dir, [string]$name, [double]$mb) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $fs = [IO.File]::Create((Join-Path $dir $name)); $fs.SetLength([long]($mb * 1MB)); $fs.Close()
+        }
+        # One game of two 400 MB files: too big for a CD, fine as two of them.
+        $script:TwoDisc = Join-Path $script:WouldDir 'two_disc_game'
+        New-Sparse $script:TwoDisc 'setup_two_disc_game.exe' 400
+        New-Sparse $script:TwoDisc 'setup_two_disc_game-1.bin' 400
+        # One game whose single file no CD could hold.
+        $script:TooBig = Join-Path $script:WouldDir 'one_huge_game'
+        New-Sparse $script:TooBig 'setup_one_huge_game.exe' 900
+
+        function Would([string]$folder, [string]$media, [hashtable]$extra = @{}) {
+            $s = @{ Games = @((Get-GameInfo $folder)); MediaKey = $media
+                    IconPath = $script:Art; BgPath = $script:Art; Menu = $true }
+            foreach ($k in $extra.Keys) { $s[$k] = $extra[$k] }
+            return (Get-DiscSetWouldNeed $s)
+        }
+    }
+
+    It 'says how many discs a payload that will not fit would take' {
+        Would $script:TwoDisc 'CD' | Should -Be 2
+    }
+
+    It 'says one for a payload that fits, so nothing is offered' {
+        # A set is not wrong here, it is just not worth asking about.
+        Would $script:TwoDisc 'DVD5' | Should -Be 1
+    }
+
+    It 'offers nothing when a single file is bigger than the disc' {
+        # A set cannot help, and offering one would end in a refusal.
+        Would $script:TooBig 'CD' | Should -Be 0
+    }
+
+    It 'offers nothing when no disc has been chosen' {
+        Would $script:TwoDisc '' | Should -Be 0
+    }
+
+    It 'offers nothing for several games' {
+        $s = @{ Games = @((Get-GameInfo $script:TwoDisc), (Get-GameInfo $script:TooBig))
+                MediaKey = 'CD'; IconPath = $script:Art; BgPath = $script:Art; Menu = $true }
+        Get-DiscSetWouldNeed $s | Should -Be 0
+    }
+
+    It 'offers nothing when the extras alone are bigger than the disc' {
+        $big = Join-Path $script:WouldDir 'bigextras'
+        New-Sparse $big 'soundtrack.flac' 900
+        Would $script:TwoDisc 'CD' @{ ExtrasPath = $big } | Should -Be 0
+    }
+
+    It 'counts the extras when they do fit' {
+        # 800 MB of game plus 400 MB of extras needs one more CD than the game
+        # alone, and the offer has to say the real number.
+        $small = Join-Path $script:WouldDir 'smallextras'
+        New-Sparse $small 'wallpapers.zip' 400
+        (Would $script:TwoDisc 'CD' @{ ExtrasPath = $small }) | Should -BeGreaterThan 2
+    }
+
+    It 'offers nothing for a game with no files' {
+        $empty = Join-Path $script:WouldDir 'empty_game'
+        New-Item -ItemType Directory -Force -Path $empty | Out-Null
+        $s = @{ Games = @(@{ Folder = $empty; SetupExe = $null; Files = @(); Source = 'Files' })
+                MediaKey = 'CD'; IconPath = $script:Art; BgPath = $script:Art; Menu = $true }
+        Get-DiscSetWouldNeed $s | Should -Be 0
+    }
+}
