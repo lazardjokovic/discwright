@@ -98,8 +98,20 @@ for i in keep:
             out.append(i)
 print('frames: %d captured, %d cut, %d kept' % (len(files), len(dropped), len(out)))
 
+# The crop above trims the shadow from around the application window, and it is
+# that window's size. A film whose subject is the disc menu is 760x480, and
+# cropping those frames to a 700x992 rectangle pads them with black below and
+# cuts the right-hand side off: the first menu film came out as a letterboxed
+# sliver. So it is applied only to frames the shape it was measured for.
+FIRST = Image.open(files[0])
+CROPPABLE = abs(FIRST.width - 700) <= 12 and abs(FIRST.height - 992) <= 12
+if not CROPPABLE:
+    print('frames are %dx%d, so they are used whole' % (FIRST.width, FIRST.height))
+
 def prepared(path):
-    im = Image.open(path).convert('RGB').crop(CROP)
+    im = Image.open(path).convert('RGB')
+    if CROPPABLE:
+        im = im.crop(CROP)
     h = round(im.height * WIDTH / im.width)
     return im.resize((WIDTH, h), Image.LANCZOS)
 

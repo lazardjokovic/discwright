@@ -13,7 +13,12 @@
 param(
     [Parameter(Mandatory)][string]$OutDir,
     [Parameter(Mandatory)][string]$StopFile,
-    [int]$IntervalMs = 100
+    [int]$IntervalMs = 100,
+    # An explicit rectangle, for a film whose subject is not the form. The disc
+    # menu is 760 wide and the window is 700, so a menu can never fit inside a
+    # region pinned to the form: that film came back as a mostly empty form
+    # with a sliver of menu down one edge.
+    [int]$RegionX = 0, [int]$RegionY = 0, [int]$RegionW = 0, [int]$RegionH = 0
 )
 $ErrorActionPreference = 'Stop'
 
@@ -88,9 +93,15 @@ try {
     # Pin the rectangle once. The form does not move during the demo, and
     # re-reading it every frame makes the GIF jitter a pixel when Windows rounds
     # differently between calls.
-    $el = [System.Windows.Automation.AutomationElement]::FromHandle($proc.MainWindowHandle)
-    $r  = $el.Current.BoundingRectangle
-    $x = [int]$r.X; $y = [int]$r.Y; $w = [int]$r.Width; $h = [int]$r.Height
+    if ($RegionW -gt 0 -and $RegionH -gt 0) {
+        $x = $RegionX; $y = $RegionY; $w = $RegionW; $h = $RegionH
+        Say 'using the rectangle it was given'
+    }
+    else {
+        $el = [System.Windows.Automation.AutomationElement]::FromHandle($proc.MainWindowHandle)
+        $r  = $el.Current.BoundingRectangle
+        $x = [int]$r.X; $y = [int]$r.Y; $w = [int]$r.Width; $h = [int]$r.Height
+    }
     Say ("region {0}x{1} at {2},{3}" -f $w, $h, $x, $y)
     if ($w -le 0 -or $h -le 0) { Say 'bad rectangle'; exit 1 }
 

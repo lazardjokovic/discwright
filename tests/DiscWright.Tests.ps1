@@ -7801,3 +7801,145 @@ Describe 'The set panel does not dress as a button' -Tag 'Unit' {
         }
     }
 }
+
+
+Describe 'No control on the form is laid out on top of another' -Tag 'Unit' {
+
+    # The window is positioned in absolute pixels, and a new control put at a
+    # free-looking x can land inside a neighbour that is wider than it reads.
+    #
+    # That happened: 'disc set' was placed at x=380 on the row of disc options,
+    # where 'readable on Windows XP and older' is 240 wide and runs from 265 to
+    # 505. The new box sat entirely inside it, every click went to the
+    # neighbour, and the checkbox never ticked - so the window could not ask for
+    # a disc set at all while everything behind it worked.
+    #
+    # The window suite's own overlap check could not see it. It allows one
+    # rectangle to contain another, because a group box legitimately contains
+    # its children, and full containment is exactly what this was.
+    #
+    # Read off the source rather than off a running window, so it fails on the
+    # machine that made the change instead of on the one with a desktop.
+
+    BeforeAll {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+
+        $kind = @{}
+        foreach ($m in [regex]::Matches($src, '\$(\w+)\s*=\s*New-Object System\.Windows\.Forms\.(\w+)')) {
+            $kind[$m.Groups[1].Value] = $m.Groups[2].Value
+        }
+        $pos = @{}
+        foreach ($m in [regex]::Matches($src, '\$(\w+)\.Location\s*=\s*New-Object System\.Drawing\.Point\((\d+),\s*(\d+)\)')) {
+            $pos[$m.Groups[1].Value] = @([int]$m.Groups[2].Value, [int]$m.Groups[3].Value)
+        }
+        $dim = @{}
+        foreach ($m in [regex]::Matches($src, '\$(\w+)\.Size\s*=\s*New-Object System\.Drawing\.Size\((\d+),\s*(\d+)\)')) {
+            $dim[$m.Groups[1].Value] = @([int]$m.Groups[2].Value, [int]$m.Groups[3].Value)
+        }
+
+        # Only what is added straight to the main form. A control added to a
+        # group box is positioned relative to that box, so its numbers cannot be
+        # compared with these.
+        $onForm = @()
+        foreach ($m in [regex]::Matches($src, '\$form\.Controls\.Add\(\$(\w+)\)')) {
+            $onForm += $m.Groups[1].Value
+        }
+        $onForm = @($onForm | Sort-Object -Unique)
+
+        $script:Boxes = @()
+        foreach ($n in $onForm) {
+            if (-not $pos.ContainsKey($n) -or -not $dim.ContainsKey($n)) { continue }
+            # A group box is a container, so things inside it are meant to be.
+            if ($kind[$n] -eq 'GroupBox') { continue }
+            $script:Boxes += , @{ Name = $n; Kind = [string]$kind[$n]
+                                  X = $pos[$n][0]; Y = $pos[$n][1]
+                                  W = $dim[$n][0]; H = $dim[$n][1] }
+        }
+    }
+
+    It 'found the controls it is supposed to be checking' {
+        # Without this the test below passes for ever on an empty list the day
+        # the source stops matching these patterns.
+        @($script:Boxes).Count | Should -BeGreaterThan 8
+        @($script:Boxes | Where-Object { $_.Kind -eq 'CheckBox' }).Count | Should -BeGreaterThan 3
+    }
+
+    It 'has no two of them sharing a pixel' {
+        $clashes = @()
+        for ($i = 0; $i -lt $script:Boxes.Count; $i++) {
+            for ($j = $i + 1; $j -lt $script:Boxes.Count; $j++) {
+                $a = $script:Boxes[$i]; $b = $script:Boxes[$j]
+                $overX = ($a.X -lt ($b.X + $b.W)) -and ($b.X -lt ($a.X + $a.W))
+                $overY = ($a.Y -lt ($b.Y + $b.H)) -and ($b.Y -lt ($a.Y + $a.H))
+                if ($overX -and $overY) {
+                    $clashes += ('{0} ({1}..{2} x {3}..{4}) runs through {5} ({6}..{7} x {8}..{9})' -f
+                        $a.Name, $a.X, ($a.X + $a.W), $a.Y, ($a.Y + $a.H),
+                        $b.Name, $b.X, ($b.X + $b.W), $b.Y, ($b.Y + $b.H))
+                }
+            }
+        }
+        $clashes | Should -BeNullOrEmpty
+    }
+
+    It 'keeps the row of disc options clear of each other' {
+        # The specific row the mistake was made on, named so a future reader
+        # knows which one is crowded.
+        $row = @($script:Boxes | Where-Object { $_.Y -ge 330 -and $_.Y -le 370 } | Sort-Object { $_.X })
+        $row.Count | Should -BeGreaterThan 2
+        for ($i = 1; $i -lt $row.Count; $i++) {
+            $row[$i].X | Should -BeGreaterOrEqual ($row[$i-1].X + $row[$i-1].W) `
+                -Because "$($row[$i].Name) starts before $($row[$i-1].Name) ends"
+        }
+    }
+}
+
+Describe 'The set panel fits the window, and says when it cannot tidy up' -Tag 'Unit' {
+
+    # Two faults found by recording a demonstration of the feature, neither of
+    # which any test here would have caught. Both are in the menu's JScript,
+    # inside functions that need a document and a real window, so they cannot
+    # be run headlessly the way the arithmetic further up can. These read the
+    # source instead, which is weaker, and is why each one says what it is
+    # guarding rather than only that a string is present.
+
+    BeforeAll {
+        $script:App = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+    }
+
+    It 'takes the set panel out of the room the buttons get' {
+        # setPanel shrinks buttons so they cannot run off a 480px window, but it
+        # counted only <A> elements. The set panel puts a block of text above
+        # them, so on a two-disc set Choose folder sat half over the bottom edge
+        # and Exit was not drawn at all.
+        $script:App | Should -Match 'var si=document\.getElementById\("setinfo"\)'
+        $script:App | Should -Match 'var siH=si \? si\.offsetHeight\+12 : 0'
+        $script:App | Should -Match 'var bh=46, gap=12, avail=440-capH-siH'
+    }
+
+    It 'counts the set panel when centring what is left' {
+        # The same height has to be in the block being centred, or the panel is
+        # centred as though the text were not there and rides high.
+        $script:App | Should -Match 'var block=capH\+siH\+n\*bh'
+    }
+
+    It 'gives the set panel a handle to be measured by' {
+        $script:App | Should -Match '<div class="setinfo" id="setinfo">'
+    }
+
+    It 'does not throw away a failed delete' {
+        # Every removal was wrapped in a catch that said nothing. A real run
+        # left two of four files behind, still held open by whatever had just
+        # copied them, and the menu reported the folder as emptied.
+        $script:App | Should -Match 'catch\(ex\)\{ failed\[failed\.length\]=list\.files\[i\]; \}'
+        $script:App | Should -Match 'if\(failed\.length\)\{'
+        $script:App | Should -Match 'could not be removed'
+    }
+
+    It 'still has the silent catches it is allowed to have' {
+        # The sweep that removes empty folders afterwards may fail harmlessly:
+        # a folder someone else put a file in is not this set's to delete. That
+        # one stays quiet on purpose, so the guard above must not be read as
+        # "no catch may ever be silent".
+        $script:App | Should -Match 'if\(d\.Files\.Count===0&&d\.SubFolders\.Count===0\)'
+    }
+}

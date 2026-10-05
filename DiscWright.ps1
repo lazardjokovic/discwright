@@ -2167,7 +2167,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // 46px buttons with 12px between them fill a 480px window at eight, and a
     // game with four add-ons already needs eight. Rather than let the ninth draw
     // off the bottom edge where nothing can reach it, the buttons shrink to fit.
-    var bh=46, gap=12, avail=440-capH;
+    // The set panel puts a block of text above the buttons, and it has to come
+    // out of the room they get. Counting only the buttons ran the panel off the
+    // bottom of a 480px window: on a two-disc set, Choose folder was half over
+    // the edge and Exit was not drawn at all.
+    var si=document.getElementById("setinfo");
+    var siH=si ? si.offsetHeight+12 : 0;
+    var bh=46, gap=12, avail=440-capH-siH;
     if(n*bh+(n-1)*gap > avail){
       gap = 8;
       bh = Math.floor((avail-(n-1)*gap)/n);
@@ -2192,7 +2198,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       el.style.lineHeight=Math.floor(bh/lines)+"px";
     }
 
-    var block=capH+n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
+    var block=capH+siH+n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
     if(t<10) t=10;
     p.style.top=t+"px";
     setupHover();
@@ -2464,13 +2470,26 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var dir=setDir(), list=setDeleteList(dir), i;
     if(!list.files.length){ alert("There is nothing of this set in that folder to remove."); return; }
     if(!SETARM){ SETARM=true; show(); return; }
-    for(i=0;i<list.files.length;i++){ try{ fso.DeleteFile(list.files[i],true); }catch(ex){} }
+    // Counted, not swallowed. A file still held open by whatever copied it
+    // cannot be deleted, and the catch here said nothing at all: a real run
+    // left two of four files behind and the menu reported the folder as
+    // emptied. Whoever pressed this has to be told what is still there.
+    var failed=[];
+    for(i=0;i<list.files.length;i++){
+      try{ fso.DeleteFile(list.files[i],true); }
+      catch(ex){ failed[failed.length]=list.files[i]; }
+    }
     // Only folders this set filled, and only if nothing else ended up in them.
     for(i=list.dirs.length-1;i>=0;i--){
       try{
         var d=fso.GetFolder(list.dirs[i]);
         if(d.Files.Count===0&&d.SubFolders.Count===0){ fso.DeleteFolder(list.dirs[i],true); }
       }catch(ex){}
+    }
+    if(failed.length){
+      alert(failed.length+" file(s) could not be removed, most likely still open:" +
+            String.fromCharCode(10)+String.fromCharCode(10)+failed.join(String.fromCharCode(10)) +
+            String.fromCharCode(10)+String.fromCharCode(10)+"Close anything using them and try again.");
     }
     SETARM=false;
     show();
@@ -2482,12 +2501,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // bug was a Play button on a disc that could never play anything.
   function renderSet(){
     var dir=setDir(), s=setScan(dir), h="";
-    h+='<div class="setinfo">'+
-       "Disc "+SET.n+" of "+SET.of+". "+
-       "No disc in this set can install the game on its own."+
-       "<br><br>Copy every disc in the set into one folder on a hard drive, "+
-       "then run the installer from there."+
-       (dir.length ? "<br><br>Suggested folder:<br>"+dir : "")+
+    h+='<div class="setinfo" id="setinfo">'+
+       "Disc "+SET.n+" of "+SET.of+". No disc in a set installs on its own."+
+       "<br><br>Copy every disc into one folder, then install from there."+
+       (dir.length ? "<br><br>"+dir : "")+
        "<br><br>"+setSentence(s)+
        "</div>";
     // The copy is offered while anything of this disc is still missing from
@@ -3926,10 +3943,16 @@ $chkLegacy.Location=New-Object System.Drawing.Point(265,342)
 $chkLegacy.Size=New-Object System.Drawing.Size(240,22)
 $chkLegacy.Checked=$false
 $form.Controls.Add($chkLegacy)
+# Beside the disc it is about, rather than on the row of disc options below.
+# That row is full: 'readable on Windows XP and older' is 240 wide and runs
+# from 265 to 505, and this box was put at 380 - inside it. The click landed
+# on the neighbour, the box never ticked, and the build went on refusing a
+# payload a set would have handled. Everything downstream was right; the
+# control was simply underneath another one.
 $chkSet=New-Object System.Windows.Forms.CheckBox
 $chkSet.Text='disc set'
-$chkSet.Location=New-Object System.Drawing.Point(380,342)
-$chkSet.Size=New-Object System.Drawing.Size(120,22)
+$chkSet.Location=New-Object System.Drawing.Point(540,208)
+$chkSet.Size=New-Object System.Drawing.Size(115,22)
 $chkSet.Checked=$false
 $form.Controls.Add($chkSet)
 
@@ -5922,29 +5945,40 @@ $btnBuild.Add_Click({
     $mediaKey = Get-SelectedMediaKey
     $fit      = Get-CurrentFit $pay
 
-    if ($fit -and -not $fit.Ok) {
-        $mName = Get-MediaNameFromKey $mediaKey
-        $why = if ($fit.Reason -eq 'media') { "This set cannot be weighed against a $mName." }
-               else {
-                   ("This disc comes to {0:N2} GB, and a {1} holds {2:N2} GB - {3:N2} GB over." -f
-                        ($fit.Need/1GB), $mName, ($fit.Capacity/1GB), ($fit.Over/1GB)) +
-                   # Which games belong on a disc together is the user's call, so the
-                   # dialog says what has to come off and leaves the choosing alone.
-                   # DiscWright used to pack the overflow onto further discs by itself,
-                   # in whatever order the rows happened to sit in - see ROADMAP.md.
-                   "`r`n`r`nRemove an entry in step 1, or choose a larger disc in step 2."
-               }
-        Deny-Build ("payload does not fit a $mName.") $why
-        return
-    }
-
-    $rec = Get-MediaRec $pay.Total
-    if (-not $fit -and -not $rec.Fit) {
-        Deny-Build ("payload is {0:N1} GB - too big for any single disc." -f ($pay.Total/1GB)) (
-            ("This disc would be {0:N1} GB, which is bigger than any single disc DiscWright can write." -f ($pay.Total/1GB)) +
-            "`r`n`r`nThe largest supported medium is BD-R XL at 100 GB." +
-            "`r`n`r`nRemove an entry in step 1 so what is left fits one disc.")
-        return
+    # Both of these refusals are answered by a disc set, so neither applies
+    # when one has been asked for. Invoke-BuildDiscSet does the arithmetic
+    # itself and refuses with the file that decided it, or with the disc that
+    # was never chosen.
+    #
+    # Without this the window could not build a set at all: the payload that
+    # makes a set worth having is exactly the payload this stops. The tests
+    # called the build directly and never saw it. Driving the real window to
+    # record a demonstration did, on the first take.
+    if (-not $chkSet.Checked) {
+        if ($fit -and -not $fit.Ok) {
+            $mName = Get-MediaNameFromKey $mediaKey
+            $why = if ($fit.Reason -eq 'media') { "This set cannot be weighed against a $mName." }
+                   else {
+                       ("This disc comes to {0:N2} GB, and a {1} holds {2:N2} GB - {3:N2} GB over." -f
+                            ($fit.Need/1GB), $mName, ($fit.Capacity/1GB), ($fit.Over/1GB)) +
+                       # Which games belong on a disc together is the user's call, so the
+                       # dialog says what has to come off and leaves the choosing alone.
+                       # DiscWright used to pack the overflow onto further discs by itself,
+                       # in whatever order the rows happened to sit in - see ROADMAP.md.
+                       "`r`n`r`nRemove an entry in step 1, or choose a larger disc in step 2."
+                   }
+            Deny-Build ("payload does not fit a $mName.") $why
+            return
+        }
+    
+        $rec = Get-MediaRec $pay.Total
+        if (-not $fit -and -not $rec.Fit) {
+            Deny-Build ("payload is {0:N1} GB - too big for any single disc." -f ($pay.Total/1GB)) (
+                ("This disc would be {0:N1} GB, which is bigger than any single disc DiscWright can write." -f ($pay.Total/1GB)) +
+                "`r`n`r`nThe largest supported medium is BD-R XL at 100 GB." +
+                "`r`n`r`nRemove an entry in step 1 so what is left fits one disc.")
+            return
+        }
     }
 
     # Staging copies the payload, then the ISO is written beside it, so the output
@@ -6035,9 +6069,11 @@ $btnBuild.Add_Click({
     try {
         if ($s.DiscSet) {
             $set = Invoke-BuildDiscSet $s $log $buildProgress
-            # Thrown rather than reported here, so a refusal reaches the same
-            # message box every other build failure already uses.
-            if (-not $set.Ok) { throw $set.Why }
+            # Refused, not failed. Deny-Build is what every other refusal on
+            # this button uses, so the wording and the log line match them;
+            # thrown, it arrived as "The build failed:" in front of a sentence
+            # explaining that a file is too big, which is not a failure.
+            if (-not $set.Ok) { Deny-Build 'the disc set cannot be laid out.' $set.Why; return }
             $isos = @($set.Isos)
         } else {
             $isos = @(Invoke-Build $s $log $buildProgress)
