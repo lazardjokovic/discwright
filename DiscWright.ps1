@@ -3050,10 +3050,15 @@ function Get-ArtFitNote([string]$imagePath, [double]$panelW, [double]$panelH, [s
     # not cover art, and a plain label is printed instead with the picture left
     # alone.
     $want = $panelW / $panelH
+    $pw = [int]$panelW; $ph = [int]$panelH
     $have = $w / [double]$h
     $off = [int][Math]::Round(100 * [Math]::Abs($have - $want) / $want)
     if ($off -le 6) { return "$what ${w}x${h}, the right shape: printed exactly as it is." }
-    return "$what ${w}x${h} is not that shape, so a plain label is printed instead."
+    # "any size at 1.00 to 1" is a long way of saying square, and the disc
+    # face is always square.
+    $shape = $(if ([Math]::Abs($want - 1) -lt 0.01) { "or any square picture" }
+               else { "or any size at {0:N2} to 1" -f $want })
+    return "$what ${w}x${h} is not that shape, so a plain label is printed instead. It wants about ${pw}x${ph}, $shape."
 }
 
 function Save-Project([hashtable]$s,[string]$outDir) {
@@ -4085,6 +4090,11 @@ AddLabel 'Disc face picture' 15 1024 200 | Out-Null
 $txtDiscArt = AddText 15 1046 525
 $btnDiscArt = AddBtn 'Browse...' 545 1046 110
 $lblArtNote = AddLabel '' 15 1074 645
+# Two lines, because there are two pictures and either can be the wrong
+# shape. On one line the second note ran off the end of the label and was
+# simply not there - reported from outside, where it reads as the warning
+# being cut off mid-sentence.
+$lblArtNote.Size = New-Object System.Drawing.Size(645, 68)
 $lblArtNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
 $btnArtwork = AddBtn 'Print artwork' 15 1100 150
 $btnBurn    = AddBtn 'Burn to disc...' 180 1100 150
@@ -4551,7 +4561,7 @@ function Update-ArtNote {
         $notes += if ($state.BgPath) { 'Empty means the menu background is used.' }
                   else { 'Left empty, the panels print in a plain colour with the title on them.' }
     }
-    $lblArtNote.Text = $notes -join '   '
+    $lblArtNote.Text = $notes -join [Environment]::NewLine
 }
 
 function Update-ActionButtons {

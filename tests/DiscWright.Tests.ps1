@@ -8204,3 +8204,80 @@ Describe 'Running the burn walk, not just reading it' -Tag 'Unit' {
         ($script:Lines -join '|') | Should -Match 'All 2 discs have been handed over'
     }
 }
+
+Describe 'The warning about artwork that is the wrong shape' -Tag 'Unit' {
+
+    # Reported from outside: with an unsuitable picture in BOTH the cover and
+    # the disc face, the "is not that shape, so a..." line cut off mid-sentence.
+    # Two notes were joined onto one 645px label with three spaces between
+    # them, so the second one ran off the end and was simply not there.
+    #
+    # And the half he asked for next: a warning that says the shape is wrong
+    # without saying which shape would be right leaves somebody to guess.
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Drawing
+        $script:ArtDir = Join-Path $script:Sandbox 'artnote'
+        New-Item -ItemType Directory -Force -Path $script:ArtDir | Out-Null
+        function New-Pic([string]$name, [int]$w, [int]$h) {
+            $b = New-Object System.Drawing.Bitmap($w, $h)
+            $g = [System.Drawing.Graphics]::FromImage($b)
+            $g.Clear([System.Drawing.Color]::SlateGray); $g.Dispose()
+            $p = Join-Path $script:ArtDir $name
+            $b.Save($p, [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose()
+            return $p
+        }
+        $script:Wide = New-Pic 'wide.png' 1280 1024
+        $script:Cover = New-Pic 'cover.png' 1530 2161
+        $script:Face = New-Pic 'face.png' 1394 1394
+    }
+
+    It 'says what shape it wanted, not only that this one is wrong' {
+        $n = Get-ArtFitNote $script:Wide 1530 2161 'Cover'
+        $n | Should -Match '1280x1024'
+        $n | Should -Match '1530x2161'
+        $n | Should -Match '0\.71 to 1'
+    }
+
+    It 'calls a square a square' {
+        # "any size at 1.00 to 1" is a long way round.
+        $n = Get-ArtFitNote $script:Wide 1394 1394 'Disc face'
+        $n | Should -Match 'any square picture'
+        $n | Should -Not -Match '1\.00 to 1'
+    }
+
+    It 'says nothing about shape when the picture is the right one' {
+        $n = Get-ArtFitNote $script:Cover 1530 2161 'Cover'
+        $n | Should -Match 'the right shape'
+        $n | Should -Not -Match 'wants about'
+    }
+
+    It 'puts the two notes on separate lines' {
+        # The actual defect. Both notes are long, and on one line the second is
+        # past the end of the label.
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $src | Should -Match '\$lblArtNote\.Text = \$notes -join \[Environment\]::NewLine'
+        $src | Should -Not -Match "\`$lblArtNote\.Text = \`$notes -join '   '"
+    }
+
+    It 'gives the label room for both of them' {
+        # Joining with a newline changes nothing on a label one line tall, and
+        # two lines is not enough either once each warning names a shape.
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $src | Should -Match '\$lblArtNote\.Size = New-Object System\.Drawing\.Size\(645, 68\)'
+    }
+
+    It 'both warnings together still fit the two lines they are given' {
+        # The thing that was actually reported, measured: two notes at the
+        # label's own width and font, wrapped, must come to two lines or fewer.
+        $a = Get-ArtFitNote $script:Wide 1530 2161 'Cover'
+        $b = Get-ArtFitNote $script:Wide 1394 1394 'Disc face'
+        $text = $a + [Environment]::NewLine + $b
+        $f = New-Object System.Drawing.Font('Segoe UI', 9)
+        $bmp = New-Object System.Drawing.Bitmap(1, 1)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $size = $g.MeasureString($text, $f, 645)
+        $g.Dispose(); $bmp.Dispose(); $f.Dispose()
+        $size.Height | Should -BeLessOrEqual 68 -Because "it measured $([int]$size.Height)px in a 68px label"
+    }
+}
