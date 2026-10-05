@@ -729,6 +729,32 @@ function Get-DiscSetSteps([hashtable]$s, $plan, [array]$entries) {
 }
 
 # Build every disc in the set.
+# Could this payload be a set, and how many discs would it take? Zero when it
+# could not: several games, no disc chosen, a single file bigger than the disc,
+# or extras no disc could hold.
+#
+# Here so the build button can OFFER a set when a payload will not fit, rather
+# than only refusing it and leaving the person to find the tick box. Knowing
+# the feature exists should not be a condition of using it.
+function Get-DiscSetWouldNeed([hashtable]$s) {
+    if (@($s.Games).Count -ne 1) { return 0 }
+    $cap = Get-MediaCapacity $s.MediaKey
+    if ($cap -le 0) { return 0 }
+    $g = @($s.Games)[0]
+    $files = @()
+    foreach ($f in @($g.Files)) {
+        $files += , @{ Rel = (Get-EntryFileRelative $g $f); Bytes = [double]$f.Length; Path = [string]$f.FullName }
+    }
+    if (-not $files.Count) { return 0 }
+    $side = @()
+    $side += @($s.ExtraItems)
+    if ($s.ManualPath) { $side += [string]$s.ManualPath }
+    if ($s.ExtrasPath) { $side += [string]$s.ExtrasPath }
+    $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s) ([double](Get-ItemsSize $side))
+    if (-not $plan.Ok) { return 0 }
+    return @($plan.Discs).Count
+}
+
 function Invoke-BuildDiscSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progress = $null) {
     # One game. Which games belong together on a disc is curation: a compilation
     # is something a person assembles, and the disc sets DiscWright built in 2026
@@ -2167,7 +2193,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // 46px buttons with 12px between them fill a 480px window at eight, and a
     // game with four add-ons already needs eight. Rather than let the ninth draw
     // off the bottom edge where nothing can reach it, the buttons shrink to fit.
-    var bh=46, gap=12, avail=440-capH;
+    // The set panel puts a block of text above the buttons, and it has to come
+    // out of the room they get. Counting only the buttons ran the panel off the
+    // bottom of a 480px window: on a two-disc set, Choose folder was half over
+    // the edge and Exit was not drawn at all.
+    var si=document.getElementById("setinfo");
+    var siH=si ? si.offsetHeight+12 : 0;
+    var bh=46, gap=12, avail=440-capH-siH;
     if(n*bh+(n-1)*gap > avail){
       gap = 8;
       bh = Math.floor((avail-(n-1)*gap)/n);
@@ -2192,7 +2224,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       el.style.lineHeight=Math.floor(bh/lines)+"px";
     }
 
-    var block=capH+n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
+    var block=capH+siH+n*bh+(n-1)*gap, t=Math.floor((480-block)/2);
     if(t<10) t=10;
     p.style.top=t+"px";
     setupHover();
@@ -2313,12 +2345,26 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     return "Run the installer from "+dir;
   }
   // One sentence about where the set stands, for the panel.
+  // One sentence about where the set stands, for the panel.
+  //
+  // It ends on what to do next, not on a fact. "Still needed: disc 2" is a
+  // status line and leaves somebody to work out that they should go and get
+  // disc 2; "Now put disc 2 in" is the same information as an instruction,
+  // which is what a person standing at a drive with a disc in their hand
+  // actually wants.
   function setSentence(s){
+    // Not "ready to install": a folder of game files has nothing to install,
+    // and the button below already says whether it installs, plays or opens.
+    // Saying it twice is how one of them comes to be wrong.
     if(!s.total) return "This disc says it is part of a set, but its list of files is missing.";
     if(s.complete) return "All "+s.total+" files are here. The game is ready in that folder.";
-    var m=s.ok+" of "+s.total+" files are in that folder.";
-    if(s.bad>0) m+=" "+s.bad+" copied badly.";
-    if(s.need.length) m+=" Still needed: disc "+s.need+".";
+    var m=s.ok+" of "+s.total+" files copied so far.";
+    if(s.bad>0) m+=" "+s.bad+" copied badly and will be done again.";
+    if(s.need.length){
+      var list=s.need.split(", ");
+      if(list.length==1) m+=" Now put disc "+list[0]+" in.";
+      else m+=" Still to come: discs "+s.need+".";
+    }
     return m;
   }
   // The rows that belong to the disc in the drive.
@@ -2464,13 +2510,26 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var dir=setDir(), list=setDeleteList(dir), i;
     if(!list.files.length){ alert("There is nothing of this set in that folder to remove."); return; }
     if(!SETARM){ SETARM=true; show(); return; }
-    for(i=0;i<list.files.length;i++){ try{ fso.DeleteFile(list.files[i],true); }catch(ex){} }
+    // Counted, not swallowed. A file still held open by whatever copied it
+    // cannot be deleted, and the catch here said nothing at all: a real run
+    // left two of four files behind and the menu reported the folder as
+    // emptied. Whoever pressed this has to be told what is still there.
+    var failed=[];
+    for(i=0;i<list.files.length;i++){
+      try{ fso.DeleteFile(list.files[i],true); }
+      catch(ex){ failed[failed.length]=list.files[i]; }
+    }
     // Only folders this set filled, and only if nothing else ended up in them.
     for(i=list.dirs.length-1;i>=0;i--){
       try{
         var d=fso.GetFolder(list.dirs[i]);
         if(d.Files.Count===0&&d.SubFolders.Count===0){ fso.DeleteFolder(list.dirs[i],true); }
       }catch(ex){}
+    }
+    if(failed.length){
+      alert(failed.length+" file(s) could not be removed, most likely still open:" +
+            String.fromCharCode(10)+String.fromCharCode(10)+failed.join(String.fromCharCode(10)) +
+            String.fromCharCode(10)+String.fromCharCode(10)+"Close anything using them and try again.");
     }
     SETARM=false;
     show();
@@ -2482,18 +2541,19 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // bug was a Play button on a disc that could never play anything.
   function renderSet(){
     var dir=setDir(), s=setScan(dir), h="";
-    h+='<div class="setinfo">'+
-       "Disc "+SET.n+" of "+SET.of+". "+
-       "No disc in this set can install the game on its own."+
-       "<br><br>Copy every disc in the set into one folder on a hard drive, "+
-       "then run the installer from there."+
-       (dir.length ? "<br><br>Suggested folder:<br>"+dir : "")+
+    h+='<div class="setinfo" id="setinfo">'+
+       "Disc "+SET.n+" of "+SET.of+". No disc in a set installs on its own."+
+       "<br><br>Copy every disc into one folder, then install from there."+
+       (dir.length ? "<br><br>"+dir : "")+
        "<br><br>"+setSentence(s)+
        "</div>";
     // The copy is offered while anything of this disc is still missing from
     // the folder, and the install only once the whole set is there.
     if(s.mineHere<s.mineTotal){
-      h+=btnHtml("btn_SetCopy","install","Copy this disc","setCopy()",
+      // Numbered, so the sequence reads itself: a person who has just put
+      // disc 1 in sees "Copy disc 1 of 2" and knows there is a disc 2 coming
+      // without having to read the paragraph above it.
+      h+=btnHtml("btn_SetCopy","install","Copy disc "+SET.n+" of "+SET.of,"setCopy()",
                  "Copy this disc's share of the game into "+dir);
     }
     if(s.complete){
@@ -3926,10 +3986,16 @@ $chkLegacy.Location=New-Object System.Drawing.Point(265,342)
 $chkLegacy.Size=New-Object System.Drawing.Size(240,22)
 $chkLegacy.Checked=$false
 $form.Controls.Add($chkLegacy)
+# Beside the disc it is about, rather than on the row of disc options below.
+# That row is full: 'readable on Windows XP and older' is 240 wide and runs
+# from 265 to 505, and this box was put at 380 - inside it. The click landed
+# on the neighbour, the box never ticked, and the build went on refusing a
+# payload a set would have handled. Everything downstream was right; the
+# control was simply underneath another one.
 $chkSet=New-Object System.Windows.Forms.CheckBox
 $chkSet.Text='disc set'
-$chkSet.Location=New-Object System.Drawing.Point(380,342)
-$chkSet.Size=New-Object System.Drawing.Size(120,22)
+$chkSet.Location=New-Object System.Drawing.Point(540,208)
+$chkSet.Size=New-Object System.Drawing.Size(115,22)
 $chkSet.Checked=$false
 $form.Controls.Add($chkSet)
 
@@ -5395,6 +5461,136 @@ $txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Upda
 #
 # The ISO is handed over and that is all. Driving another burner's command line
 # would mean knowing every one of them, and getting it wrong costs a disc.
+
+# Hand a set to a burner, one disc at a time, in order.
+#
+# A set is only a set once every disc is burned, and the thing most likely to
+# go wrong is burning them out of order or losing count. So this walks them:
+# disc 1, then ask, disc 2, then ask.
+#
+# It asks rather than detects, and says so. DiscWright hands the ISO to another
+# program and that program says nothing back - there is no way to know a burn
+# finished, or worked. Pretending otherwise would be the one thing worse than
+# asking: a set reported as burned when disc 2 never wrote.
+#
+# Returns nothing. Every exit is a sentence in the log, because a set half
+# burned is a thing somebody will come back to tomorrow needing to know where
+# they stopped.
+# $picks and $burnerPath are here so this can be RUN by a test. Without them it
+# finds its burner from $PSScriptRoot, which is the application's folder and not
+# anywhere a test can reach, so every test of this would have been a test of its
+# source text rather than of what it does. Production passes neither.
+function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks = $null, [string]$burnerPath = '') {
+    $n = @($isos).Count
+    if ($n -lt 2) { return }
+
+    if ($null -eq $picks) {
+        $burner = $(if ($burnerPath) { $burnerPath } else { Join-Path $PSScriptRoot ('burn' + [char]92 + 'DiscWright.Burn.ps1') })
+        if (-not (Test-Path $burner)) { & $log 'The burning files are not installed, so the discs were not offered.'; return }
+        . $burner
+        $picks = @(Get-IsoHandoffs)
+    }
+    $picks = @($picks)
+    if (-not $picks.Count) {
+        & $log 'Nothing on this machine is registered to open an ISO, so the discs were not offered.'
+        return
+    }
+
+    $start = "The set is $n discs." + [Environment]::NewLine + [Environment]::NewLine +
+             'They can be burned one at a time from here, in order.' + [Environment]::NewLine + [Environment]::NewLine +
+             'DiscWright hands each ISO to your burning program and cannot tell when it has' +
+             ' finished, so it will ask you before moving on to the next one.' + [Environment]::NewLine + [Environment]::NewLine +
+             'Burn them now?'
+    if (-not (Show-Confirm $start "Burn $n discs")) {
+        & $log "The $n ISOs are written. Burn each one to its own disc, in order, and label them."
+        return
+    }
+
+    # Chosen once. Being asked which program to use before every disc would be
+    # the kind of help nobody wants.
+    $chosen = Select-IsoHandoff $picks $parent
+    if (-not $chosen) {
+        & $log "Cancelled. The $n ISOs are written and can be burned by hand."
+        return
+    }
+
+    for ($i = 0; $i -lt $n; $i++) {
+        $d = $i + 1
+        $name = Split-Path $isos[$i] -Leaf
+        $ask = "Disc $d of $n" + [Environment]::NewLine + [Environment]::NewLine + $name +
+               [Environment]::NewLine + [Environment]::NewLine +
+               'Put a blank disc in, then press Yes to open it in ' + $chosen.Name + '.'
+        if (-not (Show-Confirm $ask "Disc $d of $n")) {
+            & $log "Stopped at disc $d of $n. The rest are written and can be burned later."
+            return
+        }
+        try {
+            Start-IsoHandoff $chosen $isos[$i]
+            & $log "Handed disc $d of $n to $($chosen.Name): $name"
+        }
+        catch {
+            Show-Warn "$($chosen.Name) could not be started:$([Environment]::NewLine + [Environment]::NewLine)$($_.Exception.Message)"
+            & $log "ERROR: disc $d of $n could not be handed over: $($_.Exception.Message)"
+            return
+        }
+
+        # The wait. Nothing here knows whether that burn worked, so the only
+        # honest thing is to stop and be told.
+        if ($d -lt $n) {
+            $next = "Disc $d of $n has been handed to $($chosen.Name)." + [Environment]::NewLine + [Environment]::NewLine +
+                    'When it has finished and you have labelled it, put the next blank in and' +
+                    ' press Yes for disc ' + ($d + 1) + '.' + [Environment]::NewLine + [Environment]::NewLine +
+                    'Ready for disc ' + ($d + 1) + ' of ' + $n + '?'
+            if (-not (Show-Confirm $next "Disc $d of $n done?")) {
+                & $log "Stopped after disc $d of $n. The rest are written and can be burned later."
+                return
+            }
+        }
+    }
+    & $log "All $n discs have been handed over. Label them 1 to $n if you have not already."
+}
+
+# Which program opens the ISO. Lifted out of the Burn with... button so the
+# walk above can ask once and reuse the answer.
+function Select-IsoHandoff($picks, $parent) {
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = 'Burn with'; $dlg.Font = $form.Font
+    $dlg.FormBorderStyle = 'FixedDialog'; $dlg.MaximizeBox = $false; $dlg.MinimizeBox = $false
+    $dlg.StartPosition = 'CenterParent'; $dlg.ShowInTaskbar = $false
+    $dlg.ClientSize = New-Object System.Drawing.Size(460, 172)
+
+    $l = New-Object System.Windows.Forms.Label
+    $l.Text = 'Hand each disc to which program?'
+    $l.Location = New-Object System.Drawing.Point(15, 14); $l.Size = New-Object System.Drawing.Size(430, 20)
+    $dlg.Controls.Add($l)
+
+    $lst = New-Object System.Windows.Forms.ListBox
+    $lst.Location = New-Object System.Drawing.Point(15, 40); $lst.Size = New-Object System.Drawing.Size(430, 62)
+    foreach ($h in $picks) { [void]$lst.Items.Add("$($h.Name)  -  $($h.What)") }
+    $lst.SelectedIndex = 0
+    $dlg.Controls.Add($lst)
+
+    $note = New-Object System.Windows.Forms.Label
+    $note.Text = 'DiscWright only opens it. What happens next is that program''s business.'
+    $note.Location = New-Object System.Drawing.Point(15, 108); $note.Size = New-Object System.Drawing.Size(430, 20)
+    $note.ForeColor = [System.Drawing.Color]::DimGray
+    $dlg.Controls.Add($note)
+
+    $ok = New-Object System.Windows.Forms.Button; $ok.Text = 'Use this'
+    $ok.Location = New-Object System.Drawing.Point(275, 136); $ok.Size = New-Object System.Drawing.Size(80, 26)
+    $ok.DialogResult = 'OK'; $dlg.Controls.Add($ok)
+    $cancel = New-Object System.Windows.Forms.Button; $cancel.Text = 'Cancel'
+    $cancel.Location = New-Object System.Drawing.Point(365, 136); $cancel.Size = New-Object System.Drawing.Size(80, 26)
+    $cancel.DialogResult = 'Cancel'; $dlg.Controls.Add($cancel)
+    $dlg.AcceptButton = $ok; $dlg.CancelButton = $cancel
+
+    $r = $dlg.ShowDialog($parent)
+    $i = $lst.SelectedIndex
+    $dlg.Dispose()
+    if ($r -ne [System.Windows.Forms.DialogResult]::OK -or $i -lt 0) { return $null }
+    return $picks[$i]
+}
+
 $btnHandoff.Add_Click({
     $t = $txtOut.Text.Trim()
     if (-not $t -or -not (Test-Path $t)) { Show-Warn 'No output folder is set yet.'; return }
@@ -5922,29 +6118,69 @@ $btnBuild.Add_Click({
     $mediaKey = Get-SelectedMediaKey
     $fit      = Get-CurrentFit $pay
 
-    if ($fit -and -not $fit.Ok) {
-        $mName = Get-MediaNameFromKey $mediaKey
-        $why = if ($fit.Reason -eq 'media') { "This set cannot be weighed against a $mName." }
-               else {
-                   ("This disc comes to {0:N2} GB, and a {1} holds {2:N2} GB - {3:N2} GB over." -f
-                        ($fit.Need/1GB), $mName, ($fit.Capacity/1GB), ($fit.Over/1GB)) +
-                   # Which games belong on a disc together is the user's call, so the
-                   # dialog says what has to come off and leaves the choosing alone.
-                   # DiscWright used to pack the overflow onto further discs by itself,
-                   # in whatever order the rows happened to sit in - see ROADMAP.md.
-                   "`r`n`r`nRemove an entry in step 1, or choose a larger disc in step 2."
-               }
-        Deny-Build ("payload does not fit a $mName.") $why
-        return
+    # Both of these refusals are answered by a disc set, so neither applies
+    # when one has been asked for. Invoke-BuildDiscSet does the arithmetic
+    # itself and refuses with the file that decided it, or with the disc that
+    # was never chosen.
+    #
+    # Without this the window could not build a set at all: the payload that
+    # makes a set worth having is exactly the payload this stops. The tests
+    # called the build directly and never saw it. Driving the real window to
+    # record a demonstration did, on the first take.
+    # Before refusing a payload for being too big, see whether splitting it
+    # across discs would work, and offer that. Nobody should have to know the
+    # tick box exists to be told their game needs three discs.
+    #
+    # Saying yes ticks the box rather than quietly building something else, so
+    # the form shows what is about to happen and the project remembers it.
+    if (-not $chkSet.Checked -and $fit -and -not $fit.Ok) {
+        $wouldBe = Get-DiscSetWouldNeed @{
+            Games = (Get-Games); MediaKey = $mediaKey; IconPath = $state.IconPath
+            BgPath = $state.BgPath; Menu = $chkMenu.Checked
+            MusicFile = $(if ($chkMusic.Checked) { $state.MusicFile } else { $null })
+            ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
+            ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
+            ExtraItems = @($lstExtra.Items)
+        }
+        if ($wouldBe -gt 1) {
+            $ask = ("This disc comes to {0:N2} GB and a {1} holds {2:N2} GB." -f
+                        ($fit.Need/1GB), (Get-MediaNameFromKey $mediaKey), ($fit.Capacity/1GB)) +
+                   "`r`n`r`nIt can be written as a set of $wouldBe discs instead." +
+                   "`r`n`r`nEvery disc carries a list of the whole set, and the menu on any of" +
+                   " them copies them all back into one folder and installs from there." +
+                   "`r`n`r`nWrite $wouldBe discs?"
+            if (Show-Confirm $ask 'This game needs more than one disc') {
+                $chkSet.Checked = $true
+                & $log "Building as a set of $wouldBe discs."
+            }
+        }
     }
 
-    $rec = Get-MediaRec $pay.Total
-    if (-not $fit -and -not $rec.Fit) {
-        Deny-Build ("payload is {0:N1} GB - too big for any single disc." -f ($pay.Total/1GB)) (
-            ("This disc would be {0:N1} GB, which is bigger than any single disc DiscWright can write." -f ($pay.Total/1GB)) +
-            "`r`n`r`nThe largest supported medium is BD-R XL at 100 GB." +
-            "`r`n`r`nRemove an entry in step 1 so what is left fits one disc.")
-        return
+    if (-not $chkSet.Checked) {
+        if ($fit -and -not $fit.Ok) {
+            $mName = Get-MediaNameFromKey $mediaKey
+            $why = if ($fit.Reason -eq 'media') { "This set cannot be weighed against a $mName." }
+                   else {
+                       ("This disc comes to {0:N2} GB, and a {1} holds {2:N2} GB - {3:N2} GB over." -f
+                            ($fit.Need/1GB), $mName, ($fit.Capacity/1GB), ($fit.Over/1GB)) +
+                       # Which games belong on a disc together is the user's call, so the
+                       # dialog says what has to come off and leaves the choosing alone.
+                       # DiscWright used to pack the overflow onto further discs by itself,
+                       # in whatever order the rows happened to sit in - see ROADMAP.md.
+                       "`r`n`r`nRemove an entry in step 1, or choose a larger disc in step 2."
+                   }
+            Deny-Build ("payload does not fit a $mName.") $why
+            return
+        }
+    
+        $rec = Get-MediaRec $pay.Total
+        if (-not $fit -and -not $rec.Fit) {
+            Deny-Build ("payload is {0:N1} GB - too big for any single disc." -f ($pay.Total/1GB)) (
+                ("This disc would be {0:N1} GB, which is bigger than any single disc DiscWright can write." -f ($pay.Total/1GB)) +
+                "`r`n`r`nThe largest supported medium is BD-R XL at 100 GB." +
+                "`r`n`r`nRemove an entry in step 1 so what is left fits one disc.")
+            return
+        }
     }
 
     # Staging copies the payload, then the ISO is written beside it, so the output
@@ -6035,9 +6271,11 @@ $btnBuild.Add_Click({
     try {
         if ($s.DiscSet) {
             $set = Invoke-BuildDiscSet $s $log $buildProgress
-            # Thrown rather than reported here, so a refusal reaches the same
-            # message box every other build failure already uses.
-            if (-not $set.Ok) { throw $set.Why }
+            # Refused, not failed. Deny-Build is what every other refusal on
+            # this button uses, so the wording and the log line match them;
+            # thrown, it arrived as "The build failed:" in front of a sentence
+            # explaining that a file is too big, which is not a failure.
+            if (-not $set.Ok) { Deny-Build 'the disc set cannot be laid out.' $set.Why; return }
             $isos = @($set.Isos)
         } else {
             $isos = @(Invoke-Build $s $log $buildProgress)
@@ -6049,6 +6287,13 @@ $btnBuild.Add_Click({
         & $log "Total time: $took"
         $what = $(if ($isos.Count -gt 1) { "$($isos.Count) discs built in $took" } else { "Build complete in $took" })
         [System.Windows.Forms.MessageBox]::Show(($what + "`n`n" + ($isos -join "`n")),"DiscWright") | Out-Null
+
+        # A set is only a set once every disc is burned, and burning them out of
+        # order or losing count is the easy mistake. Offered here, one at a time,
+        # rather than left as a line in the log saying to burn them all.
+        if ($s.DiscSet -and @($isos).Count -gt 1) {
+            Invoke-SetBurnWalk @($isos) $log $form
+        }
     }
     catch {
         $buildWatch.Stop(); $script:BuildDiscTag = ''; $lblElapsed.Text='Failed'

@@ -103,6 +103,41 @@ BeforeAll {
     $script:BigB = Join-Path $script:SrcRoot 'ddd_big_two'
     $null = New-Installer $script:BigA 'setup_big_one_1.0.exe' 500
     $null = New-Installer $script:BigB 'setup_big_two_1.0.exe' 500
+    # One game that no single CD could hold, for the disc-set refusals. 800 MB
+    # in one file: a set cannot help, because the file itself is larger than the
+    # disc, and the refusal has to name it rather than talk about totals.
+    # One game of two 400 MB files: too big for a CD, and a set of two fixes
+    # it. This is the case where the build should OFFER to split rather than
+    # refuse, so it needs a payload a set can actually help with.
+    $script:Splittable = Join-Path $script:SrcRoot 'fff_splittable'
+    $null = New-Installer $script:Splittable 'setup_splittable_1.0.exe' 400
+    $null = New-Installer $script:Splittable 'setup_splittable_1.0-1.bin' 400
+    $script:SplitOut = Join-Path $script:Sandbox 'splitproj'
+    New-Item -ItemType Directory -Force -Path $script:SplitOut | Out-Null
+    Save-Project @{
+        Games=@((Get-GameInfo $script:Splittable)); Label='Splittable'
+        IconPath=$script:Art; IconIsIco=$false
+        Menu=$true; BgPath=$script:Art; BgAsIs=$false; PanelSide='Right'
+        Divider=$false; ShowTitle=$false; TitleText=''
+        WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+        Buttons=@('Install','Exit'); ManualPath=$null; ExtrasPath=$null
+        ExtraItems=@(); MediaKey='CD'; OutDir=$script:SplitOut
+    } $script:SplitOut
+
+    $script:SoloBig = Join-Path $script:SrcRoot 'eee_big_solo'
+    $null = New-Installer $script:SoloBig 'setup_big_solo_1.0.exe' 800
+    $script:SoloOut = Join-Path $script:Sandbox 'soloproj'
+    New-Item -ItemType Directory -Force -Path $script:SoloOut | Out-Null
+    Save-Project @{
+        Games=@((Get-GameInfo $script:SoloBig)); Label='Big Solo'
+        IconPath=$script:Art; IconIsIco=$false
+        Menu=$true; BgPath=$script:Art; BgAsIs=$false; PanelSide='Right'
+        Divider=$false; ShowTitle=$false; TitleText=''
+        WindowBorder=$true; ButtonStyle='Minimal'; MusicFile=$null
+        Buttons=@('Install','Exit'); ManualPath=$null; ExtrasPath=$null
+        ExtraItems=@(); MediaKey='CD'; OutDir=$script:SoloOut
+    } $script:SoloOut
+
     $script:BigOut = Join-Path $script:Sandbox 'bigproj'
     New-Item -ItemType Directory -Force -Path $script:BigOut | Out-Null
     Save-Project @{
@@ -839,6 +874,112 @@ Describe 'What the build refuses, and whether it says why' -Tag 'UI' -Skip:(-not
     }
 }
 
+
+
+Describe 'Asking for a disc set from the window' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # This Describe exists because of a bug no logic test could have found.
+    #
+    # BUILD ISO refuses a payload that will not fit the chosen disc, and it does
+    # so before the build starts. That payload is exactly the payload a disc set
+    # is for, so with the box ticked the window could not build a set at all:
+    # the tick was wired through saving, loading and the build itself, and a
+    # guard three screens earlier said no.
+    #
+    # Every logic test called Invoke-BuildDiscSet directly, so all of them
+    # passed. Driving the real window to record a demonstration found it on the
+    # first take, which is the argument for this file existing.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+
+        # One game of 800 MB in a single file, pointed at a CD. A set cannot
+        # help with this one, which is what makes it useful here: the refusal
+        # has to come from the set arithmetic and name the file.
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:SoloOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        if ((Get-EntryCount $script:Win) -ne 1) { throw 'the solo project did not load' }
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'reads the target disc back off the project' {
+        Get-MediaTargetText $script:Win | Should -Match 'CD-R'
+    }
+
+    It 'refuses a payload past the disc when no set was asked for' {
+        # Unchanged behaviour, pinned here so the change below cannot quietly
+        # turn this refusal off for everybody.
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $msg = Read-MessageBox -Win $script:Win
+        $msg | Should -Match 'over'
+        $msg | Should -Match 'Remove an entry in step 1'
+    }
+
+    It 'lets the set arithmetic answer instead, once a set is asked for' {
+        # The bug. With the box ticked the old refusal must stand aside, and the
+        # set's own refusal must reach the person: by name, with the room a disc
+        # of that size actually leaves.
+        Invoke-CtlNamed $script:Win 'disc set' | Out-Null
+        Start-Sleep -Milliseconds 500
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $msg = Read-MessageBox -Win $script:Win
+        $msg | Should -Not -Match 'Remove an entry in step 1'
+        $msg | Should -Match 'setup_big_solo'
+        $msg | Should -Match 'larger disc'
+    }
+
+    It 'says which file decided it, not just that it does not fit' {
+        # Same dialog, read again for the part that makes it actionable. A size
+        # on its own leaves somebody to work out which file to go and look at.
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $msg = Read-MessageBox -Win $script:Win
+        $msg | Should -Match '0\.78 GB'
+        $msg | Should -Match '0\.6[0-9] GB'
+    }
+
+    It 'still refuses several games across a set' {
+        # The one decision a set will not make for anybody. Two games, both of
+        # which fit a CD on their own, which is why only the set rule can
+        # refuse this.
+        Invoke-CtlNamed $script:Win 'New disc' | Out-Null
+        $yes = Find-Ctl -Root $script:Win -NameLike 'Yes' -TimeoutSec 8
+        if ($yes) { Invoke-Ctl -Ctl $yes -SettleMs 1000 }
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:BigOutSet
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        (Get-EntryCount $script:Win) | Should -Be 2
+
+        # The project did not ask for a set, so tick it here.
+        Invoke-CtlNamed $script:Win 'disc set' | Out-Null
+        Start-Sleep -Milliseconds 500
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        # This project already has an ISO beside it, so the button reads REBUILD
+        # and asks before replacing it. That confirmation comes first and is not
+        # the refusal.
+        #
+        # Dismissed by its BUTTON, not by its words: every message box here is
+        # named 'DiscWright', so searching for the body text finds nothing, which
+        # is how the first attempt at this still read the confirmation.
+        $msg = Read-MessageBox -Win $script:Win -Button 'Yes' -TimeoutSec 15
+        if ($msg -match 'Continue') {
+            $msg = Read-MessageBox -Win $script:Win -TimeoutSec 20
+        }
+        else {
+            $ok = Find-Ctl -Root $script:Win -NameLike 'OK' -TimeoutSec 4
+            if ($ok) { Invoke-Ctl -Ctl $ok -SettleMs 600 }
+        }
+        $msg | Should -Match 'one game'
+        $msg | Should -Not -Match 'Remove an entry in step 1'
+    }
+
+    It 'leaves the disc alone after every one of those refusals' {
+        Get-EntryCount $script:Win | Should -Be 2
+    }
+}
 
 Describe 'Previewing the menu' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
@@ -1783,5 +1924,62 @@ Describe 'Double-clicking the launcher on a finished disc' -Tag 'UI' -Skip:(-not
     It 'leaves the menu where autorun.inf still points, so AutoPlay is unchanged' {
         Test-Path (Join-Path $script:LaunchDisc 'AUTORUN\menu.hta') | Should -BeTrue
         (Get-Content (Join-Path $script:LaunchDisc 'autorun.inf') -Raw) | Should -Match 'shellexecute=AUTORUN'
+    }
+}
+
+Describe 'Being offered a disc set rather than a refusal' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The build used to say "too big for that disc" and stop, which left finding
+    # the tick box as the person's problem. It now works out whether splitting
+    # would help and asks. This drives the real dialog, because the wording is
+    # the whole value of it: a question nobody understands is not an offer.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:SplitOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        if ((Get-EntryCount $script:Win) -ne 1) { throw 'the splittable project did not load' }
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    It 'asks before refusing, and says how many discs it would take' {
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $ask = Find-Ctl -Root $script:Win -NameLike 'This game needs more than one disc' -TimeoutSec 15
+        $ask | Should -Not -BeNullOrEmpty -Because 'a payload a set could carry must be offered one'
+        $text = ''
+        foreach ($c in @(Find-Ctl -Root $ask -NameLike '*set of*' -TimeoutSec 4)) {
+            if ($c) { $text = [string]$c.Current.Name }
+        }
+        $text | Should -Match 'set of 2 discs'
+        $text | Should -Match 'copies them all back into one folder'
+    }
+
+    It 'leaves the box alone and still refuses when the answer is no' {
+        # Declining has to land on the refusal that was always there, not on a
+        # half-started build.
+        $no = Find-Ctl -Root $script:Win -NameLike 'No' -TimeoutSec 8
+        $no | Should -Not -BeNullOrEmpty
+        Invoke-Ctl -Ctl $no -SettleMs 1200
+        $msg = Read-MessageBox -Win $script:Win -TimeoutSec 15
+        $msg | Should -Match 'Remove an entry in step 1'
+    }
+
+    It 'does not ask at all when a set could not help' {
+        # The same button, on a game whose single file no CD could hold. There
+        # is nothing to offer, so it goes straight to the refusal that names it.
+        Invoke-CtlNamed $script:Win 'New disc' | Out-Null
+        $yes = Find-Ctl -Root $script:Win -NameLike 'Yes' -TimeoutSec 8
+        if ($yes) { Invoke-Ctl -Ctl $yes -SettleMs 1000 }
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:SoloOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $msg = Read-MessageBox -Win $script:Win -TimeoutSec 15
+        $msg | Should -Match 'Remove an entry in step 1'
+        $msg | Should -Not -Match 'set of'
     }
 }

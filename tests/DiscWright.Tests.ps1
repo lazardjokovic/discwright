@@ -7801,3 +7801,406 @@ Describe 'The set panel does not dress as a button' -Tag 'Unit' {
         }
     }
 }
+
+
+Describe 'No control on the form is laid out on top of another' -Tag 'Unit' {
+
+    # The window is positioned in absolute pixels, and a new control put at a
+    # free-looking x can land inside a neighbour that is wider than it reads.
+    #
+    # That happened: 'disc set' was placed at x=380 on the row of disc options,
+    # where 'readable on Windows XP and older' is 240 wide and runs from 265 to
+    # 505. The new box sat entirely inside it, every click went to the
+    # neighbour, and the checkbox never ticked - so the window could not ask for
+    # a disc set at all while everything behind it worked.
+    #
+    # The window suite's own overlap check could not see it. It allows one
+    # rectangle to contain another, because a group box legitimately contains
+    # its children, and full containment is exactly what this was.
+    #
+    # Read off the source rather than off a running window, so it fails on the
+    # machine that made the change instead of on the one with a desktop.
+
+    BeforeAll {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+
+        $kind = @{}
+        foreach ($m in [regex]::Matches($src, '\$(\w+)\s*=\s*New-Object System\.Windows\.Forms\.(\w+)')) {
+            $kind[$m.Groups[1].Value] = $m.Groups[2].Value
+        }
+        $pos = @{}
+        foreach ($m in [regex]::Matches($src, '\$(\w+)\.Location\s*=\s*New-Object System\.Drawing\.Point\((\d+),\s*(\d+)\)')) {
+            $pos[$m.Groups[1].Value] = @([int]$m.Groups[2].Value, [int]$m.Groups[3].Value)
+        }
+        $dim = @{}
+        foreach ($m in [regex]::Matches($src, '\$(\w+)\.Size\s*=\s*New-Object System\.Drawing\.Size\((\d+),\s*(\d+)\)')) {
+            $dim[$m.Groups[1].Value] = @([int]$m.Groups[2].Value, [int]$m.Groups[3].Value)
+        }
+
+        # Only what is added straight to the main form. A control added to a
+        # group box is positioned relative to that box, so its numbers cannot be
+        # compared with these.
+        $onForm = @()
+        foreach ($m in [regex]::Matches($src, '\$form\.Controls\.Add\(\$(\w+)\)')) {
+            $onForm += $m.Groups[1].Value
+        }
+        $onForm = @($onForm | Sort-Object -Unique)
+
+        $script:Boxes = @()
+        foreach ($n in $onForm) {
+            if (-not $pos.ContainsKey($n) -or -not $dim.ContainsKey($n)) { continue }
+            # A group box is a container, so things inside it are meant to be.
+            if ($kind[$n] -eq 'GroupBox') { continue }
+            $script:Boxes += , @{ Name = $n; Kind = [string]$kind[$n]
+                                  X = $pos[$n][0]; Y = $pos[$n][1]
+                                  W = $dim[$n][0]; H = $dim[$n][1] }
+        }
+    }
+
+    It 'found the controls it is supposed to be checking' {
+        # Without this the test below passes for ever on an empty list the day
+        # the source stops matching these patterns.
+        @($script:Boxes).Count | Should -BeGreaterThan 8
+        @($script:Boxes | Where-Object { $_.Kind -eq 'CheckBox' }).Count | Should -BeGreaterThan 3
+    }
+
+    It 'has no two of them sharing a pixel' {
+        $clashes = @()
+        for ($i = 0; $i -lt $script:Boxes.Count; $i++) {
+            for ($j = $i + 1; $j -lt $script:Boxes.Count; $j++) {
+                $a = $script:Boxes[$i]; $b = $script:Boxes[$j]
+                $overX = ($a.X -lt ($b.X + $b.W)) -and ($b.X -lt ($a.X + $a.W))
+                $overY = ($a.Y -lt ($b.Y + $b.H)) -and ($b.Y -lt ($a.Y + $a.H))
+                if ($overX -and $overY) {
+                    $clashes += ('{0} ({1}..{2} x {3}..{4}) runs through {5} ({6}..{7} x {8}..{9})' -f
+                        $a.Name, $a.X, ($a.X + $a.W), $a.Y, ($a.Y + $a.H),
+                        $b.Name, $b.X, ($b.X + $b.W), $b.Y, ($b.Y + $b.H))
+                }
+            }
+        }
+        $clashes | Should -BeNullOrEmpty
+    }
+
+    It 'keeps the row of disc options clear of each other' {
+        # The specific row the mistake was made on, named so a future reader
+        # knows which one is crowded.
+        $row = @($script:Boxes | Where-Object { $_.Y -ge 330 -and $_.Y -le 370 } | Sort-Object { $_.X })
+        $row.Count | Should -BeGreaterThan 2
+        for ($i = 1; $i -lt $row.Count; $i++) {
+            $row[$i].X | Should -BeGreaterOrEqual ($row[$i-1].X + $row[$i-1].W) `
+                -Because "$($row[$i].Name) starts before $($row[$i-1].Name) ends"
+        }
+    }
+}
+
+Describe 'The set panel fits the window, and says when it cannot tidy up' -Tag 'Unit' {
+
+    # Two faults found by recording a demonstration of the feature, neither of
+    # which any test here would have caught. Both are in the menu's JScript,
+    # inside functions that need a document and a real window, so they cannot
+    # be run headlessly the way the arithmetic further up can. These read the
+    # source instead, which is weaker, and is why each one says what it is
+    # guarding rather than only that a string is present.
+
+    BeforeAll {
+        $script:App = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+    }
+
+    It 'takes the set panel out of the room the buttons get' {
+        # setPanel shrinks buttons so they cannot run off a 480px window, but it
+        # counted only <A> elements. The set panel puts a block of text above
+        # them, so on a two-disc set Choose folder sat half over the bottom edge
+        # and Exit was not drawn at all.
+        $script:App | Should -Match 'var si=document\.getElementById\("setinfo"\)'
+        $script:App | Should -Match 'var siH=si \? si\.offsetHeight\+12 : 0'
+        $script:App | Should -Match 'var bh=46, gap=12, avail=440-capH-siH'
+    }
+
+    It 'counts the set panel when centring what is left' {
+        # The same height has to be in the block being centred, or the panel is
+        # centred as though the text were not there and rides high.
+        $script:App | Should -Match 'var block=capH\+siH\+n\*bh'
+    }
+
+    It 'gives the set panel a handle to be measured by' {
+        $script:App | Should -Match '<div class="setinfo" id="setinfo">'
+    }
+
+    It 'does not throw away a failed delete' {
+        # Every removal was wrapped in a catch that said nothing. A real run
+        # left two of four files behind, still held open by whatever had just
+        # copied them, and the menu reported the folder as emptied.
+        $script:App | Should -Match 'catch\(ex\)\{ failed\[failed\.length\]=list\.files\[i\]; \}'
+        $script:App | Should -Match 'if\(failed\.length\)\{'
+        $script:App | Should -Match 'could not be removed'
+    }
+
+    It 'still has the silent catches it is allowed to have' {
+        # The sweep that removes empty folders afterwards may fail harmlessly:
+        # a folder someone else put a file in is not this set's to delete. That
+        # one stays quiet on purpose, so the guard above must not be read as
+        # "no catch may ever be silent".
+        $script:App | Should -Match 'if\(d\.Files\.Count===0&&d\.SubFolders\.Count===0\)'
+    }
+}
+
+Describe 'Working out whether a set would help, before refusing' -Tag 'Unit' {
+
+    # The build used to answer "too big for that disc" and stop there, leaving
+    # the person to discover the tick box for themselves. Knowing a feature
+    # exists should not be a condition of using it, so the button asks this
+    # first and offers the set.
+    #
+    # Zero means "do not offer", and every reason for that is its own case
+    # below: offering a set that would then be refused is worse than not
+    # offering one.
+
+    BeforeAll {
+        $script:WouldDir = Join-Path $script:Sandbox 'would'
+        New-Item -ItemType Directory -Force -Path $script:WouldDir | Out-Null
+        function New-Sparse([string]$dir, [string]$name, [double]$mb) {
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $fs = [IO.File]::Create((Join-Path $dir $name)); $fs.SetLength([long]($mb * 1MB)); $fs.Close()
+        }
+        # One game of two 400 MB files: too big for a CD, fine as two of them.
+        $script:TwoDisc = Join-Path $script:WouldDir 'two_disc_game'
+        New-Sparse $script:TwoDisc 'setup_two_disc_game.exe' 400
+        New-Sparse $script:TwoDisc 'setup_two_disc_game-1.bin' 400
+        # One game whose single file no CD could hold.
+        $script:TooBig = Join-Path $script:WouldDir 'one_huge_game'
+        New-Sparse $script:TooBig 'setup_one_huge_game.exe' 900
+
+        function Would([string]$folder, [string]$media, [hashtable]$extra = @{}) {
+            $s = @{ Games = @((Get-GameInfo $folder)); MediaKey = $media
+                    IconPath = $script:Art; BgPath = $script:Art; Menu = $true }
+            foreach ($k in $extra.Keys) { $s[$k] = $extra[$k] }
+            return (Get-DiscSetWouldNeed $s)
+        }
+    }
+
+    It 'says how many discs a payload that will not fit would take' {
+        Would $script:TwoDisc 'CD' | Should -Be 2
+    }
+
+    It 'says one for a payload that fits, so nothing is offered' {
+        # A set is not wrong here, it is just not worth asking about.
+        Would $script:TwoDisc 'DVD5' | Should -Be 1
+    }
+
+    It 'offers nothing when a single file is bigger than the disc' {
+        # A set cannot help, and offering one would end in a refusal.
+        Would $script:TooBig 'CD' | Should -Be 0
+    }
+
+    It 'offers nothing when no disc has been chosen' {
+        Would $script:TwoDisc '' | Should -Be 0
+    }
+
+    It 'offers nothing for several games' {
+        $s = @{ Games = @((Get-GameInfo $script:TwoDisc), (Get-GameInfo $script:TooBig))
+                MediaKey = 'CD'; IconPath = $script:Art; BgPath = $script:Art; Menu = $true }
+        Get-DiscSetWouldNeed $s | Should -Be 0
+    }
+
+    It 'offers nothing when the extras alone are bigger than the disc' {
+        $big = Join-Path $script:WouldDir 'bigextras'
+        New-Sparse $big 'soundtrack.flac' 900
+        Would $script:TwoDisc 'CD' @{ ExtrasPath = $big } | Should -Be 0
+    }
+
+    It 'counts the extras when they do fit' {
+        # 800 MB of game plus 400 MB of extras needs one more CD than the game
+        # alone, and the offer has to say the real number.
+        $small = Join-Path $script:WouldDir 'smallextras'
+        New-Sparse $small 'wallpapers.zip' 400
+        (Would $script:TwoDisc 'CD' @{ ExtrasPath = $small }) | Should -BeGreaterThan 2
+    }
+
+    It 'offers nothing for a game with no files' {
+        $empty = Join-Path $script:WouldDir 'empty_game'
+        New-Item -ItemType Directory -Force -Path $empty | Out-Null
+        $s = @{ Games = @(@{ Folder = $empty; SetupExe = $null; Files = @(); Source = 'Files' })
+                MediaKey = 'CD'; IconPath = $script:Art; BgPath = $script:Art; Menu = $true }
+        Get-DiscSetWouldNeed $s | Should -Be 0
+    }
+}
+
+Describe 'Walking a set to the burner, one disc at a time' -Tag 'Unit' {
+
+    # A set is only a set once every disc is burned, and the easy mistake is
+    # burning them out of order or losing count. The build offers to walk them.
+    #
+    # It asks rather than detects, on purpose: DiscWright hands an ISO to
+    # another program and that program says nothing back, so there is no way to
+    # know a burn finished or worked. Reporting a set as burned when disc 2
+    # never wrote would be worse than asking.
+    #
+    # The walk itself puts dialogs on the screen, so what can be checked here
+    # is its shape and the sentences it leaves behind. The dialogs themselves
+    # belong to the window suite.
+
+    BeforeAll {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+        $script:Walk = ($ast.FindAll({ param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $n.Name -eq 'Invoke-SetBurnWalk' }, $false) | Select-Object -First 1)
+        $script:WalkText = [string]$script:Walk.Extent.Text
+        $script:Src = $src
+    }
+
+    It 'exists, and the build calls it only for a set of more than one disc' {
+        $script:Walk | Should -Not -BeNullOrEmpty
+        $script:Src | Should -Match 'if \(\$s\.DiscSet -and @\(\$isos\)\.Count -gt 1\) \{'
+    }
+
+    It 'does nothing for a single disc' {
+        # Called with one ISO it must return before asking anything at all: a
+        # one-disc build is not a set and must not grow a burning interview.
+        $script:WalkText | Should -Match 'if \(\$n -lt 2\) \{ return \}'
+    }
+
+    It 'asks which program once, not once per disc' {
+        # Being asked before every disc is the kind of help nobody wants.
+        ([regex]::Matches($script:WalkText, 'Select-IsoHandoff')).Count | Should -Be 1
+    }
+
+    It 'says it cannot tell when a burn has finished' {
+        # The whole reason it asks. If this sentence goes, somebody will assume
+        # the app knows, and a set reported as burned is a set that may not be.
+        $script:WalkText | Should -Match 'cannot tell when it has'
+    }
+
+    It 'stops where it was told to stop, and says so' {
+        # Every way out writes a line saying which disc it reached, because a
+        # set half burned is something somebody comes back to tomorrow.
+        $script:WalkText | Should -Match 'Stopped at disc \$d of \$n'
+        $script:WalkText | Should -Match 'Stopped after disc \$d of \$n'
+        $script:WalkText | Should -Match 'can be burned later'
+    }
+
+    It 'does not ask about the disc after the last one' {
+        $script:WalkText | Should -Match 'if \(\$d -lt \$n\) \{'
+    }
+
+    It 'gives up quietly when there is nothing registered to open an ISO' {
+        # Not an error: the ISOs are written and can be burned by hand.
+        $script:WalkText | Should -Match 'Nothing on this machine is registered to open an ISO'
+        $script:WalkText | Should -Match 'The burning files are not installed'
+    }
+
+    It 'tells the person where the discs are when they decline' {
+        $script:WalkText | Should -Match 'Burn each one to its own disc, in order, and label them'
+    }
+}
+
+
+Describe 'Running the burn walk, not just reading it' -Tag 'Unit' {
+
+    # The nine tests above this one read the source. That is a weak way to test
+    # anything, and it was the only way available while the walk found its
+    # burner from $PSScriptRoot. It takes that as an argument now, so this runs
+    # it for real: the questions it asks, in order, and what it hands over.
+    #
+    # The dialogs and the handoff are stubs, because the point is the sequence,
+    # not whether Windows can start Nero.
+
+    BeforeAll {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+        $fn = ($ast.FindAll({ param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $n.Name -eq 'Invoke-SetBurnWalk' }, $false) | Select-Object -First 1)
+        . ([scriptblock]::Create($fn.Extent.Text))
+
+        # Answers are handed out in order, so a test says what the person did.
+        function Show-Confirm([string]$msg, [string]$title = 'DiscWright') {
+            $script:Asked += , $msg
+            if ($script:Answers.Count -eq 0) { return $false }
+            $a = $script:Answers[0]
+            $script:Answers = @($script:Answers | Select-Object -Skip 1)
+            return $a
+        }
+        function Show-Warn([string]$m) { $script:Warned += , $m }
+        function Select-IsoHandoff($picks, $parent) {
+            $script:Chose++
+            return @{ Name = 'Fake Burner'; What = 'opens an ISO' }
+        }
+        function Start-IsoHandoff($chosen, [string]$iso) { $script:Handed += , $iso }
+
+        function Walk([int]$discs, [bool[]]$answers) {
+            $script:Asked = @(); $script:Handed = @(); $script:Warned = @(); $script:Chose = 0
+            $script:Lines = @()
+            $script:Answers = @($answers)
+            $isos = @(1..$discs | ForEach-Object { "D:\out\GAME D$_.iso" })
+            Invoke-SetBurnWalk $isos { param($m) $script:Lines += , $m } $null `
+                               @(@{ Name = 'Fake Burner'; What = 'opens an ISO' })
+        }
+    }
+
+    It 'asks nothing at all for a single disc' {
+        # One disc is not a set, and must not grow a burning interview.
+        Walk 1 @($true)
+        @($script:Asked).Count | Should -Be 0
+        @($script:Handed).Count | Should -Be 0
+    }
+
+    It 'hands every disc over, in order, when the answer is always yes' {
+        # Three discs: the opening question, then per disc one "put a blank in",
+        # with a "that one done?" between them. Seven questions, three handoffs.
+        Walk 3 @($true, $true, $true, $true, $true, $true, $true)
+        $script:Handed | Should -Be @('D:\out\GAME D1.iso', 'D:\out\GAME D2.iso', 'D:\out\GAME D3.iso')
+        $script:Chose | Should -Be 1 -Because 'the program is chosen once, not once per disc'
+    }
+
+    It 'says which disc each question is about' {
+        Walk 2 @($true, $true, $true, $true)
+        ($script:Asked -join '|') | Should -Match 'Disc 1 of 2'
+        ($script:Asked -join '|') | Should -Match 'Disc 2 of 2'
+        ($script:Asked -join '|') | Should -Match 'GAME D1\.iso'
+        ($script:Asked -join '|') | Should -Match 'GAME D2\.iso'
+    }
+
+    It 'does not ask whether the last disc is done' {
+        # There is nothing after it, so asking would be a question with no point.
+        Walk 2 @($true, $true, $true, $true)
+        ($script:Asked -join '|') | Should -Match 'Ready for disc 2 of 2'
+        ($script:Asked -join '|') | Should -Not -Match 'Ready for disc 3'
+    }
+
+    It 'hands over nothing when the opening question is declined' {
+        Walk 3 @($false)
+        @($script:Handed).Count | Should -Be 0
+        ($script:Lines -join '|') | Should -Match 'Burn each one to its own disc, in order'
+    }
+
+    It 'stops where it was told, and the log says which disc' {
+        # Yes to the opening question, yes to disc 1, then no when asked whether
+        # disc 1 is done. One disc handed over, and a line saying so.
+        Walk 3 @($true, $true, $false)
+        @($script:Handed).Count | Should -Be 1
+        ($script:Lines -join '|') | Should -Match 'Stopped after disc 1 of 3'
+        ($script:Lines -join '|') | Should -Match 'can be burned later'
+    }
+
+    It 'stops before handing over when a disc is declined' {
+        Walk 3 @($true, $true, $true, $false)
+        @($script:Handed).Count | Should -Be 1
+        ($script:Lines -join '|') | Should -Match 'Stopped at disc 2 of 3'
+    }
+
+    It 'says so when nothing on the machine opens an ISO' {
+        $script:Asked = @(); $script:Handed = @(); $script:Lines = @(); $script:Answers = @($true)
+        Invoke-SetBurnWalk @('D:\a.iso', 'D:\b.iso') { param($m) $script:Lines += , $m } $null @()
+        @($script:Asked).Count | Should -Be 0
+        ($script:Lines -join '|') | Should -Match 'Nothing on this machine is registered to open an ISO'
+    }
+
+    It 'records every disc it handed over, by number' {
+        # The log is what somebody reads tomorrow to find where they stopped.
+        Walk 2 @($true, $true, $true, $true)
+        ($script:Lines -join '|') | Should -Match 'Handed disc 1 of 2 to Fake Burner'
+        ($script:Lines -join '|') | Should -Match 'Handed disc 2 of 2 to Fake Burner'
+        ($script:Lines -join '|') | Should -Match 'All 2 discs have been handed over'
+    }
+}
