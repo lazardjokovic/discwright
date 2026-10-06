@@ -6640,11 +6640,24 @@ Describe 'Laying one game out across several discs' -Tag 'Unit' {
     It 'refuses a file no disc of that size could hold, and names it' {
         # The answer is a bigger blank, so the person has to be told which file
         # decided that rather than just "it will not fit".
+        #
+        # This used to end "Choose a larger disc." and that is now gone, which is
+        # why this test changed rather than being loosened. Lazar ticked disc set
+        # for a 9 GB game on a CD and got exactly that sentence: it tells you to
+        # pick another disc without saying which, and never says why ticking the
+        # box did not help. The rule is the missing half, so the rule is what is
+        # asserted. Which disc to pick is answered by Get-SmallestSetMedia, on
+        # the line under the installer list, where the choice is actually made.
         $plan = Get-DiscSetPlan $script:Gog (Get-MediaCapacity 'CD') 6MB
         $plan.Ok | Should -BeFalse
         $plan.Why | Should -Match 'setup_big_game\.exe'
-        $plan.Why | Should -Match 'larger disc'
+        $plan.Why | Should -Match 'never splits a file'
+        $plan.Why | Should -Not -Match 'larger disc' -Because 'advice without a disc name sent somebody back to guessing'
         @($plan.Discs).Count | Should -Be 0
+        # And the same facts as numbers, so nothing has to read them back out of
+        # the sentence.
+        $plan.TooBig.Rel | Should -Be 'setup_big_game.exe'
+        [double]$plan.TooBig.Bytes | Should -BeGreaterThan (Get-MediaCapacity 'CD')
     }
 
     It 'counts the room the menu and artwork take' {
