@@ -349,3 +349,67 @@ Describe 'Telling somebody how long a burn will take' -Tag 'Unit' {
         $seen[-1] | Should -Be 5
     }
 }
+
+Describe 'Telling the truth about the disc in the drive' -Tag 'Unit' {
+
+    # The burn confirmation said "This cannot be undone and the disc is not
+    # rewritable" to everybody, whatever was in the drive. Found with a CD-RW
+    # actually in the drive, which is the one case where it is flatly wrong, and
+    # it is the sentence somebody reads immediately before committing a disc.
+    #
+    # Being wrong about the thing in their hand is how a dialog loses the
+    # benefit of the doubt for everything else it says.
+
+    It 'knows <Name> can be erased and written again' -ForEach @(
+        @{ Code = 3;  Name = 'CD-RW' }
+        @{ Code = 5;  Name = 'DVD-RAM' }
+        @{ Code = 7;  Name = 'DVD+RW' }
+        @{ Code = 10; Name = 'DVD-RW' }
+        @{ Code = 13; Name = 'DVD+RW DL' }
+        @{ Code = 19; Name = 'BD-RE' }
+    ) {
+        Test-MediaRewritable $Code | Should -BeTrue
+    }
+
+    It 'knows <Name> is written once and never again' -ForEach @(
+        @{ Code = 2;  Name = 'CD-R' }
+        @{ Code = 6;  Name = 'DVD+R' }
+        @{ Code = 9;  Name = 'DVD-R' }
+        @{ Code = 11; Name = 'DVD-R DL' }
+        @{ Code = 18; Name = 'BD-R' }
+    ) {
+        Test-MediaRewritable $Code | Should -BeFalse
+    }
+
+    It 'does not call a pressed disc rewritable' {
+        # It cannot be written at all, so it certainly cannot be rewritten.
+        Test-MediaRewritable 1  | Should -BeFalse
+        Test-MediaRewritable 17 | Should -BeFalse
+    }
+
+    It 'says nothing about a code it does not know' {
+        Test-MediaRewritable 250 | Should -BeFalse
+    }
+
+    It 'every writable medium says one thing or the other, and never both' {
+        # A new media type added to the table without a Rewritable flag would
+        # quietly read as "not rewritable", which is how the original bug would
+        # come back one disc type at a time.
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'burn\DiscWright.Burn.ps1') -Raw
+        $rows = [regex]::Matches($src, "=\s*@\{ Name = '[^']+';\s*Writable = \`$(true|false);\s*Rewritable = \`$(true|false)")
+        $rows.Count | Should -BeGreaterThan 15 -Because 'every row in the media table carries both flags'
+        foreach ($m in $rows) {
+            if ($m.Groups[1].Value -eq 'false') {
+                $m.Groups[2].Value | Should -Be 'false' -Because 'a disc that cannot be written cannot be rewritten'
+            }
+        }
+    }
+
+    It 'picks the sentence from the media, not from a constant' {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'burn\DiscWright.Burn.ps1') -Raw
+        $src | Should -Match 'if \(Test-MediaRewritable \$target\.MediaType\)'
+        $src | Should -Match 'The disc is rewritable, so it can be erased and written again'
+        $src | Should -Match 'This cannot be undone: the disc is not rewritable'
+        $src | Should -Not -Match 'This cannot be undone and the disc is not rewritable'
+    }
+}
