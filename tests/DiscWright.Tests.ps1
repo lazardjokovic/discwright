@@ -8578,3 +8578,138 @@ Describe 'Good news should not wear a warning triangle' -Tag 'Unit' {
         $script:WartSrc | Should -Match ([regex]::Escape('+setSentence(s),false)'))
     }
 }
+
+Describe 'What the line says once a disc set has been asked for' -Tag 'Unit' {
+
+    # Lazar ticked disc set for a 9 GB game on a CD and got "choose a larger
+    # disc", and for the same game on a DVD5 the line stayed orange and said
+    # "3.76 GB too big for a DVD5" - which is the one thing that is no longer
+    # true once the box is ticked, because splitting it is exactly what the box
+    # does. His question was the obvious one: how many discs will it be?
+    #
+    # So the line answers that when a set can be made, and when it cannot it
+    # names the file that decided it and the disc that would work. "Choose a
+    # larger disc" never said WHICH, and never said why ticking the box did not
+    # help.
+
+    BeforeAll {
+        $script:Tiers = Get-MediaTiers
+
+        function New-Payload([double[]]$sizesGb) {
+            $i = 0
+            return @($sizesGb | ForEach-Object {
+                $i++
+                @{ Rel = "part$i.bin"; Bytes = [double]($_ * 1GB); Path = "X:\part$i.bin" }
+            })
+        }
+    }
+
+    It 'counts the discs a real game needs on each disc it fits' {
+        # Two 4 GB parts and some small extras, which is the shape every GOG
+        # game on this machine has.
+        $files = New-Payload @(4.0, 3.79, 0.45, 0.33, 0.22, 0.20)
+        $five = Get-DiscSetPlan $files (Get-MediaCapacity 'DVD5') 12MB 0
+        $nine = Get-DiscSetPlan $files (Get-MediaCapacity 'DVD9') 12MB 0
+        $five.Ok | Should -BeTrue
+        @($five.Discs).Count | Should -Be 3
+        $nine.Ok | Should -BeTrue
+        @($nine.Discs).Count | Should -Be 2
+    }
+
+    It 'hands back the file that decided a refusal, as a number' {
+        # Not as prose. The line under the installer list has 655 pixels and the
+        # sentence needs 930, so it builds its own: reading the size back out of
+        # our own wording would be parsing our own prose.
+        $files = New-Payload @(4.0, 0.2)
+        $plan = Get-DiscSetPlan $files (Get-MediaCapacity 'CD') 12MB 0
+        $plan.Ok | Should -BeFalse
+        $plan.TooBig | Should -Not -BeNullOrEmpty
+        $plan.TooBig.Rel | Should -Be 'part1.bin'
+        [double]$plan.TooBig.Bytes | Should -Be ([double](4.0 * 1GB))
+    }
+
+    It 'explains that a set never cuts a file' {
+        # The sentence Lazar needed and did not get. "Choose a larger disc" is
+        # advice; it is not an answer to "but I ticked disc set".
+        $files = New-Payload @(4.0, 0.2)
+        $plan = Get-DiscSetPlan $files (Get-MediaCapacity 'CD') 12MB 0
+        $plan.Why | Should -Match 'never splits a file'
+        $plan.Why | Should -Match 'part1\.bin'
+    }
+
+    It 'finds the smallest disc a set could actually be made from' {
+        # Not the smallest disc the payload fits on: a set may span, so what
+        # rules a disc out is the biggest single file, not the total.
+        $game = @{ Folder = 'X:\g'; Kind = 'Game'
+                   Files = @(4.0, 3.79) | ForEach-Object {
+                       [pscustomobject]@{ Name = "p$_.bin"; FullName = "X:\g\p$_.bin"; Length = [long]($_ * 1GB) } } }
+        $alt = Get-SmallestSetMedia @{ Games = @($game); MediaKey = 'CD'; IconPath = $null
+                                       BgPath = $null; Menu = $true; MusicFile = $null
+                                       ManualPath = $null; ExtrasPath = $null; ExtraItems = @() }
+        $alt | Should -Not -BeNullOrEmpty
+        $alt.Key | Should -Be 'DVD5' -Because '7.79 GB of 4 GB parts span two DVD5s but no CD holds either part'
+        $alt.Discs | Should -Be 2
+    }
+
+    It 'says there is no disc at all when one file beats the biggest blank' {
+        $game = @{ Folder = 'X:\g'; Kind = 'Game'
+                   Files = @([pscustomobject]@{ Name = 'huge.bin'; FullName = 'X:\g\huge.bin'
+                                                Length = [long](120 * 1GB) }) }
+        $alt = Get-SmallestSetMedia @{ Games = @($game); MediaKey = 'CD'; IconPath = $null
+                                       BgPath = $null; Menu = $true; MusicFile = $null
+                                       ManualPath = $null; ExtrasPath = $null; ExtraItems = @() }
+        $alt | Should -BeNullOrEmpty -Because 'a 120 GB file does not fit a BD-R XL either'
+    }
+
+    It 'every wording it can produce fits the 655 pixels the label has' {
+        # The label ellipsises, and the half that matters is the actionable half.
+        # The old refusal needed 930 pixels and lost its ending to "...".
+        Add-Type -AssemblyName System.Drawing
+        $font = New-Object System.Drawing.Font('Segoe UI', 9)
+        $bmp  = New-Object System.Drawing.Bitmap(1, 1)
+        $gfx  = [System.Drawing.Graphics]::FromImage($bmp)
+        try {
+            # A long but ordinary detected line to put in front of it.
+            $prefix = 'Detected: The Witcher  (29 files, 14.12 GB)   ->   '
+            $wordings = @(
+                'fits one DVD5 4.7 GB, so no set is needed'
+                '4 discs of DVD5 4.7 GB'
+                '12 discs of CD-R 700 MB'
+                'one file is 4.00 GB, so it needs a DVD5 4.7 GB'
+                'one file is 4.00 GB, so a set needs a DVD5 4.7 GB (4 discs)'
+                'one file is 120.00 GB, too big for any disc'
+            )
+            foreach ($w in $wordings) {
+                $px = [int]$gfx.MeasureString(($prefix + $w), $font).Width
+                $px | Should -BeLessOrEqual 655 -Because "'$w' is $px px and the label is 655"
+            }
+        }
+        finally { $gfx.Dispose(); $bmp.Dispose(); $font.Dispose() }
+    }
+
+    It 'still answers with a plain count for the offer that ticks the box' {
+        # Get-DiscSetWouldNeed is what the "write N discs?" offer asks, and it
+        # kept its contract when the planning moved out: a number, and 0 for no.
+        $game = @{ Folder = 'X:\g'; Kind = 'Game'
+                   Files = @(4.0, 3.79) | ForEach-Object {
+                       [pscustomobject]@{ Name = "p$_.bin"; FullName = "X:\g\p$_.bin"; Length = [long]($_ * 1GB) } } }
+        $s = @{ Games = @($game); MediaKey = 'DVD5'; IconPath = $null; BgPath = $null
+                Menu = $true; MusicFile = $null; ManualPath = $null; ExtrasPath = $null; ExtraItems = @() }
+        Get-DiscSetWouldNeed $s | Should -Be 2
+        $s.MediaKey = 'CD'
+        Get-DiscSetWouldNeed $s | Should -Be 0 -Because 'a 4 GB file cannot go on a CD at all'
+    }
+
+    It 'says nothing for several games, where the count is not one number' {
+        # Get-DiscSetPlanFor is written for a single game. With more than one it
+        # returns nothing and the line falls back to the wording it always had,
+        # rather than inventing a count for a disc it has not planned.
+        $two = 1..2 | ForEach-Object {
+            @{ Folder = "X:\g$_"; Kind = 'Game'
+               Files = @([pscustomobject]@{ Name = 'a.bin'; FullName = "X:\g$_\a.bin"; Length = [long](1GB) }) } }
+        $plan = Get-DiscSetPlanFor @{ Games = @($two); MediaKey = 'DVD5'; IconPath = $null
+                                      BgPath = $null; Menu = $true; MusicFile = $null
+                                      ManualPath = $null; ExtrasPath = $null; ExtraItems = @() }
+        $plan | Should -BeNullOrEmpty
+    }
+}
