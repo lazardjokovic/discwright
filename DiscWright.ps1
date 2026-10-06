@@ -2528,6 +2528,47 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(!dir.length||!fso.FileExists(full)) return false;
     return fso.GetFile(full).Size==parseFloat(j.b);
   }
+  // Put a cut file back together, once every piece of it is here.
+  //
+  // copy /b is the whole mechanism: it is in Windows, it needs nothing
+  // installed, and it is what the set file tells somebody to type if they are
+  // doing this by hand. The pieces are only deleted once the finished file is
+  // the right size, because a join that half worked and then removed its own
+  // evidence is the one failure here that cannot be recovered from.
+  //
+  // The size is checked here and the hash is not: hashing a 4 GB file takes
+  // minutes and this runs with every disc. Check every file does the hashing,
+  // and the panel says so.
+  function setJoinAll(dir){
+    var js=setJoins(), done=0, failed=[], i, k;
+    for(i=0;i<js.length;i++){
+      var j=js[i];
+      if(setJoinDone(dir,j)) continue;
+      var have=true;
+      for(k=0;k<j.parts.length;k++){
+        if(!fso.FileExists(setPath(dir,j.parts[k]))){ have=false; break; }
+      }
+      if(!have) continue;
+      var q=String.fromCharCode(34), names=[];
+      for(k=0;k<j.parts.length;k++){ names[names.length]=setQuote(setPath(dir,j.parts[k])); }
+      var cmd="cmd /c copy /b "+names.join("+")+" "+setQuote(setPath(dir,j.f));
+      var sh=new ActiveXObject("WScript.Shell");
+      sh.Run(cmd,0,true);
+      if(setJoinDone(dir,j)){
+        for(k=0;k<j.parts.length;k++){
+          try{ fso.DeleteFile(setPath(dir,j.parts[k])); }catch(ex){}
+        }
+        done++;
+      }
+      else { failed[failed.length]=j.f; }
+    }
+    if(failed.length){
+      setSay(failed.length+" file(s) could not be put back together:\n\n"+
+             failed.join("\n")+
+             "\n\nThe pieces are still there, so nothing is lost. There may not be room",false);
+    }
+    return done;
+  }
   function setScan(dir){
     var rows=setRows();
     var r={total:rows.length,ok:0,missing:0,bad:0,here:0,need:"",bytes:0,mineTotal:0,mineHere:0};
@@ -2735,47 +2776,6 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       var f=new ActiveXObject("Shell.Application").BrowseForFolder(0,"Where is the game being put back together?",0);
       if(f){ SETDIR=f.Self.Path; SETARM=false; show(); }
     }catch(ex){ alert("This machine will not show the folder picker.\n\nType the folder into the set file instructions instead, or copy the discs by hand."); }
-  }
-  // Put a cut file back together, once every piece of it is here.
-  //
-  // copy /b is the whole mechanism: it is in Windows, it needs nothing
-  // installed, and it is what the set file tells somebody to type if they are
-  // doing this by hand. The pieces are only deleted once the finished file is
-  // the right size, because a join that half worked and then removed its own
-  // evidence is the one failure here that cannot be recovered from.
-  //
-  // The size is checked here and the hash is not: hashing a 4 GB file takes
-  // minutes and this runs with every disc. Check every file does the hashing,
-  // and the panel says so.
-  function setJoinAll(dir){
-    var js=setJoins(), done=0, failed=[], i, k;
-    for(i=0;i<js.length;i++){
-      var j=js[i];
-      if(setJoinDone(dir,j)) continue;
-      var have=true;
-      for(k=0;k<j.parts.length;k++){
-        if(!fso.FileExists(setPath(dir,j.parts[k]))){ have=false; break; }
-      }
-      if(!have) continue;
-      var q=String.fromCharCode(34), names=[];
-      for(k=0;k<j.parts.length;k++){ names[names.length]=setQuote(setPath(dir,j.parts[k])); }
-      var cmd="cmd /c copy /b "+names.join("+")+" "+setQuote(setPath(dir,j.f));
-      var sh=new ActiveXObject("WScript.Shell");
-      sh.Run(cmd,0,true);
-      if(setJoinDone(dir,j)){
-        for(k=0;k<j.parts.length;k++){
-          try{ fso.DeleteFile(setPath(dir,j.parts[k])); }catch(ex){}
-        }
-        done++;
-      }
-      else { failed[failed.length]=j.f; }
-    }
-    if(failed.length){
-      setSay(failed.length+" file(s) could not be put back together:\n\n"+
-             failed.join("\n")+
-             "\n\nThe pieces are still there, so nothing is lost. There may not be room",false);
-    }
-    return done;
   }
   function setCopy(){
     var dir=setDir();
@@ -4725,6 +4725,11 @@ function Update-MediaLabel {
                 ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
                 ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
                 ExtraItems = @($lstExtra.Items)
+                # Once a cut has been agreed to, the line has to plan the same
+                # way the build will. Without this it keeps showing the refusal
+                # for a file the build is now going to cut, which reads as the
+                # answer not having been taken.
+                CutFiles = [bool]$state.CutFiles
             }
             if ($plan -and $plan.Ok) {
                 $n = @($plan.Discs).Count

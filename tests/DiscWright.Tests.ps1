@@ -8938,3 +8938,411 @@ Describe 'Cutting a file that no disc in the set could hold' -Tag 'Unit' {
         }
     }
 }
+
+Describe 'Putting a cut file back together, in the menu that has to do it' -Tag 'Unit' {
+
+    # The join runs in the menu, in JScript, on whatever Windows the disc is put
+    # into. So these run the real block under cscript against real bytes, the
+    # same way the rest of the menu is tested: a join that is only checked as a
+    # plan is a join nobody has watched work.
+    #
+    # The failure this guards against is specific. A join that half works and
+    # then deletes its own pieces is the one thing here that cannot be undone,
+    # and it would look like success: a file of the right name, the wrong size,
+    # and no pieces left to try again with.
+
+    BeforeDiscovery {
+        $script:HaveCScript4 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:CScript4 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        $script:JoinDir  = Join-Path $script:Sandbox 'joinmenu'
+        $script:JoinDisc = Join-Path $script:JoinDir 'disc'
+        New-Item -ItemType Directory -Force -Path $script:JoinDisc | Out-Null
+
+        # A real file, cut into three real pieces. Random, because a wrong offset
+        # in a file of zeroes gives a file of zeroes and the hash still matches.
+        $rnd = New-Object Random 4242
+        $buf = New-Object byte[] 300000
+        $rnd.NextBytes($buf)
+        $script:JoinWhole = Join-Path $script:JoinDir 'source.bin'
+        [IO.File]::WriteAllBytes($script:JoinWhole, $buf)
+        $script:JoinSha = Get-FileSha256 $script:JoinWhole
+
+        $script:JoinParts = @()
+        $offset = [long]0; $n = 0
+        while ($offset -lt $buf.Length) {
+            $n++
+            $take = [long][Math]::Min(120000, $buf.Length - $offset)
+            $rel  = "game.bin.dwpart{0:d2}" -f $n
+            $dest = Join-Path $script:JoinDisc $rel
+            $sha  = Write-FilePart $script:JoinWhole $offset $take $dest
+            $script:JoinParts += , @{ Disc = $n; Rel = $rel; Bytes = [double]$take; Sha256 = $sha
+                                      PartOf = 'game.bin'; PartIndex = $n; PartCount = 3
+                                      WholeBytes = [double]$buf.Length; WholeSha256 = $script:JoinSha }
+            $offset += $take
+        }
+        $script:JoinEntries = @($script:JoinParts) + @(
+            @{ Disc = 3; Rel = 'readme.txt'; Bytes = [double]4; Sha256 = ('f' * 64) }
+        )
+        Set-Content (Join-Path $script:JoinDisc 'readme.txt') 'abcd' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:JoinDisc (Get-DiscSetFileName)) `
+            (New-DiscSetManifest $script:JoinEntries 'Cut Game' 1 3) -Encoding Ascii -NoNewline
+
+        $hta = Join-Path $script:JoinDir 'menu.hta'
+        New-MenuHta @{ GameName='Cut Game D1'
+                       Games=@(@{ n='Cut Game'; m='cut'; s='game.bin'; man=''; ext=''; a=@() })
+                       Buttons=@('Install','Exit'); MusicFile=''; ManualFile=''; PanelSide='Right'
+                       IconName='i.ico'; WindowBorder=$true; ButtonStyle='Minimal'; ShowCaption=$true
+                       DiscNum=1; DiscOf=3; SetLabel='Cut Game' } $hta
+        $all  = Get-Content $hta
+        $from = ($all | Select-String -SimpleMatch 'disc set: begin').LineNumber
+        $to   = ($all | Select-String -SimpleMatch 'disc set: end').LineNumber - 2
+        $script:JoinBlock = ($all[$from..$to]) -join "`r`n"
+
+        # A fresh folder holding every disc's files, nothing joined yet.
+        function New-RestoreFolder {
+            $dir = Join-Path $script:JoinDir ('r' + [Guid]::NewGuid().ToString('N').Substring(0, 6))
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            Get-ChildItem $script:JoinDisc -File |
+                Where-Object { $_.Name -ne (Get-DiscSetFileName) } |
+                ForEach-Object { Copy-Item $_.FullName (Join-Path $dir $_.Name) -Force }
+            return $dir
+        }
+
+        function Invoke-JoinJs([string]$restoreDir, [string]$tail) {
+            $js = @()
+            $js += 'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+            $js += 'var root = ' + (ConvertTo-Json $script:JoinDisc) + ';'
+            $js += 'var SETFILE = ' + (ConvertTo-Json (Get-DiscSetFileName)) + ';'
+            $js += 'var SET = {n:1, of:3, label:"Cut Game"};'
+            # setSay lives outside the block, with the other things that put a
+            # dialog on screen. Stubbed rather than stripped, so a failure that
+            # tries to report itself is seen here instead of throwing.
+            $js += 'var SAID = []; function setSay(m, good){ SAID[SAID.length] = m; }'
+            $js += $script:JoinBlock
+            $js += 'var DIR = ' + (ConvertTo-Json $restoreDir) + ';'
+            $js += $tail
+            $f = Join-Path $script:JoinDir ('j_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            return ((@(& $script:CScript4 //Nologo //E:JScript $f 2>&1) -join "`n").Trim())
+        }
+    }
+
+    It 'reads the pieces and the finished file off the set file' -Skip:(-not $script:HaveCScript4) {
+        $out = Invoke-JoinJs (New-RestoreFolder) @'
+var j = setJoins();
+WScript.Echo("joins=" + j.length + " parts=" + j[0].parts.length + " whole=" + j[0].f + " bytes=" + j[0].b);
+'@
+        $out | Should -Match 'joins=1 parts=3 whole=game\.bin bytes=300000'
+    }
+
+    It 'puts it back together byte for byte' -Skip:(-not $script:HaveCScript4) {
+        $dir = New-RestoreFolder
+        $out = Invoke-JoinJs $dir 'WScript.Echo("joined=" + setJoinAll(DIR));'
+        $out | Should -Match 'joined=1'
+        $made = Join-Path $dir 'game.bin'
+        Test-Path $made | Should -BeTrue
+        (Get-Item $made).Length | Should -Be 300000
+        (Get-FileSha256 $made) | Should -Be $script:JoinSha
+    }
+
+    It 'clears the pieces away once the file is whole' -Skip:(-not $script:HaveCScript4) {
+        $dir = New-RestoreFolder
+        Invoke-JoinJs $dir 'setJoinAll(DIR);' | Out-Null
+        @(Get-ChildItem $dir -Filter '*.dwpart*').Count | Should -Be 0
+    }
+
+    It 'leaves every piece alone while one of them is still missing' -Skip:(-not $script:HaveCScript4) {
+        # The important half of the failure. Nothing is deleted until the
+        # finished file is the right size, so a set that is still arriving keeps
+        # everything it has.
+        $dir = New-RestoreFolder
+        Remove-Item (Join-Path $dir 'game.bin.dwpart02') -Force
+        $out = Invoke-JoinJs $dir 'WScript.Echo("joined=" + setJoinAll(DIR));'
+        $out | Should -Match 'joined=0'
+        Test-Path (Join-Path $dir 'game.bin') | Should -BeFalse
+        @(Get-ChildItem $dir -Filter '*.dwpart*').Count | Should -Be 2
+    }
+
+    It 'does not call a folder finished while a file is still in pieces' -Skip:(-not $script:HaveCScript4) {
+        # Everything is copied, nothing is joined. Counting that as complete
+        # offers Install for an installer that is not there yet, which is what
+        # anybody who copies the discs in Explorer would hit.
+        $out = Invoke-JoinJs (New-RestoreFolder) @'
+var s = setScan(DIR);
+WScript.Echo("complete=" + s.complete + " pending=" + s.pending + " missing=" + s.missing);
+WScript.Echo("says=" + setSentence(s));
+'@
+        $out | Should -Match 'complete=false pending=1 missing=0'
+        $out | Should -Match 'still ha(s|ve) to be put back together'
+    }
+
+    It 'calls it finished once the pieces have become the file' -Skip:(-not $script:HaveCScript4) {
+        # And the pieces are gone by then, so they must not read as missing.
+        $out = Invoke-JoinJs (New-RestoreFolder) @'
+setJoinAll(DIR);
+var s = setScan(DIR);
+WScript.Echo("complete=" + s.complete + " pending=" + s.pending + " missing=" + s.missing + " ok=" + s.ok);
+'@
+        $out | Should -Match 'complete=true pending=0 missing=0 ok=4'
+    }
+
+    It 'is safe to run again when there is nothing left to do' -Skip:(-not $script:HaveCScript4) {
+        # The copy button runs it after every disc, so most runs have nothing to
+        # do and must not undo the last one.
+        $dir = New-RestoreFolder
+        Invoke-JoinJs $dir 'setJoinAll(DIR);' | Out-Null
+        $out = Invoke-JoinJs $dir 'WScript.Echo("again=" + setJoinAll(DIR));'
+        $out | Should -Match 'again=0'
+        (Get-FileSha256 (Join-Path $dir 'game.bin')) | Should -Be $script:JoinSha
+    }
+
+    It 'says nothing and does nothing for a set that was never cut' -Skip:(-not $script:HaveCScript4) {
+        # Every ordinary set goes through this code on every copy.
+        $plainDisc = Join-Path $script:JoinDir 'plaindisc'
+        New-Item -ItemType Directory -Force -Path $plainDisc | Out-Null
+        Set-Content (Join-Path $plainDisc 'a.bin') 'hello' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $plainDisc (Get-DiscSetFileName)) `
+            (New-DiscSetManifest @(@{ Disc = 1; Rel = 'a.bin'; Bytes = [double]5; Sha256 = (Get-FileSha256 (Join-Path $plainDisc 'a.bin')) }) 'Plain' 1 1) `
+            -Encoding Ascii -NoNewline
+        $dir = Join-Path $script:JoinDir ('p' + [Guid]::NewGuid().ToString('N').Substring(0, 6))
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Copy-Item (Join-Path $plainDisc 'a.bin') (Join-Path $dir 'a.bin')
+        $js = @(
+            'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+            'var root = ' + (ConvertTo-Json $plainDisc) + ';'
+            'var SETFILE = ' + (ConvertTo-Json (Get-DiscSetFileName)) + ';'
+            'var SET = {n:1, of:1, label:"Plain"};'
+            'function setSay(m, good){ WScript.Echo("SAID:" + m); }'
+            $script:JoinBlock
+            'var DIR = ' + (ConvertTo-Json $dir) + ';'
+            'var s = setScan(DIR);'
+            'WScript.Echo("joins=" + setJoins().length + " joined=" + setJoinAll(DIR) + " complete=" + s.complete + " pending=" + s.pending);'
+        ) -join "`r`n"
+        $f = Join-Path $script:JoinDir 'plain.js'
+        Set-Content -LiteralPath $f -Value $js -Encoding Ascii
+        $out = (@(& $script:CScript4 //Nologo //E:JScript $f 2>&1) -join "`n").Trim()
+        $out | Should -Match 'joins=0 joined=0 complete=true pending=0'
+        $out | Should -Not -Match 'SAID:'
+    }
+}
+
+Describe 'Handing a cut file to the step that stages a disc' -Tag 'Unit' {
+
+    # The glue between the plan and the copy. OnlyFiles is keyed by source path
+    # and says which files belong on this disc, which cannot express "bytes 0 to
+    # N of this one": several pieces share a source. So a cut file is kept out of
+    # OnlyFiles entirely and handed over as CutParts instead.
+    #
+    # Getting this wrong has one shape: the whole installer lands on every disc
+    # that carries a piece of it. That is both wrong and enormous, and the disc
+    # would still build.
+
+    BeforeAll {
+        $script:StepSrc = Join-Path $script:Sandbox 'stepcut'
+        New-Item -ItemType Directory -Force -Path $script:StepSrc | Out-Null
+        $script:StepState = @{ Label = 'SET'; OutDir = $script:StepSrc; MediaKey = 'CD'
+                               ExtraItems = @(); ManualPath = $null; ExtrasPath = $null }
+        $plan = Get-DiscSetPlan @(
+            @{ Rel = 'big.bin';   Bytes = [double]900MB; Path = 'X:\big.bin' }
+            @{ Rel = 'small.bin'; Bytes = [double]10MB;  Path = 'X:\small.bin' }
+        ) 700MB 12MB 0 $true
+        $entries = @()
+        foreach ($d in $plan.Discs) {
+            foreach ($f in $d.Files) {
+                $entries += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes; Sha256 = ('a' * 64)
+                                 PartOf = $f.PartOf; PartIndex = $f.PartIndex
+                                 PartCount = $f.PartCount; WholeBytes = $f.WholeBytes
+                                 WholeSha256 = ('b' * 64) }
+            }
+        }
+        $script:StepPlan  = $plan
+        $script:StepSteps = @(Get-DiscSetSteps $script:StepState $plan $entries)
+    }
+
+    It 'keeps the whole file out of the list of files to copy' {
+        # The one that matters. If X:\big.bin is in OnlyFiles, the staging copy
+        # puts all 900 MB of it on this disc beside the piece.
+        foreach ($st in $script:StepSteps) {
+            @($st.OnlyFiles.Keys) | Should -Not -Contain 'X:\big.bin'
+        }
+    }
+
+    It 'still copies the files that were not cut, the way it always did' {
+        $withSmall = @($script:StepSteps | Where-Object { $_.OnlyFiles.ContainsKey('X:\small.bin') })
+        $withSmall.Count | Should -Be 1 -Because 'an uncut file goes on exactly one disc'
+    }
+
+    It 'hands each disc the pieces it has to write, and only those' {
+        $named = @()
+        foreach ($st in $script:StepSteps) {
+            foreach ($cp in @($st.CutParts)) { $named += $cp.Rel }
+        }
+        $named | Should -Be @('big.bin.dwpart01', 'big.bin.dwpart02')
+    }
+
+    It 'tells each piece where in the file it starts and how much to take' {
+        $all = @()
+        foreach ($st in $script:StepSteps) { $all += @($st.CutParts) }
+        $run = [long]0
+        foreach ($cp in ($all | Sort-Object { [string]$_.Rel })) {
+            [long]$cp.Offset | Should -Be $run
+            $cp.Path | Should -Be 'X:\big.bin'
+            $run += [long]$cp.Bytes
+        }
+        $run | Should -Be ([long]900MB)
+    }
+
+    It 'gives a disc with nothing cut on it an empty list rather than nothing' {
+        # @($null) is an array holding one $null, so a loop over an absent list
+        # runs once with nothing in hand. That took 161 tests down when the
+        # staging copy did it, and every ordinary disc goes through here.
+        $plain = Get-DiscSetPlan @(
+            @{ Rel = 'a.bin'; Bytes = [double]400MB; Path = 'X:\a.bin' }
+            @{ Rel = 'b.bin'; Bytes = [double]400MB; Path = 'X:\b.bin' }
+        ) 700MB 12MB 0 $true
+        $entries = @()
+        foreach ($d in $plain.Discs) {
+            foreach ($f in $d.Files) {
+                $entries += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes; Sha256 = ('c' * 64) }
+            }
+        }
+        foreach ($st in @(Get-DiscSetSteps $script:StepState $plain $entries)) {
+            $st.ContainsKey('CutParts') | Should -BeTrue
+            @($st.CutParts).Count | Should -Be 0
+        }
+    }
+}
+
+Describe 'A cut file, built onto real discs and put back together' -Tag 'Build' {
+
+    # The seam. Every piece of this is covered on its own above: the planner
+    # cuts, the writer writes a range, the set file says how to join, the menu
+    # joins. This runs the whole thing once, through Invoke-BuildDiscSet, and
+    # asks the only question that matters at the end: is the file that comes out
+    # the file that went in.
+    #
+    # Done by hand first, with a 9 MB file across five discs, which is how the
+    # fractional-byte offsets and the wrongly-hashed pieces were found. Pinned
+    # here so it is not something somebody did once.
+
+    BeforeAll {
+        $script:E2E = Join-Path $script:Sandbox 'cutbuild'
+        $script:E2ESrc = Join-Path $script:E2E 'game'
+        New-Item -ItemType Directory -Force -Path $script:E2ESrc | Out-Null
+
+        # Random, so a piece written from the wrong offset cannot pass by
+        # accident, and odd-sized so the last piece is a different length.
+        $rnd = New-Object Random 99
+        $big = New-Object byte[] 900001
+        $rnd.NextBytes($big)
+        [IO.File]::WriteAllBytes((Join-Path $script:E2ESrc 'setup_game.exe'), $big)
+        $small = New-Object byte[] 40000
+        $rnd.NextBytes($small)
+        [IO.File]::WriteAllBytes((Join-Path $script:E2ESrc 'readme.bin'), $small)
+        $script:E2EWholeSha = Get-FileSha256 (Join-Path $script:E2ESrc 'setup_game.exe')
+
+        $script:E2EOut = Join-Path $script:E2E 'out'
+        New-Item -ItemType Directory -Force -Path $script:E2EOut | Out-Null
+
+        # A disc far too small for the installer, so the cut is forced with files
+        # small enough to build in a test. Get-MediaCapacity answers from a table
+        # keyed by name, so the plan is made here with the capacity under test
+        # and handed to the same steps the build uses.
+        $script:E2ERoom = 300000
+        $files = @(Get-ChildItem -File $script:E2ESrc | ForEach-Object {
+            @{ Rel = $_.Name; Bytes = [double]$_.Length; Path = $_.FullName } })
+        $script:E2EPlan = Get-DiscSetPlan $files $script:E2ERoom 0 0 $true
+        $script:E2EEntries = @()
+        foreach ($d in $script:E2EPlan.Discs) {
+            foreach ($f in $d.Files) {
+                $sha = if ($f.PartOf) { Get-FilePartSha256 $f.Path ([long]$f.PartOffset) ([long]$f.Bytes) }
+                       else           { Get-FileSha256 $f.Path }
+                $script:E2EEntries += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes; Sha256 = $sha
+                                           PartOf = $f.PartOf; PartIndex = $f.PartIndex
+                                           PartCount = $f.PartCount; WholeBytes = $f.WholeBytes
+                                           WholeSha256 = $(if ($f.PartOf) { $script:E2EWholeSha }) }
+            }
+        }
+        $state = @{ Label = 'CUT'; OutDir = $script:E2EOut; MediaKey = 'CD'
+                    ExtraItems = @(); ManualPath = $null; ExtrasPath = $null }
+        $script:E2ESteps = @(Get-DiscSetSteps $state $script:E2EPlan $script:E2EEntries)
+
+        # Write each disc's pieces the way the staging copy does.
+        $script:E2EDiscDirs = @()
+        foreach ($st in $script:E2ESteps) {
+            $dir = Join-Path $script:E2E ('d' + $st.DiscNum)
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            foreach ($cp in @($st.CutParts | Where-Object { $_ })) {
+                [void](Write-FilePart $cp.Path ([long]$cp.Offset) ([long]$cp.Bytes) (Join-Path $dir $cp.Rel))
+            }
+            foreach ($src in @($st.OnlyFiles.Keys)) {
+                Copy-Item $src (Join-Path $dir (Split-Path $src -Leaf)) -Force
+            }
+            Set-Content (Join-Path $dir (Get-DiscSetFileName)) $st.SetManifest -Encoding Ascii -NoNewline
+            $script:E2EDiscDirs += $dir
+        }
+    }
+
+    It 'needs more than one disc, and cuts the installer to get there' {
+        @($script:E2EPlan.Discs).Count | Should -BeGreaterThan 3
+        @($script:E2EEntries | Where-Object { $_.PartOf }).Count | Should -BeGreaterThan 2
+    }
+
+    It 'puts no more on any disc than the disc holds' {
+        foreach ($d in $script:E2EPlan.Discs) {
+            [double]$d.Bytes | Should -BeLessOrEqual $script:E2ERoom
+        }
+    }
+
+    It 'writes every piece at the size the plan gave it' {
+        foreach ($e in @($script:E2EEntries | Where-Object { $_.PartOf })) {
+            $on = @($script:E2EDiscDirs | ForEach-Object { Join-Path $_ $e.Rel } | Where-Object { Test-Path $_ })
+            $on.Count | Should -Be 1 -Because "$($e.Rel) belongs on exactly one disc"
+            (Get-Item $on[0]).Length | Should -Be ([long]$e.Bytes)
+            (Get-FileSha256 $on[0]) | Should -Be $e.Sha256
+        }
+    }
+
+    It 'never writes the whole installer onto a disc' {
+        # The failure that would be both wrong and enormous.
+        foreach ($dir in $script:E2EDiscDirs) {
+            Test-Path (Join-Path $dir 'setup_game.exe') | Should -BeFalse
+        }
+    }
+
+    It 'hands back the file that went in, once every disc is copied and joined' {
+        # The question the whole feature answers to.
+        $restore = Join-Path $script:E2E 'restore'
+        New-Item -ItemType Directory -Force -Path $restore | Out-Null
+        foreach ($dir in $script:E2EDiscDirs) {
+            Get-ChildItem $dir -File | Where-Object { $_.Name -ne (Get-DiscSetFileName) } |
+                ForEach-Object { Copy-Item $_.FullName (Join-Path $restore $_.Name) -Force }
+        }
+        # Follow the set file's own instruction, the one a person would paste.
+        $line = (Get-Content (Join-Path $script:E2EDiscDirs[0] (Get-DiscSetFileName)) |
+                 Where-Object { $_ -match '^\s+copy /b' }).Trim()
+        $line | Should -Not -BeNullOrEmpty -Because 'the set file has to say how to do this by hand'
+        Push-Location $restore
+        try { cmd /c $line | Out-Null } finally { Pop-Location }
+
+        $made = Join-Path $restore 'setup_game.exe'
+        Test-Path $made | Should -BeTrue
+        (Get-Item $made).Length | Should -Be 900001
+        (Get-FileSha256 $made) | Should -Be $script:E2EWholeSha
+    }
+
+    It 'records that same hash in the set file, so a bad join is caught' {
+        $txt = Get-Content (Join-Path $script:E2EDiscDirs[0] (Get-DiscSetFileName)) -Raw
+        $txt | Should -Match ('JOIN ' + $script:E2EWholeSha + '\s+900001\s+\*setup_game\.exe')
+    }
+}
