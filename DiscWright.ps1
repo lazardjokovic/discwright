@@ -866,7 +866,7 @@ function Get-DiscSetPlanFor([hashtable]$s) {
     $side += @($s.ExtraItems)
     if ($s.ManualPath) { $side += [string]$s.ManualPath }
     if ($s.ExtrasPath) { $side += [string]$s.ExtrasPath }
-    $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s) ([double](Get-ItemsSize $side))
+    $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s) ([double](Get-ItemsSize $side)) ([bool]$s.CutFiles)
     return $plan
 }
 
@@ -3453,7 +3453,12 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         # split across a set of them. Absent in anything older, which reads back
         # as off: those versions refused such a payload outright, and reopening
         # one of their projects must not quietly turn one disc into five.
-        Version      = 13
+        # Version 14 adds CutFiles - whether a file too big for any disc in the
+        # set is cut into pieces and put back together on the way in. Absent in
+        # anything older, which reads back as off, for the same reason DiscSet
+        # does: those versions refused such a payload by name, and reopening one
+        # of their projects must not quietly start handing back a game in pieces.
+        Version      = 14
         AppVersion   = $APP_VERSION
         SavedUtc     = (Get-Date).ToUniversalTime().ToString('s')
         # Version 1 knew about exactly one game and stored it here. Both keys are
@@ -3503,6 +3508,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         LegacyFs     = [bool]$s.LegacyFs
         Checksums    = [bool]$s.Checksums
         DiscSet      = [bool]$s.DiscSet
+        CutFiles     = [bool]$s.CutFiles
         ShowCaption  = $(if ($null -eq $s.ShowCaption) { $true } else { [bool]$s.ShowCaption })
         OutDir       = $outDir
     }
@@ -3554,7 +3560,7 @@ function Import-Project([string]$jsonPath) {
             Label=$j.Label; IconPath=$j.IconPath; IconIsIco=[bool]$j.IconIsIco
             LinuxInfo=[bool]$j.LinuxInfo
             LegacyFs=[bool]$j.LegacyFs
-            Checksums=[bool]$j.Checksums; DiscSet=[bool]$j.DiscSet
+            Checksums=[bool]$j.Checksums; DiscSet=[bool]$j.DiscSet; CutFiles=[bool]$j.CutFiles
             ShowCaption=$(if ($null -eq $j.ShowCaption) { $true } else { [bool]$j.ShowCaption })
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             CoverPath=$j.CoverPath; DiscArtPath=$j.DiscArtPath
@@ -5802,6 +5808,9 @@ function Open-Project([string]$folder) {
     $chkLegacy.Checked = [bool]$p.LegacyFs
     $chkSums.Checked = [bool]$p.Checksums
     $chkSet.Checked = [bool]$p.DiscSet
+    # No box of its own: it is answered when a build asks, and it rides with the
+    # project so the answer is not asked again every time.
+    $state.CutFiles = [bool]$p.CutFiles
     $chkCaption.Checked = $(if ($null -eq $p.ShowCaption) { $true } else { [bool]$p.ShowCaption })
     if ($p.BgPath -and (Test-Path $p.BgPath)) { Set-BgFile $p.BgPath } else { $txtBg.Text=''; $state.BgPath=$null }
     $chkBgAsIs.Checked = [bool]$p.BgAsIs
@@ -6599,6 +6608,45 @@ $btnBuild.Add_Click({
         }
     }
 
+    # A set cannot help when one file is bigger than a whole disc, because a set
+    # places whole files. Cutting that file is the only thing that can, and it is
+    # off until somebody says yes to it here: handing back a game in pieces is a
+    # different promise from handing back a game on several discs, and it should
+    # be made on purpose.
+    if ($chkSet.Checked -and -not $state.CutFiles) {
+        $probe = @{
+            Games = (Get-Games); MediaKey = $mediaKey; IconPath = $state.IconPath
+            BgPath = $state.BgPath; Menu = $chkMenu.Checked
+            MusicFile = $(if ($chkMusic.Checked) { $state.MusicFile } else { $null })
+            ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
+            ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
+            ExtraItems = @($lstExtra.Items)
+        }
+        $plain = Get-DiscSetPlanFor $probe
+        if ($plain -and -not $plain.Ok -and $plain.TooBig) {
+            $probe.CutFiles = $true
+            $cutPlan = Get-DiscSetPlanFor $probe
+            if ($cutPlan -and $cutPlan.Ok) {
+                $pieces = @(@($cutPlan.Discs | ForEach-Object { $_.Files }) |
+                            Where-Object { $_.PartOf -eq $plain.TooBig.Rel }).Count
+                $ask = ("{0} is {1:N2} GB, and a {2} holds {3:N2} GB." -f
+                            (Split-Path $plain.TooBig.Rel -Leaf), ([double]$plain.TooBig.Bytes / 1GB),
+                            (Get-MediaNameFromKey $mediaKey), ($plain.Room / 1GB)) +
+                       "`r`n`r`nIt can be cut into $pieces pieces across the set and put back" +
+                       " together after the last disc is copied, which makes " +
+                       "$(@($cutPlan.Discs).Count) discs in all." +
+                       "`r`n`r`nThe pieces are named .dwpart01 and so on, and they look like" +
+                       " broken files until they are joined. The set file says how to join them" +
+                       " by hand as well, and the finished file is checked against its hash." +
+                       "`r`n`r`nCut it?"
+                if (Show-Confirm $ask 'One file is bigger than a disc') {
+                    $state.CutFiles = $true
+                    & $log ("Cutting {0} into {1} pieces." -f (Split-Path $plain.TooBig.Rel -Leaf), $pieces)
+                }
+            }
+        }
+    }
+
     if (-not $chkSet.Checked) {
         if ($fit -and -not $fit.Ok) {
             $mName = Get-MediaNameFromKey $mediaKey
@@ -6704,7 +6752,7 @@ $btnBuild.Add_Click({
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
          ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey
          LinuxInfo=$chkLinux.Checked; LegacyFs=$chkLegacy.Checked; Checksums=$chkSums.Checked
-         DiscSet=$chkSet.Checked }
+         DiscSet=$chkSet.Checked; CutFiles=[bool]$state.CutFiles }
     $btnBuild.Enabled=$false
     Set-FormBusy $true
     $script:BuildDiscTag = ''
