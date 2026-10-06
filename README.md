@@ -137,6 +137,21 @@ fit the blank you chose, DiscWright works out whether splitting it would help an
 Saying yes ticks the **disc set** box, so the form shows what is about to happen and the
 project remembers it. You can tick it yourself beforehand instead.
 
+With the box ticked, the line under the installer list stops weighing the game against
+one disc and says what the set comes to instead, so changing the target shows the cost
+before anything is written:
+
+| Target disc | What the line says |
+| --- | --- |
+| DVD5 4.7 GB | 3 discs of DVD5 4.7 GB |
+| DVD9 8.5 GB | 2 discs of DVD9 8.5 GB |
+| BD-R 25 GB | fits one BD-R 25 GB, so no set is needed |
+| CD-R 700 MB | one file is 4.00 GB, so a set needs a DVD5 4.7 GB (3 discs) |
+
+That last one is the whole rule in a line. A set splits a game between discs, but it
+never splits a file, so a disc smaller than the biggest file cannot hold the set however
+many of them you have.
+
 It writes one ISO per disc, then offers to burn them one at a time, in order, handing
 each to whichever program you use. It asks you between discs rather than claiming to
 know when a burn has finished, because it hands the ISO over and gets nothing back.
@@ -352,13 +367,13 @@ Stated up front rather than discovered later.
   is built: DiscWright offers it when the payload will not fit. But it places whole
   files, so a single file larger than the blank is refused by name, and the answer is a
   larger blank. GOG splits its own downloads just under 4 GiB, so on a DVD5 and up there
-  is rarely anything to cut.
+  is rarely anything to cut. Whether to build it is open, with the reasoning and what it
+  would take, in [#131](../../issues/131).
 - **A game cannot be installed straight off a set of discs.** The discs are copied back
   into one folder first and the installer runs from there. Swapping discs while the
   installer asks was tested and deliberately not built: it asks for parts out of order, a
   different number of times each run, and keeps going back to discs it has already read.
   The [roadmap](ROADMAP.md) records the evidence.
-  blank instead.
 - **Disc labels are limited to what Windows can encode.** AutoRun reads `autorun.inf` in the system ANSI codepage and has no Unicode mode at all, so accented Latin characters are fine but Cyrillic, Greek and CJK are not. DiscWright shows you exactly what This PC will display and asks before building one it cannot represent.
 
 Not all of these are permanent — the [roadmap](ROADMAP.md) says which are being worked on and which are settled. [Issues](../../issues) is the place to ask for something, and [CHANGELOG.md](CHANGELOG.md) records what has changed between releases.
