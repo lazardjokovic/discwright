@@ -6156,6 +6156,12 @@ $btnXDel.Add_Click({
 $chkMusic.Add_CheckedChanged({ $txtMusic.Enabled=$chkMusic.Checked; $btnMusic.Enabled=$chkMusic.Checked; Update-MediaLabel })
 $cbMan.Add_CheckedChanged({ $txtMan.Enabled=$cbMan.Checked; $btnMan.Enabled=$cbMan.Checked; Update-MediaLabel })
 $cbExtra.Add_CheckedChanged({ $txtEx.Enabled=$cbExtra.Checked; $btnEx.Enabled=$cbExtra.Checked; Update-MediaLabel })
+# The line under the installer list reads the tick now, so the tick has to redraw
+# it. Every other box that changes what goes on the disc already does this; this
+# one did not, and it did not show until the line started depending on it: you
+# ticked disc set and the old "too big for a DVD5" stayed on screen until you
+# touched something else, which reads as the tick box doing nothing.
+$chkSet.Add_CheckedChanged({ Update-MediaLabel })
 $chkBgAsIs.Add_CheckedChanged({
     # Unticking this on a background we already composed would re-darken it and
     # stamp the title a second time, while the old divider stays painted in.

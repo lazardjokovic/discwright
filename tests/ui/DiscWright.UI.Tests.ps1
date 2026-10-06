@@ -928,7 +928,10 @@ Describe 'Asking for a disc set from the window' -Tag 'UI' -Skip:(-not $script:H
         $msg = Read-MessageBox -Win $script:Win
         $msg | Should -Not -Match 'Remove an entry in step 1'
         $msg | Should -Match 'setup_big_solo'
-        $msg | Should -Match 'larger disc'
+        $msg | Should -Match 'never splits a file'
+        # Was 'larger disc'. That advice never said WHICH disc, so it is gone
+        # and the rule took its place. Which disc to pick is answered on the
+        # line under the installer list, where the choice is actually made.
     }
 
     It 'says which file decided it, not just that it does not fit' {
@@ -1610,7 +1613,12 @@ Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop)
             return ''
         }
         function Get-NoteClause([string]$which) {
-            foreach ($part in ((Get-ArtNote) -split '\s{3,}')) {
+            # Split on a line break as well as a run of spaces. The note went from
+            # one line to several when it started measuring both pictures, and a
+            # newline is two characters, so a split on three-or-more whitespace
+            # stopped separating the clauses and handed back the whole note.
+            foreach ($part in ((Get-ArtNote) -split '?
+|\s{3,}')) {
                 if ($part.Trim().StartsWith($which)) { return $part.Trim() }
             }
             return ''
@@ -1981,5 +1989,108 @@ Describe 'Being offered a disc set rather than a refusal' -Tag 'UI' -Skip:(-not 
         $msg = Read-MessageBox -Win $script:Win -TimeoutSec 15
         $msg | Should -Match 'Remove an entry in step 1'
         $msg | Should -Not -Match 'set of'
+    }
+}
+
+Describe 'What the line says once a disc set has been asked for, in the window' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # Lazar ticked disc set for a 9 GB game and a DVD5 and the line stayed
+    # orange saying "3.76 GB too big for a DVD5", which is the one thing that
+    # stops being true the moment the box is ticked. His question was how many
+    # discs it would be, and nothing on screen answered it.
+    #
+    # The logic tests measure the wordings against the font and check the
+    # planner. They cannot check that the line a person actually reads is the
+    # one that was written, because the label is updated from a handler that
+    # only runs in a window. That is the same gap that let BUILD ISO refuse
+    # every set while every logic test passed, two Describes up.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+    }
+    AfterAll { Stop-DiscWright $script:App; $script:App = $null }
+
+    Context 'a game that a set can carry' {
+
+        BeforeAll {
+            # Two files of 400 MB aimed at a CD: each one fits a CD on its own,
+            # together they do not, which is precisely what a set is for.
+            Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:SplitOut
+            Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+            Complete-FolderDialog -Win $script:Win | Out-Null
+            Start-Sleep -Seconds 2
+            if ((Get-EntryCount $script:Win) -ne 1) { throw 'the splittable project did not load' }
+            Invoke-CtlNamed $script:Win 'disc set' | Out-Null
+            Start-Sleep -Seconds 1
+        }
+
+        It 'says how many discs instead of how much too big it is' {
+            $s = Get-StatusText $script:Win
+            $s | Should -Match '2 discs of CD-R 700 MB'
+            $s | Should -Not -Match 'too big'
+        }
+
+        It 'says no set is needed once the disc is big enough to hold it whole' {
+            # Ticking the box for something that fits is not an error, but
+            # "1 disc of DVD5" reads as though the tick did nothing.
+            Set-MediaTarget -Win $script:Win -Index 2
+            Start-Sleep -Seconds 1
+            $s = Get-StatusText $script:Win
+            $s | Should -Match 'no set is needed'
+            $s | Should -Not -Match 'too big'
+        }
+
+        It 'counts again when the target disc changes back' {
+            # The line is a plan, so it has to follow the dropdown rather than
+            # being worked out once when the box was ticked.
+            Set-MediaTarget -Win $script:Win -Index 1
+            Start-Sleep -Seconds 1
+            Get-StatusText $script:Win | Should -Match '2 discs of CD-R 700 MB'
+        }
+
+        It 'goes back to the old wording when the set is turned off again' {
+            # Everything above has to be reversible, or the tick box becomes a
+            # one-way door.
+            Invoke-CtlNamed $script:Win 'disc set' | Out-Null
+            Start-Sleep -Seconds 1
+            $s = Get-StatusText $script:Win
+            $s | Should -Match 'too big for a CD-R 700 MB'
+            $s | Should -Not -Match 'discs of'
+        }
+    }
+
+    Context 'a game no set can carry' {
+
+        BeforeAll {
+            # One file of 800 MB, bigger than a whole CD. No number of CDs
+            # helps, because a set never cuts a file in half.
+            Invoke-CtlNamed $script:Win 'New disc' | Out-Null
+            Read-MessageBox -Win $script:Win -TitleLike 'New disc' -Button 'Yes' | Out-Null
+            Start-Sleep -Seconds 1
+            Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:SoloOut
+            Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+            Complete-FolderDialog -Win $script:Win | Out-Null
+            Start-Sleep -Seconds 2
+            if ((Get-EntryCount $script:Win) -ne 1) { throw 'the solo project did not load' }
+            Invoke-CtlNamed $script:Win 'disc set' | Out-Null
+            Start-Sleep -Seconds 1
+        }
+
+        It 'names the disc that would work, rather than saying choose a larger one' {
+            # "Choose a larger disc" is the sentence that sent Lazar back to
+            # guessing. It never said which, and never said why the tick box
+            # had not helped.
+            $s = Get-StatusText $script:Win
+            $s | Should -Match 'one file is'
+            $s | Should -Match 'DVD5 4\.7 GB'
+            $s | Should -Not -Match 'Choose a larger disc'
+        }
+
+        It 'quotes the size of the file that decided it' {
+            # 800 MB is 0.78 GB, and the number has to be the file's, not the
+            # payload's, or it names a problem the person cannot act on.
+            Get-StatusText $script:Win | Should -Match 'one file is 0\.7[0-9] GB'
+        }
     }
 }
