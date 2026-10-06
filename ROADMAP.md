@@ -127,6 +127,39 @@ that table was settled.
   Windows can be legible on either machine. What is still missing there is a menu and
   GOG's Linux `.sh` installers, which is the part that needs a tool to collect them.
   Intent only; nothing here is promised.
+- **Cutting a file so it fits.** Asked for twice by xniwo, who also pointed out the risk
+  before anyone else did. A set splits a game between discs but never splits a file, so a
+  file larger than the blank is refused by name and the answer is a bigger blank.
+
+  The evidence under *Not planned* below refuses **spanning**, which is a different thing,
+  and it should not be read as refusing this. Spanning fails because the installer
+  controls the order it reads parts in and that order cannot be predicted. Splitting is
+  tractable for the opposite reason: DiscWright controls it, and it is fixed. Nothing is
+  ever installed from a disc, so the parts would be rejoined on the hard drive, with
+  `copy /b`, before the installer is handed anything.
+
+  What it costs is a new way to lose a game: a half joined file that looks finished, room
+  for the parts and the result at once, pieces that look like broken files to anybody
+  browsing the disc, and more logic in the menu, which is IE7-era JScript. Hashing the
+  joined file before the set reports complete answers the first; `Disc set.txt` already
+  records every original size and SHA-256, which is the database xniwo asked whether this
+  would need.
+
+  What it buys is narrow. GOG caps its own installer parts just under 4 GiB, so on a DVD5
+  and up there is rarely anything to cut. Measured across four real games, the biggest
+  single file was 4.00 GB in every one of them, and only a CD refused them:
+
+  | Game | Total | Biggest file | CD 700 MB | DVD5 |
+  | --- | --- | --- | --- | --- |
+  | The Witcher | 14.12 GB | 4.00 GB | refused | 4 discs |
+  | Alan Wake | 9.09 GB | 4.00 GB | refused | 3 discs |
+  | Dead Space | 8.13 GB | 3.91 GB | refused | 2 discs |
+  | Hollow Knight | 1.80 GB | 1.16 GB | refused | 1 disc |
+
+  So it buys CD sized media, where every game above is refused today including a 1.8 GB
+  one, and non-GOG games that ship as a single enormous file, which is the case with no
+  workaround at all. Whether that is worth handing somebody a game in pieces has not been
+  decided, and the README used to read as though it had.
 - **More than one music track.** One per disc is currently deliberate. A short playlist
   might justify the complexity. A music player will not.
 - **Menu themes.** The menu is one layout with configurable artwork. Named presets would

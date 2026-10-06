@@ -367,8 +367,8 @@ Stated up front rather than discovered later.
   is built: DiscWright offers it when the payload will not fit. But it places whole
   files, so a single file larger than the blank is refused by name, and the answer is a
   larger blank. GOG splits its own downloads just under 4 GiB, so on a DVD5 and up there
-  is rarely anything to cut. Whether to build it is open, with the reasoning and what it
-  would take, in [#131](../../issues/131).
+  is rarely anything to cut. Whether to build it is open, with the
+  reasoning and what it would take, in the [roadmap](ROADMAP.md).
 - **A game cannot be installed straight off a set of discs.** The discs are copied back
   into one folder first and the installer runs from there. Swapping discs while the
   installer asks was tested and deliberately not built: it asks for parts out of order, a
