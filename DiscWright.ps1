@@ -510,6 +510,25 @@ function Get-MediaCapacity([string]$key) {
     return [double]0
 }
 
+# The smallest disc a SET could be made from, which is not the same question as
+# the smallest disc the payload fits on: a set is allowed to span, so what rules
+# a disc out is the single biggest file, not the total.
+#
+# Answers with the tier and how many discs it would take, so the form can say
+# "a DVD5 4.7 GB makes 3 discs" rather than "choose a larger disc" and leave
+# somebody guessing which one.
+function Get-SmallestSetMedia([hashtable]$s) {
+    foreach ($t in Get-MediaTiers) {
+        $try = @{} + $s
+        $try.MediaKey = $t.Key
+        $plan = Get-DiscSetPlanFor $try
+        if ($plan -and $plan.Ok) {
+            return @{ Key = $t.Key; Short = $t.Short; Discs = @($plan.Discs).Count }
+        }
+    }
+    return $null
+}
+
 # Recommend the smallest media that fits the payload.
 function Get-MediaRec([double]$bytes) {
     $gib = $bytes/1GB
@@ -563,8 +582,14 @@ function Get-DiscSetPlan([array]$files, [double]$capacityBytes, [double]$overhea
         # will not fit any of them. Named, because the answer is a bigger blank
         # and the person needs to know which file decided that.
         if ($size -gt $room) {
-            $why = '{0} is {1:N2} GB and a disc this size leaves {2:N2} GB for files. Choose a larger disc.'
+            # Named, because the answer is a bigger blank and the person needs to
+            # know which file decided that. TooBig carries the same facts as
+            # numbers: the line under the installer list has 655 pixels and this
+            # sentence needs 930, and re-reading them out of the sentence would
+            # be parsing our own prose.
+            $why = '{0} is {1:N2} GB and a disc this size leaves {2:N2} GB for files. A set splits a game between discs but never splits a file, so every file has to fit on one disc.'
             return @{ Ok = $false; Discs = @(); Room = $room; ExtrasDisc = 0
+                      TooBig = @{ Rel = $f.Rel; Bytes = $size }
                       Why = ($why -f $f.Rel, ($size / 1GB), ($room / 1GB)) }
         }
         if ($cur.Count -and ($curBytes + $size) -gt $room) {
@@ -736,22 +761,33 @@ function Get-DiscSetSteps([hashtable]$s, $plan, [array]$entries) {
 # Here so the build button can OFFER a set when a payload will not fit, rather
 # than only refusing it and leaving the person to find the tick box. Knowing
 # the feature exists should not be a condition of using it.
-function Get-DiscSetWouldNeed([hashtable]$s) {
-    if (@($s.Games).Count -ne 1) { return 0 }
+# The plan a set would make for what is on the form right now, reasoning and
+# all. Get-DiscSetWouldNeed answers the same question with a single number,
+# which is all the offer needs; the line under the installer list also has to
+# say WHY when the answer is no, because "too big for a DVD5" is not true once
+# a set has been asked for and "choose a larger disc" does not say that a set
+# never cuts a file in half.
+function Get-DiscSetPlanFor([hashtable]$s) {
+    if (@($s.Games).Count -ne 1) { return $null }
     $cap = Get-MediaCapacity $s.MediaKey
-    if ($cap -le 0) { return 0 }
+    if ($cap -le 0) { return $null }
     $g = @($s.Games)[0]
     $files = @()
     foreach ($f in @($g.Files)) {
         $files += , @{ Rel = (Get-EntryFileRelative $g $f); Bytes = [double]$f.Length; Path = [string]$f.FullName }
     }
-    if (-not $files.Count) { return 0 }
+    if (-not $files.Count) { return $null }
     $side = @()
     $side += @($s.ExtraItems)
     if ($s.ManualPath) { $side += [string]$s.ManualPath }
     if ($s.ExtrasPath) { $side += [string]$s.ExtrasPath }
     $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s) ([double](Get-ItemsSize $side))
-    if (-not $plan.Ok) { return 0 }
+    return $plan
+}
+
+function Get-DiscSetWouldNeed([hashtable]$s) {
+    $plan = Get-DiscSetPlanFor $s
+    if (-not $plan -or -not $plan.Ok) { return 0 }
     return @($plan.Discs).Count
 }
 
@@ -4371,8 +4407,68 @@ function Update-MediaLabel {
         # user has told DiscWright which discs are actually in the drawer.
         $pi  = Get-PlanInputs $p
         $fit = Get-MediaFit $pi.Payload.Total $pi.Overhead $key
-        $lblGame.Text = "$txt   ->   $(Get-MediaFitText $fit $key)"
-        $lblGame.ForeColor = if($fit.Ok){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
+        # With a set asked for, "3.76 GB too big for a DVD5" is no longer true:
+        # that is exactly what a set is for. Say how many discs it comes to
+        # instead, and say it in green, because it is a plan and not a problem.
+        #
+        # And when a set cannot be made either, the planner knows the file that
+        # decided it. That is the sentence somebody needs: a 9 GB game refused on
+        # a CD with the box already ticked otherwise reads as the tick box not
+        # working, when the truth is that a set never cuts a file in half.
+        $setNote = $null
+        if ($chkSet.Checked) {
+            $plan = Get-DiscSetPlanFor @{
+                Games = (Get-Games); MediaKey = $key; IconPath = $state.IconPath
+                BgPath = $state.BgPath; Menu = $chkMenu.Checked
+                MusicFile = $(if ($chkMusic.Checked) { $state.MusicFile } else { $null })
+                ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
+                ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
+                ExtraItems = @($lstExtra.Items)
+            }
+            if ($plan -and $plan.Ok) {
+                $n = @($plan.Discs).Count
+                # One disc is not a set, and saying "1 disc of DVD5" to somebody who
+                # ticked the box reads as though it did nothing. Say what actually
+                # happened: it fits, and the tick box will not be used.
+                $setNote = if ($n -eq 1) {
+                    @{ Ok = $true; Text = ("fits one {0}, so no set is needed" -f (Get-MediaShortFromKey $key)) }
+                } else {
+                    @{ Ok = $true; Text = ("{0} discs of {1}" -f $n, (Get-MediaShortFromKey $key)) }
+                }
+            }
+            elseif ($plan -and $plan.TooBig) {
+                # 655 pixels, so the actionable half goes first and the full
+                # reasoning rides along in the tooltip.
+                $bigGb = ([double]$plan.TooBig.Bytes) / 1GB
+                $alt = Get-SmallestSetMedia @{
+                    Games = (Get-Games); MediaKey = $key; IconPath = $state.IconPath
+                    BgPath = $state.BgPath; Menu = $chkMenu.Checked
+                    MusicFile = $(if ($chkMusic.Checked) { $state.MusicFile } else { $null })
+                    ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
+                    ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
+                    ExtraItems = @($lstExtra.Items)
+                }
+                $plural = $(if ($alt -and $alt.Discs -ne 1) { "s" } else { "" })
+                $t = if ($alt -and $alt.Discs -eq 1) {
+                    "one file is {0:N2} GB, so it needs a {1}" -f $bigGb, $alt.Short
+                } elseif ($alt) {
+                    "one file is {0:N2} GB, so a set needs a {1} ({2} discs)" -f $bigGb, $alt.Short, $alt.Discs
+                } else {
+                    "one file is {0:N2} GB, too big for any disc" -f $bigGb
+                }
+                $setNote = @{ Ok = $false; Text = $t }
+            }
+            elseif ($plan -and $plan.Why) {
+                $setNote = @{ Ok = $false; Text = [string]$plan.Why }
+            }
+        }
+        if ($setNote) {
+            $lblGame.Text = "$txt   ->   $($setNote.Text)"
+            $lblGame.ForeColor = if ($setNote.Ok) { [System.Drawing.Color]::Green } else { [System.Drawing.Color]::DarkOrange }
+        } else {
+            $lblGame.Text = "$txt   ->   $(Get-MediaFitText $fit $key)"
+            $lblGame.ForeColor = if($fit.Ok){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
+        }
     } else {
         $lblGame.Text = "$txt   ->   Disc: $($m.Text)"
         $lblGame.ForeColor = if($m.Fit){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
