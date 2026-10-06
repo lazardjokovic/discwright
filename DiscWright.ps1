@@ -2490,15 +2490,81 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // What the folder somebody has been copying the discs into holds so far.
   // The folder is the only state there is: nothing is written down anywhere
   // else and nothing is remembered between sessions.
+  // The files that were cut, and the pieces each one goes back together from.
+  // Read off the same set file as the table, from lines the table parser walks
+  // past because they start with a letter rather than a digit.
+  //
+  //   JOIN <sha256 of the finished file> <bytes> *name
+  //   PART <n> *name.dwpart01
+  function setJoins(){
+    var out=[], p=fso.BuildPath(root,SETFILE), cur=null;
+    if(!fso.FileExists(p)) return out;
+    var t=fso.OpenTextFile(p,1), line, star, head;
+    while(!t.AtEndOfStream){
+      line=t.ReadLine();
+      star=line.indexOf("*");
+      if(star<0) continue;
+      head=line.substring(0,star);
+      if(head.substring(0,5)=="JOIN "){
+        var bits=[], raw=head.substring(5).split(" "), k;
+        for(k=0;k<raw.length;k++){ if(raw[k].length) bits[bits.length]=raw[k]; }
+        if(bits.length<2) continue;
+        cur={h:bits[0], b:bits[1], f:line.substring(star+1), parts:[]};
+        out[out.length]=cur;
+      }
+      else if(head.substring(0,5)=="PART " && cur){
+        cur.parts[cur.parts.length]=line.substring(star+1);
+      }
+    }
+    t.Close();
+    return out;
+  }
+  // Has this cut file already been put back together? The join deletes the
+  // pieces when it is done, so without this every part would read as missing
+  // the moment the join succeeded, and a finished set would report itself
+  // incomplete.
+  function setJoinDone(dir,j){
+    var full=setPath(dir,j.f);
+    if(!dir.length||!fso.FileExists(full)) return false;
+    return fso.GetFile(full).Size==parseFloat(j.b);
+  }
   function setScan(dir){
     var rows=setRows();
     var r={total:rows.length,ok:0,missing:0,bad:0,here:0,need:"",bytes:0,mineTotal:0,mineHere:0};
     var needed={}, i, row, full, want, got;
+    // A piece whose finished file is already here is not missing: it was used
+    // and deleted. Worked out once rather than per row, so a set of six pieces
+    // does not go looking for the same finished file six times.
+    var joined={}, js=setJoins(), jx, px, pending=0;
+    for(jx=0;jx<js.length;jx++){
+      if(setJoinDone(dir,js[jx])){
+        for(px=0;px<js[jx].parts.length;px++){ joined[js[jx].parts[px]]=true; }
+      }
+      else {
+        // Every piece here and not yet put together. The files are all present,
+        // so counting this as finished would offer Install for an installer
+        // that is still in pieces. It happens to anybody who copies the discs
+        // in Explorer rather than from the menu.
+        var all=true;
+        for(px=0;px<js[jx].parts.length;px++){
+          if(!dir.length||!fso.FileExists(setPath(dir,js[jx].parts[px]))){ all=false; break; }
+        }
+        if(all){ pending++; }
+      }
+    }
+    r.pending=pending;
     for(i=0;i<rows.length;i++){
       row=rows[i];
       r.bytes+=parseFloat(row.b);
       if(row.d==SET.n){ r.mineTotal++; }
       full=setPath(dir,row.f);
+      if(joined[row.f]){
+        // Counted as arrived, because it did arrive and then became part of
+        // the file it was cut from.
+        r.ok++;
+        if(row.d==SET.n){ r.mineHere++; }
+        continue;
+      }
       if(!dir.length||!fso.FileExists(full)){
         r.missing++; needed[row.d]=true;
         continue;
@@ -2518,7 +2584,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var list=[];
     for(i=1;i<=SET.of;i++){ if(needed[i]){ list[list.length]=i; } }
     r.need=list.join(", ");
-    r.complete=(r.total>0&&r.ok==r.total);
+    r.complete=(r.total>0&&r.ok==r.total&&r.pending==0);
     return r;
   }
   // What the button at the end of a restore should say. A GOG download
@@ -2552,6 +2618,12 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // Saying it twice is how one of them comes to be wrong.
     if(!s.total) return "This disc says it is part of a set, but its list of files is missing.";
     if(s.complete) return "All "+s.total+" files are here. The game is ready in that folder.";
+    // Every file here but a cut one still in pieces. Says what is left rather
+    // than naming a disc, because no disc is missing: the work is on this
+    // machine now.
+    if(s.pending&&s.ok==s.total){
+      return "Every file is here. "+(s.pending==1?"One file was cut to fit and still has to be put back together.":s.pending+" files were cut to fit and still have to be put back together.");
+    }
     var m=s.ok+" of "+s.total+" files copied so far.";
     if(s.bad>0) m+=" "+s.bad+" copied badly and will be done again.";
     if(s.need.length){
@@ -2664,6 +2736,47 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       if(f){ SETDIR=f.Self.Path; SETARM=false; show(); }
     }catch(ex){ alert("This machine will not show the folder picker.\n\nType the folder into the set file instructions instead, or copy the discs by hand."); }
   }
+  // Put a cut file back together, once every piece of it is here.
+  //
+  // copy /b is the whole mechanism: it is in Windows, it needs nothing
+  // installed, and it is what the set file tells somebody to type if they are
+  // doing this by hand. The pieces are only deleted once the finished file is
+  // the right size, because a join that half worked and then removed its own
+  // evidence is the one failure here that cannot be recovered from.
+  //
+  // The size is checked here and the hash is not: hashing a 4 GB file takes
+  // minutes and this runs with every disc. Check every file does the hashing,
+  // and the panel says so.
+  function setJoinAll(dir){
+    var js=setJoins(), done=0, failed=[], i, k;
+    for(i=0;i<js.length;i++){
+      var j=js[i];
+      if(setJoinDone(dir,j)) continue;
+      var have=true;
+      for(k=0;k<j.parts.length;k++){
+        if(!fso.FileExists(setPath(dir,j.parts[k]))){ have=false; break; }
+      }
+      if(!have) continue;
+      var q=String.fromCharCode(34), names=[];
+      for(k=0;k<j.parts.length;k++){ names[names.length]=setQuote(setPath(dir,j.parts[k])); }
+      var cmd="cmd /c copy /b "+names.join("+")+" "+setQuote(setPath(dir,j.f));
+      var sh=new ActiveXObject("WScript.Shell");
+      sh.Run(cmd,0,true);
+      if(setJoinDone(dir,j)){
+        for(k=0;k<j.parts.length;k++){
+          try{ fso.DeleteFile(setPath(dir,j.parts[k])); }catch(ex){}
+        }
+        done++;
+      }
+      else { failed[failed.length]=j.f; }
+    }
+    if(failed.length){
+      setSay(failed.length+" file(s) could not be put back together:\n\n"+
+             failed.join("\n")+
+             "\n\nThe pieces are still there, so nothing is lost. There may not be room",false);
+    }
+    return done;
+  }
   function setCopy(){
     var dir=setDir();
     if(!dir.length){ alert("No hard drive was found to copy to."); return; }
@@ -2683,6 +2796,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       if(code>=8){ bad++; }
     }
     SETARM=false;
+    if(bad==0){ setJoinAll(dir); }
     if(bad>0){ setSay(bad+" of "+mine.length+" files would not copy from this disc.\n\nIt may be scratched. Try it again, or copy them in Explorer.",false); }
     show();
   }
@@ -2727,6 +2841,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   }
   function setInstall(){
     var dir=setDir(), s=setScan(dir);
+    // Put any outstanding pieces together first. Cheap when there is nothing to
+    // do, and it means somebody who copied the discs in Explorer gets the same
+    // result as somebody who used the button.
+    if(s.pending){ setJoinAll(dir); s=setScan(dir); }
     if(!s.complete){ setSay("The set is not complete yet.\n\n"+setSentence(s),false); return; }
     var g=GAMES[cur], exe=setPath(dir,g.s.split(String.fromCharCode(92)).join("/"));
     if(!g.s.length||!fso.FileExists(exe)){
