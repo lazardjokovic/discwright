@@ -731,8 +731,8 @@ Describe 'Project file' -Tag 'Unit' {
 
     Context 'writing' {
 
-        It 'declares schema version 13' {
-            $script:PJson.Version | Should -Be 13
+        It 'declares schema version 14' {
+            $script:PJson.Version | Should -Be 14
         }
 
         It 'records where each entry came from' {
@@ -4129,8 +4129,8 @@ Describe 'Renaming a game for the menu' -Tag 'Unit' {
             $script:RenameRaw  = Get-Content -Raw -LiteralPath $script:RenameJson | ConvertFrom-Json
         }
 
-        It 'writes schema version 13' {
-            $script:RenameRaw.Version | Should -Be 13
+        It 'writes schema version 14' {
+            $script:RenameRaw.Version | Should -Be 14
         }
 
         It 'stores the registered name beside the chosen one' {
@@ -5017,7 +5017,7 @@ Describe 'The older-Windows setting in a project file' -Tag 'Unit' {
                 ExtraItems=@(); MediaKey=''; LinuxInfo=$false; LegacyFs=$true }
         Save-Project $s $script:LegProj
         $raw = Get-Content -Raw (Join-Path $script:LegProj 'discproject.json') | ConvertFrom-Json
-        $raw.Version  | Should -Be 13
+        $raw.Version  | Should -Be 14
         $raw.LegacyFs | Should -BeTrue
         (Import-Project (Join-Path $script:LegProj 'discproject.json')).LegacyFs | Should -BeTrue
     }
@@ -5215,7 +5215,7 @@ Describe 'Keeping the printed pictures in the project' -Tag 'Unit' {
             CoverPath = 'C:\art\cover.png'; DiscArtPath = 'C:\art\face.png'
         } $out
         $raw = Get-Content (Join-Path $out 'discproject.json') -Raw | ConvertFrom-Json
-        $raw.Version     | Should -Be 13
+        $raw.Version     | Should -Be 14
         $raw.CoverPath   | Should -Be 'C:\art\cover.png'
         $raw.DiscArtPath | Should -Be 'C:\art\face.png'
     }
@@ -5968,7 +5968,7 @@ Describe 'Remembering whether the disc was asked to be checksummed' -Tag 'Unit' 
                 Checksums=$true }
         Save-Project $s $script:CsProj
         $raw = Get-Content -Raw (Join-Path $script:CsProj 'discproject.json') | ConvertFrom-Json
-        $raw.Version   | Should -Be 13
+        $raw.Version   | Should -Be 14
         $raw.Checksums | Should -BeTrue
         (Import-Project (Join-Path $script:CsProj 'discproject.json')).Checksums | Should -BeTrue
     }
@@ -6249,7 +6249,7 @@ WScript.Echo(out ? out.replace(/<[^>]*>/g,"") : "");
                 LinuxInfo=$false; LegacyFs=$false; Checksums=$false; ShowCaption=$false }
         Save-Project $s $proj
         $raw = Get-Content -Raw (Join-Path $proj 'discproject.json') | ConvertFrom-Json
-        $raw.Version | Should -Be 13
+        $raw.Version | Should -Be 14
         $raw.ShowCaption | Should -BeFalse
         (Import-Project (Join-Path $proj 'discproject.json')).ShowCaption | Should -BeFalse
 
@@ -6322,7 +6322,7 @@ Describe 'Nothing is added to the form and then forgotten' -Tag 'Unit' {
                 Buttons=@('Play','Exit'); ManualPath='C:\a\manual.pdf'; ExtrasPath='C:\a\extras'
                 ExtraItems=@('C:\a\readme.txt'); MediaKey='DVD'; LinuxInfo=$true
                 LegacyFs=$true; Checksums=$true
-                DiscSet=$true }
+                DiscSet=$true; CutFiles=$true }
         Save-Project $s $dir
         $json = Get-Content -Raw (Join-Path $dir 'discproject.json') | ConvertFrom-Json
         $back = Import-Project (Join-Path $dir 'discproject.json')
@@ -7574,10 +7574,11 @@ Describe 'Asking for a disc set from the window' -Tag 'Unit' {
     # These add the parts those cannot see: the schema number, what an older
     # project reads back as, and that asking for a set actually builds one.
 
-    It 'is version 13 of the project file' {
+    It 'is version 14 of the project file' {
         $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
-        $src | Should -Match 'Version\s+=\s+13'
+        $src | Should -Match 'Version\s+=\s+14'
         $src | Should -Match 'Version 13 adds DiscSet'
+        $src | Should -Match 'Version 14 adds CutFiles'
     }
 
     It 'reads back as off in a project written before it existed' {
@@ -8724,5 +8725,216 @@ Describe 'What the line says once a disc set has been asked for' -Tag 'Unit' {
                                       BgPath = $null; Menu = $true; MusicFile = $null
                                       ManualPath = $null; ExtrasPath = $null; ExtraItems = @() }
         $plan | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Cutting a file that no disc in the set could hold' -Tag 'Unit' {
+
+    # A set splits a game between discs but places whole files, so one file
+    # bigger than a blank was refused by name and the answer was a bigger blank.
+    # On a CD that refuses every game in the demo folder, including a 1.8 GB
+    # indie one whose largest file alone is bigger than a whole CD.
+    #
+    # Asked for twice by xniwo. The evidence recorded against *spanning* does
+    # not apply: spanning fails because the installer decides what order to read
+    # parts in and that order cannot be predicted, and this is the opposite,
+    # because DiscWright decides and the order is fixed. Nothing is ever
+    # installed from a disc, so the pieces are joined on the hard drive before
+    # the installer is handed anything.
+    #
+    # The risk is real and it is the reason this is off until somebody says yes:
+    # a join that half works is a game in pieces. So these tests cut real bytes
+    # and join them back, rather than asserting on a plan.
+
+    BeforeAll {
+        function P($rel, $bytes) { @{ Rel = $rel; Bytes = [double]$bytes; Path = "X:\$rel" } }
+    }
+
+    Context 'the plan' {
+
+        It 'still refuses by name when nobody asked for a cut' {
+            # Unchanged behaviour, pinned so the new path cannot become the old
+            # one's replacement by accident.
+            $plan = Get-DiscSetPlan @((P 'big.bin' 900MB)) 700MB 12MB 0 $false
+            $plan.Ok | Should -BeFalse
+            $plan.Why | Should -Match 'never splits a file'
+            @($plan.Discs).Count | Should -Be 0
+        }
+
+        It 'cuts it into as many pieces as the disc needs' {
+            $plan = Get-DiscSetPlan @((P 'big.bin' 900MB)) 700MB 12MB 0 $true
+            $plan.Ok | Should -BeTrue
+            $parts = @(@($plan.Discs | ForEach-Object { $_.Files }))
+            $parts.Count | Should -Be 2
+            $parts[0].Rel | Should -Be 'big.bin.dwpart01'
+            $parts[1].Rel | Should -Be 'big.bin.dwpart02'
+        }
+
+        It 'cuts on whole bytes' {
+            # room is a capacity minus an overhead and lands on a fraction of a
+            # byte. A part cut at two thirds of a byte is one that cannot be
+            # written, let alone joined.
+            $plan = Get-DiscSetPlan @((P 'big.bin' 2000000000)) 700MB 12345 0 $true
+            foreach ($f in @($plan.Discs | ForEach-Object { $_.Files })) {
+                [double]$f.Bytes | Should -Be ([Math]::Floor([double]$f.Bytes))
+                [double]$f.PartOffset | Should -Be ([Math]::Floor([double]$f.PartOffset))
+            }
+        }
+
+        It 'loses not one byte, and the pieces run end to end' {
+            # The arithmetic that matters: the pieces have to account for the
+            # whole file exactly, with no gap and no overlap.
+            $size = 3000000003
+            $plan = Get-DiscSetPlan @((P 'big.bin' $size)) 700MB 12MB 0 $true
+            $parts = @(@($plan.Discs | ForEach-Object { $_.Files }) |
+                       Sort-Object { [int]$_.PartIndex })
+            $run = [long]0
+            foreach ($f in $parts) {
+                [long]$f.PartOffset | Should -Be $run -Because 'a gap or an overlap loses or repeats bytes'
+                $run += [long]$f.Bytes
+            }
+            $run | Should -Be ([long]$size)
+            [long]$parts[0].WholeBytes | Should -Be ([long]$size)
+        }
+
+        It 'never puts more on a disc than the disc holds' {
+            $room = [long][Math]::Floor(700MB - 12MB)
+            $plan = Get-DiscSetPlan @((P 'big.bin' 2500000000), (P 'small.bin' 50MB)) 700MB 12MB 0 $true
+            foreach ($d in $plan.Discs) { [double]$d.Bytes | Should -BeLessOrEqual $room }
+        }
+
+        It 'starts a cut file on a disc of its own' {
+            # So the pieces run in order and somebody holding disc 3 can tell
+            # which piece is on it without arithmetic.
+            $plan = Get-DiscSetPlan @((P 'small.bin' 50MB), (P 'big.bin' 900MB)) 700MB 12MB 0 $true
+            @($plan.Discs[0].Files)[0].Rel | Should -Be 'small.bin'
+            @($plan.Discs[1].Files)[0].Rel | Should -Be 'big.bin.dwpart01'
+        }
+
+        It 'lets the last piece share its disc with what comes after it' {
+            # Otherwise every cut file would end on a disc with room going spare.
+            $plan = Get-DiscSetPlan @((P 'big.bin' 800MB), (P 'small.bin' 10MB)) 700MB 12MB 0 $true
+            $last = $plan.Discs[-1]
+            @($last.Files | ForEach-Object { $_.Rel }) | Should -Contain 'small.bin'
+            @($last.Files | ForEach-Object { $_.Rel }) | Should -Contain 'big.bin.dwpart02'
+        }
+
+        It 'numbers the pieces so they sort in the order they go back together' {
+            # dwpart9 and dwpart10 sort the wrong way round as text, and the
+            # join reads them in the order it finds them.
+            $plan = Get-DiscSetPlan @((P 'big.bin' 8000MB)) 700MB 12MB 0 $true
+            $names = @(@($plan.Discs | ForEach-Object { $_.Files }) | ForEach-Object { $_.Rel })
+            $names.Count | Should -BeGreaterThan 9
+            ($names | Sort-Object) | Should -Be ($names | Sort-Object { [int]$_.Substring($_.Length - 2) })
+        }
+    }
+
+    Context 'real bytes, cut and joined back' {
+
+        BeforeAll {
+            $script:CutDir = Join-Path $script:Sandbox 'cutbytes'
+            New-Item -ItemType Directory -Force -Path $script:CutDir | Out-Null
+            # Random rather than zeroes: a wrong offset in a file of zeroes
+            # produces a file of zeroes and the hash still matches.
+            $script:CutSrc = Join-Path $script:CutDir 'whole.bin'
+            $rnd = New-Object Random 20261006
+            $buf = New-Object byte[] 5000000
+            $rnd.NextBytes($buf)
+            [IO.File]::WriteAllBytes($script:CutSrc, $buf)
+            $script:CutSha = Get-FileSha256 $script:CutSrc
+        }
+
+        It 'hashes a stretch of a file as that stretch, not as the file' {
+            # Hashing the path would write the whole file's hash beside every
+            # one of its pieces and make all of them look wrong on arrival.
+            $a = Get-FilePartSha256 $script:CutSrc 0 1000000
+            $b = Get-FilePartSha256 $script:CutSrc 1000000 1000000
+            $a | Should -Not -Be $b
+            $a | Should -Not -Be $script:CutSha
+        }
+
+        It 'writes a piece whose hash is what it said it would be' {
+            $dest = Join-Path $script:CutDir 'p1.bin'
+            $said = Write-FilePart $script:CutSrc 1000000 1234567 $dest
+            (Get-Item $dest).Length | Should -Be 1234567
+            (Get-FileSha256 $dest) | Should -Be $said
+            (Get-FilePartSha256 $script:CutSrc 1000000 1234567) | Should -Be $said
+        }
+
+        It 'puts the file back together byte for byte' {
+            # The whole point. Cut it the way the planner would, join it the way
+            # the menu does, and the result has to be the file that went in.
+            $parts = @()
+            $offset = [long]0; $n = 0
+            while ($offset -lt 5000000) {
+                $n++
+                $take = [long][Math]::Min(1500000, 5000000 - $offset)
+                $dest = Join-Path $script:CutDir ("joined.bin.dwpart{0:d2}" -f $n)
+                [void](Write-FilePart $script:CutSrc $offset $take $dest)
+                $parts += $dest
+                $offset += $take
+            }
+            $out = Join-Path $script:CutDir 'rejoined.bin'
+            cmd /c ('copy /b "' + ($parts -join '"+"') + '" "' + $out + '"') | Out-Null
+            (Get-Item $out).Length | Should -Be 5000000
+            (Get-FileSha256 $out) | Should -Be $script:CutSha
+        }
+
+        It 'says so rather than inventing bytes when the file is shorter than the part' {
+            # A source that shrank between planning and writing must not produce
+            # a short piece that still looks like a piece.
+            $short = Join-Path $script:CutDir 'short.bin'
+            [IO.File]::WriteAllBytes($short, (New-Object byte[] 100))
+            { Get-FilePartSha256 $short 0 500 } | Should -Throw -ExpectedMessage '*ended*'
+        }
+    }
+
+    Context 'what the set file says about it' {
+
+        BeforeAll {
+            $script:CutEntries = @(
+                @{ Disc = 1; Rel = 'game.bin.dwpart01'; Bytes = 100; Sha256 = ('a' * 64)
+                   PartOf = 'game.bin'; PartIndex = 1; PartCount = 2
+                   WholeBytes = 150; WholeSha256 = ('c' * 64) }
+                @{ Disc = 2; Rel = 'game.bin.dwpart02'; Bytes = 50;  Sha256 = ('b' * 64)
+                   PartOf = 'game.bin'; PartIndex = 2; PartCount = 2
+                   WholeBytes = 150; WholeSha256 = ('c' * 64) }
+                @{ Disc = 2; Rel = 'readme.txt'; Bytes = 10; Sha256 = ('d' * 64) }
+            )
+            $script:CutManifest = New-DiscSetManifest $script:CutEntries 'GAME' 1 2
+        }
+
+        It 'lists the pieces in the table, because the pieces are what is on the discs' {
+            $script:CutManifest | Should -Match ([regex]::Escape('*game.bin.dwpart01'))
+            $script:CutManifest | Should -Match ([regex]::Escape('*game.bin.dwpart02'))
+        }
+
+        It 'says how to put it back by hand' {
+            $script:CutManifest | Should -Match ([regex]::Escape('copy /b game.bin.dwpart01+game.bin.dwpart02 game.bin'))
+        }
+
+        It 'records the finished file, its size and its hash' {
+            $script:CutManifest | Should -Match ('JOIN ' + ('c' * 64) + '\s+150\s+\*game\.bin')
+            $script:CutManifest | Should -Match ([regex]::Escape('PART 1   *game.bin.dwpart01'))
+            $script:CutManifest | Should -Match ([regex]::Escape('PART 2   *game.bin.dwpart02'))
+        }
+
+        It 'keeps those lines out of the table parser' {
+            # The table takes lines beginning with a digit, and the pasteable
+            # check does the same. JOIN and PART begin with letters so both walk
+            # straight past them, which is why the check still works on a folder
+            # the discs have just been copied into and nothing joined yet.
+            foreach ($line in ($script:CutManifest -split "`r`n")) {
+                if ($line -match '^(JOIN|PART)') {
+                    $line.Substring(0, 1) | Should -Not -Match '[0-9]'
+                }
+            }
+        }
+
+        It 'says nothing of the sort when nothing was cut' {
+            $plain = New-DiscSetManifest @(@{ Disc = 1; Rel = 'a.bin'; Bytes = 1; Sha256 = ('e' * 64) }) 'GAME' 1 1
+            $plain | Should -Not -Match 'JOIN '
+            $plain | Should -Not -Match 'Files that were cut'
+        }
     }
 }

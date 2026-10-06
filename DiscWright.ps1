@@ -3813,7 +3813,10 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
             # copied, because there is no file on the hard drive to copy: a part
             # is a stretch of the installer, and this is where that stretch
             # becomes a file of its own.
-            foreach ($cp in @($s.CutParts)) {
+            # Filtered, because @($null) is an array holding one $null rather than
+            # an empty one, so an unfiltered loop runs once on every ordinary build
+            # with nothing in hand. It did, and it took 161 tests down with it.
+            foreach ($cp in @($s.CutParts | Where-Object { $_ })) {
                 $pDest = Join-Path $destDir $cp.Rel
                 $pParent = Split-Path $pDest -Parent
                 if ($pParent -and -not (Test-Path $pParent)) {
