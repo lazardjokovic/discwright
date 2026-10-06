@@ -8281,3 +8281,143 @@ Describe 'The warning about artwork that is the wrong shape' -Tag 'Unit' {
         $size.Height | Should -BeLessOrEqual 68 -Because "it measured $([int]$size.Height)px in a 68px label"
     }
 }
+
+Describe 'Copying off a disc, whose source folder is a drive root' -Tag 'Unit' {
+
+    # Found on a burned CD-RW, with twenty minutes of burning behind it, and not
+    # findable any other way: the menu said "1 of 1 files would not copy from
+    # this disc. It may be scratched." The disc was minutes old and every byte on
+    # it had just been hashed back successfully.
+    #
+    # setCopyCmd wrapped the source folder in quotes. A disc is always a drive
+    # root, so the source always ended in a backslash, and a backslash
+    # immediately before a closing quote escapes the quote:
+    #
+    #   robocopy "D:\" "F:\restore" "game.bin" /R:1 /W:1
+    #
+    # robocopy read that as ONE source argument running to the end of the line,
+    # and settled on a destination inside C:\Windows\System32. Exit code 16, no
+    # files, and a message blaming the person's disc.
+    #
+    # Every test before this one copied from a staging FOLDER, and a folder path
+    # never ends in a backslash. That is the whole reason 870 passing tests never
+    # saw it, and why these use a drive root for real via subst rather than
+    # asserting on a string that happens to contain one.
+
+    BeforeDiscovery {
+        $script:HaveCScript2 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        # Worked out HERE and not in BeforeAll, for the reason this file already
+        # warns about further up: -Skip: is decided during discovery, and
+        # BeforeAll has not run yet. Testing a variable that BeforeAll sets means
+        # it is always empty at the moment that matters, and the test skips on
+        # every machine for ever. Which is exactly what happened on the first run
+        # of this block: 873 passed, and the two tests that actually prove
+        # anything had quietly not run at all.
+        #
+        # So discovery only answers "could a drive be made", and BeforeAll makes
+        # it. If making it then fails, the test FAILS rather than skipping.
+        $script:CanSubst = [bool]((Get-Command subst.exe -ErrorAction SilentlyContinue) -and
+                                  @('X','Y','W','V','U' | Where-Object { -not (Test-Path "${_}:") }).Count)
+    }
+
+    BeforeAll {
+        $script:CScript2 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        function Get-JsFn([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        # The real functions out of the real file, handed to the same engine the
+        # menu runs in.
+        function Invoke-SetCopyCmd([string]$srcDir, [string]$dstDir, [string]$rel) {
+            $src = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+            $js = @('var fso=new ActiveXObject("Scripting.FileSystemObject");'
+                    'var SEP=String.fromCharCode(92);')
+            foreach ($fn in 'setQuote','setCopyCmd') { $js += (Get-JsFn $src $fn) }
+            $js += 'WScript.Echo(setCopyCmd(WScript.Arguments(0),WScript.Arguments(1),WScript.Arguments(2)));'
+            $tmp = Join-Path $script:Sandbox ('copycmd_' + [Guid]::NewGuid().ToString('N').Substring(0,6) + '.js')
+            Set-Content -LiteralPath $tmp -Value ($js -join "`r`n") -Encoding Ascii
+            $out = & $script:CScript2 //Nologo //E:JScript $tmp $srcDir $dstDir $rel 2>&1
+            return (@($out | Where-Object { $_ -and $_ -notmatch '^\s*$' }) -join '').Trim()
+        }
+
+        # A drive whose root is a folder we own, so a root path can be copied
+        # from without a disc in the machine.
+        $script:FakeDrive = $null
+        $script:FakeRoot = Join-Path $script:Sandbox 'fakedisc'
+        New-Item -ItemType Directory -Force -Path $script:FakeRoot | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:FakeRoot 'payload.bin') -Value 'disc contents' -Encoding Ascii
+        foreach ($letter in 'X','Y','W','V','U') {
+            if (Test-Path "${letter}:") { continue }
+            & subst "${letter}:" $script:FakeRoot 2>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0 -and (Test-Path "${letter}:\payload.bin")) {
+                $script:FakeDrive = "${letter}:"
+                break
+            }
+        }
+        if ($script:CanSubst -and -not $script:FakeDrive) {
+            throw 'no drive could be made with subst, so the drive-root tests cannot run'
+        }
+    }
+
+    AfterAll {
+        if ($script:FakeDrive) { & subst $script:FakeDrive /d 2>&1 | Out-Null }
+    }
+
+    It 'doubles the trailing backslash on a drive root' -Skip:(-not $script:HaveCScript2) {
+        $cmd = Invoke-SetCopyCmd 'D:\' 'F:\restore\GAME' 'game.bin'
+        $cmd | Should -Match ([regex]::Escape('robocopy "D:\\" "F:\restore\GAME" "game.bin"'))
+    }
+
+    It 'leaves an ordinary folder path exactly as it was' -Skip:(-not $script:HaveCScript2) {
+        # The staging folder case, which always worked and must keep working.
+        $cmd = Invoke-SetCopyCmd 'C:\out\disc D1' 'F:\restore\GAME' 'game.bin'
+        $cmd | Should -Match ([regex]::Escape('robocopy "C:\out\disc D1" "F:\restore\GAME" "game.bin"'))
+    }
+
+    It 'handles a restore folder that is itself a drive root' -Skip:(-not $script:HaveCScript2) {
+        # Somebody can pick one in Choose folder, and then the same escape is
+        # needed on the other side of the command.
+        $cmd = Invoke-SetCopyCmd 'D:\' 'E:\' 'game.bin'
+        $cmd | Should -Match ([regex]::Escape('"D:\\" "E:\\"'))
+    }
+
+    It 'copies a file out of a real drive root' -Skip:((-not $script:HaveCScript2) -or (-not $script:CanSubst)) {
+        # The real thing. A string assertion above would pass against a command
+        # that still does not run, so this runs it.
+        $dst = Join-Path $script:Sandbox 'restored'
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        $cmd = Invoke-SetCopyCmd "$($script:FakeDrive)\" $dst 'payload.bin'
+        cmd /c "$cmd" 2>&1 | Out-Null
+        $code = $LASTEXITCODE
+        $code | Should -BeLessThan 8 -Because "robocopy codes below 8 are success, got $code"
+        Test-Path (Join-Path $dst 'payload.bin') | Should -BeTrue
+        (Get-Content (Join-Path $dst 'payload.bin') -Raw).Trim() | Should -Be 'disc contents'
+    }
+
+    It 'and the old quoting really did fail, so this is not testing nothing' -Skip:(-not $script:CanSubst) {
+        # Watching the guard fail. If the naive form copied the file after all,
+        # the test above proves nothing and the bug was somewhere else.
+        $dst = Join-Path $script:Sandbox 'restored-naive'
+        New-Item -ItemType Directory -Force -Path $dst | Out-Null
+        $q = [char]34
+        $naive = "robocopy $q$($script:FakeDrive)\$q $q$dst$q ${q}payload.bin$q /R:1 /W:1 /NJH /NJS"
+        cmd /c "$naive" 2>&1 | Out-Null
+        $LASTEXITCODE | Should -BeGreaterOrEqual 8 -Because 'the unescaped form is a robocopy usage error'
+        Test-Path (Join-Path $dst 'payload.bin') | Should -BeFalse
+    }
+}
