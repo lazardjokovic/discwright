@@ -24,26 +24,26 @@
 # nothing on their own, and a report that says "media type 9" is a report
 # nobody can act on.
 $script:MediaTypes = @{
-    0  = @{ Name = 'no disc';                 Writable = $false }
-    1  = @{ Name = 'CD-ROM, pressed';         Writable = $false }
-    2  = @{ Name = 'CD-R';                    Writable = $true  }
-    3  = @{ Name = 'CD-RW';                   Writable = $true  }
-    4  = @{ Name = 'DVD-ROM, pressed';        Writable = $false }
-    5  = @{ Name = 'DVD-RAM';                 Writable = $true  }
-    6  = @{ Name = 'DVD+R';                   Writable = $true  }
-    7  = @{ Name = 'DVD+RW';                  Writable = $true  }
-    8  = @{ Name = 'DVD+R DL';                Writable = $true  }
-    9  = @{ Name = 'DVD-R';                   Writable = $true  }
-    10 = @{ Name = 'DVD-RW';                  Writable = $true  }
-    11 = @{ Name = 'DVD-R DL';                Writable = $true  }
-    12 = @{ Name = 'hard disk';               Writable = $false }
-    13 = @{ Name = 'DVD+RW DL';               Writable = $true  }
-    14 = @{ Name = 'HD DVD-ROM';              Writable = $false }
-    15 = @{ Name = 'HD DVD-R';                Writable = $true  }
-    16 = @{ Name = 'HD DVD-RAM';              Writable = $true  }
-    17 = @{ Name = 'BD-ROM, pressed';         Writable = $false }
-    18 = @{ Name = 'BD-R';                    Writable = $true  }
-    19 = @{ Name = 'BD-RE';                   Writable = $true  }
+    0  = @{ Name = 'no disc';                 Writable = $false; Rewritable = $false }
+    1  = @{ Name = 'CD-ROM, pressed';         Writable = $false; Rewritable = $false }
+    2  = @{ Name = 'CD-R';                    Writable = $true; Rewritable = $false }
+    3  = @{ Name = 'CD-RW';                   Writable = $true; Rewritable = $true  }
+    4  = @{ Name = 'DVD-ROM, pressed';        Writable = $false; Rewritable = $false }
+    5  = @{ Name = 'DVD-RAM';                 Writable = $true; Rewritable = $true  }
+    6  = @{ Name = 'DVD+R';                   Writable = $true; Rewritable = $false }
+    7  = @{ Name = 'DVD+RW';                  Writable = $true; Rewritable = $true  }
+    8  = @{ Name = 'DVD+R DL';                Writable = $true; Rewritable = $false }
+    9  = @{ Name = 'DVD-R';                   Writable = $true; Rewritable = $false }
+    10 = @{ Name = 'DVD-RW';                  Writable = $true; Rewritable = $true  }
+    11 = @{ Name = 'DVD-R DL';                Writable = $true; Rewritable = $false }
+    12 = @{ Name = 'hard disk';               Writable = $false; Rewritable = $false }
+    13 = @{ Name = 'DVD+RW DL';               Writable = $true; Rewritable = $true  }
+    14 = @{ Name = 'HD DVD-ROM';              Writable = $false; Rewritable = $false }
+    15 = @{ Name = 'HD DVD-R';                Writable = $true; Rewritable = $false }
+    16 = @{ Name = 'HD DVD-RAM';              Writable = $true; Rewritable = $true  }
+    17 = @{ Name = 'BD-ROM, pressed';         Writable = $false; Rewritable = $false }
+    18 = @{ Name = 'BD-R';                    Writable = $true; Rewritable = $false }
+    19 = @{ Name = 'BD-RE';                   Writable = $true; Rewritable = $true  }
 }
 
 # The profiles a drive reports it can write, which is about the hardware rather
@@ -154,6 +154,16 @@ function Get-MediaTypeName([int]$code) {
 
 function Test-MediaWritable([int]$code) {
     if ($script:MediaTypes.ContainsKey($code)) { return [bool]$script:MediaTypes[$code].Writable }
+    return $false
+}
+
+# Can this disc be erased and used again? Not the same question as whether it
+# can be written: a CD-R can be written once and never again, a CD-RW can be
+# written, erased and written again. The burn confirmation used to tell
+# everybody their disc was not rewritable, including people holding a CD-RW,
+# which is the sort of thing that makes somebody doubt the rest of the dialog.
+function Test-MediaRewritable([int]$code) {
+    if ($script:MediaTypes.ContainsKey($code)) { return [bool]$script:MediaTypes[$code].Rewritable }
     return $false
 }
 
@@ -333,8 +343,11 @@ function Write-IsoToDisc {
     }
 
     $what = "$($iso.Name), $([Math]::Round($iso.Length / 1MB, 1)) MB, onto the $($target.MediaName)"
+    $undo = $(if (Test-MediaRewritable $target.MediaType) {
+                  'The disc is rewritable, so it can be erased and written again elsewhere.'
+              } else { 'This cannot be undone: the disc is not rewritable.' })
     if (-not $PSCmdlet.ShouldProcess("$($target.Drive) ($($target.Vendor) $($target.Product))",
-                                     "Burn $what. This cannot be undone and the disc is not rewritable")) {
+                                     "Burn $what. $undo")) {
         return [pscustomobject]@{
             Burned = $false; WhatIf = $true; Drive = $target.Drive
             MediaName = $target.MediaName; IsoPath = $iso.FullName

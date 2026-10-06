@@ -2385,13 +2385,31 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // One call per file because the disc holds a subset of the game: copying the
   // folder would bring AUTORUN, the set file and the disc icon along with it,
   // and the installer has to run in a folder holding nothing but the game.
+  // Quoting a path for the command line, which is not as simple as putting
+  // quotes round it. A backslash immediately before a closing quote escapes
+  // that quote, so "D:\" does not mean the root of D: - it means a quote
+  // character, and everything after it runs on into the same argument.
+  //
+  // Every disc is a drive root, so every real disc hit this and nothing else
+  // did: the staging folder a test copies from never ends in a backslash.
+  // robocopy took the whole command line as one source and chose a
+  // destination inside C:\Windows\System32, and the menu told the person
+  // their disc was scratched.
+  //
+  // Doubling the trailing run is the documented escape.
+  function setQuote(p){
+    var q=String.fromCharCode(34), bs=String.fromCharCode(92), n=0, i, tail="";
+    for(i=p.length-1;i>=0&&p.charAt(i)==bs;i--){ n++; }
+    for(i=0;i<n;i++){ tail+=bs; }
+    return q+p+tail+q;
+  }
   function setCopyCmd(srcDir,dstDir,rel){
-    var q=String.fromCharCode(34), parts=rel.split("/"), name=parts[parts.length-1];
+    var parts=rel.split("/"), name=parts[parts.length-1];
     var sub="", i;
     for(i=0;i<parts.length-1;i++){ sub=(sub.length?sub+SEP:"")+parts[i]; }
     var from=srcDir, to=dstDir;
     if(sub.length){ from=fso.BuildPath(srcDir,sub); to=fso.BuildPath(dstDir,sub); }
-    return "robocopy "+q+from+q+" "+q+to+q+" "+q+name+q+" /R:1 /W:1 /NJH /NJS";
+    return "robocopy "+setQuote(from)+" "+setQuote(to)+" "+setQuote(name)+" /R:1 /W:1 /NJH /NJS";
   }
   // Every folder on the way down, because robocopy makes the last one but the
   // drive may not have the ones above it.
