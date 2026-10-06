@@ -2361,8 +2361,20 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var m=s.ok+" of "+s.total+" files copied so far.";
     if(s.bad>0) m+=" "+s.bad+" copied badly and will be done again.";
     if(s.need.length){
-      var list=s.need.split(", ");
-      if(list.length==1) m+=" Now put disc "+list[0]+" in.";
+      // Which of the missing discs is the one in the drive right now. Without
+      // this, disc 2's own menu said "Now put disc 2 in" to somebody who was
+      // reading that sentence off disc 2, and the first thing anybody saw on
+      // disc 1 was "Still to come: discs 1, 2" rather than "copy this one".
+      var list=s.need.split(", "), mineNeeded=false, rest=[], i;
+      for(i=0;i<list.length;i++){
+        if(parseFloat(list[i])==SET.n){ mineNeeded=true; } else { rest[rest.length]=list[i]; }
+      }
+      if(mineNeeded){
+        if(!rest.length) m+=" Copy this disc to finish.";
+        else if(rest.length==1) m+=" Copy this disc, then put disc "+rest[0]+" in.";
+        else m+=" Copy this disc, then the rest: discs "+rest.join(", ")+".";
+      }
+      else if(list.length==1) m+=" Now put disc "+list[0]+" in.";
       else m+=" Still to come: discs "+s.need+".";
     }
     return m;
@@ -2477,8 +2489,17 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       if(code>=8){ bad++; }
     }
     SETARM=false;
-    if(bad>0){ alert(bad+" of "+mine.length+" files would not copy from this disc.\n\nIt may be scratched. Try it again, or copy them in Explorer."); }
+    if(bad>0){ setSay(bad+" of "+mine.length+" files would not copy from this disc.\n\nIt may be scratched. Try it again, or copy them in Explorer.",false); }
     show();
+  }
+  // alert() in an HTA always draws the exclamation triangle, so "Every file in
+  // that folder is byte for byte what was burned" arrived looking like a
+  // problem. Popup takes an icon: 64 is information, 48 is the warning the
+  // real failures should keep. It falls back to alert() rather than swallowing
+  // the message if Popup is unavailable.
+  function setSay(msg,good){
+    try{ new ActiveXObject("WScript.Shell").Popup(msg,0,document.title,good?64:48); }
+    catch(ex){ alert(msg); }
   }
   function setVerify(){
     // The sizes are checked on every redraw; this is the slow, certain one, and
@@ -2506,13 +2527,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       if(hash.length&&hash.toUpperCase()!=rows[i].h.toUpperCase()){ bad[bad.length]=rows[i].f; }
     }
     try{ if(fso.FileExists(tmp)) fso.DeleteFile(tmp); }catch(ex){}
-    if(!bad.length){ alert("Every file in that folder is byte for byte what was burned."); }
-    else{ alert(bad.length+" file(s) do not match what was burned:\n\n"+bad.join("\n")+
-                "\n\nCopy them again from the disc they are on."); }
+    if(!bad.length){ setSay("Every file in that folder is byte for byte what was burned.",true); }
+    else{ setSay(bad.length+" file(s) do not match what was burned:\n\n"+bad.join("\n")+
+                "\n\nCopy them again from the disc they are on.",false); }
   }
   function setInstall(){
     var dir=setDir(), s=setScan(dir);
-    if(!s.complete){ alert("The set is not complete yet.\n\n"+setSentence(s)); return; }
+    if(!s.complete){ setSay("The set is not complete yet.\n\n"+setSentence(s),false); return; }
     var g=GAMES[cur], exe=setPath(dir,g.s.split(String.fromCharCode(92)).join("/"));
     if(!g.s.length||!fso.FileExists(exe)){
       // Nothing recorded to run, or it is not where the set file said: open the
