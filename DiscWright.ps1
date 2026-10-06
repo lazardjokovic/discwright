@@ -568,7 +568,7 @@ function Get-DiscSetFileName { 'Disc set.txt' }
 # Filling each disc until the next file does not fit is a rule that can be
 # explained in one sentence and checked by eye.
 function Get-DiscSetPlan([array]$files, [double]$capacityBytes, [double]$overheadBytes = 0,
-                         [double]$extraBytes = 0) {
+                         [double]$extraBytes = 0, [bool]$cutFiles = $false) {
     $room = $capacityBytes - $overheadBytes
     if ($room -le 0) {
         return @{ Ok = $false; Discs = @(); Room = $room; ExtrasDisc = 0
@@ -582,15 +582,47 @@ function Get-DiscSetPlan([array]$files, [double]$capacityBytes, [double]$overhea
         # will not fit any of them. Named, because the answer is a bigger blank
         # and the person needs to know which file decided that.
         if ($size -gt $room) {
-            # Named, because the answer is a bigger blank and the person needs to
-            # know which file decided that. TooBig carries the same facts as
-            # numbers: the line under the installer list has 655 pixels and this
-            # sentence needs 930, and re-reading them out of the sentence would
-            # be parsing our own prose.
-            $why = '{0} is {1:N2} GB and a disc this size leaves {2:N2} GB for files. A set splits a game between discs but never splits a file, so every file has to fit on one disc.'
-            return @{ Ok = $false; Discs = @(); Room = $room; ExtrasDisc = 0
-                      TooBig = @{ Rel = $f.Rel; Bytes = $size }
-                      Why = ($why -f $f.Rel, ($size / 1GB), ($room / 1GB)) }
+            if (-not $cutFiles) {
+                # Named, because the answer is a bigger blank and the person needs to
+                # know which file decided that. TooBig carries the same facts as
+                # numbers: the line under the installer list has 655 pixels and this
+                # sentence needs 930, and re-reading them out of the sentence would
+                # be parsing our own prose.
+                $why = '{0} is {1:N2} GB and a disc this size leaves {2:N2} GB for files. A set splits a game between discs but never splits a file, so every file has to fit on one disc.'
+                return @{ Ok = $false; Discs = @(); Room = $room; ExtrasDisc = 0
+                          TooBig = @{ Rel = $f.Rel; Bytes = $size }
+                          Why = ($why -f $f.Rel, ($size / 1GB), ($room / 1GB)) }
+            }
+            # Cut it instead, when asked to. The parts start on a fresh disc so
+            # they run in order and somebody holding disc 3 can see which part is
+            # on it without doing arithmetic. The last part keeps the room it
+            # does not use, so the files after it share that disc rather than
+            # starting another one.
+            if ($cur.Count) {
+                $discs += , @{ Number = ($discs.Count + 1); Files = @($cur); Bytes = $curBytes }
+                $cur = @(); $curBytes = [double]0
+            }
+            # Whole bytes. room is a capacity minus an overhead and lands on a
+            # fraction of a byte, and a part cut at two thirds of a byte is one
+            # that cannot be written, let alone joined back.
+            $chunk  = [long][Math]::Floor($room)
+            $count  = [int][Math]::Ceiling($size / $chunk)
+            $width  = [Math]::Max(2, ([string]$count).Length)
+            $offset = [long]0
+            for ($n = 1; $n -le $count; $n++) {
+                $take = [long][Math]::Min([double]$chunk, $size - $offset)
+                $part = @{ Rel = ("{0}.dwpart{1}" -f $f.Rel, ([string]$n).PadLeft($width, "0"))
+                           Bytes = $take; Path = $f.Path
+                           PartOf = $f.Rel; PartIndex = $n; PartCount = $count
+                           PartOffset = $offset; WholeBytes = $size }
+                if ($n -lt $count) {
+                    $discs += , @{ Number = ($discs.Count + 1); Files = @($part); Bytes = $take }
+                } else {
+                    $cur = @($part); $curBytes = $take
+                }
+                $offset += $take
+            }
+            continue
         }
         if ($cur.Count -and ($curBytes + $size) -gt $room) {
             $discs += , @{ Number = ($discs.Count + 1); Files = @($cur); Bytes = $curBytes }
@@ -686,6 +718,47 @@ function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [i
     $o.Add('  }')
     $o.Add('')
     $o.Add('Silence means every file is there and every one of them is right.')
+
+    # How a file that was cut goes back together. Written after the table and
+    # not inside it, because the table is the physical truth about the discs and
+    # this is an instruction about what to do once they are all copied.
+    #
+    # The prefixes are letters so the table parser, which takes only lines
+    # starting with a digit, walks straight past them. The pasteable check above
+    # does the same, which is right: it checks a folder the discs have been
+    # copied into, and at that moment the parts are what is there.
+    $joins = @($entries | Where-Object { $_.PartOf } | Group-Object { [string]$_.PartOf })
+    if ($joins.Count) {
+        $o.Add("")
+        $o.Add("Files that were cut to fit")
+        $o.Add("--------------------------")
+        $o.Add("")
+        $o.Add("These are on the discs in pieces, because no disc in this set is big")
+        $o.Add("enough to hold one of them whole. The menu puts them back together after")
+        $o.Add("the last disc is copied, and checks the result against the hash below.")
+        $o.Add("")
+        $o.Add("To do it by hand, from inside the folder you copied the discs into:")
+        $o.Add("")
+        foreach ($grp in $joins) {
+            $ps = @($grp.Group | Sort-Object { [int]$_.PartIndex })
+            $whole = ([string]$ps[0].PartOf).Replace($sep, "/")
+            $names = @($ps | ForEach-Object { ([string]$_.Rel).Replace($sep, "/") })
+            $o.Add("  copy /b " + ($names -join "+") + " " + $whole)
+        }
+        $o.Add("")
+        $o.Add("and then delete the pieces. Each JOIN line below is the finished file:")
+        $o.Add("its SHA-256, its size in bytes, and its name. Each PART line under it is")
+        $o.Add("one piece, in the order they go back together.")
+        $o.Add("")
+        foreach ($grp in $joins) {
+            $ps = @($grp.Group | Sort-Object { [int]$_.PartIndex })
+            $whole = ([string]$ps[0].PartOf).Replace($sep, "/")
+            $o.Add(("JOIN {0} {1,-13} *{2}" -f $ps[0].WholeSha256, [long]$ps[0].WholeBytes, $whole))
+            foreach ($pt in $ps) {
+                $o.Add(("PART {0,-3} *{1}" -f [int]$pt.PartIndex, ([string]$pt.Rel).Replace($sep, "/")))
+            }
+        }
+    }
     return (($o -join "`r`n") + "`r`n")
 }
 
@@ -720,7 +793,18 @@ function Get-DiscSetSteps([hashtable]$s, $plan, [array]$entries) {
         # Full paths, because that is what the staging copy has in hand when it
         # asks whether this file belongs on this disc.
         $only = @{}
-        foreach ($f in $d.Files) { $only[[string]$f.Path] = $true }
+        # A file that was cut is never on any disc whole, so its source path must
+        # not go in here: the staging copy would put the whole thing on every disc
+        # that carries a part of it, which is both wrong and enormous.
+        $cuts = @()
+        foreach ($f in $d.Files) {
+            if ($f.PartOf) {
+                $cuts += , @{ Path = [string]$f.Path; Rel = [string]$f.Rel
+                              Offset = [long]$f.PartOffset; Bytes = [long]$f.Bytes }
+            } else {
+                $only[[string]$f.Path] = $true
+            }
+        }
         # A copy per disc. The build fills in defaults on the hashtable it is
         # given - a missing icon, a missing background - and without a copy
         # disc 1's answers would quietly become disc 2's.
@@ -735,6 +819,7 @@ function Get-DiscSetSteps([hashtable]$s, $plan, [array]$entries) {
         $ds.VolumeLabel = Get-VolumeLabel $s.Label $d.Number $n
         $ds.StageDir    = Join-Path $s.OutDir ('disc D{0}' -f $d.Number)
         $ds.OnlyFiles   = $only
+        $ds.CutParts    = @($cuts)
         $ds.SetManifest = New-DiscSetManifest $entries $s.Label $d.Number $n
         $ds.DiscNum     = $d.Number
         $ds.DiscOf      = $n
@@ -829,7 +914,7 @@ function Invoke-BuildDiscSet([hashtable]$s, [scriptblock]$log, [scriptblock]$pro
     if ($s.ExtrasPath) { $side += [string]$s.ExtrasPath }
     $extraBytes = [double](Get-ItemsSize $side)
 
-    $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s) $extraBytes
+    $plan = Get-DiscSetPlan $files $cap (Get-DiscOverheadBytes $s) $extraBytes ([bool]$s.CutFiles)
     if (-not $plan.Ok) { return @{ Ok = $false; Isos = @(); Discs = 0; Why = $plan.Why } }
 
     $n = @($plan.Discs).Count
@@ -842,9 +927,31 @@ function Invoke-BuildDiscSet([hashtable]$s, [scriptblock]$log, [scriptblock]$pro
     $entries = @()
     foreach ($d in $plan.Discs) {
         foreach ($f in $d.Files) {
-            $entries += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes
-                             Sha256 = (Get-FileSha256 $f.Path) }
+            # A part is a stretch of a file, so hashing $f.Path would write the
+            # whole file's hash beside every one of its parts and make all of
+            # them look wrong on arrival.
+            $sha = if ($f.PartOf) { Get-FilePartSha256 $f.Path ([long]$f.PartOffset) ([long]$f.Bytes) }
+                   else           { Get-FileSha256 $f.Path }
+            $entries += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes; Sha256 = $sha
+                             PartOf = $f.PartOf; PartIndex = $f.PartIndex
+                             PartCount = $f.PartCount; WholeBytes = $f.WholeBytes }
         }
+    }
+
+    # The hash of each cut file as it was before it was cut, which is what the
+    # join has to produce. Once per file rather than once per part: a 4 GB
+    # installer in six pieces would otherwise be read six times over to answer
+    # the same question six times.
+    $wholeHashes = @{}
+    foreach ($e in $entries) {
+        if (-not $e.PartOf) { continue }
+        if (-not $wholeHashes.ContainsKey([string]$e.PartOf)) {
+            $src = @($plan.Discs | ForEach-Object { $_.Files } |
+                     Where-Object { $_.PartOf -eq $e.PartOf } | Select-Object -First 1).Path
+            & $log ("Hashing {0} whole, so the join can be checked ..." -f (Split-Path $e.PartOf -Leaf))
+            $wholeHashes[[string]$e.PartOf] = Get-FileSha256 $src
+        }
+        $e.WholeSha256 = $wholeHashes[[string]$e.PartOf]
     }
 
     $isos = @()
@@ -1883,6 +1990,57 @@ function Get-FileSha256([string]$path) {
         [void]$sha.TransformFinalBlock((New-Object byte[] 0), 0, 0)
         return (-join ($sha.Hash | ForEach-Object { $_.ToString('x2') }))
     } finally { $st.Dispose(); $sha.Dispose() }
+}
+
+# The same, for one stretch of a file. A file cut to fit a disc is never on a
+# disc whole, so the only honest thing to write in the set list beside a part is
+# the hash of that part, and a part is a range rather than a file.
+#
+# Read in the same 1 MB bites as the whole-file version, and the last bite is
+# trimmed to the range rather than the buffer: hashing 1 MB when 300 KB was
+# asked for is how a part that copied perfectly comes back as damaged.
+function Get-FilePartSha256([string]$path, [long]$offset, [long]$count) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $st = [IO.File]::Open($path, "Open", "Read", "Read")
+    try {
+        [void]$st.Seek($offset, "Begin")
+        $buf = New-Object byte[] (1MB)
+        $left = $count
+        while ($left -gt 0) {
+            $want = [int][Math]::Min([long]$buf.Length, $left)
+            $n = $st.Read($buf, 0, $want)
+            if ($n -le 0) { throw "$path ended $left bytes before the part did." }
+            [void]$sha.TransformBlock($buf, 0, $n, $null, 0)
+            $left -= $n
+        }
+        [void]$sha.TransformFinalBlock((New-Object byte[] 0), 0, 0)
+        return (-join ($sha.Hash | ForEach-Object { $_.ToString("x2") }))
+    } finally { $st.Dispose(); $sha.Dispose() }
+}
+
+# Write one stretch of a file out as a file of its own, and say what it hashed
+# to on the way past. Returning the hash is not a convenience: hashing it
+# afterwards would read the part back off the disc being built, and doing it
+# here means the bytes are hashed as they are written rather than after.
+function Write-FilePart([string]$path, [long]$offset, [long]$count, [string]$dest) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $in  = [IO.File]::Open($path, "Open", "Read", "Read")
+    $out = [IO.File]::Open($dest, "Create", "Write", "None")
+    try {
+        [void]$in.Seek($offset, "Begin")
+        $buf = New-Object byte[] (1MB)
+        $left = $count
+        while ($left -gt 0) {
+            $want = [int][Math]::Min([long]$buf.Length, $left)
+            $n = $in.Read($buf, 0, $want)
+            if ($n -le 0) { throw "$path ended $left bytes before the part did." }
+            $out.Write($buf, 0, $n)
+            [void]$sha.TransformBlock($buf, 0, $n, $null, 0)
+            $left -= $n
+        }
+        [void]$sha.TransformFinalBlock((New-Object byte[] 0), 0, 0)
+        return (-join ($sha.Hash | ForEach-Object { $_.ToString("x2") }))
+    } finally { $out.Dispose(); $in.Dispose(); $sha.Dispose() }
 }
 
 function New-ChecksumManifest([string]$stage, [string]$label, [scriptblock]$log) {
@@ -3525,6 +3683,22 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
                 if ($sameVol) { try { New-Item -ItemType HardLink -Path $dest -Target $f.FullName -EA Stop | Out-Null; & $log "  linked $($f.Name)" }
                                 catch { Copy-Item $f.FullName $dest; & $log "  copied $($f.Name)" } }
                 else { & $log "  copying $($f.Name) ..."; Copy-Item $f.FullName $dest }
+            }
+
+            # The parts of a file too big for one disc. Written here rather than
+            # copied, because there is no file on the hard drive to copy: a part
+            # is a stretch of the installer, and this is where that stretch
+            # becomes a file of its own.
+            foreach ($cp in @($s.CutParts)) {
+                $pDest = Join-Path $destDir $cp.Rel
+                $pParent = Split-Path $pDest -Parent
+                if ($pParent -and -not (Test-Path $pParent)) {
+                    New-Item -ItemType Directory -Force -Path $pParent | Out-Null
+                }
+                & $log ("  cutting {0} ({1:N0} MB of {2}) ..." -f
+                        (Split-Path $cp.Rel -Leaf), ([double]$cp.Bytes / 1MB), (Split-Path $cp.Path -Leaf))
+                [void](Write-FilePart $cp.Path ([long]$cp.Offset) ([long]$cp.Bytes) $pDest)
+                if ($destDir -eq $stage -and $cp.Rel -notmatch "\\") { $ownRootFiles[$cp.Rel] = $true }
             }
 
             # This entry's own manual and extras, beside its installer, so a game
