@@ -8421,3 +8421,160 @@ Describe 'Copying off a disc, whose source folder is a drive root' -Tag 'Unit' {
         Test-Path (Join-Path $dst 'payload.bin') | Should -BeFalse
     }
 }
+
+Describe 'What the set sentence tells you to do next' -Tag 'Unit' {
+
+    # The sentence is the one line somebody reads before deciding what to do
+    # with the disc in their hand, so it has to be about THAT disc.
+    #
+    # Found on real discs: disc 2's own menu said "Now put disc 2 in" to
+    # somebody who was reading that sentence off disc 2. And the first thing
+    # anybody saw on disc 1 was "Still to come: discs 1, 2", which reports a
+    # state instead of saying "copy this one".
+    #
+    # setSentence touches only s.* and SET.n, so these run it with a scan result
+    # made by hand. That is deliberate: building two discs of files to reach
+    # each wording would make a slow test out of a pure function. The function
+    # itself is lifted out of DiscWright.ps1 rather than copied here.
+
+    BeforeDiscovery {
+        $script:HaveCScript3 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:CScript3 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        $src = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $start = $src.IndexOf('function setSentence(')
+        if ($start -lt 0) { throw 'DiscWright.ps1 has no setSentence' }
+        $i = $src.IndexOf('{', $start); $depth = 0
+        for ($j = $i; $j -lt $src.Length; $j++) {
+            if ($src[$j] -eq '{') { $depth++ }
+            elseif ($src[$j] -eq '}') { $depth--; if ($depth -eq 0) { break } }
+        }
+        $script:SentenceJs = $src.Substring($start, $j - $start + 1)
+
+        function Get-Sentence([int]$inDrive, [int]$of, [hashtable]$scan) {
+            $js = @("var SET={n:$inDrive,of:$of,label:""Game""};"
+                    $script:SentenceJs
+                    ('var s={total:' + $scan.total + ',ok:' + $scan.ok + ',bad:' + $scan.bad +
+                     ',complete:' + $scan.complete + ',need:"' + $scan.need + '"};')
+                    'WScript.Echo(setSentence(s));') -join "`r`n"
+            $f = Join-Path $script:Sandbox ('sent_' + [Guid]::NewGuid().ToString('N').Substring(0,6) + '.js')
+            Set-Content -LiteralPath $f -Value $js -Encoding Ascii
+            return ((@(& $script:CScript3 //Nologo //E:JScript $f 2>&1) -join ' ').Trim())
+        }
+    }
+
+    It 'says to copy THIS disc when it is the only one still missing' -Skip:(-not $script:HaveCScript3) {
+        $s = Get-Sentence 2 2 @{ total=2; ok=1; bad=0; complete='false'; need='2' }
+        $s | Should -Match 'Copy this disc to finish'
+        $s | Should -Not -Match 'put disc 2 in'
+    }
+
+    It 'never tells you to insert the disc you are reading it on' -Skip:(-not $script:HaveCScript3) {
+        # The regression, stated as plainly as it can be: for every disc of a
+        # set, its own number must never come back as an instruction to insert
+        # it.
+        foreach ($n in 1..4) {
+            $need = (@(1..4) -join ', ')
+            $s = Get-Sentence $n 4 @{ total=4; ok=0; bad=0; complete='false'; need=$need }
+            $s | Should -Not -Match "put disc $n in" -Because "disc $n is already in the drive"
+            $s | Should -Match 'Copy this disc'
+        }
+    }
+
+    It 'names the next disc once this one is copied' -Skip:(-not $script:HaveCScript3) {
+        $s = Get-Sentence 1 2 @{ total=2; ok=0; bad=0; complete='false'; need='1, 2' }
+        $s | Should -Match ([regex]::Escape('Copy this disc, then put disc 2 in.'))
+    }
+
+    It 'lists the rest when more than one is still to come' -Skip:(-not $script:HaveCScript3) {
+        $s = Get-Sentence 1 3 @{ total=3; ok=0; bad=0; complete='false'; need='1, 2, 3' }
+        $s | Should -Match ([regex]::Escape('Copy this disc, then the rest: discs 2, 3.'))
+    }
+
+    It 'still asks for another disc when this one is already copied' -Skip:(-not $script:HaveCScript3) {
+        # The wording that was always right, and has to stay right.
+        $s = Get-Sentence 1 2 @{ total=2; ok=1; bad=0; complete='false'; need='2' }
+        $s | Should -Match 'Now put disc 2 in'
+        $s | Should -Not -Match 'Copy this disc'
+    }
+
+    It 'still lists several when none of them is the one in the drive' -Skip:(-not $script:HaveCScript3) {
+        $s = Get-Sentence 3 3 @{ total=3; ok=1; bad=0; complete='false'; need='1, 2' }
+        $s | Should -Match ([regex]::Escape('Still to come: discs 1, 2.'))
+    }
+
+    It 'says the game is ready once every file is there' -Skip:(-not $script:HaveCScript3) {
+        $s = Get-Sentence 2 2 @{ total=2; ok=2; bad=0; complete='true'; need='' }
+        $s | Should -Match 'All 2 files are here'
+        $s | Should -Not -Match 'Copy this disc'
+    }
+
+    It 'still reports a bad copy alongside the instruction' -Skip:(-not $script:HaveCScript3) {
+        $s = Get-Sentence 2 2 @{ total=2; ok=1; bad=1; complete='false'; need='2' }
+        $s | Should -Match 'copied badly and will be done again'
+        $s | Should -Match 'Copy this disc to finish'
+    }
+}
+
+Describe 'Good news should not wear a warning triangle' -Tag 'Unit' {
+
+    # alert() in an HTA always draws the exclamation icon, so "Every file in
+    # that folder is byte for byte what was burned" arrived looking like a
+    # problem. Seen at the end of a restore from real discs, which is the moment
+    # somebody most wants to be told that everything is fine.
+    #
+    # Popup takes an icon argument: 64 information, 48 exclamation.
+
+    BeforeAll {
+        $script:WartSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+    }
+
+    It 'has a helper that picks the icon from whether the news is good' {
+        $script:WartSrc | Should -Match ([regex]::Escape('function setSay(msg,good){'))
+        $script:WartSrc | Should -Match ([regex]::Escape('Popup(msg,0,document.title,good?64:48)'))
+    }
+
+    It 'falls back to alert rather than swallowing the message' {
+        # A machine where Popup is unavailable must still say the thing.
+        $m = [regex]::Match($script:WartSrc, 'function setSay\(msg,good\)\{[\s\S]{0,400}?\r?\n  \}')
+        $m.Success | Should -BeTrue
+        $m.Value | Should -Match 'catch\(ex\)\{ alert\(msg\); \}'
+    }
+
+    It 'tells the person the verify passed with the information icon' {
+        $script:WartSrc | Should -Match ([regex]::Escape('byte for byte what was burned.",true)'))
+    }
+
+    It 'every set message says whether its news is good' {
+        # A setSay with no flag reads as a warning, which is the right default
+        # but the wrong thing to leave to chance: the next message added would
+        # inherit it silently.
+        # Skipping the definition itself: its own body ends in a Popup(...);
+        # with no flag, and matching it made this fail on a file that was fine.
+        $calls = [regex]::Matches($script:WartSrc, '(?<!function )setSay\((?:[^;]|\r?\n)*?\);')
+        @($calls).Count | Should -BeGreaterThan 3 -Because 'the set code reports through setSay'
+        foreach ($m in $calls) {
+            $m.Value | Should -Match ',(true|false)\);'
+        }
+    }
+
+    It 'keeps the failures on the warning icon' {
+        foreach ($bad in 'would not copy from this disc',
+                         'do not match what was burned',
+                         'The set is not complete yet') {
+            $hit = ($script:WartSrc -split "`r?`n" | Where-Object { $_ -match [regex]::Escape($bad) } | Select-Object -First 1)
+            $hit | Should -Not -BeNullOrEmpty -Because "the message '$bad' should still exist"
+        }
+        $script:WartSrc | Should -Match ([regex]::Escape('Try it again, or copy them in Explorer.",false)'))
+        $script:WartSrc | Should -Match ([regex]::Escape('+setSentence(s),false)'))
+    }
+}
