@@ -122,9 +122,10 @@ other. A set holds one game.
 To make a second disc, reopen the project, swap the games and rebuild. The icon,
 background, music and buttons all carry over, so only the list and the label change.
 
-**A single game bigger than the disc is refused by name.** Spreading one game's `.bin`
-parts across several discs was tested and deliberately not built — see the
-[roadmap](ROADMAP.md) under *Not planned*.
+**Installing straight off the discs is refused**, and that is a different thing from
+splitting a game across them, which is built. Swapping discs while GOG's installer asks
+for parts was tested and deliberately not built — see the [roadmap](ROADMAP.md) under
+*Not planned*.
 
 ### A game across several discs
 
@@ -148,9 +149,11 @@ before anything is written:
 | BD-R 25 GB | fits one BD-R 25 GB, so no set is needed |
 | CD-R 700 MB | one file is 4.00 GB, so a set needs a DVD5 4.7 GB (3 discs) |
 
-That last one is the whole rule in a line. A set splits a game between discs, but it
-never splits a file, so a disc smaller than the biggest file cannot hold the set however
-many of them you have.
+That last one is the rule in a line: a set splits a game between discs, and placing whole
+files is what makes it safe. A disc smaller than the biggest file stops it, and the build
+then offers to cut that file instead. Say yes and the line counts the cut set, so the CD
+row above becomes *15 discs of CD-R 700 MB* rather than a refusal, with the two 4 GB
+installer parts in twelve pieces between them.
 
 It writes one ISO per disc, then offers to burn them one at a time, in order, handing
 each to whichever program you use. It asks you between discs rather than claiming to
@@ -175,9 +178,16 @@ Folder** when nothing in it was picked to run. Afterwards it will delete the cop
 it removes only the files `Disc set.txt` names, so anything else in that folder is left
 alone.
 
-Whole files only. A single file larger than one disc is refused by name rather than cut
-in two: a join has to be byte perfect, the pieces look like broken files to anybody
-browsing the disc, and it is a new way to lose a game.
+Whole files, unless a file is bigger than a whole disc. Then nothing else can help, and
+the build asks whether to cut it. Say no and it is refused by name, as it always was.
+Say yes and it is cut on whole bytes into `.dwpart01` and so on, one per disc, and put
+back together on the hard drive after the last disc is copied.
+
+The pieces look like broken files until they are joined, which is why it is asked
+rather than assumed. Each piece carries its own SHA-256 in the set list and the
+finished file carries its own, so a join that did not work is caught rather than
+installed. The pieces are deleted only once the result is the right size, and a folder
+with a file still in pieces is not a finished set.
 
 A set holds one game. Which games belong together on a disc is a decision for the person
 making it.
@@ -363,11 +373,12 @@ Stated up front rather than discovered later.
 - **AutoPlay has to be allowed.** If you have previously told Windows to "Take no action" for this drive, the menu will not launch on insert. Double-clicking the drive still opens it.
 - **Paths longer than 260 characters** will fail during the copy. PowerShell 5.1 limitation.
 - **One music track** per disc, by design. Manuals are per game.
-- **A single file bigger than the disc cannot be split.** One game across several discs
-  is built: DiscWright offers it when the payload will not fit. But it places whole
-  files, so a single file larger than the blank is refused by name, and the answer is a
-  larger blank. GOG splits its own downloads just under 4 GiB, so on a DVD5 and up there
-  is rarely anything to cut.
+- **A file bigger than the disc is cut only if you say so.** A set places whole files, so
+  one file larger than the blank stops it. The build offers to cut that file into pieces
+  and join them back on the way in, and refuses by name if you decline. It is asked
+  rather than assumed because the pieces look like broken files until they are joined.
+  GOG splits its own downloads just under 4 GiB, so on a DVD5 and up there is rarely
+  anything to cut; on a CD there almost always is.
 - **A game cannot be installed straight off a set of discs.** The discs are copied back
   into one folder first and the installer runs from there. Swapping discs while the
   installer asks was tested and deliberately not built: it asks for parts out of order, a

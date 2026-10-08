@@ -918,13 +918,34 @@ Describe 'Asking for a disc set from the window' -Tag 'UI' -Skip:(-not $script:H
         $msg | Should -Match 'Remove an entry in step 1'
     }
 
-    It 'lets the set arithmetic answer instead, once a set is asked for' {
-        # The bug. With the box ticked the old refusal must stand aside, and the
-        # set's own refusal must reach the person: by name, with the room a disc
-        # of that size actually leaves.
+    It 'offers to cut the file, because nothing else can help' {
+        # One file of 800 MB aimed at a CD. A set places whole files, so no
+        # number of CDs helps and the only thing that can is cutting it. The
+        # offer comes before the refusal, and it has to name the file, the
+        # pieces and the discs, and warn what the pieces look like.
         Invoke-CtlNamed $script:Win 'disc set' | Out-Null
         Start-Sleep -Milliseconds 500
         Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        $offer = Read-MessageBox -Win $script:Win -TitleLike 'One file is bigger*' -Button 'No'
+        $offer | Should -Match 'setup_big_solo'
+        $offer | Should -Match '0\.78 GB'
+        $offer | Should -Match 'pieces'
+        $offer | Should -Match 'broken files'
+        # Saying no leaves the build to refuse as it always did, and that refusal
+        # is modal. Left standing it disables BUILD ISO for every test after
+        # this one, which is how four tests failed on one unanswered dialog.
+        Read-MessageBox -Win $script:Win | Out-Null
+    }
+
+    It 'lets the set arithmetic answer instead, once the cut is declined' {
+        # The original bug this block exists for. With the box ticked the old
+        # refusal must stand aside, and the set's own refusal must reach the
+        # person: by name, with the room a disc of that size actually leaves.
+        #
+        # Reached by saying no to the offer above, which is the path somebody
+        # takes who does not want their game in pieces.
+        Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        Read-MessageBox -Win $script:Win -TitleLike 'One file is bigger*' -Button 'No' | Out-Null
         $msg = Read-MessageBox -Win $script:Win
         $msg | Should -Not -Match 'Remove an entry in step 1'
         $msg | Should -Match 'setup_big_solo'
@@ -938,6 +959,7 @@ Describe 'Asking for a disc set from the window' -Tag 'UI' -Skip:(-not $script:H
         # Same dialog, read again for the part that makes it actionable. A size
         # on its own leaves somebody to work out which file to go and look at.
         Invoke-CtlNamed $script:Win '*BUILD ISO' | Out-Null
+        Read-MessageBox -Win $script:Win -TitleLike 'One file is bigger*' -Button 'No' | Out-Null
         $msg = Read-MessageBox -Win $script:Win
         $msg | Should -Match '0\.78 GB'
         $msg | Should -Match '0\.6[0-9] GB'

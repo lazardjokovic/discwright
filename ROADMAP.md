@@ -21,6 +21,36 @@ that happens, and a request other people turn up and agree with moves up.
 
 ## Delivered
 
+**Cutting a file so it fits** — asked for twice by xniwo, who also worked out the risk
+before anyone else did, and who asked whether it would need "a database of some sort to
+remember a game's original state". It does, and `Disc set.txt` already was one.
+
+A disc set splits a game between discs but places whole files, so one file bigger than
+the blank was refused by name and the answer was a bigger blank. That answer runs out on
+a CD, which refuses every game measured here including a 1.8 GB indie one whose largest
+single file is bigger than a whole CD, and it has no answer at all for a game that ships
+as one enormous file.
+
+The evidence recorded under *Not planned* refuses **spanning**, and it does not apply
+here. The two fail for opposite reasons. Spanning fails because the installer decides
+what order to read parts in and that order cannot be predicted. Cutting is tractable
+because DiscWright decides and the order is fixed: nothing is ever installed from a disc,
+so the pieces are joined on the hard drive before the installer is handed anything.
+
+It is off until a build asks. The question names the file, the number of pieces and the
+number of discs, and says the pieces look like broken files until they are joined,
+because handing somebody a game in pieces is a different promise from handing them a game
+on several discs. The answer rides with the project.
+
+The pieces are cut on whole bytes, carry their own SHA-256 in the set list, and are
+deleted only once the finished file is the right size: a join that half worked and then
+removed its own evidence is the one failure here that cannot be undone. The finished
+file's own hash is recorded beside them, and **Check every file** verifies it. The set
+file also carries the `copy /b` line to do it by hand, and the folder is not called
+complete while a file is still in pieces, which is what anybody copying the discs in
+Explorer would otherwise hit.
+
+
 **Games that are not GOG downloads** — asked about by people with other DRM-free
 sources, and this was sitting under *Considering* while the honest position was that
 only GOG downloads had been tested. What made it decidable was realising the question
