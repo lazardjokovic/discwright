@@ -877,3 +877,73 @@ Describe 'Printing artwork somebody else made' -Tag 'Unit' {
         } finally { $face.Dispose() }
     }
 }
+
+Describe 'Lettering that sits in the middle of the spine' -Tag 'Unit' {
+
+    # xniwo: "The dvd spine label is slightly off centre to the right (not a
+    # major issue)." Measured off a rendered wrap, it was 1.48 mm on a 14 mm
+    # spine, which is eleven percent of the band.
+    #
+    # The cause is that centring a string in a rectangle centres the LINE box,
+    # ascent plus descent, and a title in capitals uses none of the descent. The
+    # ink therefore rides high in the box, and the box is rotated a quarter turn
+    # on a spine, so high reads as right.
+    #
+    # Two things went wrong fixing it, and both are worth knowing. The spine
+    # band was assumed to be where the arithmetic said rather than measured off
+    # the page. And the ink was measured on a scratch bitmap left at the 96 dpi
+    # a new Bitmap defaults to, while the page draws at 300: a font is sized in
+    # points, so every offset came back a third of its real size.
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Drawing
+        $script:InkFont = New-Object System.Drawing.Font('Segoe UI', 18)
+    }
+    AfterAll { if ($script:InkFont) { $script:InkFont.Dispose() } }
+
+    It 'measures where the ink is, not where the line box is' {
+        $ink = Get-TextInk -Text 'HOLLOW KNIGHT' -Font $script:InkFont
+        $ink.InkHeight | Should -BeGreaterThan 0
+        # Capitals leave the descent empty, so the ink's middle sits above the
+        # middle of the line box. That gap is the whole bug.
+        $boxMiddle = $ink.InkTop + (($ink.InkBottom - $ink.InkTop) / 2.0)
+        $boxMiddle | Should -BeLessThan ($ink.InkBottom)
+    }
+
+    It 'measures at the resolution the page prints at' {
+        # The same string must come back bigger than it would on a 96 dpi
+        # surface, or every offset taken from it is a third of what it should be.
+        $ink = Get-TextInk -Text 'HOLLOW KNIGHT' -Font $script:InkFont
+        $ink.InkHeight | Should -BeGreaterThan 40 -Because '18 pt at 300 dpi is about 75 px tall, not 24'
+    }
+
+    It 'finds a descender, so the measurement is of ink and not of a guess' {
+        $caps = Get-TextInk -Text 'HOLLOW' -Font $script:InkFont
+        $desc = Get-TextInk -Text 'happy' -Font $script:InkFont
+        $desc.InkBottom | Should -BeGreaterThan $caps.InkBottom -Because 'p and y go below the baseline'
+    }
+
+    It 'says nothing for an empty title rather than throwing' {
+        $ink = Get-TextInk -Text '' -Font $script:InkFont
+        $ink.Width | Should -Be 0
+        $ink.InkHeight | Should -Be 0
+    }
+
+    It 'places the spine title by its ink' {
+        # Pinned in the source, because rendering a wrap and measuring the band
+        # takes seconds and belongs in the hardware notes, not in every run.
+        $src = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'print\DiscWright.Print.ps1')
+        $src | Should -Match ([regex]::Escape('$ink = Get-TextInk -Text $Title -Font $spineFont'))
+        $src | Should -Match ([regex]::Escape('[single](-($ink.InkTop + $ink.InkBottom) / 2)'))
+        $src | Should -Not -Match ([regex]::Escape('$g.DrawString($Title, $spineFont, $white, $spineBox, $middle)'))
+    }
+
+    It 'leaves the dialog to wrap its own sentences' {
+        # xniwo again: a line break mid-sentence at "which sets the diameters".
+        # A hand wrap is set to one width; the box is whatever width Windows
+        # gives it.
+        $app = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $app | Should -Match ([regex]::Escape('which sets the diameters and lines the tray up.'))
+        $app | Should -Not -Match ([regex]::Escape('which sets the`r`n'))
+    }
+}

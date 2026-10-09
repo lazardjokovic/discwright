@@ -6388,8 +6388,10 @@ $btnArtwork.Add_Click({
              "$(Split-Path $art.Wrap -Leaf)`r`n" +
              "    The case wrap. Print at 100% with scaling off, then cut to the marks.`r`n`r`n" +
              "$(Split-Path $art.DiscFace -Leaf)`r`n" +
-             "    The disc face. Open it in your printer's disc software, which sets the`r`n" +
-             "    diameters and lines the tray up.`r`n`r`n" +
+             # One line, wrapped by the dialog rather than by hand. Broken here it
+             # read as "which sets the / diameters", which xniwo noticed: a hand
+             # wrap is set to one width and the box is whatever width Windows gives it.
+             "    The disc face. Open it in your printer's disc software, which sets the diameters and lines the tray up.`r`n`r`n" +
              $cover),
             'Artwork ready', [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null

@@ -539,6 +539,78 @@ function New-DiscFace {
     not a style choice: the sheet wraps round the case from the back, so the
     front panel has to be the right-hand one.
 #>
+# Where a string's ink actually lands, drawn at a known point, and how wide it
+# is. Both measured rather than worked out: cap height is not something GDI+
+# will report, every font answers differently, and the fitter picks the font at
+# run time anyway.
+#
+# This exists because centring a rotated title in a rectangle does not centre
+# the lettering. StringAlignment.Center centres the line box, which is ascent
+# plus descent, and a title in capitals uses none of the descent, so the ink
+# rides high in the box. On a spine, where the box is rotated a quarter turn,
+# that reads as a label pushed to one side: 1.48 mm of it on a 14 mm spine,
+# which is where xniwo noticed it.
+#
+# Returns the ink's offsets from the draw origin, so the caller can place the
+# string by its ink instead of by its box.
+function Get-TextInk {
+    param(
+        # Empty is allowed: a disc may have no title, and the guard below
+        # cannot run at all if the binder rejects the argument first.
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Text,
+        [Parameter(Mandatory)][System.Drawing.Font]$Font
+    )
+    $blank = @{ Width = 0.0; InkTop = 0.0; InkBottom = 0.0; InkHeight = 0.0 }
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $blank }
+    $pad = 12
+    $probe = $null; $pg = $null
+    try {
+        # At the page's resolution, not the 96 dpi a new bitmap defaults to.
+        # A font is sized in points, so the same font measures 3.1 times smaller
+        # on a 96 dpi surface than it draws on a 300 dpi page, and every offset
+        # taken from it comes back a third of what it should be.
+        $tmp = New-Object System.Drawing.Bitmap 1, 1
+        $tmp.SetResolution($script:Dpi, $script:Dpi)
+        $tg = [System.Drawing.Graphics]::FromImage($tmp)
+        $tg.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
+        $m = $tg.MeasureString($Text, $Font)
+        $tg.Dispose(); $tmp.Dispose()
+        $w = [int][Math]::Ceiling($m.Width) + ($pad * 2)
+        $h = [int][Math]::Ceiling($m.Height) + ($pad * 2)
+        if ($w -le 0 -or $h -le 0) { return $blank }
+        $probe = New-Object System.Drawing.Bitmap $w, $h
+        $probe.SetResolution($script:Dpi, $script:Dpi)
+        $pg = [System.Drawing.Graphics]::FromImage($probe)
+        $pg.Clear([System.Drawing.Color]::Black)
+        $pg.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::ClearTypeGridFit
+        $pg.DrawString($Text, $Font, [System.Drawing.Brushes]::White, [single]$pad, [single]$pad)
+        $pg.Flush()
+        $top = -1; $bottom = -1; $left = -1; $right = -1
+        for ($y = 0; $y -lt $h; $y++) {
+            for ($x = 0; $x -lt $w; $x++) {
+                if ($probe.GetPixel($x, $y).R -gt 60) {
+                    if ($top -lt 0) { $top = $y }
+                    $bottom = $y
+                    if ($left -lt 0 -or $x -lt $left) { $left = $x }
+                    if ($x -gt $right) { $right = $x }
+                }
+            }
+        }
+        if ($top -lt 0) { return $blank }
+        # Offsets from the point the string was drawn at.
+        return @{ Width     = [double]$m.Width
+                  InkTop    = [double]($top - $pad)
+                  InkBottom = [double]($bottom - $pad)
+                  InkLeft   = [double]($left - $pad)
+                  InkRight  = [double]($right - $pad)
+                  InkHeight = [double]($bottom - $top) }
+    }
+    finally {
+        if ($pg) { $pg.Dispose() }
+        if ($probe) { $probe.Dispose() }
+    }
+}
+
 function New-CaseWrap {
     param(
         [Parameter(Mandatory)][string]$OutPdf,
@@ -695,9 +767,13 @@ function New-CaseWrap {
     # Clockwise, so the title reads downwards with the case standing up, which
     # is how a shelf of DVDs reads.
     $g.RotateTransform(90)
-    $spineBox = New-Object System.Drawing.RectangleF(
-        [single](-$spineLen / 2), [single](-$spineW / 2), [single]$spineLen, [single]$spineW)
-    $g.DrawString($Title, $spineFont, $white, $spineBox, $middle)
+    # Placed by its ink rather than centred in a box. See Get-TextInk: a box
+    # centres ascent plus descent, and capitals use none of the descent, so a
+    # boxed title sits off to one side of a spine.
+    $ink = Get-TextInk -Text $Title -Font $spineFont
+    $g.DrawString($Title, $spineFont, $white,
+                  [single](-$ink.Width / 2),
+                  [single](-($ink.InkTop + $ink.InkBottom) / 2))
     $g.Restore($state)
 
     # ---- the back panel
