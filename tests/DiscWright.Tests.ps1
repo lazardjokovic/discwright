@@ -9047,7 +9047,7 @@ WScript.Echo("joins=" + j.length + " parts=" + j[0].parts.length + " whole=" + j
 
     It 'puts it back together byte for byte' -Skip:(-not $script:HaveCScript4) {
         $dir = New-RestoreFolder
-        $out = Invoke-JoinJs $dir 'WScript.Echo("joined=" + setJoinAll(DIR));'
+        $out = Invoke-JoinJs $dir 'var N=-1; setJoinAll(DIR, function(d){ N=d; }); WScript.Echo("joined=" + N);'
         $out | Should -Match 'joined=1'
         $made = Join-Path $dir 'game.bin'
         Test-Path $made | Should -BeTrue
@@ -9057,7 +9057,7 @@ WScript.Echo("joins=" + j.length + " parts=" + j[0].parts.length + " whole=" + j
 
     It 'clears the pieces away once the file is whole' -Skip:(-not $script:HaveCScript4) {
         $dir = New-RestoreFolder
-        Invoke-JoinJs $dir 'setJoinAll(DIR);' | Out-Null
+        Invoke-JoinJs $dir 'setJoinAll(DIR, function(d){});' | Out-Null
         @(Get-ChildItem $dir -Filter '*.dwpart*').Count | Should -Be 0
     }
 
@@ -9067,7 +9067,7 @@ WScript.Echo("joins=" + j.length + " parts=" + j[0].parts.length + " whole=" + j
         # everything it has.
         $dir = New-RestoreFolder
         Remove-Item (Join-Path $dir 'game.bin.dwpart02') -Force
-        $out = Invoke-JoinJs $dir 'WScript.Echo("joined=" + setJoinAll(DIR));'
+        $out = Invoke-JoinJs $dir 'var N=-1; setJoinAll(DIR, function(d){ N=d; }); WScript.Echo("joined=" + N);'
         $out | Should -Match 'joined=0'
         Test-Path (Join-Path $dir 'game.bin') | Should -BeFalse
         @(Get-ChildItem $dir -Filter '*.dwpart*').Count | Should -Be 2
@@ -9089,7 +9089,7 @@ WScript.Echo("says=" + setSentence(s));
     It 'calls it finished once the pieces have become the file' -Skip:(-not $script:HaveCScript4) {
         # And the pieces are gone by then, so they must not read as missing.
         $out = Invoke-JoinJs (New-RestoreFolder) @'
-setJoinAll(DIR);
+setJoinAll(DIR, function(d){});
 var s = setScan(DIR);
 WScript.Echo("complete=" + s.complete + " pending=" + s.pending + " missing=" + s.missing + " ok=" + s.ok);
 '@
@@ -9100,8 +9100,8 @@ WScript.Echo("complete=" + s.complete + " pending=" + s.pending + " missing=" + 
         # The copy button runs it after every disc, so most runs have nothing to
         # do and must not undo the last one.
         $dir = New-RestoreFolder
-        Invoke-JoinJs $dir 'setJoinAll(DIR);' | Out-Null
-        $out = Invoke-JoinJs $dir 'WScript.Echo("again=" + setJoinAll(DIR));'
+        Invoke-JoinJs $dir 'setJoinAll(DIR, function(d){});' | Out-Null
+        $out = Invoke-JoinJs $dir 'var N=-1; setJoinAll(DIR, function(d){ N=d; }); WScript.Echo("again=" + N);'
         $out | Should -Match 'again=0'
         (Get-FileSha256 (Join-Path $dir 'game.bin')) | Should -Be $script:JoinSha
     }
@@ -9126,7 +9126,8 @@ WScript.Echo("complete=" + s.complete + " pending=" + s.pending + " missing=" + 
             $script:JoinBlock
             'var DIR = ' + (ConvertTo-Json $dir) + ';'
             'var s = setScan(DIR);'
-            'WScript.Echo("joins=" + setJoins().length + " joined=" + setJoinAll(DIR) + " complete=" + s.complete + " pending=" + s.pending);'
+            'var N=-1; setJoinAll(DIR, function(d){ N=d; });'
+            'WScript.Echo("joins=" + setJoins().length + " joined=" + N + " complete=" + s.complete + " pending=" + s.pending);'
         ) -join "`r`n"
         $f = Join-Path $script:JoinDir 'plain.js'
         Set-Content -LiteralPath $f -Value $js -Encoding Ascii
@@ -9344,5 +9345,102 @@ Describe 'A cut file, built onto real discs and put back together' -Tag 'Build' 
     It 'records that same hash in the set file, so a bad join is caught' {
         $txt = Get-Content (Join-Path $script:E2EDiscDirs[0] (Get-DiscSetFileName)) -Raw
         $txt | Should -Match ('JOIN ' + $script:E2EWholeSha + '\s+900001\s+\*setup_game\.exe')
+    }
+}
+
+Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
+
+    # Found on real discs, joining a 1.18 GB Hollow Knight installer off two
+    # CDs. The join waited for copy /b to return, which blocks the script
+    # thread, and mshta put this up, more than once for a single join:
+    #
+    #     Stop running this script?
+    #     A script on this page is causing your web browser to run slowly.
+    #     If it continues to run, your computer might become unresponsive.
+    #
+    # Unreachable by any test that joins a small file: the whole trigger is how
+    # long one blocking call takes, and these join a few hundred kilobytes in
+    # milliseconds. So this checks the SHAPE of the code instead, which is the
+    # honest thing a fast test can check, and says why.
+    #
+    # It matters because the dialog invites exactly the wrong answer. Somebody
+    # told their computer may stop responding presses Yes, and Yes kills the
+    # script in the middle of a join: a part-written file, both pieces still
+    # there, and nothing to say what happened.
+
+    BeforeAll {
+        $src = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $start = $src.IndexOf('function setJoinStep(')
+        $i = $src.IndexOf('{', $start); $d = 0
+        for ($j = $i; $j -lt $src.Length; $j++) {
+            if ($src[$j] -eq '{') { $d++ }
+            elseif ($src[$j] -eq '}') { $d--; if ($d -eq 0) { break } }
+        }
+        $script:StepSrc = $src.Substring($start, $j - $start + 1)
+        $script:AllSrc = $src
+    }
+
+    It 'starts the copy rather than waiting for it' {
+        # Exec hands back a process to watch. Run with bWaitOnReturn blocks
+        # until it finishes, which is the thing that earned the dialog.
+        $script:StepSrc | Should -Match 'Exec\(cmd\)'
+        $script:StepSrc | Should -Not -Match 'Run\(cmd,0,true\)'
+    }
+
+    It 'watches it on a timer when there is a window to keep alive' {
+        $script:AllSrc | Should -Match ([regex]::Escape('window.setTimeout(function(){ setJoinWait(exec,after); },400)'))
+    }
+
+    It 'still waits where there is no window, so the suite can run it' {
+        # cscript has no window and no timer. Without this the tests would
+        # exercise a path the disc never takes, or not run at all.
+        $script:AllSrc | Should -Match ([regex]::Escape('while(exec.Status==0){ WScript.Sleep(50); }'))
+    }
+
+    It 'deletes the pieces only after the finished file checks out' {
+        # Unchanged by going asynchronous, and the one rule that must not move:
+        # a join that half worked and then removed its evidence cannot be undone.
+        $script:StepSrc | Should -Match ([regex]::Escape('if(setJoinDone(st.dir,j)){'))
+        $del = [regex]::Match($script:StepSrc, 'if\(setJoinDone\(st\.dir,j\)\)\{[\s\S]{0,300}?DeleteFile')
+        $del.Success | Should -BeTrue -Because 'the delete has to sit inside the check, not beside it'
+    }
+
+    It 'says which file it is working on while it does' {
+        # Minutes can pass with nothing else to show for it, and a menu that
+        # looks idle is one somebody closes.
+        $script:StepSrc | Should -Match 'SETJOINING=j\.f'
+        $script:AllSrc | Should -Match ([regex]::Escape('"Putting "+SETJOINING+" back together.'))
+    }
+
+    It 'stops saying it once the queue is empty' {
+        $script:StepSrc | Should -Match 'SETJOINING=""'
+    }
+
+    It 'offers a button to do the thing the panel says is left' {
+        # Found by opening the menu fresh on a folder where every disc had been
+        # copied and nothing joined. The panel said "still has to be put back
+        # together" and offered Check, Delete and Choose folder: no way to do
+        # it. Install is hidden while the set is incomplete, and the join only
+        # ran by itself at the end of a copy, so anybody who copied the discs in
+        # Explorer, or closed the menu and came back, was simply stuck.
+        $script:AllSrc | Should -Match ([regex]::Escape('if(s.pending&&!s.complete){'))
+        $script:AllSrc | Should -Match ([regex]::Escape('btn_SetJoin'))
+        $script:AllSrc | Should -Match 'Put the file back together'
+        $script:AllSrc | Should -Match 'Put the files back together'
+    }
+
+    It 'wires that button to the same join everything else uses' {
+        # Not a second implementation. One join, one set of rules about when
+        # pieces may be deleted.
+        $m = [regex]::Match($script:AllSrc, 'function setJoinNow\(\)\{[\s\S]{0,300}?\r?\n  \}')
+        $m.Success | Should -BeTrue
+        $m.Value | Should -Match ([regex]::Escape('setJoinAll(dir,function(n){ show(); });'))
+    }
+
+    It 'lets its callers carry on afterwards instead of guessing' {
+        # Both callers used to read the result on the next line, which is no
+        # longer there to read.
+        $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(dir,function(){ show(); })'))
+        $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(dir,function(){ show(); setInstall(); }); return;'))
     }
 }

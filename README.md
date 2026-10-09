@@ -186,8 +186,13 @@ back together on the hard drive after the last disc is copied.
 The pieces look like broken files until they are joined, which is why it is asked
 rather than assumed. Each piece carries its own SHA-256 in the set list and the
 finished file carries its own, so a join that did not work is caught rather than
-installed. The pieces are deleted only once the result is the right size, and a folder
-with a file still in pieces is not a finished set.
+installed. The pieces are deleted only once the result is the right size.
+
+A folder with a file still in pieces is not a finished set, and the menu says so and
+offers **Put the file back together**. That matters for anybody who copies the discs
+in Explorer rather than from the menu, or who closes the menu and comes back: the join
+normally happens by itself at the end of a copy, and without that button there would
+be nothing to press.
 
 A set holds one game. Which games belong together on a disc is a decision for the person
 making it.
