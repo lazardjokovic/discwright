@@ -47,8 +47,16 @@ deleted only once the finished file is the right size: a join that half worked a
 removed its own evidence is the one failure here that cannot be undone. The finished
 file's own hash is recorded beside them, and **Check every file** verifies it. The set
 file also carries the `copy /b` line to do it by hand, and the folder is not called
-complete while a file is still in pieces, which is what anybody copying the discs in
-Explorer would otherwise hit.
+complete while a file is still in pieces.
+
+Two things came out of doing it on real discs, and neither was reachable any other
+way. The join waited for `copy /b` to return, which blocks the menu's script thread,
+and mshta answered that with *Stop running this script? ... your computer might become
+unresponsive*, four times for one file. Somebody reading that presses Yes, which kills
+the join half way. It starts the copy and watches it on a timer now, so the window
+stays alive and says which file it is working on. And the panel said a file still had
+to be put back together while offering no button that would do it, which is where
+anybody who copied the discs in Explorer ended up; there is a button now.
 
 
 **Games that are not GOG downloads** — asked about by people with other DRM-free

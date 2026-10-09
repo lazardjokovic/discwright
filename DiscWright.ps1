@@ -2539,8 +2539,43 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // The size is checked here and the hash is not: hashing a 4 GB file takes
   // minutes and this runs with every disc. Check every file does the hashing,
   // and the panel says so.
-  function setJoinAll(dir){
-    var js=setJoins(), done=0, failed=[], i, k;
+  // Put a cut file back together, once every piece of it is here.
+  //
+  // copy /b is the whole mechanism: it is in Windows, it needs nothing
+  // installed, and it is what the set file tells somebody to type if they are
+  // doing this by hand. The pieces are only deleted once the finished file is
+  // the right size, because a join that half worked and then removed its own
+  // evidence is the one failure here that cannot be recovered from.
+  //
+  // It does NOT wait for copy /b to return. Waiting is what the first version
+  // did, and on a real game it earned this, every time, more than once per
+  // join:
+  //
+  //     Stop running this script?
+  //     A script on this page is causing your web browser to run slowly.
+  //     If it continues to run, your computer might become unresponsive.
+  //
+  // Found by joining a 1.18 GB Hollow Knight installer off two CDs, and
+  // unreachable by any test that joins a small file: the whole trigger is how
+  // long the one blocking call takes. Somebody reading that warning presses
+  // Yes, which kills the script in the middle of a join and leaves a part
+  // written file, both pieces, and no cleanup.
+  //
+  // So the process is started and then watched on a timer, which leaves the
+  // window able to redraw and the person able to read what is happening.
+  // cscript has no window and no timer, so it waits there instead; the test
+  // suite runs that path and the disc runs the other.
+  function setJoinWait(exec,after){
+    if(typeof window!="undefined"&&window.setTimeout){
+      if(exec.Status==0){ window.setTimeout(function(){ setJoinWait(exec,after); },400); return; }
+      after();
+    } else {
+      while(exec.Status==0){ WScript.Sleep(50); }
+      after();
+    }
+  }
+  function setJoinAll(dir,after){
+    var js=setJoins(), todo=[], i, k;
     for(i=0;i<js.length;i++){
       var j=js[i];
       if(setJoinDone(dir,j)) continue;
@@ -2548,26 +2583,43 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       for(k=0;k<j.parts.length;k++){
         if(!fso.FileExists(setPath(dir,j.parts[k]))){ have=false; break; }
       }
-      if(!have) continue;
-      var q=String.fromCharCode(34), names=[];
-      for(k=0;k<j.parts.length;k++){ names[names.length]=setQuote(setPath(dir,j.parts[k])); }
-      var cmd="cmd /c copy /b "+names.join("+")+" "+setQuote(setPath(dir,j.f));
-      var sh=new ActiveXObject("WScript.Shell");
-      sh.Run(cmd,0,true);
-      if(setJoinDone(dir,j)){
-        for(k=0;k<j.parts.length;k++){
-          try{ fso.DeleteFile(setPath(dir,j.parts[k])); }catch(ex){}
-        }
-        done++;
+      if(have){ todo[todo.length]=j; }
+    }
+    if(!todo.length){ if(after) after(0); return 0; }
+    var st={dir:dir,todo:todo,at:0,done:0,failed:[],after:after};
+    setJoinStep(st);
+    return todo.length;
+  }
+  function setJoinStep(st){
+    if(st.at>=st.todo.length){
+      SETJOINING="";
+      if(st.failed.length){
+        setSay(st.failed.length+" file(s) could not be put back together:\n\n"+
+               st.failed.join("\n")+
+               "\n\nThe pieces are still there, so nothing is lost. There may not be room.",false);
       }
-      else { failed[failed.length]=j.f; }
+      if(st.after) st.after(st.done);
+      return;
     }
-    if(failed.length){
-      setSay(failed.length+" file(s) could not be put back together:\n\n"+
-             failed.join("\n")+
-             "\n\nThe pieces are still there, so nothing is lost. There may not be room",false);
-    }
-    return done;
+    var j=st.todo[st.at], k, names=[];
+    for(k=0;k<j.parts.length;k++){ names[names.length]=setQuote(setPath(st.dir,j.parts[k])); }
+    // Named so the panel can say which file, because on a big one this is
+    // minutes of apparently nothing happening.
+    SETJOINING=j.f;
+    try{ show(); }catch(ex){}
+    var cmd="cmd /c copy /b "+names.join("+")+" "+setQuote(setPath(st.dir,j.f));
+    var exec=new ActiveXObject("WScript.Shell").Exec(cmd);
+    setJoinWait(exec,function(){
+      if(setJoinDone(st.dir,j)){
+        for(var m=0;m<j.parts.length;m++){
+          try{ fso.DeleteFile(setPath(st.dir,j.parts[m])); }catch(ex2){}
+        }
+        st.done++;
+      }
+      else { st.failed[st.failed.length]=j.f; }
+      st.at++;
+      setJoinStep(st);
+    });
   }
   function setScan(dir){
     var rows=setRows();
@@ -2657,6 +2709,12 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // Not "ready to install": a folder of game files has nothing to install,
     // and the button below already says whether it installs, plays or opens.
     // Saying it twice is how one of them comes to be wrong.
+    // While a join is running. Minutes can pass with copy /b working through
+    // a gigabyte and nothing else to show for it, and an empty-looking menu is
+    // how somebody decides it has hung and closes it.
+    if(typeof SETJOINING!="undefined"&&SETJOINING.length){
+      return "Putting "+SETJOINING+" back together. On a large file this takes a few minutes.";
+    }
     if(!s.total) return "This disc says it is part of a set, but its list of files is missing.";
     if(s.complete) return "All "+s.total+" files are here. The game is ready in that folder.";
     // Every file here but a cut one still in pieces. Says what is left rather
@@ -2767,6 +2825,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // one, so disc 2 does not have to be told where disc 1 went.
   var SETDIR="";
   var SETARM=false;   // the delete button's second press
+  var SETJOINING="";  // the cut file being put back together right now
   function setDir(){ if(!SETDIR.length) SETDIR=setDefaultDir(); return SETDIR; }
   function setChoose(){
     // Shell.Application is used rather than a file dialog because the menu has
@@ -2796,7 +2855,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       if(code>=8){ bad++; }
     }
     SETARM=false;
-    if(bad==0){ setJoinAll(dir); }
+    if(bad==0){ setJoinAll(dir,function(){ show(); }); }
     if(bad>0){ setSay(bad+" of "+mine.length+" files would not copy from this disc.\n\nIt may be scratched. Try it again, or copy them in Explorer.",false); }
     show();
   }
@@ -2808,6 +2867,14 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   function setSay(msg,good){
     try{ new ActiveXObject("WScript.Shell").Popup(msg,0,document.title,good?64:48); }
     catch(ex){ alert(msg); }
+  }
+  // The button the panel offers when every file is here but a cut one is
+  // still in pieces. setCopy does this for itself at the end of a copy; this
+  // is for everybody who arrives at that state another way.
+  function setJoinNow(){
+    var dir=setDir();
+    if(!dir.length) return;
+    setJoinAll(dir,function(n){ show(); });
   }
   function setVerify(){
     // The sizes are checked on every redraw; this is the slow, certain one, and
@@ -2844,7 +2911,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // Put any outstanding pieces together first. Cheap when there is nothing to
     // do, and it means somebody who copied the discs in Explorer gets the same
     // result as somebody who used the button.
-    if(s.pending){ setJoinAll(dir); s=setScan(dir); }
+    // The join is on a timer now, so this cannot read the answer on the next
+    // line. It starts the join and comes back here when it is finished.
+    if(s.pending){ setJoinAll(dir,function(){ show(); setInstall(); }); return; }
     if(!s.complete){ setSay("The set is not complete yet.\n\n"+setSentence(s),false); return; }
     var g=GAMES[cur], exe=setPath(dir,g.s.split(String.fromCharCode(92)).join("/"));
     if(!g.s.length||!fso.FileExists(exe)){
@@ -2906,6 +2975,17 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       // without having to read the paragraph above it.
       h+=btnHtml("btn_SetCopy","install","Copy disc "+SET.n+" of "+SET.of,"setCopy()",
                  "Copy this disc's share of the game into "+dir);
+    }
+    // Every file here and a cut one still in pieces. Without this the panel
+    // says "still has to be put back together" and offers no way to do it:
+    // Install is hidden because the set is not complete, and the join only
+    // runs by itself at the end of a copy. Anybody who copied the discs in
+    // Explorer, or who closed the menu and came back, lands exactly here.
+    if(s.pending&&!s.complete){
+      h+=btnHtml("btn_SetJoin","install",
+                 (s.pending==1?"Put the file back together":"Put the files back together"),
+                 "setJoinNow()",
+                 "Join the pieces that were cut to fit, and check the result");
     }
     if(s.complete){
       h+=btnHtml("btn_SetInstall","install",setDoneVerb(GAMES[cur]),"setInstall()",
