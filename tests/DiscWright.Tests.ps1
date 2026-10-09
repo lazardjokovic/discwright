@@ -9388,7 +9388,10 @@ Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
     }
 
     It 'watches it on a timer when there is a window to keep alive' {
-        $script:AllSrc | Should -Match ([regex]::Escape('window.setTimeout(function(){ setJoinWait(exec,after); },400)'))
+        # Renamed from setJoinWait when the hash check started using it too: two
+        # features share the waiter now, and a name saying join would be read
+        # as belonging to one of them.
+        $script:AllSrc | Should -Match ([regex]::Escape('window.setTimeout(function(){ setWaitExec(exec,after); },400)'))
     }
 
     It 'still waits where there is no window, so the suite can run it' {
@@ -9442,5 +9445,206 @@ Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
         # longer there to read.
         $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(dir,function(){ show(); })'))
         $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(dir,function(){ show(); setInstall(); }); return;'))
+    }
+}
+
+Describe 'Checking a disc against its own checksum list' -Tag 'Unit' {
+
+    # xniwo, 4 October: "Next to the mute music icon in the splash menu, an
+    # optional one click windows or linux sha256 verification might be useful
+    # for some."
+    #
+    # A disc built with checksums already carries checksums.sha256 at its root,
+    # in sha256sum format, so the list a person could check by hand with
+    # sha256sum or Get-FileHash was there and the menu would not read it.
+    #
+    # It answers a different question from the set's Check every file, which
+    # checks a FOLDER the discs were copied into. This checks the disc, which is
+    # "did that burn come out right", asked with the disc in your hand.
+
+    BeforeDiscovery {
+        $script:HaveCScript5 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:CScript5 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:SumSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+
+        function Get-SumJs([string]$name) {
+            $a = $script:SumSrc.IndexOf("function $name(")
+            if ($a -lt 0) { throw "no JScript function $name" }
+            $i = $script:SumSrc.IndexOf('{', $a); $d = 0
+            for ($j = $i; $j -lt $script:SumSrc.Length; $j++) {
+                if ($script:SumSrc[$j] -eq '{') { $d++ }
+                elseif ($script:SumSrc[$j] -eq '}') { $d--; if ($d -eq 0) { return $script:SumSrc.Substring($a, $j - $a + 1) } }
+            }
+        }
+
+        # A disc-shaped folder with a real checksum list over real files.
+        $script:SumDisc = Join-Path $script:Sandbox 'sumdisc'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:SumDisc 'AUTORUN') | Out-Null
+        Set-Content (Join-Path $script:SumDisc 'autorun.inf') "[autorun]`r`nicon=d.ico" -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:SumDisc 'AUTORUN\menu.hta') '<html></html>' -Encoding Ascii -NoNewline
+        Set-Content (Join-Path $script:SumDisc 'game.bin') 'the game itself' -Encoding Ascii -NoNewline
+        $rows = foreach ($rel in 'autorun.inf', 'AUTORUN/menu.hta', 'game.bin') {
+            $full = Join-Path $script:SumDisc ($rel -replace '/', '\')
+            '{0} *{1}' -f (Get-FileSha256 $full), $rel
+        }
+        Set-Content (Join-Path $script:SumDisc 'checksums.sha256') `
+            ((@('# DiscWright checksum list') + $rows) -join "`r`n") -Encoding Ascii -NoNewline
+
+        function Invoke-DiscCheck([string]$root) {
+            $js = @(
+                'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+                'var SEP = String.fromCharCode(92);'
+                'var root = ' + (ConvertTo-Json $root) + ';'
+                'var PREVIEW = false; var SETCHECKING = "";'
+                'function show(){}'
+                'function setSay(m, good){ WScript.Echo((good ? "GOOD:" : "BAD:") + m); }'
+            )
+            foreach ($fn in 'setWaitExec', 'discSums', 'setCheckRun', 'discCheck') { $js += (Get-SumJs $fn) }
+            $js += 'discCheck();'
+            $f = Join-Path $script:Sandbox ('dc_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            return ((@(& $script:CScript5 //Nologo //E:JScript $f 2>&1) -join "`n").Trim())
+        }
+    }
+
+    It 'reads the list the disc carries' -Skip:(-not $script:HaveCScript5) {
+        $js = @(
+            'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+            'var SEP = String.fromCharCode(92);'
+            'var root = ' + (ConvertTo-Json $script:SumDisc) + ';'
+            (Get-SumJs 'discSums')
+            'var l = discSums();'
+            'WScript.Echo("rows=" + l.length);'
+            'for (var i = 0; i < l.length; i++) { WScript.Echo(l[i].f + "|" + (fso.FileExists(l[i].full) ? "here" : "gone")); }'
+        ) -join "`r`n"
+        $f = Join-Path $script:Sandbox 'sums_read.js'
+        Set-Content -LiteralPath $f -Value $js -Encoding Ascii
+        $out = (@(& $script:CScript5 //Nologo //E:JScript $f 2>&1) -join "`n")
+        $out | Should -Match 'rows=3'
+        # Written with forward slashes, found with backslashes.
+        $out | Should -Match ([regex]::Escape('AUTORUN\menu.hta|here'))
+        $out | Should -Not -Match 'gone'
+    }
+
+    It 'skips the comment lines rather than reading them as files' -Skip:(-not $script:HaveCScript5) {
+        (Get-Content (Join-Path $script:SumDisc 'checksums.sha256'))[0] | Should -Match '^#'
+        Invoke-DiscCheck $script:SumDisc | Should -Match 'GOOD:3 files checked'
+    }
+
+    It 'says every file is right when it is' -Skip:(-not $script:HaveCScript5) {
+        Invoke-DiscCheck $script:SumDisc | Should -Match 'byte for byte what was burned'
+    }
+
+    It 'catches one changed byte, and names only that file' -Skip:(-not $script:HaveCScript5) {
+        $copy = Join-Path $script:Sandbox 'sumdisc-bad'
+        if (Test-Path $copy) { Remove-Item $copy -Recurse -Force }
+        Copy-Item $script:SumDisc $copy -Recurse
+        Add-Content -LiteralPath (Join-Path $copy 'game.bin') '!' -NoNewline
+        $out = Invoke-DiscCheck $copy
+        $out | Should -Match 'BAD:'
+        $out | Should -Match 'game\.bin'
+        $out | Should -Not -Match 'autorun\.inf'
+    }
+
+    It 'counts a file that is not there at all' -Skip:(-not $script:HaveCScript5) {
+        $copy = Join-Path $script:Sandbox 'sumdisc-gone'
+        if (Test-Path $copy) { Remove-Item $copy -Recurse -Force }
+        Copy-Item $script:SumDisc $copy -Recurse
+        Remove-Item (Join-Path $copy 'game.bin') -Force
+        $out = Invoke-DiscCheck $copy
+        $out | Should -Match 'BAD:'
+        $out | Should -Match 'game\.bin'
+    }
+
+    It 'says so rather than nothing when the disc carries no list' -Skip:(-not $script:HaveCScript5) {
+        $bare = Join-Path $script:Sandbox 'sumdisc-none'
+        New-Item -ItemType Directory -Force -Path $bare | Out-Null
+        Invoke-DiscCheck $bare | Should -Match 'does not carry a checksum list'
+    }
+
+    It 'only shows the control when there is a list to check' {
+        # A tick that answers "there is nothing to check" is a button that lies
+        # about what the disc can do.
+        $script:SumSrc | Should -Match ([regex]::Escape('function initSums(){'))
+        $script:SumSrc | Should -Match ([regex]::Escape('if(fso.FileExists(fso.BuildPath(root,"checksums.sha256"))){ b.style.display="block"; }'))
+    }
+
+    It 'does not sit on top of the controls already in that corner' {
+        # The menu corner holds close, mute and now this, all positioned
+        # absolutely from the right edge. The form has had exactly this bug
+        # once: a checkbox placed at a free-looking x that was inside a wider
+        # neighbour, so every click went to the neighbour. Read off the CSS,
+        # so it fails on the machine that moved one rather than on a desktop.
+        $boxes = @()
+        foreach ($id in 'x', 'mute', 'sums') {
+            $m = [regex]::Match($script:SumSrc, "#$id\{position:absolute;right:(\d+)px;top:(\d+)px;width:(\d+)px")
+            $m.Success | Should -BeTrue -Because "#$id should be placed from the right edge"
+            $boxes += , @{ Id = $id
+                           From = [int]$m.Groups[1].Value
+                           To   = [int]$m.Groups[1].Value + [int]$m.Groups[3].Value }
+        }
+        for ($i = 0; $i -lt $boxes.Count; $i++) {
+            for ($j = $i + 1; $j -lt $boxes.Count; $j++) {
+                $a = $boxes[$i]; $b = $boxes[$j]
+                $overlap = ($a.From -lt $b.To) -and ($b.From -lt $a.To)
+                $overlap | Should -BeFalse -Because "#$($a.Id) and #$($b.Id) would share pixels"
+            }
+        }
+    }
+
+    It 'sits beside the mute, where it was asked for' {
+        $script:SumSrc | Should -Match ([regex]::Escape('<div id="sums"'))
+        $script:SumSrc | Should -Match 'onclick="discCheck\(\)"'
+    }
+}
+
+Describe 'Hashing a game without the window seizing up' -Tag 'Unit' {
+
+    # Check every file ran certutil once per file and waited for each one. The
+    # join earned "Stop running this script?" by blocking for a single long
+    # call; this blocked once per file, so a 1.8 GB game is minutes of it.
+    #
+    # Found while looking at xniwo's request for a one-click check rather than
+    # by anybody hitting it, which is the only reason it was not shipped twice.
+
+    BeforeAll {
+        $script:VSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+    }
+
+    It 'no longer waits on certutil' {
+        $script:VSrc | Should -Not -Match ([regex]::Escape("sh.Run('cmd /c certutil"))
+        $script:VSrc | Should -Match ([regex]::Escape("sh.Exec('cmd /c certutil"))
+    }
+
+    It 'walks the list one process at a time, through the shared waiter' {
+        # One loop, used by the set check and by the disc check, so there is one
+        # place where "how do we wait" is decided.
+        $script:VSrc | Should -Match ([regex]::Escape('function setCheckRun(list,at,bad,after){'))
+        $script:VSrc | Should -Match ([regex]::Escape('setWaitExec(exec,function(){'))
+    }
+
+    It 'says which file it is on while it works' {
+        $script:VSrc | Should -Match ([regex]::Escape('SETCHECKING=(at+1)+" of "+list.length'))
+        $script:VSrc | Should -Match ([regex]::Escape('"Checking file "+SETCHECKING+" against what was burned."'))
+    }
+
+    It 'stops saying it when the list is done' {
+        $m = [regex]::Match($script:VSrc, 'function setCheckRun\(list,at,bad,after\)\{[\s\S]{0,400}?SETCHECKING="";')
+        $m.Success | Should -BeTrue -Because 'the first thing it does when the list runs out'
+    }
+
+    It 'names the waiter for what it does, not for the join that needed it first' {
+        # Two features use it now. A name that says join would be read as one.
+        $script:VSrc | Should -Not -Match 'setJoinWait'
+        $script:VSrc | Should -Match ([regex]::Escape('function setWaitExec(exec,after){'))
     }
 }
