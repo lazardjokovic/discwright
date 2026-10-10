@@ -184,6 +184,19 @@ built.
 - **Anything that removes DRM.** GOG installers are DRM-free by design — that is the only
   reason a tool like this can exist. DiscWright circumvents nothing and never will.
 
+- **Keeping count of your blank discs.** Mentioned once, by xniwo, in a paragraph
+  prefaced with "Most of the above is of course unnecessary". The worry behind it was
+  starting a long job without enough blanks to finish it, and that part is already
+  answered: with a set asked for, the line under the installer list says how many discs
+  the set comes to before anything is burned, and when no set fits it names the file that
+  decided it and the blank that would work.
+
+  A stock count is a different kind of program. It would be wrong the first time you
+  burned from another tool, gave a disc away or ruined one, and a number nobody maintains
+  is worse than no number, because it gets believed. It would also be the only thing the
+  app remembers that belongs to the person rather than to a project or to a disc, which
+  is a new kind of state for the sake of a figure you can see by opening the drawer.
+
 ### Installing a game straight off a set of discs
 
 **Splitting one game across a set was built, in October 2026.** It is not what this
