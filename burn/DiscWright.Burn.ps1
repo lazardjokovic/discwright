@@ -577,6 +577,33 @@ function Get-IsoHandoffs {
     return $out
 }
 
+<#
+    The same list, for a question that is specifically "which burner".
+
+    On 10 October a two disc set was burned by handing both ISOs to the Windows
+    Disc Image Burning Tool, because that is what ticking "disc set" offered.
+    The disc came back unreadable in its outer third and the only thing that
+    tool could say about it was 0x80004005. DiscWright had a burner of its own
+    the whole time, with a speed it picks below the drive's maximum and a check
+    that hashes every file afterwards, and it never put itself on the list.
+
+    So it goes first, and the mount entry comes off. "Mounts it as a drive,
+    without burning anything" is an honest label and a fine thing to offer
+    somebody looking inside an ISO, but it is not an answer to "which program
+    should burn these two discs", and a walk that accepted it would march on
+    asking for disc 2 having burned nothing at all.
+#>
+function Get-SetBurnChoices {
+    $out = @(@{ Name = 'DiscWright'
+                What = 'writes it here, below the drive top speed, and checks every file afterwards'
+                Exe  = ''; Args = ''; Verb = ''; Own = $true })
+    foreach ($h in @(Get-IsoHandoffs)) {
+        if ($h.Verb -eq 'mount') { continue }
+        $out += $h
+    }
+    return $out
+}
+
 function Start-IsoHandoff([hashtable]$handoff, [string]$isoPath) {
     <#  .SYNOPSIS
         Hand the ISO over and return. The other program takes it from there:

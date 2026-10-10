@@ -8219,6 +8219,217 @@ Describe 'Running the burn walk, not just reading it' -Tag 'Unit' {
     }
 }
 
+Describe 'Burning a set here, rather than handing it to somebody else' -Tag 'Unit' {
+
+    # 10 October 2026, reported with a screenshot. Hollow Knight, two discs, the
+    # installer cut across both. Ticking "disc set" offered three programs:
+    #
+    #   Windows Disc Image Burning Tool  -  writes it to a blank disc
+    #   Nero Burning ROM                 -  opens it, and burns it its own way
+    #   Windows Explorer                 -  mounts it as a drive, without burning anything
+    #
+    # DiscWright was not among them, although it has had a burner of its own
+    # since burning shipped: one that picks a speed below the drive's maximum
+    # and hashes every file on the finished disc. The disc came back unreadable
+    # in its outer third and the tool that wrote it could say only 0x80004005.
+    #
+    # A set is the case that needs those two things most. The discs are written
+    # one after another, and on a cut game disc 2 is no use whatever if disc 1
+    # came out wrong, because the file is joined back together from both.
+
+    BeforeAll {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+        foreach ($want in 'Invoke-SetBurnWalk', 'Invoke-DiscBurnAndCheck') {
+            $fn = ($ast.FindAll({ param($n)
+                $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $n.Name -eq $want }, $false) | Select-Object -First 1)
+            . ([scriptblock]::Create($fn.Extent.Text))
+        }
+
+        function Show-Confirm([string]$msg, [string]$title = 'DiscWright') {
+            $script:Asked += , $msg
+            if ($script:Answers.Count -eq 0) { return $false }
+            $a = $script:Answers[0]
+            $script:Answers = @($script:Answers | Select-Object -Skip 1)
+            return $a
+        }
+        function Show-Warn([string]$m) { $script:Warned += , $m }
+        function Select-IsoHandoff($picks, $parent) { return $picks[0] }
+        function Start-IsoHandoff($chosen, [string]$iso) { $script:Handed += , $iso }
+
+        # The burn itself is a drive and a blank disc, which no test has. What
+        # is testable is everything around it: which discs get written, in what
+        # order, what is checked against what, and what happens when one of
+        # them comes back wrong.
+        function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblock]$log) {
+            $script:Burned += , $isoPath
+            $script:Stages += , $stageDir
+            if ($script:Results.Count -eq 0) { return @{ Ok = $true; Why = 'all 9 files match' } }
+            $r = $script:Results[0]
+            $script:Results = @($script:Results | Select-Object -Skip 1)
+            return $r
+        }
+
+        function WalkOwn([int]$discs, [bool[]]$answers, $results = @()) {
+            $script:Asked = @(); $script:Handed = @(); $script:Warned = @()
+            $script:Burned = @(); $script:Stages = @(); $script:Lines = @()
+            $script:Answers = @($answers); $script:Results = @($results)
+            $isos = @(1..$discs | ForEach-Object { "D:\out\GAME D$_.iso" })
+            Invoke-SetBurnWalk $isos { param($m) $script:Lines += , $m } $null `
+                               @(@{ Name = 'DiscWright'; What = 'writes it here'; Own = $true })
+        }
+    }
+
+    It 'asks the list that has DiscWright on it' {
+        # Get-IsoHandoffs is "what Windows records", which is the right answer
+        # to a different question. Get-SetBurnChoices is the answer to "which
+        # program should write these discs".
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+        $walk = [string](($ast.FindAll({ param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $n.Name -eq 'Invoke-SetBurnWalk' }, $false) | Select-Object -First 1).Extent.Text)
+        $walk | Should -Match 'Get-SetBurnChoices'
+        $walk | Should -Not -Match 'Get-IsoHandoffs'
+    }
+
+    It 'writes every disc itself, in order' {
+        WalkOwn 3 @($true, $true, $true, $true)
+        $script:Burned | Should -Be @('D:\out\GAME D1.iso', 'D:\out\GAME D2.iso', 'D:\out\GAME D3.iso')
+        @($script:Handed).Count | Should -Be 0 -Because 'nothing was handed to anybody else'
+    }
+
+    It 'checks each disc against the folder that disc was built from' {
+        # 'disc D1' beside the ISO, which is where the build puts it. Checking
+        # disc 2 against disc 1's folder would pass nothing and fail everything.
+        WalkOwn 2 @($true, $true, $true)
+        $script:Stages | Should -Be @('D:\out\disc D1', 'D:\out\disc D2')
+    }
+
+    It 'does not ask whether a disc it burned itself is done' {
+        # The handoff asks because it cannot know. This knows, and a question
+        # whose answer is already in hand is noise.
+        WalkOwn 2 @($true, $true, $true)
+        ($script:Asked -join '|') | Should -Not -Match 'Ready for disc'
+        ($script:Asked -join '|') | Should -Match 'press Yes to write it'
+    }
+
+    It 'stops the moment a disc comes back wrong' {
+        # The one that matters. Disc 2 of a cut game is half of nothing if disc
+        # 1 is bad, so carrying on would spend a blank to make it.
+        WalkOwn 3 @($true, $true, $true, $true) @(@{ Ok = $false; Why = 'could not be read off the disc: setup.exe.dwpart01' })
+        @($script:Burned).Count | Should -Be 1
+        ($script:Lines -join '|') | Should -Match 'ERROR: disc 1 of 3 did not come out right'
+        ($script:Lines -join '|') | Should -Match 'dwpart01'
+    }
+
+    It 'warns on the screen too, not only in the log' {
+        WalkOwn 2 @($true, $true) @(@{ Ok = $false; Why = 'wrong contents: menu.hta' })
+        ($script:Warned -join '|') | Should -Match 'Disc 1 of 2 did not come out right'
+        ($script:Warned -join '|') | Should -Match 'Do not rely on this disc'
+    }
+
+    It 'says the discs were checked, not merely handed over' {
+        WalkOwn 2 @($true, $true, $true)
+        ($script:Lines -join '|') | Should -Match 'Disc 1 of 2 written and checked: all 9 files match'
+        ($script:Lines -join '|') | Should -Match 'All 2 discs written and checked'
+        ($script:Lines -join '|') | Should -Not -Match 'handed over'
+    }
+
+    It 'still stops where it is told, before writing anything' {
+        WalkOwn 3 @($true, $false)
+        @($script:Burned).Count | Should -Be 0
+        ($script:Lines -join '|') | Should -Match 'Stopped at disc 1 of 3'
+    }
+}
+
+Describe 'One disc, written and then read back' -Tag 'Unit' {
+
+    # The refusals, which are the half of this that can be tested without a
+    # drive. Every one of them is a disc not spent.
+
+    BeforeAll {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+        $fn = ($ast.FindAll({ param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $n.Name -eq 'Invoke-DiscBurnAndCheck' }, $false) | Select-Object -First 1)
+        . ([scriptblock]::Create($fn.Extent.Text))
+
+        $script:Dir = Join-Path $script:Sandbox 'burnwalk'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:Dir 'disc D1') | Out-Null
+        Set-Content -LiteralPath (Join-Path $script:Dir 'GAME D1.iso') -Value 'x' -NoNewline
+        $script:Iso = Join-Path $script:Dir 'GAME D1.iso'
+        $script:Stage = Join-Path $script:Dir 'disc D1'
+
+        function Show-Confirm([string]$m, [string]$t = 'DiscWright') { return $true }
+        function Test-IsoFitsMedia { param($IsoBytes, $FreeSectors) @{ Fits = $true; IsoBytes = $IsoBytes; FreeBytes = 700MB } }
+        function Write-IsoToDisc { @{ Seconds = 11 } }
+        function Test-BurnedDisc { param($DiscRoot, $StagingFolder) $script:Checked = @{ Root = $DiscRoot; Stage = $StagingFolder }; return $script:Verdict }
+        function Get-BurnerInfo { return $script:Drives }
+    }
+
+    BeforeEach {
+        $script:Drives = @(@{ Drive = 'D:\'; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
+                              FreeSectors = 359853; FreeBytes = 736978944; Vendor = 'ASUS'; Product = 'DRW'
+                              Speeds = @([pscustomobject]@{ Kb = 7200; Multiple = 48 }, [pscustomobject]@{ Kb = 2400; Multiple = 16 }) })
+        $script:Verdict = @{ Ok = $true; FilesOnDisc = 9; Unreadable = @(); Missing = @(); Unexpected = @(); WrongSize = @(); WrongContent = @() }
+    }
+
+    It 'will not burn without the folder to check the disc against' {
+        # A burn with no check is the state this whole change exists to end.
+        $r = Invoke-DiscBurnAndCheck $script:Iso (Join-Path $script:Dir 'disc D9') { param($m) }
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -Match 'nothing at .* to check the disc against'
+    }
+
+    It 'says so when the machine has no recorder' {
+        $script:Drives = @()
+        $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -Match 'No disc recorder'
+    }
+
+    It 'names the drive and the reason when none is ready' {
+        $script:Drives = @(@{ Drive = 'D:\'; Ready = $false; Why = 'no disc' })
+        $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -Match 'D:\\ no disc'
+    }
+
+    It 'keeps away from the top speed the drive offers' {
+        # 48x is what this drive would choose. 16x is what cheap media wants,
+        # and the minute saved is not worth a disc.
+        $script:Said = @()
+        $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) $script:Said += , $m }
+        ($script:Said -join '|') | Should -Match 'at 16x'
+        ($script:Said -join '|') | Should -Not -Match 'at 48x'
+    }
+
+    It 'checks the disc in the drive it just wrote, against the folder it was given' {
+        $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
+        $script:Checked.Root | Should -Be 'D:\'
+        $script:Checked.Stage | Should -Be $script:Stage
+    }
+
+    It 'puts an unreadable file first among the reasons' {
+        # Worse than the rest: there is nothing to copy off the disc at all.
+        $script:Verdict = @{ Ok = $false; FilesOnDisc = 9; Unreadable = @('setup.exe.dwpart01 (Data error)')
+                             Missing = @('menu.hta'); Unexpected = @(); WrongSize = @(); WrongContent = @() }
+        $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -BeLike 'could not be read off the disc*'
+        $r.Why | Should -Match 'missing: menu\.hta'
+    }
+
+    It 'passes the disc when every file matches' {
+        $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
+        $r.Ok | Should -BeTrue
+        $r.Why | Should -Match 'all 9 files match'
+    }
+}
+
 Describe 'The warning about artwork that is the wrong shape' -Tag 'Unit' {
 
     # Reported from outside: with an unsuitable picture in BOTH the cover and
