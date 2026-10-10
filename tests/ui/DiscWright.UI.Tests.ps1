@@ -2082,11 +2082,12 @@ Describe 'What the line says once a disc set has been asked for, in the window' 
         }
     }
 
-    Context 'a game no set can carry' {
+    Context 'a game that only fits once a file is cut' {
 
         BeforeAll {
             # One file of 800 MB, bigger than a whole CD. No number of CDs
-            # helps, because a set never cuts a file in half.
+            # helps while files are placed whole, because a set never cuts a
+            # file in half unless it is asked to.
             Invoke-CtlNamed $script:Win 'New disc' | Out-Null
             Read-MessageBox -Win $script:Win -TitleLike 'New disc' -Button 'Yes' | Out-Null
             Start-Sleep -Seconds 1
@@ -2099,14 +2100,26 @@ Describe 'What the line says once a disc set has been asked for, in the window' 
             Start-Sleep -Seconds 1
         }
 
-        It 'names the disc that would work, rather than saying choose a larger one' {
+        It 'offers what this disc can do, rather than naming a different one' {
             # "Choose a larger disc" is the sentence that sent Lazar back to
-            # guessing. It never said which, and never said why the tick box
-            # had not helped.
+            # guessing. Naming a bigger blank was the next version of the same
+            # problem: once cutting shipped, the app could put this file on the
+            # discs already in his hand, and the line was still sending him out
+            # for others. The blank that holds it whole moved to the tooltip,
+            # which is where the long answer lives.
             $s = Get-StatusText $script:Win
             $s | Should -Match 'one file is'
-            $s | Should -Match 'DVD5 4\.7 GB'
+            $s | Should -Match 'cut'
+            $s | Should -Match '2 discs'
             $s | Should -Not -Match 'Choose a larger disc'
+            $s | Should -Not -Match 'needs a DVD5'
+        }
+
+        It 'says the cut is still a question, not a decision' {
+            # Cutting is consent, asked for at the build button. A line that
+            # read "2 discs" flat would be promising something nobody agreed to
+            # yet, and the tick box did not agree to it.
+            Get-StatusText $script:Win | Should -Match 'will offer'
         }
 
         It 'quotes the size of the file that decided it' {

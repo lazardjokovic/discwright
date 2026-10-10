@@ -473,10 +473,29 @@ function Get-MediaTiers {
 function Get-MediaAutoText { return 'Recommend a disc for me' }
 
 # What one row of the dropdown reads. The list is where the question "which disc
-# should I use" gets asked, so it is where the answer belongs - and the answer is
-# now simply whether the payload fits that tier. No games on the form means
-# nothing to weigh and no annotation.
-function Get-MediaOptionText([hashtable]$tier, $fit) {
+# should I use" gets asked, so it is where the answer belongs. No games on the
+# form means nothing to weigh and no annotation.
+#
+# With a set asked for, "will not fit" answers a question nobody asked: of
+# course the game does not fit one disc, that is what the tick box is for. So a
+# set, when there is one, takes the row over and says what the set would be.
+# $set is the pair of plans for this tier, @{ Plain = ; Cut = }, either of
+# which may be absent.
+function Get-MediaOptionText([hashtable]$tier, $fit, $set = $null) {
+    if ($set) {
+        if ($set.Plain -and $set.Plain.Ok) {
+            $n = @($set.Plain.Discs).Count
+            if ($n -eq 1) { return ("{0}  -  fits" -f $tier.Name) }
+            return ("{0}  -  {1} discs" -f $tier.Name, $n)
+        }
+        # The honest answer for a disc that only works once a file is cut. It
+        # is not "will not fit", which is what sent somebody looking for bigger
+        # blanks they did not need.
+        if ($set.Cut -and $set.Cut.Ok) {
+            return ("{0}  -  {1} discs if cut" -f $tier.Name, @($set.Cut.Discs).Count)
+        }
+        return ("{0}  -  will not fit" -f $tier.Name)
+    }
     if (-not $fit) { return [string]$tier.Name }
     if ($fit.Ok)   { return ("{0}  -  fits" -f $tier.Name) }
     return ("{0}  -  will not fit" -f $tier.Name)
@@ -510,20 +529,66 @@ function Get-MediaCapacity([string]$key) {
     return [double]0
 }
 
+# Every medium weighed against the same game, measured once. Get-DiscSetPlanFor
+# re-reads the manual, the extras and the icon on every call, which is nothing
+# for one answer and six times nothing for the dropdown, which asks about every
+# tier each time the form changes.
+#
+# Each tier gets up to two plans: the one the form has agreed to, and, when that
+# one is beaten by a single oversized file, the plan a cut would make. The
+# second is what lets a row say "2 discs if cut" instead of "will not fit".
+# Returns $null for anything a set cannot be planned for at all.
+function Get-SetPlansForEveryMedia([hashtable]$s) {
+    if (@($s.Games).Count -ne 1) { return $null }
+    $g = @($s.Games)[0]
+    $files = @()
+    foreach ($f in @($g.Files)) {
+        $files += , @{ Rel = (Get-EntryFileRelative $g $f); Bytes = [double]$f.Length; Path = [string]$f.FullName }
+    }
+    if (-not $files.Count) { return $null }
+    $side = @()
+    $side += @($s.ExtraItems)
+    if ($s.ManualPath) { $side += [string]$s.ManualPath }
+    if ($s.ExtrasPath) { $side += [string]$s.ExtrasPath }
+    $over  = Get-DiscOverheadBytes $s
+    $extra = [double](Get-ItemsSize $side)
+    $out = @{}
+    foreach ($t in Get-MediaTiers) {
+        $cap = Get-MediaCapacity $t.Key
+        if ($cap -le 0) { continue }
+        $plain = Get-DiscSetPlan $files $cap $over $extra ([bool]$s.CutFiles)
+        $cut = $null
+        # Only worth asking where cutting is the thing in the way. A set that
+        # already works, or one refused for a reason a cut cannot mend, does not
+        # need a second plan made for it.
+        if (-not $plain.Ok -and $plain.TooBig) {
+            $cut = Get-DiscSetPlan $files $cap $over $extra $true
+        }
+        $out[$t.Key] = @{ Plain = $plain; Cut = $cut }
+    }
+    return $out
+}
+
 # The smallest disc a SET could be made from, which is not the same question as
 # the smallest disc the payload fits on: a set is allowed to span, so what rules
 # a disc out is the single biggest file, not the total.
 #
 # Answers with the tier and how many discs it would take, so the form can say
 # "a DVD5 4.7 GB makes 3 discs" rather than "choose a larger disc" and leave
-# somebody guessing which one.
+# somebody guessing which one. Cutting is deliberately not considered here: this
+# is the question "what would hold it whole".
 function Get-SmallestSetMedia([hashtable]$s) {
+    return (Get-SmallestFromSetPlans (Get-SetPlansForEveryMedia $s))
+}
+
+# The same walk over a map that has already been made, so the form can ask the
+# question without measuring the game a second time.
+function Get-SmallestFromSetPlans($all) {
+    if (-not $all) { return $null }
     foreach ($t in Get-MediaTiers) {
-        $try = @{} + $s
-        $try.MediaKey = $t.Key
-        $plan = Get-DiscSetPlanFor $try
-        if ($plan -and $plan.Ok) {
-            return @{ Key = $t.Key; Short = $t.Short; Discs = @($plan.Discs).Count }
+        $p = $all[$t.Key]
+        if ($p -and $p.Plain -and $p.Plain.Ok) {
+            return @{ Key = $t.Key; Short = $t.Short; Discs = @($p.Plain.Discs).Count }
         }
     }
     return $null
@@ -907,6 +972,71 @@ function Get-DiscSetWouldNeed([hashtable]$s) {
     $plan = Get-DiscSetPlanFor $s
     if (-not $plan -or -not $plan.Ok) { return 0 }
     return @($plan.Discs).Count
+}
+
+# What the line under the installer list says once a set has been asked for.
+#
+# Out here rather than inside the window function, because the sentence IS the
+# feature. The screen that said "one file is 1.16 GB, so it needs a DVD5 4.7 GB"
+# sent somebody off to find bigger blanks while the app was already able to put
+# that file on the CDs in their hand. A sentence chosen inside a WinForms
+# handler cannot be tested; this can.
+#
+#   Plan     the plan for the disc that is chosen, made the way the build will
+#   CutPlan  the plan a cut would make for that same disc, where one would help
+#   Alt      the smallest disc that holds every file whole, or nothing
+#
+# Answers @{ Ok; Text; Tip }. Tip is the long form for the tooltip, and is
+# absent when the line already says everything there is to say.
+function Get-SetAdvice([hashtable]$a) {
+    $plan = $a.Plan
+    if (-not $plan) { return $null }
+    $key = [string]$a.MediaKey
+
+    if ($plan.Ok) {
+        $n = @($plan.Discs).Count
+        # One disc is not a set, and saying "1 disc of DVD5" to somebody who
+        # ticked the box reads as though it did nothing. Say what actually
+        # happened: it fits, and the tick box will not be used.
+        if ($n -eq 1) {
+            return @{ Ok = $true; Text = ("fits one {0}, so no set is needed" -f (Get-MediaShortFromKey $key)) }
+        }
+        return @{ Ok = $true; Text = ("{0} discs of {1}" -f $n, (Get-MediaShortFromKey $key)) }
+    }
+
+    if ($plan.TooBig) {
+        $bigGb = ([double]$plan.TooBig.Bytes) / 1GB
+        $cut = $a.CutPlan
+        # What THIS disc can do comes before the name of a different one. Naming
+        # a bigger blank first is the answer that reads as "go and buy some".
+        if ($cut -and $cut.Ok) {
+            $pieces = @(@($cut.Discs | ForEach-Object { $_.Files }) |
+                        Where-Object { $_ -and $_.PartOf -eq $plan.TooBig.Rel }).Count
+            $n = @($cut.Discs).Count
+            $tip = ("{0} is {1:N2} GB, which is more than a {2} holds. Cut into {3} pieces it makes {4} discs, put back together into the file it was once the last disc has been copied. Build asks before it cuts anything." -f
+                        (Split-Path $plan.TooBig.Rel -Leaf), $bigGb, (Get-MediaNameFromKey $key), $pieces, $n)
+            if ($a.Alt) {
+                $tip += $(if ($a.Alt.Discs -eq 1) { " A {0} would hold it whole." -f $a.Alt.Short }
+                          else { " {0} discs of {1} would hold it whole." -f $a.Alt.Discs, $a.Alt.Short })
+            }
+            # 655 pixels, so the disc in front of them goes on the line and the
+            # reasoning rides along in the tooltip.
+            return @{ Ok = $false; Tip = $tip
+                      Text = ("one file is {0:N2} GB, so Build will offer to cut it: {1} discs" -f $bigGb, $n) }
+        }
+        $alt = $a.Alt
+        $t = if ($alt -and $alt.Discs -eq 1) {
+            "one file is {0:N2} GB, so it needs a {1}" -f $bigGb, $alt.Short
+        } elseif ($alt) {
+            "one file is {0:N2} GB, so a set needs a {1} ({2} discs)" -f $bigGb, $alt.Short, $alt.Discs
+        } else {
+            "one file is {0:N2} GB, too big for any disc" -f $bigGb
+        }
+        return @{ Ok = $false; Text = $t }
+    }
+
+    if ($plan.Why) { return @{ Ok = $false; Text = [string]$plan.Why } }
+    return $null
 }
 
 function Invoke-BuildDiscSet([hashtable]$s, [scriptblock]$log, [scriptblock]$progress = $null) {
@@ -4777,17 +4907,51 @@ function Get-SelectedMediaKey { return (Get-MediaKeyFromName ([string]$cmbMedia.
 # that eventually leaves it unhooked.
 $script:MediaRowsBusy = $false
 
+# Everything a set plan is made of that comes off the form. The line under the
+# installer list, the rows in the dropdown and the offer the build button makes
+# all have to plan from the same inputs; three hand-written copies of this
+# hashtable is exactly how they would quietly stop agreeing with each other.
+function Get-SetInputsFromForm($games = $null) {
+    if ($null -eq $games) { $games = Get-Games }
+    return @{
+        Games      = @($games)
+        IconPath   = $state.IconPath
+        BgPath     = $state.BgPath
+        Menu       = $chkMenu.Checked
+        MusicFile  = $(if ($chkMusic.Checked) { $state.MusicFile } else { $null })
+        ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
+        ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
+        ExtraItems = @($lstExtra.Items)
+    }
+}
+
+# Every medium planned as a set, for a form that has asked for one. Nothing when
+# the box is not ticked: the rows then answer the one-disc question, which is
+# the question that was asked.
+function Get-SetPlansFromForm($games) {
+    if (-not $games -or -not $games.Count) { return $null }
+    if (-not $chkSet.Checked) { return $null }
+    $si = Get-SetInputsFromForm $games
+    $si.CutFiles = [bool]$state.CutFiles
+    return (Get-SetPlansForEveryMedia $si)
+}
+
 # Re-annotate the dropdown for what is on the form now. Selection is restored by
 # KEY, because the text it was selected by has just changed underneath it.
-function Update-MediaOptions {
+#
+# $sets is the plan for every medium, which Update-MediaLabel has usually made
+# already; it is passed in rather than made again because making it measures the
+# manual and the extras.
+function Update-MediaOptions($sets = $null) {
     if ($script:MediaRowsBusy) { return }
     $games = Get-Games
     $pi    = $(if ($games.Count) { Get-PlanInputs } else { $null })
+    if (-not $sets) { $sets = Get-SetPlansFromForm $games }
     $rows  = @((Get-MediaAutoText))
     foreach ($t in Get-MediaTiers) {
         $plan = $null
         if ($games.Count) { $plan = Get-MediaFit $pi.Payload.Total $pi.Overhead $t.Key }
-        $rows += (Get-MediaOptionText $t $plan)
+        $rows += (Get-MediaOptionText $t $plan $(if ($sets) { $sets[$t.Key] } else { $null }))
     }
     # Only touch the control when something actually changed. Rewriting the list
     # on every keystroke would close the dropdown under a user reading it.
@@ -4884,7 +5048,11 @@ function Update-LegacyFsBox {
 
 function Update-MediaLabel {
     $games = Get-Games
-    Update-MediaOptions
+    # Planned once, here, because three questions are about to be asked of the
+    # same arithmetic: what each row of the dropdown should say, what the line
+    # below the list should say, and which disc would hold the game whole.
+    $sets = Get-SetPlansFromForm $games
+    Update-MediaOptions $sets
     Update-LegacyFsBox
     if ($games.Count -eq 0) {
         # Removing the last entry has to clear this line, not leave it alone.
@@ -4930,56 +5098,19 @@ function Update-MediaLabel {
         # a CD with the box already ticked otherwise reads as the tick box not
         # working, when the truth is that a set never cuts a file in half.
         $setNote = $null
-        if ($chkSet.Checked) {
-            $plan = Get-DiscSetPlanFor @{
-                Games = (Get-Games); MediaKey = $key; IconPath = $state.IconPath
-                BgPath = $state.BgPath; Menu = $chkMenu.Checked
-                MusicFile = $(if ($chkMusic.Checked) { $state.MusicFile } else { $null })
-                ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
-                ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
-                ExtraItems = @($lstExtra.Items)
-                # Once a cut has been agreed to, the line has to plan the same
-                # way the build will. Without this it keeps showing the refusal
-                # for a file the build is now going to cut, which reads as the
-                # answer not having been taken.
-                CutFiles = [bool]$state.CutFiles
+        if ($sets) {
+            $pair = $sets[$key]
+            # The smallest disc that holds every file whole, for the cases where
+            # the chosen one does not. Read off the map rather than planned
+            # again: a plan that is beaten by one oversized file is a plan made
+            # without cutting, so the map's own rows answer the same question.
+            $alt = $null
+            if ($pair -and -not $pair.Plain.Ok -and $pair.Plain.TooBig) {
+                $alt = Get-SmallestFromSetPlans $sets
             }
-            if ($plan -and $plan.Ok) {
-                $n = @($plan.Discs).Count
-                # One disc is not a set, and saying "1 disc of DVD5" to somebody who
-                # ticked the box reads as though it did nothing. Say what actually
-                # happened: it fits, and the tick box will not be used.
-                $setNote = if ($n -eq 1) {
-                    @{ Ok = $true; Text = ("fits one {0}, so no set is needed" -f (Get-MediaShortFromKey $key)) }
-                } else {
-                    @{ Ok = $true; Text = ("{0} discs of {1}" -f $n, (Get-MediaShortFromKey $key)) }
-                }
-            }
-            elseif ($plan -and $plan.TooBig) {
-                # 655 pixels, so the actionable half goes first and the full
-                # reasoning rides along in the tooltip.
-                $bigGb = ([double]$plan.TooBig.Bytes) / 1GB
-                $alt = Get-SmallestSetMedia @{
-                    Games = (Get-Games); MediaKey = $key; IconPath = $state.IconPath
-                    BgPath = $state.BgPath; Menu = $chkMenu.Checked
-                    MusicFile = $(if ($chkMusic.Checked) { $state.MusicFile } else { $null })
-                    ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
-                    ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
-                    ExtraItems = @($lstExtra.Items)
-                }
-                $plural = $(if ($alt -and $alt.Discs -ne 1) { "s" } else { "" })
-                $t = if ($alt -and $alt.Discs -eq 1) {
-                    "one file is {0:N2} GB, so it needs a {1}" -f $bigGb, $alt.Short
-                } elseif ($alt) {
-                    "one file is {0:N2} GB, so a set needs a {1} ({2} discs)" -f $bigGb, $alt.Short, $alt.Discs
-                } else {
-                    "one file is {0:N2} GB, too big for any disc" -f $bigGb
-                }
-                $setNote = @{ Ok = $false; Text = $t }
-            }
-            elseif ($plan -and $plan.Why) {
-                $setNote = @{ Ok = $false; Text = [string]$plan.Why }
-            }
+            $setNote = Get-SetAdvice @{ MediaKey = $key; Alt = $alt
+                                        Plan    = $(if ($pair) { $pair.Plain } else { $null })
+                                        CutPlan = $(if ($pair) { $pair.Cut }   else { $null }) }
         }
         if ($setNote) {
             $lblGame.Text = "$txt   ->   $($setNote.Text)"
@@ -4992,7 +5123,9 @@ function Update-MediaLabel {
         $lblGame.Text = "$txt   ->   Disc: $($m.Text)"
         $lblGame.ForeColor = if($m.Fit){[System.Drawing.Color]::Green}else{[System.Drawing.Color]::DarkOrange}
     }
-    Set-StatusTip $lblGame.Text
+    # The label ellipsises at 655 pixels, so where there is a longer answer the
+    # tooltip is where the whole of it lives.
+    Set-StatusTip $(if ($setNote -and $setNote.Tip) { [string]$setNote.Tip } else { $lblGame.Text })
     # A missing installer part outranks the media advice - it is the thing that
     # makes the disc useless, so it takes the label and the colour.
     # With several games the label can only carry one warning, so take the first -
@@ -6848,14 +6981,8 @@ $btnBuild.Add_Click({
     # different promise from handing back a game on several discs, and it should
     # be made on purpose.
     if ($chkSet.Checked -and -not $state.CutFiles) {
-        $probe = @{
-            Games = (Get-Games); MediaKey = $mediaKey; IconPath = $state.IconPath
-            BgPath = $state.BgPath; Menu = $chkMenu.Checked
-            MusicFile = $(if ($chkMusic.Checked) { $state.MusicFile } else { $null })
-            ManualPath = $(if ($cbMan.Checked) { $state.ManualPath } else { $null })
-            ExtrasPath = $(if ($cbExtra.Checked) { $state.ExtrasPath } else { $null })
-            ExtraItems = @($lstExtra.Items)
-        }
+        $probe = Get-SetInputsFromForm
+        $probe.MediaKey = $mediaKey
         $plain = Get-DiscSetPlanFor $probe
         if ($plain -and -not $plain.Ok -and $plain.TooBig) {
             $probe.CutFiles = $true
