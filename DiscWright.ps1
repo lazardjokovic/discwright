@@ -2163,6 +2163,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   #mute{position:absolute;right:44px;top:8px;width:28px;height:26px;line-height:26px;text-align:center;color:#e6ebef;
     font-family:'Segoe UI',Arial;font-size:15px;background:#0a1519;border:1px solid #16545a;cursor:pointer;display:none;}
   #mute:hover{color:#fff;border-color:#00bec8;}
+  /* The hash check, beside the mute, because xniwo asked for "one click
+     windows or linux sha256 verification" there and a disc that carries a
+     checksum list should be able to use it without a program. Shown only
+     when the list is actually on the disc. */
+  #sums{position:absolute;right:80px;top:8px;width:28px;height:26px;line-height:26px;text-align:center;color:#e6ebef;
+    font-family:'Segoe UI',Arial;font-size:14px;background:#0a1519;border:1px solid #16545a;cursor:pointer;display:none;}
+  #sums:hover{color:#fff;border-color:#00bec8;}
   /* The caption above the buttons: which game this screen is for. This is the
      line that shows a game's name whether or not the title was put on the
      artwork, so it is the one that was reported cut off. It wraps like the
@@ -2276,6 +2283,15 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     document.onmousedown=startDrag; document.onmousemove=doDrag; document.onmouseup=endDrag;
     show();   // renders the panel, which calls setupHover and refreshButtons itself
     initMusic();
+    initSums();
+  }
+  // Shown only when the disc carries a list to check against. A tick that
+  // answers "there is nothing to check" would be a button that lies about
+  // what the disc can do.
+  function initSums(){
+    var b=document.getElementById("sums");
+    if(!b||!root) return;
+    if(fso.FileExists(fso.BuildPath(root,"checksums.sha256"))){ b.style.display="block"; }
   }
   function initMusic(){
     var mb=document.getElementById("mute");
@@ -2565,9 +2581,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // window able to redraw and the person able to read what is happening.
   // cscript has no window and no timer, so it waits there instead; the test
   // suite runs that path and the disc runs the other.
-  function setJoinWait(exec,after){
+  function setWaitExec(exec,after){
     if(typeof window!="undefined"&&window.setTimeout){
-      if(exec.Status==0){ window.setTimeout(function(){ setJoinWait(exec,after); },400); return; }
+      if(exec.Status==0){ window.setTimeout(function(){ setWaitExec(exec,after); },400); return; }
       after();
     } else {
       while(exec.Status==0){ WScript.Sleep(50); }
@@ -2609,7 +2625,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     try{ show(); }catch(ex){}
     var cmd="cmd /c copy /b "+names.join("+")+" "+setQuote(setPath(st.dir,j.f));
     var exec=new ActiveXObject("WScript.Shell").Exec(cmd);
-    setJoinWait(exec,function(){
+    setWaitExec(exec,function(){
       if(setJoinDone(st.dir,j)){
         for(var m=0;m<j.parts.length;m++){
           try{ fso.DeleteFile(setPath(st.dir,j.parts[m])); }catch(ex2){}
@@ -2712,6 +2728,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // While a join is running. Minutes can pass with copy /b working through
     // a gigabyte and nothing else to show for it, and an empty-looking menu is
     // how somebody decides it has hung and closes it.
+    // Hashing a game is minutes of a window that otherwise looks asleep.
+    if(typeof SETCHECKING!="undefined"&&SETCHECKING.length){
+      return "Checking file "+SETCHECKING+" against what was burned.";
+    }
     if(typeof SETJOINING!="undefined"&&SETJOINING.length){
       return "Putting "+SETJOINING+" back together. On a large file this takes a few minutes.";
     }
@@ -2826,6 +2846,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var SETDIR="";
   var SETARM=false;   // the delete button's second press
   var SETJOINING="";  // the cut file being put back together right now
+  var SETCHECKING=""; // which file the hash check is on, out of how many
   function setDir(){ if(!SETDIR.length) SETDIR=setDefaultDir(); return SETDIR; }
   function setChoose(){
     // Shell.Application is used rather than a file dialog because the menu has
@@ -2876,35 +2897,113 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(!dir.length) return;
     setJoinAll(dir,function(n){ show(); });
   }
+  // Hash every file in the folder against what was burned.
+  //
+  // One certutil per file, and NOT waited on: the join earned "Stop running
+  // this script?" by blocking for one long call, and this blocks once per
+  // file. A 1.8 GB game is minutes of it. Same treatment, same waiter.
+  //
+  // It is a separate button because hashing a game takes minutes and nobody
+  // should have that happen to them by surprise, and it says which file it is
+  // on, because minutes of a still window is how somebody decides it has hung.
+  // xniwo, 4 October: "Next to the mute music icon in the splash menu, an
+  // optional one click windows or linux sha256 verification might be useful
+  // for some."
+  //
+  // A disc built with checksums carries checksums.sha256 at its root, in
+  // sha256sum format, which is the same list a person could check by hand with
+  // sha256sum or Get-FileHash. This checks it without either.
+  //
+  // The disc, not a copy of it: this answers "did that burn come out right",
+  // which is a different question from the set's Check every file, and the one
+  // somebody asks with a disc in their hand.
+  function discSums(){
+    var out=[], p=fso.BuildPath(root,"checksums.sha256");
+    if(!fso.FileExists(p)) return out;
+    var t=fso.OpenTextFile(p,1), line, star;
+    while(!t.AtEndOfStream){
+      line=t.ReadLine();
+      if(!line.length||line.charAt(0)=="#") continue;
+      star=line.indexOf(" *");
+      if(star<64) continue;
+      // Forward slashes in the list, backslashes on the disc.
+      var rel=line.substring(star+2).split("/").join(SEP);
+      out[out.length]={h:line.substring(0,star),f:rel,full:fso.BuildPath(root,rel)};
+    }
+    t.Close();
+    return out;
+  }
+  function discCheck(){
+    if(PREVIEW){ previewStop("Check this disc"); return; }
+    var list=discSums(), here=[], i;
+    if(!list.length){
+      setSay("This disc does not carry a checksum list, so there is nothing to check against.",false);
+      return;
+    }
+    var missing=[];
+    for(i=0;i<list.length;i++){
+      if(fso.FileExists(list[i].full)) here[here.length]=list[i];
+      else missing[missing.length]=list[i].f;
+    }
+    setCheckRun(here,0,[],function(bad){
+      var all=bad.concat(missing);
+      if(!all.length){
+        setSay(here.length+" files checked. Every one of them is byte for byte what was burned.",true);
+      }
+      else{
+        setSay(all.length+" of "+list.length+" file(s) on this disc are wrong:\n\n"+
+               all.join("\n")+
+               "\n\nA disc that reads badly is usually scratched or was burned badly.",false);
+      }
+    });
+  }
+
   function setVerify(){
-    // The sizes are checked on every redraw; this is the slow, certain one, and
-    // it is a separate button because hashing a game takes minutes and nobody
-    // should have that happen to them by surprise.
-    var dir=setDir(), rows=setRows(), sh=new ActiveXObject("WScript.Shell");
+    var dir=setDir(), rows=setRows();
     if(!dir.length){ return; }
-    var bad=[], i, full, out, f, line, hash;
-    var tmp=fso.BuildPath(sh.ExpandEnvironmentStrings("%TEMP%"),"dwverify.txt");
+    var todo=[], i;
     for(i=0;i<rows.length;i++){
-      full=setPath(dir,rows[i].f);
-      if(!fso.FileExists(full)){ continue; }
-      // certutil is on every Windows this menu runs on, and hashing in script
-      // is not possible at all.
-      sh.Run('cmd /c certutil -hashfile "'+full+'" SHA256 > "'+tmp+'"',0,true);
-      hash="";
+      var full=setPath(dir,rows[i].f);
+      if(fso.FileExists(full)){ todo[todo.length]={f:rows[i].f,h:rows[i].h,full:full}; }
+    }
+    if(!todo.length){ setSay("There is nothing in that folder to check yet.",false); return; }
+    setCheckRun(todo,0,[],function(bad){
+      if(!bad.length){ setSay("Every file in that folder is byte for byte what was burned.",true); }
+      else{ setSay(bad.length+" file(s) do not match what was burned:\n\n"+bad.join("\n")+
+                   "\n\nCopy them again from the disc they are on.",false); }
+    });
+  }
+  // The loop behind every hash check, shared by the set's Check every file and
+  // by an ordinary disc's. Walks the list one process at a time so the window
+  // stays answerable between them.
+  function setCheckRun(list,at,bad,after){
+    if(at>=list.length){
+      SETCHECKING="";
+      try{ show(); }catch(ex){}
+      after(bad);
+      return;
+    }
+    SETCHECKING=(at+1)+" of "+list.length;
+    try{ show(); }catch(ex){}
+    var it=list[at];
+    var sh=new ActiveXObject("WScript.Shell");
+    var tmp=fso.BuildPath(sh.ExpandEnvironmentStrings("%TEMP%"),"dwverify.txt");
+    var exec=sh.Exec('cmd /c certutil -hashfile "'+it.full+'" SHA256 > "'+tmp+'"');
+    setWaitExec(exec,function(){
+      var hash="", f, line;
       try{
         f=fso.OpenTextFile(tmp,1);
         while(!f.AtEndOfStream){
           line=f.ReadLine();
+          // certutil prints the hash on its own line, with no spaces in it.
           if(line.length>=64&&line.indexOf(" ")<0){ hash=line; break; }
         }
         f.Close();
       }catch(ex){}
-      if(hash.length&&hash.toUpperCase()!=rows[i].h.toUpperCase()){ bad[bad.length]=rows[i].f; }
-    }
-    try{ if(fso.FileExists(tmp)) fso.DeleteFile(tmp); }catch(ex){}
-    if(!bad.length){ setSay("Every file in that folder is byte for byte what was burned.",true); }
-    else{ setSay(bad.length+" file(s) do not match what was burned:\n\n"+bad.join("\n")+
-                "\n\nCopy them again from the disc they are on.",false); }
+      try{ if(fso.FileExists(tmp)) fso.DeleteFile(tmp); }catch(ex2){}
+      if(hash.length&&hash.toUpperCase()!=it.h.toUpperCase()){ bad[bad.length]=it.f; }
+      setCheckRun(list,at+1,bad,after);
+    });
   }
   function setInstall(){
     var dir=setDir(), s=setScan(dir);
@@ -3288,6 +3387,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   <div id="stage">
     <div id="x" onclick="doExit()">X</div>
     <div id="mute" title="Music on / off">&#9835;</div>
+    <div id="sums" title="Check every file on this disc against its checksum list" onclick="discCheck()">&#10003;</div>
     <div id="status"></div>
     <div class="panel" id="pan"></div>
   </div>
