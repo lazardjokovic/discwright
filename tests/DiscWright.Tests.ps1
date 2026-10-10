@@ -8692,6 +8692,11 @@ Describe 'What the line says once a disc set has been asked for' -Tag 'Unit' {
                 'one file is 4.00 GB, so it needs a DVD5 4.7 GB'
                 'one file is 4.00 GB, so a set needs a DVD5 4.7 GB (4 discs)'
                 'one file is 120.00 GB, too big for any disc'
+                # Cutting, which is the answer that goes first now. The second
+                # is the daft end of it: a 120 GB file really would be 177 CDs,
+                # and the line still has to be readable when it says so.
+                'one file is 1.16 GB, so Build will offer to cut it: 2 discs'
+                'one file is 120.00 GB, so Build will offer to cut it: 177 discs'
             )
             foreach ($w in $wordings) {
                 $px = [int]$gfx.MeasureString(($prefix + $w), $font).Width
@@ -8725,6 +8730,279 @@ Describe 'What the line says once a disc set has been asked for' -Tag 'Unit' {
                                       BgPath = $null; Menu = $true; MusicFile = $null
                                       ManualPath = $null; ExtrasPath = $null; ExtraItems = @() }
         $plan | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Saying what the disc in your hand would do, once a set is asked for' -Tag 'Unit' {
+
+    # Lazar added Hollow Knight, ticked disc set, chose CD-R 700 MB, and the
+    # screen said:
+    #
+    #   Target disc:  CD-R 700 MB  -  will not fit
+    #   Detected: Hollow Knight (1 file, 1.16 GB)
+    #        ->   one file is 1.16 GB, so it needs a DVD5 4.7 GB
+    #
+    # Both halves were out of date the day cutting shipped. The app could put
+    # that file on the CDs he was holding, and would have offered to the moment
+    # he pressed Build, but every word on the screen before that said buy
+    # different discs. "will not fit" is also the answer to a question nobody
+    # asked: of course one CD does not hold it, that is what the tick box is for.
+    #
+    # The sentence is the feature here, so it is chosen by a function that can
+    # be tested rather than inside a WinForms handler that cannot.
+
+    BeforeAll {
+        # The real shape: one GOG installer of 1.16 GB, which is bigger than a
+        # whole CD and smaller than a DVD5.
+        function New-Game([double[]]$sizesGb) {
+            $i = 0
+            return @{ Folder = 'X:\g'; Kind = 'Game'
+                      Files = @($sizesGb | ForEach-Object {
+                          $i++
+                          [pscustomobject]@{ Name = "p$i.bin"; FullName = "X:\g\p$i.bin"
+                                             Length = [long]($_ * 1GB) } }) }
+        }
+        function New-Inputs($game, [bool]$cut = $false) {
+            return @{ Games = @($game); IconPath = $null; BgPath = $null; Menu = $true
+                      MusicFile = $null; ManualPath = $null; ExtrasPath = $null
+                      ExtraItems = @(); CutFiles = $cut }
+        }
+        $script:HkPlans = Get-SetPlansForEveryMedia (New-Inputs (New-Game @(1.16)))
+    }
+
+    Context 'planning every disc at once' {
+
+        It 'answers for every disc the dropdown offers' {
+            # The dropdown annotates every row on every refresh, so a map that
+            # covers some of them would leave rows silently stale.
+            foreach ($t in Get-MediaTiers) {
+                $script:HkPlans[$t.Key] | Should -Not -BeNullOrEmpty -Because "$($t.Key) is a row in the list"
+            }
+        }
+
+        It 'plans the cut only where a cut is the thing in the way' {
+            # A second plan per tier is not free, and for a disc that already
+            # works it answers a question nobody is asking.
+            $script:HkPlans['CD'].Plain.Ok   | Should -BeFalse
+            $script:HkPlans['CD'].Cut        | Should -Not -BeNullOrEmpty
+            $script:HkPlans['DVD5'].Plain.Ok | Should -BeTrue
+            $script:HkPlans['DVD5'].Cut      | Should -BeNullOrEmpty
+        }
+
+        It 'plans the cut the build would actually make' {
+            $script:HkPlans['CD'].Cut.Ok | Should -BeTrue
+            @($script:HkPlans['CD'].Cut.Discs).Count | Should -Be 2
+        }
+
+        It 'plans the way the form has already agreed to' {
+            # Once a cut has been said yes to, the rows have to stop talking
+            # about it as something that might happen.
+            $agreed = Get-SetPlansForEveryMedia (New-Inputs (New-Game @(1.16)) $true)
+            $agreed['CD'].Plain.Ok | Should -BeTrue
+            $agreed['CD'].Cut      | Should -BeNullOrEmpty
+        }
+
+        It 'says nothing at all for several games' {
+            $two = 1..2 | ForEach-Object { New-Game @(1.0) }
+            Get-SetPlansForEveryMedia @{ Games = @($two); IconPath = $null; BgPath = $null
+                                         Menu = $true; MusicFile = $null; ManualPath = $null
+                                         ExtrasPath = $null; ExtraItems = @() } |
+                Should -BeNullOrEmpty
+        }
+
+        It 'finds the smallest whole-file disc without planning the game again' {
+            # Get-SmallestSetMedia measures the game to answer this. The form
+            # has the map in its hand by then, so it should not pay twice.
+            $alt = Get-SmallestFromSetPlans $script:HkPlans
+            $alt.Key | Should -Be 'DVD5'
+            $alt.Discs | Should -Be 1
+        }
+
+        It 'does not let cutting decide what the smallest disc is' {
+            # "Smallest disc that holds it" has to keep meaning whole files, or
+            # the fallback advice would point at the CD it just refused.
+            (Get-SmallestFromSetPlans $script:HkPlans).Key | Should -Not -Be 'CD'
+        }
+    }
+
+    Context 'the row in the dropdown' {
+
+        BeforeAll { $script:CdTier = @(Get-MediaTiers | Where-Object { $_.Key -eq 'CD' })[0] }
+
+        It 'says how many discs instead of whether one holds it' {
+            # Four files that each fit a CD and together do not, which is an
+            # ordinary set and the case the old row called "will not fit".
+            $four = Get-SetPlansForEveryMedia (New-Inputs (New-Game @(0.6, 0.6, 0.6, 0.6)))
+            Get-MediaOptionText $script:CdTier @{ Ok = $false } $four['CD'] |
+                Should -Be 'CD-R 700 MB  -  4 discs'
+        }
+
+        It 'says when a disc works only because a file would be cut' {
+            Get-MediaOptionText $script:CdTier @{ Ok = $false } $script:HkPlans['CD'] |
+                Should -Be 'CD-R 700 MB  -  2 discs if cut'
+        }
+
+        It 'stops saying "if cut" once the cut has been agreed to' {
+            $agreed = Get-SetPlansForEveryMedia (New-Inputs (New-Game @(1.16)) $true)
+            Get-MediaOptionText $script:CdTier @{ Ok = $false } $agreed['CD'] |
+                Should -Be 'CD-R 700 MB  -  2 discs'
+        }
+
+        It 'says fits, not "1 disc", when the set turns out to be one disc' {
+            $tier = @(Get-MediaTiers | Where-Object { $_.Key -eq 'DVD5' })[0]
+            Get-MediaOptionText $tier @{ Ok = $true } $script:HkPlans['DVD5'] |
+                Should -Be 'DVD5 4.7 GB  -  fits'
+        }
+
+        It 'still says will not fit when no cut would rescue the disc' {
+            # Extras alone bigger than the blank. Cutting the game would not
+            # help, and the row must not pretend otherwise.
+            $plain = @{ Plain = @{ Ok = $false; Why = 'the extras alone do not fit'; TooBig = $null }
+                        Cut = $null }
+            Get-MediaOptionText $script:CdTier @{ Ok = $false } $plain |
+                Should -Be 'CD-R 700 MB  -  will not fit'
+        }
+
+        It 'leaves the one-disc question alone when no set was asked for' {
+            # Unticked, the row answers what it always answered.
+            Get-MediaOptionText $script:CdTier @{ Ok = $false } $null |
+                Should -Be 'CD-R 700 MB  -  will not fit'
+            Get-MediaOptionText $script:CdTier @{ Ok = $true } $null |
+                Should -Be 'CD-R 700 MB  -  fits'
+        }
+
+        It 'keeps a row the dropdown can still find its medium in' {
+            # The selection is restored by key, matched off the start of the
+            # row text, so a new suffix must not break the match.
+            $row = Get-MediaOptionText $script:CdTier @{ Ok = $false } $script:HkPlans['CD']
+            Get-MediaKeyFromName $row | Should -Be 'CD'
+        }
+    }
+
+    Context 'the line under the installer list' {
+
+        BeforeAll {
+            function Get-Line([string]$key, $plans) {
+                $pair = $plans[$key]
+                $alt = $null
+                if ($pair -and -not $pair.Plain.Ok -and $pair.Plain.TooBig) {
+                    $alt = Get-SmallestFromSetPlans $plans
+                }
+                return (Get-SetAdvice @{ MediaKey = $key; Alt = $alt
+                                         Plan = $pair.Plain; CutPlan = $pair.Cut })
+            }
+        }
+
+        It 'stops sending people out for bigger discs they do not need' {
+            # The reported bug, in one assertion.
+            $line = Get-Line 'CD' $script:HkPlans
+            $line.Text | Should -Not -Match 'needs a DVD5'
+        }
+
+        It 'leads with what the disc already in the drive would do' {
+            (Get-Line 'CD' $script:HkPlans).Text |
+                Should -Be 'one file is 1.16 GB, so Build will offer to cut it: 2 discs'
+        }
+
+        It 'says the cut is offered rather than already decided' {
+            # Cutting is consent, asked for at the build button. A line that
+            # read "2 discs" flat would be promising something nobody agreed to.
+            (Get-Line 'CD' $script:HkPlans).Text | Should -Match 'will offer'
+            (Get-Line 'CD' $script:HkPlans).Ok   | Should -BeFalse -Because 'there is still a question to answer'
+        }
+
+        It 'puts the file, the sizes and what happens to the pieces in the tooltip' {
+            $tip = (Get-Line 'CD' $script:HkPlans).Tip
+            $tip | Should -Match 'p1\.bin'
+            $tip | Should -Match '1\.16 GB'
+            $tip | Should -Match 'CD-R 700 MB'
+            $tip | Should -Match '2 pieces'
+            $tip | Should -Match 'put back together'
+            $tip | Should -Match 'Build asks before'
+        }
+
+        It 'still names the disc that would hold the file whole, in the tooltip' {
+            # Cutting is not the only answer and should not be the only one offered.
+            (Get-Line 'CD' $script:HkPlans).Tip | Should -Match 'DVD5 4\.7 GB would hold it whole'
+        }
+
+        It 'counts the pieces of the file that decided it, not every part on the discs' {
+            # Two oversized files are two separate cuts, and the sentence is
+            # about the one the planner named.
+            $plans = Get-SetPlansForEveryMedia (New-Inputs (New-Game @(1.16, 2.5)))
+            $line = Get-Line 'CD' $plans
+            $line.Tip | Should -Match 'p1\.bin is 1\.16 GB'
+            $line.Tip | Should -Match 'Cut into 2 pieces'
+        }
+
+        It 'names a bigger blank, as it always did, when cutting is not on offer' {
+            # Every wording that existed before has to survive, because the only
+            # thing that changed is which one comes first.
+            $pair = @{ Plain = @{ Ok = $false; TooBig = @{ Rel = 'big.bin'; Bytes = [double](4 * 1GB) } }
+                       Cut = $null }
+            (Get-SetAdvice @{ MediaKey = 'CD'; Plan = $pair.Plain; CutPlan = $pair.Cut
+                              Alt = @{ Key = 'DVD5'; Short = 'DVD5 4.7 GB'; Discs = 1 } }).Text |
+                Should -Be 'one file is 4.00 GB, so it needs a DVD5 4.7 GB'
+            (Get-SetAdvice @{ MediaKey = 'CD'; Plan = $pair.Plain; CutPlan = $pair.Cut
+                              Alt = @{ Key = 'DVD5'; Short = 'DVD5 4.7 GB'; Discs = 4 } }).Text |
+                Should -Be 'one file is 4.00 GB, so a set needs a DVD5 4.7 GB (4 discs)'
+            (Get-SetAdvice @{ MediaKey = 'CD'; Plan = $pair.Plain; CutPlan = $pair.Cut; Alt = $null }).Text |
+                Should -Be 'one file is 4.00 GB, too big for any disc'
+        }
+
+        It 'counts the discs when the set just works' {
+            (Get-Line 'DVD5' (Get-SetPlansForEveryMedia (New-Inputs (New-Game @(4.0, 3.79))))).Text |
+                Should -Be '2 discs of DVD5 4.7 GB'
+        }
+
+        It 'says a single disc is not a set' {
+            $line = Get-Line 'DVD5' $script:HkPlans
+            $line.Ok | Should -BeTrue
+            $line.Text | Should -Be 'fits one DVD5 4.7 GB, so no set is needed'
+        }
+
+        It 'passes a refusal through in the words the planner used' {
+            (Get-SetAdvice @{ MediaKey = 'CD'; Alt = $null; CutPlan = $null
+                              Plan = @{ Ok = $false; TooBig = $null
+                                        Why = 'the extras alone do not fit' } }).Text |
+                Should -Be 'the extras alone do not fit'
+        }
+
+        It 'hands back nothing when there is no plan to talk about' {
+            Get-SetAdvice @{ MediaKey = 'CD'; Plan = $null; CutPlan = $null; Alt = $null } |
+                Should -BeNullOrEmpty
+        }
+
+        It 'only carries a tooltip where there is more to say than the line holds' {
+            (Get-Line 'DVD5' $script:HkPlans).Tip | Should -BeNullOrEmpty
+            (Get-Line 'CD'   $script:HkPlans).Tip | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'the two halves of the screen agreeing' {
+
+        It 'never tells you a disc will not fit while offering to cut onto it' {
+            # The screenshot had both at once. They are built from one map now,
+            # so this is the guard that keeps them built from one map.
+            $tier = @(Get-MediaTiers | Where-Object { $_.Key -eq 'CD' })[0]
+            $row  = Get-MediaOptionText $tier @{ Ok = $false } $script:HkPlans['CD']
+            $line = Get-SetAdvice @{ MediaKey = 'CD'; Alt = (Get-SmallestFromSetPlans $script:HkPlans)
+                                     Plan = $script:HkPlans['CD'].Plain
+                                     CutPlan = $script:HkPlans['CD'].Cut }
+            if ($line.Text -match 'cut') { $row | Should -Not -Match 'will not fit' }
+            $row | Should -Match '2 discs'
+            $line.Text | Should -Match '2 discs'
+        }
+
+        It 'counts the same discs in the row and on the line' {
+            $plans = Get-SetPlansForEveryMedia (New-Inputs (New-Game @(4.0, 3.79)))
+            $tier  = @(Get-MediaTiers | Where-Object { $_.Key -eq 'DVD5' })[0]
+            $row   = Get-MediaOptionText $tier @{ Ok = $false } $plans['DVD5']
+            $line  = Get-SetAdvice @{ MediaKey = 'DVD5'; Alt = $null
+                                      Plan = $plans['DVD5'].Plain; CutPlan = $plans['DVD5'].Cut }
+            $row  | Should -Be 'DVD5 4.7 GB  -  2 discs'
+            $line.Text | Should -Be '2 discs of DVD5 4.7 GB'
+        }
     }
 }
 
