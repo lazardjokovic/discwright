@@ -6430,7 +6430,13 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
         # both, so carrying on after disc 1 failed is spending a blank to make
         # half of nothing.
         if ($chosen.Own) {
-            $stage = Join-Path (Split-Path $isos[$i] -Parent) ('disc D{0}' -f $d)
+            # Built by hand rather than with Join-Path, which asks the provider
+            # about the drive and throws DriveNotFoundException for a path on a
+            # drive this machine does not have. The ISO's own path is the only
+            # thing being read here, and a drive that is absent is a fact for
+            # Invoke-DiscBurnAndCheck to report, not a reason to fall over
+            # while working out a folder name.
+            $stage = (Split-Path $isos[$i] -Parent).TrimEnd([char]92) + [char]92 + ('disc D{0}' -f $d)
             $res = Invoke-DiscBurnAndCheck $isos[$i] $stage $log
             if (-not $res.Ok) {
                 & $log "ERROR: disc $d of $n did not come out right: $($res.Why)"

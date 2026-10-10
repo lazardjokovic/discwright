@@ -8082,7 +8082,15 @@ Describe 'Walking a set to the burner, one disc at a time' -Tag 'Unit' {
     It 'says it cannot tell when a burn has finished' {
         # The whole reason it asks. If this sentence goes, somebody will assume
         # the app knows, and a set reported as burned is a set that may not be.
-        $script:WalkText | Should -Match 'cannot tell when it has'
+        #
+        # Brought into line on 11 October, when DiscWright joined the list of
+        # programs that can write a set. The sentence is now about the OTHER
+        # programs, because that is who it was ever true of: handed an ISO to
+        # Nero, nothing here knows what Nero did with it. Burned here, it does
+        # know, and the walk says so rather than asking a question it can
+        # already answer.
+        $script:WalkText | Should -Match 'it cannot tell when that program has finished'
+        $script:WalkText | Should -Match 'check every file on each disc before asking for the next blank'
     }
 
     It 'stops where it was told to stop, and says so' {
@@ -8362,6 +8370,12 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         Set-Content -LiteralPath (Join-Path $script:Dir 'GAME D1.iso') -Value 'x' -NoNewline
         $script:Iso = Join-Path $script:Dir 'GAME D1.iso'
         $script:Stage = Join-Path $script:Dir 'disc D1'
+        # A folder standing in for the drive root. Naming a real letter would
+        # make these pass on the machine with an optical drive and fail on the
+        # VM, which has none, and the check here is which path gets read, not
+        # whether this computer owns a D:.
+        $script:Root = (Join-Path $script:Dir 'drive') + '\'
+        New-Item -ItemType Directory -Force -Path $script:Root | Out-Null
 
         function Show-Confirm([string]$m, [string]$t = 'DiscWright') { return $true }
         function Test-IsoFitsMedia { param($IsoBytes, $FreeSectors) @{ Fits = $true; IsoBytes = $IsoBytes; FreeBytes = 700MB } }
@@ -8371,7 +8385,7 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
     }
 
     BeforeEach {
-        $script:Drives = @(@{ Drive = 'D:\'; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
+        $script:Drives = @(@{ Drive = $script:Root; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
                               FreeSectors = 359853; FreeBytes = 736978944; Vendor = 'ASUS'; Product = 'DRW'
                               Speeds = @([pscustomobject]@{ Kb = 7200; Multiple = 48 }, [pscustomobject]@{ Kb = 2400; Multiple = 16 }) })
         $script:Verdict = @{ Ok = $true; FilesOnDisc = 9; Unreadable = @(); Missing = @(); Unexpected = @(); WrongSize = @(); WrongContent = @() }
@@ -8409,7 +8423,7 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
 
     It 'checks the disc in the drive it just wrote, against the folder it was given' {
         $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
-        $script:Checked.Root | Should -Be 'D:\'
+        $script:Checked.Root | Should -Be $script:Root
         $script:Checked.Stage | Should -Be $script:Stage
     }
 
