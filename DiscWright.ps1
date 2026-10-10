@@ -6583,6 +6583,11 @@ $btnBurn.Add_Click({
                 if ($v.Unexpected.Count)   { $detail += "unexpected: $($v.Unexpected -join ', ')" }
                 if ($v.WrongSize.Count)    { $detail += "wrong size: $($v.WrongSize -join ', ')" }
                 if ($v.WrongContent.Count) { $detail += "wrong contents: $($v.WrongContent -join ', ')" }
+                # First, because it is the worst of them. A file that cannot be
+                # read is not a file that came out slightly wrong: there is
+                # nothing to copy off the disc at all, and no amount of trying
+                # again will change that.
+                if ($v.Unreadable.Count)   { $detail = @("could not be read off the disc: $($v.Unreadable -join ', ')") + $detail }
                 $text = $detail -join "`r`n"
                 & $log "The disc does NOT match: $text"
                 Show-Warn "The disc does not match what was built:`r`n`r`n$text`r`n`r`nDo not rely on this disc."

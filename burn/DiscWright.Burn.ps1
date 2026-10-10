@@ -444,6 +444,7 @@ function Test-BurnedDisc {
     $extra   = @($onDisc.Keys  | Where-Object { -not $source.ContainsKey($_) } | Sort-Object)
     $sizeOff = @()
     $hashOff = @()
+    $unread  = @()
 
     foreach ($rel in ($source.Keys | Where-Object { $onDisc.ContainsKey($_) } | Sort-Object)) {
         if ($source[$rel].Length -ne $onDisc[$rel].Length) {
@@ -451,9 +452,25 @@ function Test-BurnedDisc {
             continue
         }
         if (-not $SkipHashes) {
-            $a = (Get-FileHash -LiteralPath $source[$rel].FullName -Algorithm SHA256).Hash
-            $b = (Get-FileHash -LiteralPath $onDisc[$rel].FullName -Algorithm SHA256).Hash
-            if ($a -ne $b) { $hashOff += $rel }
+            # A disc that will not read is the thing this check exists to catch,
+            # so it must not be the thing that kills the check. A CD-RW burned on
+            # 10 October held a 728 MB file the drive answered with "Data error
+            # (cyclic redundancy check)". Get-FileHash writes an error and
+            # returns nothing, .Hash on nothing throws, and the whole run ended
+            # on a stack trace partway through the disc, having said not one word
+            # about which file or whether the rest were any good.
+            #
+            # Unreadable is a verdict, not an accident. It is kept apart from
+            # WrongContent because they are different facts: one file came back
+            # as different bytes, the other did not come back at all.
+            $a = $null; $b = $null
+            try { $a = (Get-FileHash -LiteralPath $source[$rel].FullName -Algorithm SHA256 -ErrorAction Stop).Hash }
+            catch { $unread += "$rel (as built: $($_.Exception.Message))" }
+            if ($null -ne $a) {
+                try { $b = (Get-FileHash -LiteralPath $onDisc[$rel].FullName -Algorithm SHA256 -ErrorAction Stop).Hash }
+                catch { $unread += "$rel ($($_.Exception.Message))" }
+            }
+            if ($null -ne $a -and $null -ne $b -and $a -ne $b) { $hashOff += $rel }
         }
         $done++
         if ($OnProgress) { & $OnProgress $done $total $rel }
@@ -466,8 +483,10 @@ function Test-BurnedDisc {
         Unexpected    = $extra
         WrongSize     = $sizeOff
         WrongContent  = $hashOff
+        Unreadable    = $unread
         Ok            = (-not $missing.Count -and -not $extra.Count -and
-                         -not $sizeOff.Count -and -not $hashOff.Count)
+                         -not $sizeOff.Count -and -not $hashOff.Count -and
+                         -not $unread.Count)
     }
 }
 
