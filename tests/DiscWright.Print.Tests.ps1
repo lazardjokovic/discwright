@@ -947,3 +947,95 @@ Describe 'Lettering that sits in the middle of the spine' -Tag 'Unit' {
         $app | Should -Not -Match ([regex]::Escape('which sets the`r`n'))
     }
 }
+
+Describe 'A cover the shape of the case the disc goes in' -Tag 'Unit' {
+
+    # xniwo: "With 'Target disc' in DW chosen, perhaps this could sync with
+    # specific 'Cover picture' measurements (eg for cd dvd bluray cases)".
+    #
+    # Every cover was asked for and drawn at DVD size. Somebody printing for a
+    # Blu-ray case was told to make a picture 19 mm too tall, and somebody with
+    # a CD jewel case was told to make a tall rectangle for a square insert.
+    #
+    # The app keeps its own copy of these three sizes rather than importing
+    # them, because the form has to open on an install with no print\ folder:
+    # that module is reached into and never reaches back, which is what keeps
+    # the ISO builder able to ship without it. So the copy is checked here,
+    # where both halves can be loaded, instead of being trusted.
+
+    BeforeAll {
+        $script:AppSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($script:AppSrc, [ref]$null, [ref]$null)
+        foreach ($f in $ast.FindAll({ param($n)
+                $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $n.Name -in 'Get-CaseForMedia', 'Get-CoverPixels' }, $false)) {
+            . ([scriptblock]::Create($f.Extent.Text))
+        }
+    }
+
+    It 'sends <Media> to the <Case> case' -ForEach @(
+        @{ Media = 'CD';   Case = 'cd' }
+        @{ Media = 'DVD5'; Case = 'dvd' }
+        @{ Media = 'DVD9'; Case = 'dvd' }
+        @{ Media = 'BD25'; Case = 'bluray' }
+        @{ Media = 'BD50'; Case = 'bluray' }
+        @{ Media = 'BDXL'; Case = 'bluray' }
+    ) {
+        (Get-CaseForMedia $Media).Case | Should -Be $Case
+    }
+
+    It 'puts a DVD9 in one standard case, not the double' {
+        # The double case holds two discs and nothing here makes two. A dual
+        # layer disc is still one disc.
+        (Get-CaseForMedia 'DVD9').Case | Should -Be 'dvd'
+        (Get-CaseForMedia 'DVD9').Case | Should -Not -Be 'dvd-double'
+    }
+
+    It 'agrees with the print module about how big <Case> is' -ForEach @(
+        @{ Media = 'CD';   Case = 'cd' }
+        @{ Media = 'DVD5'; Case = 'dvd' }
+        @{ Media = 'BD25'; Case = 'bluray' }
+    ) {
+        # The whole point of this block. Two copies of a measurement drift, and
+        # the one that drifts here sends somebody away to make a picture that
+        # will not fit the case they are holding.
+        $fmt = Get-CaseFormat $Case
+        $fmt | Should -Not -BeNullOrEmpty -Because "the print module should know a $Case"
+        $mine = Get-CaseForMedia $Media
+        [Math]::Round($mine.WidthMm, 1)  | Should -Be ([Math]::Round((Get-PanelWidthMm $fmt), 1))
+        [Math]::Round($mine.HeightMm, 1) | Should -Be ([Math]::Round([double]$fmt.HeightMm, 1))
+    }
+
+    It 'turns those millimetres into the pixels the renderer draws at' {
+        # 300 dpi, which is what the print module uses throughout.
+        (Get-CoverPixels 'DVD5').W | Should -Be 1530
+        (Get-CoverPixels 'DVD5').H | Should -Be 2161
+        (Get-CoverPixels 'BD25').W | Should -Be 1524
+        (Get-CoverPixels 'BD25').H | Should -Be 1937
+        (Get-CoverPixels 'CD').W   | Should -Be 1417
+        (Get-CoverPixels 'CD').H   | Should -Be 1417
+    }
+
+    It 'leaves a DVD exactly where it was' {
+        # The common case must not move. 1530 x 2161 is what was hardcoded
+        # before any of this, so a DVD build is unchanged.
+        $px = Get-CoverPixels 'DVD5'
+        "$($px.W) x $($px.H)" | Should -Be '1530 x 2161'
+    }
+
+    It 'asks the renderer for that case, instead of always a DVD' {
+        $script:AppSrc | Should -Match ([regex]::Escape('-Case (Get-CaseForMedia (Get-SelectedMediaKey)).Case'))
+        $script:AppSrc | Should -Not -Match ([regex]::Escape('Get-ArtFitNote $cover 1530 2161'))
+    }
+
+    It 'says the size on the label, and changes it with the dropdown' {
+        $script:AppSrc | Should -Match ([regex]::Escape('$lblCoverPic.Text = "Cover picture: the finished front of the case, {0:N0} x {1:N0} mm"'))
+    }
+
+    It 'falls back to a DVD for a disc it has never heard of' {
+        # A new media key added to the tiers and forgotten here must not throw
+        # or hand back nothing.
+        (Get-CaseForMedia 'HVD99').Case | Should -Be 'dvd'
+        (Get-CaseForMedia '').Case      | Should -Be 'dvd'
+    }
+}
