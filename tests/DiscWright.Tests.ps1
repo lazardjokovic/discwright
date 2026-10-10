@@ -8849,8 +8849,12 @@ Describe 'Saying what the disc in your hand would do, once a set is asked for' -
         }
 
         It 'says fits, not "1 disc", when the set turns out to be one disc' {
+            # The one-disc answer is deliberately contradicted here. In the app
+            # a set of one disc and a disc that holds it are the same fact, so
+            # a row built from the honest pair would read 'fits' whichever half
+            # answered, and the test would pass with the set ignored entirely.
             $tier = @(Get-MediaTiers | Where-Object { $_.Key -eq 'DVD5' })[0]
-            Get-MediaOptionText $tier @{ Ok = $true } $script:HkPlans['DVD5'] |
+            Get-MediaOptionText $tier @{ Ok = $false } $script:HkPlans['DVD5'] |
                 Should -Be 'DVD5 4.7 GB  -  fits'
         }
 
