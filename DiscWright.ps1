@@ -2383,9 +2383,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // ever depended on another, so a caption implying otherwise described a
   // relationship that did not exist.
   function capFor(name){
-    // The game's name above the buttons. It is not the artwork title and never
+    // The game's name above the buttons. It is not the menu title and never
     // was, which is what the reporter who asked for this had assumed: unticking
-    // "title on artwork" draws nothing on the picture and leaves this alone. On
+    // "title on the menu" draws nothing on the background and leaves this alone. On
     // a one-game disc it is the only place the name appears, so it stays on by
     // default and this turns it off for anyone who finds it redundant.
     if(!SHOWCAP) return "";
@@ -4113,7 +4113,7 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
             # An empty title box means "use the disc label" - the box is only for
             # overriding it, so a blank one must not paint an empty title.
             $bgTitle = if ([string]::IsNullOrWhiteSpace($s.TitleText)) { $s.Label } else { $s.TitleText }
-            if ($s.ShowTitle) { & $log "  title on artwork: $bgTitle" }
+            if ($s.ShowTitle) { & $log "  title on the menu: $bgTitle" }
             New-Background $s.BgPath $bgTitle $bgOut $s.PanelSide ([bool]$s.Divider) ([bool]$s.ShowTitle)
         }
 
@@ -4583,7 +4583,7 @@ $chkBgAsIs=New-Object System.Windows.Forms.CheckBox; $chkBgAsIs.Text='Use as-is 
 $lblSide=New-Object System.Windows.Forms.Label; $lblSide.Text='Buttons:'; $lblSide.Location=New-Object System.Drawing.Point(410,82); $lblSide.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblSide)
 $cmbSide=New-Object System.Windows.Forms.ComboBox; $cmbSide.DropDownStyle='DropDownList'; $cmbSide.Location=New-Object System.Drawing.Point(468,79); $cmbSide.Size=New-Object System.Drawing.Size(100,24); [void]$cmbSide.Items.AddRange(@('Right','Left')); $cmbSide.SelectedIndex=0; $grp.Controls.Add($cmbSide)
 
-$lblTitle=New-Object System.Windows.Forms.Label; $lblTitle.Text='Title on artwork:'; $lblTitle.Location=New-Object System.Drawing.Point(15,110); $lblTitle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblTitle)
+$lblTitle=New-Object System.Windows.Forms.Label; $lblTitle.Text='Title on the menu:'; $lblTitle.Location=New-Object System.Drawing.Point(15,110); $lblTitle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblTitle)
 $chkTitle=New-Object System.Windows.Forms.CheckBox; $chkTitle.Text='Show title'; $chkTitle.Location=New-Object System.Drawing.Point(150,108); $chkTitle.Size=New-Object System.Drawing.Size(145,22); $grp.Controls.Add($chkTitle)
 $txtTitle=New-Object System.Windows.Forms.TextBox; $txtTitle.Location=New-Object System.Drawing.Point(300,106); $txtTitle.Size=New-Object System.Drawing.Size(320,24); $txtTitle.Enabled=$false; $grp.Controls.Add($txtTitle)
 
@@ -4639,10 +4639,10 @@ $txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLo
 # window tests find a step's box by that geometry, and a label beside its box
 # is invisible to them.
 AddLabel '7)  Printed artwork (optional):' 15 952 540 | Out-Null
-AddLabel 'Cover picture' 15 976 200 | Out-Null
+AddLabel 'Cover picture: the finished front of the case, 130 x 183 mm' 15 976 420 | Out-Null
 $txtCover = AddText 15 998 525
 $btnCover = AddBtn 'Browse...' 545 998 110
-AddLabel 'Disc face picture' 15 1024 200 | Out-Null
+AddLabel 'Disc face picture: the finished face of the disc, 118 mm across' 15 1024 420 | Out-Null
 $txtDiscArt = AddText 15 1046 525
 $btnDiscArt = AddBtn 'Browse...' 545 1046 110
 $lblArtNote = AddLabel '' 15 1074 645
