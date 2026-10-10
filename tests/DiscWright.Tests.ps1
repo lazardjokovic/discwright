@@ -9693,12 +9693,25 @@ Describe 'Fields that say which thing they are for' -Tag 'Unit' {
     It 'quotes sizes that are the ones the build actually asks for' {
         # A label that disagreed with the renderer would send somebody away to
         # make a picture of the wrong size, which is worse than saying nothing.
-        $script:FormSrc | Should -Match ([regex]::Escape('Get-ArtFitNote $cover 1530 2161'))
+        #
+        # The cover is no longer one fixed size: it follows the case the chosen
+        # disc goes in, so what is checked is that the label is BUILT from the
+        # same place the renderer asks from, and that a DVD still comes out at
+        # the size this test used to hardcode.
+        $script:FormSrc | Should -Match ([regex]::Escape('$cpx = Get-CoverPixels (Get-SelectedMediaKey)'))
+        $script:FormSrc | Should -Match ([regex]::Escape('Get-ArtFitNote $cover $cpx.W $cpx.H'))
+        $script:FormSrc | Should -Match ([regex]::Escape('$cm = Get-CaseForMedia (Get-SelectedMediaKey)'))
+
+        # The disc face does not follow the case: a Blu-ray disc is the same
+        # 120 mm circle as a DVD, so this one stays fixed.
         $script:FormSrc | Should -Match ([regex]::Escape('Get-ArtFitNote $face 1394 1394'))
-        # 1530 x 2161 at 300 dpi is 130 x 183 mm, and 1394 is 118 mm.
+        [Math]::Round(1394 / 300 * 25.4) | Should -Be 118
+
+        # And the starting label, which is what somebody sees before touching
+        # the dropdown, is the DVD one.
+        $script:FormSrc | Should -Match ([regex]::Escape('Cover picture: the finished front of the case, 130 x 183 mm'))
         [Math]::Round(1530 / 300 * 25.4) | Should -Be 130
         [Math]::Round(2161 / 300 * 25.4) | Should -Be 183
-        [Math]::Round(1394 / 300 * 25.4) | Should -Be 118
     }
 
     It 'keeps the menu title label clear of the box beside it' {

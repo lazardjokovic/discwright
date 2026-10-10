@@ -529,6 +529,39 @@ function Get-SmallestSetMedia([hashtable]$s) {
     return $null
 }
 
+# Which case a disc goes in, and how big the front of that case is, so a cover
+# is asked for at the shape of the thing it will be slipped into.
+#
+# xniwo: "With 'Target disc' in DW chosen, perhaps this could sync with specific
+# 'Cover picture' measurements (eg for cd dvd bluray cases)". Every cover was
+# asked for at DVD size before this, so somebody printing for a Blu-ray case was
+# told to make a picture 19 mm too tall, and somebody with a CD jewel case was
+# told to make a tall rectangle for a square insert.
+#
+# A DVD9 is still one disc in one standard case. The double case in the print
+# module holds two discs and nothing here makes two.
+#
+# The numbers are the print module's, repeated rather than imported because the
+# form has to open on an install with no print\ folder: that module is reached
+# into and never reaches back, which is what keeps the ISO builder able to ship
+# without it. A test loads both and fails if they drift apart.
+function Get-CaseForMedia([string]$mediaKey) {
+    switch -Regex ("$mediaKey") {
+        '^CD' { return @{ Case = 'cd';     WidthMm = 120.0; HeightMm = 120.0 } }
+        '^BD' { return @{ Case = 'bluray'; WidthMm = 129.0; HeightMm = 164.0 } }
+        default { return @{ Case = 'dvd';  WidthMm = 129.5; HeightMm = 183.0 } }
+    }
+}
+
+# The same thing in the pixels the renderer draws at, which is what the fit note
+# compares a chosen picture against.
+function Get-CoverPixels([string]$mediaKey) {
+    $c = Get-CaseForMedia $mediaKey
+    return @{ W = [int][Math]::Round($c.WidthMm / 25.4 * 300)
+              H = [int][Math]::Round($c.HeightMm / 25.4 * 300) }
+}
+
+
 # Recommend the smallest media that fits the payload.
 function Get-MediaRec([double]$bytes) {
     $gib = $bytes/1GB
@@ -4639,7 +4672,7 @@ $txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLo
 # window tests find a step's box by that geometry, and a label beside its box
 # is invisible to them.
 AddLabel '7)  Printed artwork (optional):' 15 952 540 | Out-Null
-AddLabel 'Cover picture: the finished front of the case, 130 x 183 mm' 15 976 420 | Out-Null
+$lblCoverPic = AddLabel 'Cover picture: the finished front of the case, 130 x 183 mm' 15 976 420
 $txtCover = AddText 15 998 525
 $btnCover = AddBtn 'Browse...' 545 998 110
 AddLabel 'Disc face picture: the finished face of the disc, 118 mm across' 15 1024 420 | Out-Null
@@ -5174,7 +5207,17 @@ function Update-ArtNote {
     $cover = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
     $face  = if ($state.DiscArtPath) { $state.DiscArtPath } else { $cover }
     $notes = @()
-    $n = Get-ArtFitNote $cover 1530 2161 'Cover'
+    # The label above the box, so somebody is told the size before they go and
+    # make a picture rather than after. Guarded because the logic tests drive
+    # this with stand-in controls.
+    if ($lblCoverPic -is [System.Windows.Forms.Control]) {
+        $cm = Get-CaseForMedia (Get-SelectedMediaKey)
+        $lblCoverPic.Text = "Cover picture: the finished front of the case, {0:N0} x {1:N0} mm" -f $cm.WidthMm, $cm.HeightMm
+    }
+    # Measured against the case the chosen disc goes in, which is not always a
+    # DVD's: a Blu-ray front is 19 mm shorter and a CD insert is square.
+    $cpx = Get-CoverPixels (Get-SelectedMediaKey)
+    $n = Get-ArtFitNote $cover $cpx.W $cpx.H 'Cover'
     if ($n) { $notes += $n }
     $n = Get-ArtFitNote $face 1394 1394 'Disc face'
     if ($n) { $notes += $n }
@@ -6470,7 +6513,8 @@ $btnArtwork.Add_Click({
         $art = New-ArtworkForDisc -Title $(if($txtTitle.Text.Trim()){$txtTitle.Text.Trim()}else{$txtLabel.Text.Trim()}) `
                                   -Label $txtLabel.Text.Trim() -Games $names -AddOnCount $addOns `
                                   -CoverImage $coverPic -DiscImage $facePic `
-                                  -OutDir $out
+                                  -OutDir $out `
+                                  -Case (Get-CaseForMedia (Get-SelectedMediaKey)).Case
 
         # Say which way it was made. Somebody who handed over a finished cover
         # needs to know it was printed untouched, and somebody who did not needs
