@@ -181,6 +181,68 @@ Describe 'Checking a burned disc against what was built' -Tag 'Unit' {
         { Test-BurnedDisc -DiscRoot 'Z:\no\disc' -StagingFolder $script:Sandbox } |
             Should -Throw -ExpectedMessage '*Nothing at*'
     }
+
+    # 10 October 2026, on a real disc. A CD-RW was burned twice, once by the
+    # Windows burner and once by this one, and both times the 728 MB installer
+    # piece came back "Data error (cyclic redundancy check)". The check did not
+    # report that: Get-FileHash wrote an error and returned nothing, .Hash on
+    # nothing threw, and the run ended on a stack trace partway down the disc,
+    # having named no file and said nothing about the rest.
+    #
+    # A lock stands in for the bad sector. What matters is the shape, a read
+    # that throws, and not the reason it threw: a CRC error cannot be arranged
+    # on demand and a test that needed one would never run.
+    Context 'a disc that will not give a file back' {
+
+        BeforeEach {
+            $script:LockHandle = $null
+        }
+        AfterEach {
+            if ($script:LockHandle) { $script:LockHandle.Dispose(); $script:LockHandle = $null }
+        }
+
+        It 'names the file instead of dying on it' {
+            $a = New-Tree 'unread-src' $script:Built
+            $b = New-Tree 'unread-disc' $script:Built
+            $script:LockHandle = [IO.File]::Open((Join-Path $b 'games\game1\a.bin'), 'Open', 'Read', 'None')
+            $r = Test-BurnedDisc -DiscRoot $b -StagingFolder $a
+            $r.Ok | Should -BeFalse
+            $r.Unreadable.Count | Should -Be 1
+            $r.Unreadable[0] | Should -BeLike 'games\game1\a.bin*'
+        }
+
+        It 'keeps it apart from a file that merely came out wrong' {
+            # Different facts. One file came back as the wrong bytes, the other
+            # did not come back at all, and only one of those can be looked at.
+            $a = New-Tree 'unread-apart-src' $script:Built
+            $b = New-Tree 'unread-apart-disc' $script:Built
+            $script:LockHandle = [IO.File]::Open((Join-Path $b 'games\game1\a.bin'), 'Open', 'Read', 'None')
+            $r = Test-BurnedDisc -DiscRoot $b -StagingFolder $a
+            $r.WrongContent | Should -BeNullOrEmpty -Because 'nothing came back to compare against'
+        }
+
+        It 'checks the rest of the disc afterwards' {
+            # The whole reason the old behaviour was unacceptable: it stopped at
+            # the first unreadable file, so a disc could be wrong in three more
+            # places and nobody would ever hear about them.
+            $a = New-Tree 'unread-rest-src' $script:Built
+            $bad = $script:Built.Clone(); $bad['games\game2\b.bin'] = 'bbbz'
+            $b = New-Tree 'unread-rest-disc' $bad
+            $script:LockHandle = [IO.File]::Open((Join-Path $b 'games\game1\a.bin'), 'Open', 'Read', 'None')
+            $r = Test-BurnedDisc -DiscRoot $b -StagingFolder $a
+            $r.Unreadable.Count | Should -Be 1
+            $r.WrongContent | Should -Contain 'games\game2\b.bin'
+        }
+
+        It 'says nothing about readability when it was told not to hash' {
+            $a = New-Tree 'unread-skip-src' $script:Built
+            $b = New-Tree 'unread-skip-disc' $script:Built
+            $script:LockHandle = [IO.File]::Open((Join-Path $b 'games\game1\a.bin'), 'Open', 'Read', 'None')
+            $r = Test-BurnedDisc -DiscRoot $b -StagingFolder $a -SkipHashes
+            $r.Unreadable | Should -BeNullOrEmpty -Because 'nothing was read, so nothing failed to read'
+            $r.Ok | Should -BeTrue
+        }
+    }
 }
 
 Describe 'Refusing to write rather than guessing' -Tag 'Unit' {
@@ -249,9 +311,15 @@ Describe 'The Burn to disc button' -Tag 'Unit' {
     }
 
     It 'names every kind of mismatch rather than just failing' {
-        foreach ($kind in 'Missing', 'Unexpected', 'WrongSize', 'WrongContent') {
+        foreach ($kind in 'Missing', 'Unexpected', 'WrongSize', 'WrongContent', 'Unreadable') {
             $script:Handler | Should -Match "\`$v\.$kind"
         }
+    }
+
+    It 'puts a file that could not be read above the rest, because it is worse' {
+        # A wrong file is a file you can look at. An unreadable one is not
+        # there at all, and on a set it is the disc the next one joins onto.
+        $script:Handler | Should -Match 'could not be read off the disc'
     }
 
     It 'says the burning files are missing rather than failing silently' {
