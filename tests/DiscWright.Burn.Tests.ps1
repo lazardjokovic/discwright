@@ -481,3 +481,64 @@ Describe 'Telling the truth about the disc in the drive' -Tag 'Unit' {
         $src | Should -Not -Match 'This cannot be undone and the disc is not rewritable'
     }
 }
+
+Describe 'Which program writes the discs of a set' -Tag 'Unit' {
+
+    # Ticking "disc set" used to offer the three programs Windows knows about
+    # and not DiscWright, so a set never got the speed this burner picks or the
+    # check it runs afterwards. On 10 October that cost a disc and an evening.
+
+    BeforeAll {
+        $script:Fake = @(
+            @{ Name = 'Windows Disc Image Burning Tool'; What = 'writes it to a blank disc'; Exe = 'C:\isoburn.exe'; Args = '"%1"'; Verb = '' }
+            @{ Name = 'Nero Burning ROM'; What = 'opens it, and burns it its own way'; Exe = 'C:\nero.exe'; Args = '"%1"'; Verb = '' }
+            @{ Name = 'Windows Explorer'; What = 'mounts it as a drive, without burning anything'; Exe = ''; Args = ''; Verb = 'mount' }
+        )
+    }
+
+    It 'puts DiscWright first' {
+        Mock Get-IsoHandoffs { $script:Fake }
+        $c = @(Get-SetBurnChoices)
+        $c[0].Name | Should -Be 'DiscWright'
+        $c[0].Own | Should -BeTrue
+    }
+
+    It 'says what it does that the others do not' {
+        Mock Get-IsoHandoffs { $script:Fake }
+        $c = @(Get-SetBurnChoices)
+        $c[0].What | Should -Match 'below the drive top speed'
+        $c[0].What | Should -Match 'checks every file'
+    }
+
+    It 'leaves out the one that burns nothing' {
+        # "Mounts it as a drive, without burning anything" is an honest label
+        # and a fine thing to offer somebody looking inside an ISO. It is not
+        # an answer to "which program should write these discs", and a walk
+        # that took it would march on to disc 2 having burned nothing at all.
+        Mock Get-IsoHandoffs { $script:Fake }
+        $names = @(Get-SetBurnChoices) | ForEach-Object { $_.Name }
+        $names | Should -Not -Contain 'Windows Explorer'
+    }
+
+    It 'keeps the other burners, because this is a choice and not a redirection' {
+        Mock Get-IsoHandoffs { $script:Fake }
+        $names = @(Get-SetBurnChoices) | ForEach-Object { $_.Name }
+        $names | Should -Contain 'Windows Disc Image Burning Tool'
+        $names | Should -Contain 'Nero Burning ROM'
+        @(Get-SetBurnChoices).Count | Should -Be 3
+    }
+
+    It 'offers itself even on a machine where nothing else is registered' {
+        # The old list could come back empty and the walk would say nothing on
+        # this machine opens an ISO. DiscWright opens its own ISOs.
+        Mock Get-IsoHandoffs { @() }
+        $c = @(Get-SetBurnChoices)
+        $c.Count | Should -Be 1
+        $c[0].Name | Should -Be 'DiscWright'
+    }
+
+    It 'marks only itself as its own' {
+        Mock Get-IsoHandoffs { $script:Fake }
+        @(@(Get-SetBurnChoices) | Where-Object { $_.Own }).Count | Should -Be 1
+    }
+}

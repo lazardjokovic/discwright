@@ -6272,16 +6272,102 @@ $txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Upda
 # The ISO is handed over and that is all. Driving another burner's command line
 # would mean knowing every one of them, and getting it wrong costs a disc.
 
+# One disc, written here and then read back, for the set walk.
+#
+# The Burn to disc button has done this for a single disc since burning
+# shipped: find a ready drive, refuse if the ISO will not fit, pick a speed
+# below the drive's maximum, write, then hash every file against the folder the
+# ISO was built from. A set got none of it, because the walk only ever handed
+# ISOs to other programs. Lifted out here so both can have it.
+#
+# Returns @{ Ok; Why; Seconds }, never throws. The walk has to be able to say
+# "disc 2 did not come out right" and stop, which it cannot do with an
+# exception in the middle of a sequence of dialogs.
+#
+# $stageDir is the folder this disc was built from, 'disc D1' beside the ISO.
+# Without it there is a burn and no check, which is the state this whole change
+# exists to end, so a missing one is a refusal rather than a shrug.
+function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblock]$log) {
+    if (-not (Test-Path -LiteralPath $isoPath)) { return @{ Ok = $false; Why = "There is no ISO at $isoPath." } }
+    if (-not (Test-Path -LiteralPath $stageDir)) {
+        return @{ Ok = $false; Why = "There is nothing at $stageDir to check the disc against, so it was not burned." }
+    }
+    $iso = Get-Item -LiteralPath $isoPath
+
+    try { $burners = @(Get-BurnerInfo) }
+    catch { return @{ Ok = $false; Why = "The burning service could not be asked anything: $($_.Exception.Message)" } }
+    if (-not $burners.Count) { return @{ Ok = $false; Why = 'No disc recorder was found on this machine.' } }
+    $d = $burners | Where-Object { $_.Ready } | Select-Object -First 1
+    if (-not $d) {
+        return @{ Ok = $false
+                  Why = 'No drive is ready: ' + (($burners | ForEach-Object { "$($_.Drive) $($_.Why)" }) -join '; ') }
+    }
+
+    $fit = Test-IsoFitsMedia -IsoBytes $iso.Length -FreeSectors $d.FreeSectors
+    if (-not $fit.Fits) {
+        return @{ Ok = $false
+                  Why = ("$($iso.Name) needs {0:N0} MB and the $($d.MediaName) in $($d.Drive) has {1:N0} MB. Nothing was written." -f ($fit.IsoBytes / 1MB), ($fit.FreeBytes / 1MB)) }
+    }
+
+    # Slower than the drive would choose, same cap as the single disc button.
+    # Cheap media written at full speed is the usual way to make a coaster.
+    $cap  = if ($d.MediaType -in 1, 2, 3) { 16 } else { 8 }
+    $pick = $d.Speeds | Where-Object { $_.Multiple -le $cap } | Select-Object -First 1
+    if (-not $pick) { $pick = $d.Speeds | Select-Object -Last 1 }
+    $speedText = if ($pick) { "$($pick.Multiple)x" } else { "the drive's own choice" }
+
+    try {
+        $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false }
+        if ($pick) { $burnArgs.Speed = "$($pick.Multiple)x" }
+        & $log "Writing $($iso.Name) to $($d.Drive) at $speedText. The window will not respond until it finishes."
+        $r = Write-IsoToDisc @burnArgs
+    }
+    catch { return @{ Ok = $false; Why = "The disc could not be written: $($_.Exception.Message)" } }
+
+    # Written is not the same as readable, which is the entire point. The drive
+    # ejects at the end of a write so the next read sees a freshly mounted
+    # volume rather than what Windows remembered about the blank.
+    $root = ($d.Drive.TrimEnd('\') + '\')
+    if (-not (Show-Confirm ("Disc written in $($r.Seconds) seconds, and the drive has ejected it." + [Environment]::NewLine + [Environment]::NewLine +
+                            'Close the tray, wait for Windows to read the disc, then press Yes to check every file on it.' + [Environment]::NewLine + [Environment]::NewLine +
+                            'Check it now?') 'Written')) {
+        return @{ Ok = $false; Seconds = $r.Seconds
+                  Why = 'The disc was written but not checked, so nothing here knows whether it reads back.' }
+    }
+    if (-not (Test-Path -LiteralPath $root)) {
+        return @{ Ok = $false; Seconds = $r.Seconds; Why = "$root is not readable, so the disc was not checked." }
+    }
+
+    & $log "Checking every file on $root against what was built..."
+    try { $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stageDir }
+    catch { return @{ Ok = $false; Seconds = $r.Seconds; Why = "The disc could not be checked: $($_.Exception.Message)" } }
+    if ($v.Ok) { return @{ Ok = $true; Seconds = $r.Seconds; Why = "all $($v.FilesOnDisc) files match" } }
+
+    $detail = @()
+    if ($v.Unreadable.Count)   { $detail += "could not be read off the disc: $($v.Unreadable -join ', ')" }
+    if ($v.Missing.Count)      { $detail += "missing: $($v.Missing -join ', ')" }
+    if ($v.Unexpected.Count)   { $detail += "unexpected: $($v.Unexpected -join ', ')" }
+    if ($v.WrongSize.Count)    { $detail += "wrong size: $($v.WrongSize -join ', ')" }
+    if ($v.WrongContent.Count) { $detail += "wrong contents: $($v.WrongContent -join ', ')" }
+    return @{ Ok = $false; Seconds = $r.Seconds; Why = ($detail -join '; ') }
+}
+
 # Hand a set to a burner, one disc at a time, in order.
 #
 # A set is only a set once every disc is burned, and the thing most likely to
 # go wrong is burning them out of order or losing count. So this walks them:
 # disc 1, then ask, disc 2, then ask.
 #
-# It asks rather than detects, and says so. DiscWright hands the ISO to another
-# program and that program says nothing back - there is no way to know a burn
-# finished, or worked. Pretending otherwise would be the one thing worse than
-# asking: a set reported as burned when disc 2 never wrote.
+# DiscWright goes on that list first, and until 11 October it did not. Ticking
+# "disc set" quietly took away the burner this application already had, the one
+# that picks a speed below the drive's maximum and hashes every file afterwards,
+# and offered three outside programs instead. A set is the case that needs those
+# two things MOST: the discs are written one after another, and disc 2 is no use
+# at all if disc 1 came out wrong, which is exactly what happened on 10 October.
+#
+# Handing off is still here and still honest about what it cannot know: another
+# program says nothing back, so the walk asks whether that disc is done rather
+# than claiming to know. Burning here, it does know, so it does not ask.
 #
 # Returns nothing. Every exit is a sentence in the log, because a set half
 # burned is a thing somebody will come back to tomorrow needing to know where
@@ -6298,7 +6384,7 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
         $burner = $(if ($burnerPath) { $burnerPath } else { Join-Path $PSScriptRoot ('burn' + [char]92 + 'DiscWright.Burn.ps1') })
         if (-not (Test-Path $burner)) { & $log 'The burning files are not installed, so the discs were not offered.'; return }
         . $burner
-        $picks = @(Get-IsoHandoffs)
+        $picks = @(Get-SetBurnChoices)
     }
     $picks = @($picks)
     if (-not $picks.Count) {
@@ -6308,8 +6394,10 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
 
     $start = "The set is $n discs." + [Environment]::NewLine + [Environment]::NewLine +
              'They can be burned one at a time from here, in order.' + [Environment]::NewLine + [Environment]::NewLine +
-             'DiscWright hands each ISO to your burning program and cannot tell when it has' +
-             ' finished, so it will ask you before moving on to the next one.' + [Environment]::NewLine + [Environment]::NewLine +
+             'DiscWright can write them itself, below the speed the drive would choose, and' +
+             ' check every file on each disc before asking for the next blank. Handed to' +
+             ' another program instead, it cannot tell when that program has finished, so it' +
+             ' will ask you.' + [Environment]::NewLine + [Environment]::NewLine +
              'Burn them now?'
     if (-not (Show-Confirm $start "Burn $n discs")) {
         & $log "The $n ISOs are written. Burn each one to its own disc, in order, and label them."
@@ -6329,11 +6417,38 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
         $name = Split-Path $isos[$i] -Leaf
         $ask = "Disc $d of $n" + [Environment]::NewLine + [Environment]::NewLine + $name +
                [Environment]::NewLine + [Environment]::NewLine +
-               'Put a blank disc in, then press Yes to open it in ' + $chosen.Name + '.'
+               $(if ($chosen.Own) { 'Put a blank disc in, then press Yes to write it.' }
+                 else { 'Put a blank disc in, then press Yes to open it in ' + $chosen.Name + '.' })
         if (-not (Show-Confirm $ask "Disc $d of $n")) {
             & $log "Stopped at disc $d of $n. The rest are written and can be burned later."
             return
         }
+
+        # Burned here, so the result is known and the walk stops on a bad disc
+        # rather than asking for the next blank. Disc 2 of a cut game is no use
+        # on its own: the file it carries half of is joined back together from
+        # both, so carrying on after disc 1 failed is spending a blank to make
+        # half of nothing.
+        if ($chosen.Own) {
+            # Built by hand rather than with Join-Path, which asks the provider
+            # about the drive and throws DriveNotFoundException for a path on a
+            # drive this machine does not have. The ISO's own path is the only
+            # thing being read here, and a drive that is absent is a fact for
+            # Invoke-DiscBurnAndCheck to report, not a reason to fall over
+            # while working out a folder name.
+            $stage = (Split-Path $isos[$i] -Parent).TrimEnd([char]92) + [char]92 + ('disc D{0}' -f $d)
+            $res = Invoke-DiscBurnAndCheck $isos[$i] $stage $log
+            if (-not $res.Ok) {
+                & $log "ERROR: disc $d of $n did not come out right: $($res.Why)"
+                Show-Warn ("Disc $d of $n did not come out right:" + [Environment]::NewLine + [Environment]::NewLine +
+                           $res.Why + [Environment]::NewLine + [Environment]::NewLine +
+                           'Do not rely on this disc. The remaining ISOs are written and can be burned once this one has.')
+                return
+            }
+            & $log "Disc $d of $n written and checked: $($res.Why)."
+            continue
+        }
+
         try {
             Start-IsoHandoff $chosen $isos[$i]
             & $log "Handed disc $d of $n to $($chosen.Name): $name"
@@ -6357,7 +6472,8 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
             }
         }
     }
-    & $log "All $n discs have been handed over. Label them 1 to $n if you have not already."
+    & $log $(if ($chosen.Own) { "All $n discs written and checked. Label them 1 to $n if you have not already." }
+             else { "All $n discs have been handed over. Label them 1 to $n if you have not already." })
 }
 
 # Which program opens the ISO. Lifted out of the Burn with... button so the
@@ -6370,7 +6486,7 @@ function Select-IsoHandoff($picks, $parent) {
     $dlg.ClientSize = New-Object System.Drawing.Size(460, 172)
 
     $l = New-Object System.Windows.Forms.Label
-    $l.Text = 'Hand each disc to which program?'
+    $l.Text = 'Write each disc with which program?'
     $l.Location = New-Object System.Drawing.Point(15, 14); $l.Size = New-Object System.Drawing.Size(430, 20)
     $dlg.Controls.Add($l)
 
@@ -6380,8 +6496,11 @@ function Select-IsoHandoff($picks, $parent) {
     $lst.SelectedIndex = 0
     $dlg.Controls.Add($lst)
 
+    # The note was 'DiscWright only opens it', which stopped being true the day
+    # DiscWright put itself on this list. It is still true of every other row,
+    # and that is the thing worth knowing before picking one.
     $note = New-Object System.Windows.Forms.Label
-    $note.Text = 'DiscWright only opens it. What happens next is that program''s business.'
+    $note.Text = 'Anything but DiscWright only gets opened. What happens next is that program''s business.'
     $note.Location = New-Object System.Drawing.Point(15, 108); $note.Size = New-Object System.Drawing.Size(430, 20)
     $note.ForeColor = [System.Drawing.Color]::DimGray
     $dlg.Controls.Add($note)
