@@ -9648,3 +9648,71 @@ Describe 'Hashing a game without the window seizing up' -Tag 'Unit' {
         $script:VSrc | Should -Match ([regex]::Escape('function setWaitExec(exec,after){'))
     }
 }
+
+Describe 'Fields that say which thing they are for' -Tag 'Unit' {
+
+    # Three labels xniwo read as something other than what they set, which is
+    # the only report of its kind this project has: he is the one person who
+    # has come to the app without having built it.
+    #
+    # "I wasn't sure what 'title on artwork' meant at first, but I realise now
+    # that it was for a label on the top left of the menu and not for a Game
+    # title or game name."
+    #
+    # It sets text on the MENU. It said "artwork", and since then the app has
+    # grown real printed artwork, so the word now points at the wrong half of
+    # the form entirely.
+    #
+    # "I wondered what 'Printed artwork Cover picture' might include at first.
+    # I thought it was for a dvd background (such as a wallpaper or repeat
+    # pattern) and not the main text, but realised it was for a fully finished
+    # image."
+    #
+    # So both picture fields say what they want and how big it is. The sizes
+    # are not decoration: they are the panel and the disc the build asks for,
+    # 1530 x 2161 and 1394 x 1394 at 300 dpi, and a label that disagreed with
+    # those would be worse than no label.
+
+    BeforeAll {
+        $script:FormSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+    }
+
+    It 'calls the menu title what it is' {
+        $script:FormSrc | Should -Match ([regex]::Escape("lblTitle.Text='Title on the menu:'"))
+        $script:FormSrc | Should -Not -Match 'Title on artwork'
+    }
+
+    It 'says a cover picture is a finished front, and how big' {
+        $script:FormSrc | Should -Match ([regex]::Escape('Cover picture: the finished front of the case, 130 x 183 mm'))
+    }
+
+    It 'says a disc face is the face of the disc, and how big' {
+        $script:FormSrc | Should -Match ([regex]::Escape('Disc face picture: the finished face of the disc, 118 mm across'))
+    }
+
+    It 'quotes sizes that are the ones the build actually asks for' {
+        # A label that disagreed with the renderer would send somebody away to
+        # make a picture of the wrong size, which is worse than saying nothing.
+        $script:FormSrc | Should -Match ([regex]::Escape('Get-ArtFitNote $cover 1530 2161'))
+        $script:FormSrc | Should -Match ([regex]::Escape('Get-ArtFitNote $face 1394 1394'))
+        # 1530 x 2161 at 300 dpi is 130 x 183 mm, and 1394 is 118 mm.
+        [Math]::Round(1530 / 300 * 25.4) | Should -Be 130
+        [Math]::Round(2161 / 300 * 25.4) | Should -Be 183
+        [Math]::Round(1394 / 300 * 25.4) | Should -Be 118
+    }
+
+    It 'keeps the menu title label clear of the box beside it' {
+        # The label has 130 px before the Show title checkbox at x=150, and a
+        # longer name would run under it. This is the row the form has already
+        # had an overlap bug on.
+        Add-Type -AssemblyName System.Drawing
+        $font = New-Object System.Drawing.Font('Segoe UI', 9)
+        $bmp = New-Object System.Drawing.Bitmap(1, 1)
+        $gfx = [System.Drawing.Graphics]::FromImage($bmp)
+        try {
+            $w = [int]$gfx.MeasureString('Title on the menu:', $font).Width
+            $w | Should -BeLessOrEqual 130 -Because "it is $w px and the checkbox starts 135 px along"
+        }
+        finally { $gfx.Dispose(); $bmp.Dispose(); $font.Dispose() }
+    }
+}
