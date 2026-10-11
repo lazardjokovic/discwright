@@ -1097,6 +1097,15 @@ Describe 'Choosing which writer to use, on a machine that has two' {
             (Get-BurnTarget @()).Why | Should -Match 'No disc recorder'
         }
 
+        It 'refuses the same way when it is handed nothing rather than an empty list' {
+            # A PowerShell function returning @() hands back nothing at all,
+            # so the caller's variable is $null, and piping $null yields one
+            # $null rather than nothing. Without allowing for that, a machine
+            # with no recorder reports that no drive is ready, about a drive
+            # that does not exist.
+            (Get-BurnTarget $null).Why | Should -Match 'No disc recorder'
+        }
+
         It 'takes the only drive without asking anything' {
             $r = Get-BurnTarget @((New-Burner 'D:\' $true))
             $r.Target.Drive | Should -Be 'D:\'
@@ -1109,6 +1118,25 @@ Describe 'Choosing which writer to use, on a machine that has two' {
             $r = Get-BurnTarget @((New-Burner 'D:\' $false 'no disc'), (New-Burner 'E:\' $true))
             $r.Target.Drive | Should -Be 'E:\'
             $r.Ask | Should -BeNullOrEmpty
+        }
+
+        It 'takes the list of drives however it is handed over' {
+            # Get-BurnerInfo ends with "return , $out" so that a machine with
+            # one recorder still hands back a list. That makes
+            # @(Get-BurnerInfo) an array holding an array, which two call
+            # sites wrote and got away with for a year, because the next thing
+            # they did was pipe it and a pipe unrolls.
+            #
+            # The first code to ask it for .Count instead saw one drive, chose
+            # it, and handed a burner that was really two burners on to
+            # Test-IsoFitsMedia. It only shows on a machine with a second
+            # writer plugged in, which is where it was found.
+            $two = @((New-Burner 'D:\' $false 'no disc'), (New-Burner 'E:\' $true))
+            $wrapped = @(, $two)
+            $wrapped.Count | Should -Be 1 -Because 'this is the shape the trap arrives in'
+            $r = Get-BurnTarget $wrapped
+            $r.Target.Drive | Should -Be 'E:\'
+            @($r.Target.FreeSectors).Count | Should -Be 1 -Because 'two drives in one burner fails later and worse'
         }
 
         It 'says which drives it looked at when none of them is ready' {
