@@ -10189,7 +10189,11 @@ Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
     It 'lets its callers carry on afterwards instead of guessing' {
         # Both callers used to read the result on the next line, which is no
         # longer there to read.
-        $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(dir,function(){ show(); })'))
+        #
+        # The copy's caller says st.dir rather than dir now: the copy became a
+        # stepped loop carrying its own state, so that it stops holding the
+        # script engine shut. Same folder, named by where it is kept.
+        $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(st.dir,function(){ show(); })'))
         $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(dir,function(){ show(); setInstall(); }); return;'))
     }
 }
@@ -11152,5 +11156,230 @@ Describe 'A checksum list that can be caught lying' {
         $fn = $src.Substring($src.IndexOf('function discCheck('), 1200)
         $fn | Should -Match 'declared'
         $fn | Should -Match 'damaged, so nothing it says about this disc can be relied on'
+    }
+}
+
+Describe 'The disc menu copying without holding the script engine shut' {
+
+    # Reported on 11 October from a real restore: partway through, the menu put
+    # up "Stop running this script? A script on this page is causing your web
+    # browser to run slowly. If it continues to run, your computer might become
+    # unresponsive." Answering Yes to that abandons a restore halfway through.
+    #
+    # The join and the check already start their work and then poll for it.
+    # The copy did not: it was a plain loop around Run(cmd,1,true), which
+    # waits, and copying 694 MB off a CD is four minutes with the engine held
+    # shut. The longest of the three was the one left blocking.
+
+    BeforeDiscovery {
+        $script:HaveCs4 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:Cs4 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        $script:MenuSrc = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+
+        function Get-JsFn3([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        $script:CpDir = Join-Path ([IO.Path]::GetTempPath()) ('dwcp_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:CpDir | Out-Null
+
+        # Runs the real copy loop out of the application under cscript, with
+        # only the things it talks to stubbed. Under cscript there is no
+        # window.setTimeout, so setWaitExec takes its WScript.Sleep branch,
+        # which is the same shape of poll.
+        function Invoke-CopyJs([string]$src, [string]$dst, [string[]]$files) {
+            $list = ($files | ForEach-Object { '{f:' + (ConvertTo-Json $_) + '}' }) -join ','
+            $js = @(
+                'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+                'var SEP = String.fromCharCode(92);'
+                'var root = ' + (ConvertTo-Json $src) + ';'
+                'var SETCOPYING = "";'
+                'var SAID = []; function setSay(m, good){ SAID[SAID.length] = m; }'
+                'var SHOWN = 0; function show(){ SHOWN++; }'
+                'var JOINED = 0; function setJoinAll(dir, after){ JOINED++; if (after) after(0); }'
+                (Get-JsFn3 $script:MenuSrc 'setQuote')
+                (Get-JsFn3 $script:MenuSrc 'setCopyCmd')
+                (Get-JsFn3 $script:MenuSrc 'setWaitExec')
+                (Get-JsFn3 $script:MenuSrc 'setCopyStep')
+                'setCopyStep({dir:' + (ConvertTo-Json $dst) + ',mine:[' + $list + '],at:0,bad:0});'
+                'WScript.Echo("joined=" + JOINED + " shown=" + SHOWN + " said=" + SAID.join("|"));'
+            )
+            $f = Join-Path $script:CpDir ('c_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            return ((@(& $script:Cs4 //Nologo //E:JScript $f 2>&1) -join "`n").Trim())
+        }
+    }
+
+    AfterAll {
+        if ($script:CpDir -and (Test-Path $script:CpDir)) {
+            Remove-Item $script:CpDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'the shape of it' {
+
+        It 'no longer waits on a blocking Run' {
+            # Run(cmd, style, true) is the wait. This is the whole bug.
+            $fn = Get-JsFn3 $script:MenuSrc 'setCopy'
+            $fn | Should -Not -Match '\.Run\('
+            $fn | Should -Match 'setCopyStep'
+        }
+
+        It 'starts each copy and polls it, the way the join and the check do' {
+            $fn = Get-JsFn3 $script:MenuSrc 'setCopyStep'
+            $fn | Should -Match '\.Exec\('
+            $fn | Should -Match 'setWaitExec'
+        }
+
+        It 'says which file it is on while it works' {
+            # A menu that says nothing for four minutes is one somebody closes,
+            # which is the same lesson the burn window taught.
+            Get-JsFn3 $script:MenuSrc 'setCopyStep' | Should -Match 'SETCOPYING'
+            Get-JsFn3 $script:MenuSrc 'setSentence' | Should -Match 'SETCOPYING'
+        }
+    }
+
+    Context 'and what it does when it runs' {
+
+        It 'copies every file, including one in a subfolder' -Skip:(-not $script:HaveCs4) {
+            $src = Join-Path $script:CpDir 'src1'
+            $dst = Join-Path $script:CpDir 'dst1'
+            New-Item -ItemType Directory -Force -Path (Join-Path $src 'AUTORUN') | Out-Null
+            New-Item -ItemType Directory -Force -Path $dst | Out-Null
+            Set-Content -LiteralPath (Join-Path $src 'one.bin') -Value 'one' -Encoding Ascii -NoNewline
+            Set-Content -LiteralPath (Join-Path $src 'AUTORUN\two.bin') -Value 'two' -Encoding Ascii -NoNewline
+
+            $out = Invoke-CopyJs $src $dst @('one.bin', 'AUTORUN/two.bin')
+            $out | Should -Match 'joined=1'
+            $out | Should -Match 'said=$' -Because 'nothing went wrong, so it should say nothing'
+            Test-Path (Join-Path $dst 'one.bin') | Should -BeTrue
+            Test-Path (Join-Path $dst 'AUTORUN\two.bin') | Should -BeTrue
+            (Get-Content (Join-Path $dst 'AUTORUN\two.bin') -Raw) | Should -Be 'two'
+        }
+
+        It 'redraws between files rather than once at the end' {
+            # The reason the whole thing was rewritten: a bar that cannot be
+            # drawn until the work is over is not a bar.
+            $src = Join-Path $script:CpDir 'src2'
+            $dst = Join-Path $script:CpDir 'dst2'
+            foreach ($d in $src, $dst) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
+            foreach ($n in 'a.bin', 'b.bin', 'c.bin') {
+                Set-Content -LiteralPath (Join-Path $src $n) -Value $n -Encoding Ascii -NoNewline
+            }
+            $out = Invoke-CopyJs $src $dst @('a.bin', 'b.bin', 'c.bin')
+            if (-not $script:HaveCs4) { Set-ItResult -Skipped -Because 'no cscript'; return }
+            ($out -replace '.*shown=(\d+).*', '$1') | Should -BeGreaterThan 3
+        }
+
+        It 'counts a file it could not copy and says so' -Skip:(-not $script:HaveCs4) {
+            # robocopy answers 8 and up for a real failure, which is what a
+            # scratched disc gives. Below that is "copied" and "nothing to do".
+            $dst = Join-Path $script:CpDir 'dst3'
+            New-Item -ItemType Directory -Force -Path $dst | Out-Null
+            $out = Invoke-CopyJs (Join-Path $script:CpDir 'no-such-disc') $dst @('x.bin')
+            $out | Should -Match 'said=1 of 1 files would not copy'
+            $out | Should -Match 'may be scratched'
+            $out | Should -Match 'joined=0' -Because 'a bad copy must not go on to join anything'
+        }
+    }
+}
+
+Describe 'What the disc menu claims after checking only part of a set' {
+
+    # Worked out during discovery as well as in BeforeAll, for the same reason
+    # the GOG block does it twice: -Skip: is decided while Pester is
+    # discovering, and a value set only in BeforeAll leaves every test here
+    # skipped on a machine that has cscript. Which is what happened.
+    BeforeDiscovery {
+        $script:HaveCs5 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    # Said on 11 October after pressing Check every file with one disc of two
+    # copied: it answered "Every file in that folder is byte for byte what was
+    # burned." True of the files it looked at, and it reads as though the set
+    # were done.
+
+    BeforeAll {
+        $script:VSrc = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        function Get-JsFn4([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+        $script:VDir = Join-Path ([IO.Path]::GetTempPath()) ('dwv_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:VDir | Out-Null
+
+        $script:HaveCs5 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        # setVerify with the hashing stubbed out to succeed: what is under test
+        # is the sentence it chooses, not certutil.
+        function Invoke-VerifyJs([int]$total, [int]$present) {
+            $rows = @(1..$total | ForEach-Object { '{f:"f' + $_ + '.bin",h:"x"}' }) -join ','
+            $here = @(1..$present | ForEach-Object { '"f' + $_ + '.bin"' }) -join ','
+            $js = @(
+                'var HERE = [' + $here + '];'
+                'var fso = { FileExists: function(p){ for (var i=0;i<HERE.length;i++){ if (p == HERE[i]) return true; } return false; } };'
+                'function setDir(){ return "D:' + [string][char]92 + [string][char]92 + 'x"; }'
+                'function setRows(){ return [' + $rows + ']; }'
+                'function setPath(dir, rel){ return rel; }'
+                'var SAID = ""; function setSay(m, good){ SAID = m; }'
+                'function setCheckRun(list, at, bad, after){ after([]); }'
+                (Get-JsFn4 $script:VSrc 'setVerify')
+                'setVerify();'
+                'WScript.Echo(SAID);'
+            )
+            $f = Join-Path $script:VDir ('v_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            return ((@(& $script:HaveCs5 //Nologo //E:JScript $f 2>&1) -join "`n").Trim())
+        }
+    }
+
+    AfterAll {
+        if ($script:VDir -and (Test-Path $script:VDir)) {
+            Remove-Item $script:VDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'says how many are still to come when only part of the set is there' -Skip:(-not $script:HaveCs5) {
+        $out = Invoke-VerifyJs 9 5
+        $out | Should -Match 'The 5 files here are byte for byte what was burned'
+        $out | Should -Match '4 more files are still to come off the other discs'
+    }
+
+    It 'counts one remaining file as a file, not as files' -Skip:(-not $script:HaveCs5) {
+        (Invoke-VerifyJs 2 1) | Should -Match '1 more file is still to come'
+    }
+
+    It 'keeps the plain sentence once the whole set is there' -Skip:(-not $script:HaveCs5) {
+        # The good case has to stay short. It is the one people see most.
+        (Invoke-VerifyJs 9 9) | Should -Be 'Every file in that folder is byte for byte what was burned.'
     }
 }
