@@ -286,6 +286,263 @@ function Get-BurnerInfo {
     return , $out
 }
 
+# --- what the drive says while it is writing ----------------------------------
+#
+# IMAPI has reported progress all along and nothing here listened. A burn was
+# one blocking call that said nothing for ten minutes, so every dialog in the
+# application ended up warning that the window would stop responding and that
+# this was normal. It was not normal. It was unobserved.
+#
+# The engine fires DDiscFormat2DataEvents::Update roughly once a second with the
+# sector it has reached, the phase it is in and its own estimate of the time
+# left. The interface id and the dispid below are read back off imapi2.dll's own
+# typelib by the test suite rather than trusted, because both of the values this
+# was first written with were wrong: the interface is 2735413C, not 2735412A,
+# and Update is dispid 0x200, not 0x100. A sink declaring the wrong dispid is
+# advised quite happily and then never called, which looks exactly like a drive
+# that does not report progress at all.
+#
+# PowerShell's own Register-ObjectEvent cannot do this job. Its handlers run
+# when the runspace is free, and the runspace is the very thing blocked inside
+# Write, so every update would arrive in a heap once the burn had finished. A
+# managed sink is called on the thread doing the writing, while it writes, which
+# is the only moment the news is any use.
+
+# One sector, on every optical format DiscWright writes to. Named rather than
+# repeated, because this number is what turns a sector count into megabytes.
+$script:BurnSectorBytes = 2048
+
+function Add-BurnProgressType {
+    if ('DiscWright.BurnProgressHook' -as [type]) { return }
+    Add-Type -TypeDefinition @'
+using System;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+
+namespace DiscWright
+{
+    // The dispinterface the burn engine calls back on. Declared by hand because
+    // a stock Windows carries no interop assembly for IMAPI2, and generating one
+    // at runtime is a great deal of machinery for one method.
+    [ComImport, Guid("2735413C-7F64-5B0F-8F00-5D77AFBE261E"),
+     InterfaceType(ComInterfaceType.InterfaceIsIDispatch)]
+    public interface IBurnEvents
+    {
+        [DispId(0x200)]
+        void Update([In, MarshalAs(UnmanagedType.IDispatch)] object sender,
+                    [In, MarshalAs(UnmanagedType.IDispatch)] object progress);
+    }
+
+    [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+    public class BurnProgressSink : IBurnEvents
+    {
+        public int ActionCode = -1;
+        public long SectorsDone = 0;
+        public long SectorsTotal = 0;
+        public int ElapsedSeconds = -1;
+        public int RemainingSeconds = -1;
+        public int TotalSeconds = -1;
+        public int Updates = 0;
+        public string LastError = "";
+        public Action<object> Report;
+
+        public void Update(object sender, object progress)
+        {
+            try
+            {
+                ActionCode = ToInt(Read(progress, "CurrentAction"), -1);
+                long start = ToLong(Read(progress, "StartLba"), 0);
+                long last = ToLong(Read(progress, "LastWrittenLba"), 0);
+                SectorsTotal = ToLong(Read(progress, "SectorCount"), 0);
+                // Counted from where this write began rather than from the start
+                // of the disc: a write that appends starts partway in.
+                SectorsDone = last - start;
+                if (SectorsDone < 0) { SectorsDone = 0; }
+                if (SectorsTotal > 0 && SectorsDone > SectorsTotal) { SectorsDone = SectorsTotal; }
+                ElapsedSeconds = ToInt(Read(progress, "ElapsedTime"), -1);
+                RemainingSeconds = ToInt(Read(progress, "RemainingTime"), -1);
+                TotalSeconds = ToInt(Read(progress, "TotalTime"), -1);
+                Updates++;
+            }
+            catch (Exception ex) { LastError = "reading progress: " + ex.Message; }
+
+            // Nothing in here may throw back into the engine. A disc is being
+            // written. A bar that cannot be drawn is not a reason to lose it.
+            Action<object> r = Report;
+            if (r != null)
+            {
+                try { r(this); }
+                catch (Exception ex) { LastError = "showing progress: " + ex.Message; }
+            }
+        }
+
+        // Late bound on purpose. The event argument is an IDispatch, and naming
+        // its interface would mean declaring every member of it; asking for one
+        // property by name costs nothing, and a property this build has never
+        // heard of comes back null instead of throwing.
+        static object Read(object o, string name)
+        {
+            if (o == null) { return null; }
+            try { return o.GetType().InvokeMember(name, BindingFlags.GetProperty, null, o, null); }
+            catch { return null; }
+        }
+        static int ToInt(object v, int fallback)
+        { try { return v == null ? fallback : Convert.ToInt32(v); } catch { return fallback; } }
+        static long ToLong(object v, long fallback)
+        { try { return v == null ? fallback : Convert.ToInt64(v); } catch { return fallback; } }
+    }
+
+    public class BurnProgressHook
+    {
+        IConnectionPoint point;
+        int cookie;
+        public BurnProgressSink Sink;
+        public string Why = "";
+        public bool Ok { get { return cookie != 0; } }
+
+        public static BurnProgressHook Attach(object format, Action<object> report)
+        {
+            BurnProgressHook h = new BurnProgressHook();
+            h.Sink = new BurnProgressSink();
+            h.Sink.Report = report;
+            try
+            {
+                IConnectionPointContainer c = format as IConnectionPointContainer;
+                if (c == null) { h.Why = "the burn engine offers no events at all"; return h; }
+                Guid iid = typeof(IBurnEvents).GUID;
+                IConnectionPoint cp;
+                c.FindConnectionPoint(ref iid, out cp);
+                if (cp == null) { h.Why = "no connection point for " + iid.ToString("B"); return h; }
+                int ck;
+                cp.Advise(h.Sink, out ck);
+                if (ck == 0) { h.Why = "the engine took the listener and handed back no cookie"; return h; }
+                h.point = cp;
+                h.cookie = ck;
+            }
+            catch (Exception ex) { h.Why = ex.GetType().Name + ": " + ex.Message; }
+            return h;
+        }
+
+        // Called from a finally, so it says nothing and refuses to throw. The
+        // engine holds the sink until it is dropped, and a sink left advised on
+        // a format object that gets reused would report a second burn into the
+        // first burn's window.
+        public void Detach()
+        {
+            try { if (point != null && cookie != 0) { point.Unadvise(cookie); } }
+            catch { }
+            cookie = 0;
+            point = null;
+            if (Sink != null) { Sink.Report = null; }
+        }
+    }
+}
+'@
+}
+
+<#
+    Start listening to a burn, and hand every update to a scriptblock.
+
+    Returns the hook whether or not it worked: .Ok says which and .Why says why
+    not. A drive that will not report progress is a worse burn to sit through,
+    never a reason to refuse to burn.
+#>
+function Register-BurnProgress {
+    param(
+        [Parameter(Mandatory)]$Format,
+        [Parameter(Mandatory)][scriptblock]$Report
+    )
+    Add-BurnProgressType
+    # Cast here rather than at the call site. The sink field is a delegate, and a
+    # scriptblock handed over as one runs on whichever thread calls it, which is
+    # the thread inside Write. That is the entire point of doing it this way.
+    return [DiscWright.BurnProgressHook]::Attach($Format, [Action[object]]$Report)
+}
+
+# The eight phases a data burn reports, in the words this application uses.
+# Values 0 to 7 of _IMAPI_FORMAT2_DATA_WRITE_ACTION, read off the typelib rather
+# than remembered, and an unknown code is reported as itself: a drive that
+# invents a ninth phase must not make the window claim it is writing.
+function Get-BurnPhaseName([int]$code) {
+    switch ($code) {
+        0 { 'checking the disc' }
+        1 { 'formatting the disc' }
+        2 { 'getting the drive ready' }
+        3 { 'setting the laser power' }
+        4 { 'writing' }
+        5 { 'closing the disc' }
+        6 { 'finished' }
+        7 { 'the drive is reading back what it wrote' }
+        default { "step $code" }
+    }
+}
+
+# mm:ss, or h:mm:ss once a burn runs past the hour, which a BD-R XL does.
+# Floor rather than a cast, for the reason Format-Elapsed carries in the app: a
+# cast rounds, and a clock that rounds up reads a second ahead of itself.
+function Format-BurnClock([int]$seconds) {
+    if ($seconds -lt 0) { return '' }
+    $t = [TimeSpan]::FromSeconds($seconds)
+    if ($t.TotalHours -ge 1) {
+        return '{0}:{1:00}:{2:00}' -f [int][Math]::Floor($t.TotalHours), $t.Minutes, $t.Seconds
+    }
+    return '{0:00}:{1:00}' -f [int][Math]::Floor($t.TotalMinutes), $t.Seconds
+}
+
+<#
+    One report from the drive, turned into what a window needs.
+
+    Named and returned rather than computed inside the sink's own callback,
+    because the callback only runs during a real burn and this is the part worth
+    testing: a percentage that counts from the wrong place, or goes over a
+    hundred, or reads as nought when the drive has not said anything, is a bug
+    nobody would see until they were watching a disc being written.
+
+    Percent is -1 for "the drive is not saying", which is not the same fact as
+    nought per cent and must not be drawn the same way.
+#>
+function ConvertTo-BurnProgress($sink) {
+    $pct = -1
+    if ($sink.SectorsTotal -gt 0) {
+        $pct = [int](100.0 * $sink.SectorsDone / $sink.SectorsTotal)
+        if ($pct -gt 100) { $pct = 100 }
+        if ($pct -lt 0) { $pct = 0 }
+    }
+    return [pscustomobject]@{
+        Percent = $pct
+        Phase   = Get-BurnPhaseName $sink.ActionCode
+        Detail  = [pscustomobject]@{
+            ActionCode       = $sink.ActionCode
+            SectorsDone      = $sink.SectorsDone
+            SectorsTotal     = $sink.SectorsTotal
+            BytesDone        = [long]$sink.SectorsDone * $script:BurnSectorBytes
+            BytesTotal       = [long]$sink.SectorsTotal * $script:BurnSectorBytes
+            ElapsedSeconds   = $sink.ElapsedSeconds
+            RemainingSeconds = $sink.RemainingSeconds
+            TotalSeconds     = $sink.TotalSeconds
+            Updates          = $sink.Updates
+        }
+    }
+}
+
+<#
+    The clock line that goes under a progress bar.
+
+    Kept apart from the drawing so the wording can be tested without a window,
+    and so both halves of a burn, the write and the read back, say it the same
+    way. The drive's own estimate is used wherever there is one: it knows about
+    its buffer and the speed it actually settled on, which no arithmetic here
+    does.
+#>
+function Format-BurnProgressLine([int]$elapsedSeconds, [int]$remainingSeconds) {
+    $parts = @()
+    if ($elapsedSeconds -ge 0) { $parts += 'Elapsed ' + (Format-BurnClock $elapsedSeconds) }
+    if ($remainingSeconds -gt 0) { $parts += 'about ' + (Format-BurnClock $remainingSeconds) + ' left' }
+    if (-not $parts.Count) { return 'The drive is not saying how far along it is.' }
+    return ($parts -join ', ')
+}
+
 <#
     Write an ISO to the disc in a recorder.
 
@@ -311,6 +568,11 @@ function Write-IsoToDisc {
         # machine that wrote it and can confuse older drives, which is exactly
         # the audience for a game on a CD.
         [bool]$CloseMedia = $true,
+        # Called with (percent, phase, detail) as the drive reports in, about
+        # once a second. Percent is -1 when the drive will not say how far along
+        # it is, which is a different thing from nought per cent and has to look
+        # different on screen. Detail carries the sector counts and the drive's
+        # own time estimates, and is $null for the two bookend calls.
         [scriptblock]$OnProgress
     )
     if (-not (Test-Path -LiteralPath $IsoPath)) { throw "No ISO at '$IsoPath'" }
@@ -379,11 +641,33 @@ function Write-IsoToDisc {
     $stream.LoadFromFile($iso.FullName)
 
     $started = Get-Date
+
+    # The sink goes on the format object before Write and comes off afterwards,
+    # in the same finally as the stream. What it reports is turned into percent
+    # and words here rather than in the sink, so the C# stays numbers only and
+    # everything anybody reads on screen can be tested without a drive.
+    $relay = {
+        param($s)
+        $p = ConvertTo-BurnProgress $s
+        & $OnProgress $p.Percent $p.Phase $p.Detail
+    }
+    $hook = $null
+    if ($OnProgress) {
+        $hook = Register-BurnProgress -Format $fmt -Report $relay
+        if ($hook.Ok) {
+            & $OnProgress 0 (Get-BurnPhaseName 2) $null
+        } else {
+            # Said once, in the log, and then the burn carries on. A bar that
+            # cannot be drawn is not a disc that cannot be written.
+            Write-Warning "The drive is not reporting progress: $($hook.Why)"
+            & $OnProgress -1 (Get-BurnPhaseName 4) $null
+        }
+    }
     try {
-        if ($OnProgress) { & $OnProgress 0 'starting' }
         $fmt.Write($stream)
-        if ($OnProgress) { & $OnProgress 100 'done' }
+        if ($OnProgress) { & $OnProgress 100 (Get-BurnPhaseName 6) $null }
     } finally {
+        if ($hook) { $hook.Detach() }
         $stream.Close()
         # Eject so the next step reads a freshly mounted volume rather than
         # whatever Windows cached about the blank that used to be in there.
@@ -400,6 +684,11 @@ function Write-IsoToDisc {
         IsoBytes  = $iso.Length
         Fit       = $fit
         Seconds   = [int]((Get-Date) - $started).TotalSeconds
+        # Whether this burn could be watched, and how many times the drive said
+        # anything. A burn that reports nothing is worth knowing about after the
+        # fact, because the alternative is guessing why the window sat still.
+        Watched   = [bool]($hook -and $hook.Ok)
+        Updates   = $(if ($hook) { $hook.Sink.Updates } else { 0 })
     }
 }
 
@@ -436,10 +725,18 @@ function Test-BurnedDisc {
     $source = Get-RelativeMap $StagingFolder
 
     # A callback, because reading a disc back is slow and silence for a minute
-    # looks like a hang. The burn itself cannot do this: it is one blocking call
-    # inside the drive, and this loop is ours.
+    # looks like a hang. This used to add that the burn itself could not do the
+    # same, being one blocking call inside the drive. It can: the drive reports
+    # through an event sink, which is what Register-BurnProgress is for. Both
+    # halves of a burn can be watched now, so both of them report.
     $done = 0
     $total = $source.Count
+    # Bytes as well as files, because a set is one enormous part file beside a
+    # handful of small ones: four files out of nine can be 2 per cent of the
+    # disc, and a bar counting files sits at 44 per cent for four minutes.
+    $bytesDone = [long]0
+    $bytesTotal = [long]0
+    foreach ($f in $source.Values) { $bytesTotal += $f.Length }
     $missing = @($source.Keys | Where-Object { -not $onDisc.ContainsKey($_) } | Sort-Object)
     $extra   = @($onDisc.Keys  | Where-Object { -not $source.ContainsKey($_) } | Sort-Object)
     $sizeOff = @()
@@ -447,8 +744,14 @@ function Test-BurnedDisc {
     $unread  = @()
 
     foreach ($rel in ($source.Keys | Where-Object { $onDisc.ContainsKey($_) } | Sort-Object)) {
+        # Counted before the checks rather than after them, so a file that comes
+        # out wrong still moves the bar. Counting only the good ones left a bar
+        # that stopped short of the end on exactly the discs worth watching.
+        $done++
+        $bytesDone += $source[$rel].Length
         if ($source[$rel].Length -ne $onDisc[$rel].Length) {
             $sizeOff += "$rel ($($source[$rel].Length) built, $($onDisc[$rel].Length) on disc)"
+            if ($OnProgress) { & $OnProgress $done $total $rel $bytesDone $bytesTotal }
             continue
         }
         if (-not $SkipHashes) {
@@ -472,8 +775,7 @@ function Test-BurnedDisc {
             }
             if ($null -ne $a -and $null -ne $b -and $a -ne $b) { $hashOff += $rel }
         }
-        $done++
-        if ($OnProgress) { & $OnProgress $done $total $rel }
+        if ($OnProgress) { & $OnProgress $done $total $rel $bytesDone $bytesTotal }
     }
 
     return [pscustomobject]@{

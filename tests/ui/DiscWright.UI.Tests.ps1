@@ -2129,3 +2129,81 @@ Describe 'What the line says once a disc set has been asked for, in the window' 
         }
     }
 }
+
+Describe 'The progress window a burn draws on' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # The logic suite pins everything the window says. This pins the window: a
+    # modeless form owned by the main one, shown while the burn owns the thread.
+    # It cannot be tested there, because Show returns immediately on a machine
+    # with no desktop and the one thing worth checking is that it appears.
+    #
+    # Nothing here burns anything. The window is driven by hand with the numbers
+    # a drive would send.
+
+    BeforeAll {
+        Add-Type -AssemblyName System.Windows.Forms
+        # Show-BurnWindow puts the window on the main one and copies its font,
+        # so there has to be a main one to own it.
+        $script:form = New-Object System.Windows.Forms.Form
+        $script:form.Text = 'DiscWright burn window host'
+        $script:form.ClientSize = New-Object System.Drawing.Size(600, 400)
+        $script:form.Show()
+        [System.Windows.Forms.Application]::DoEvents()
+    }
+
+    AfterAll {
+        if ($script:form) {
+            $script:form.Close(); $script:form.Dispose(); $script:form = $null
+            [System.Windows.Forms.Application]::DoEvents()
+        }
+    }
+
+    It 'opens on the main window and says what is being written' {
+        $w = Show-BurnWindow 'Writing disc 1 of 2' 'GAME D1.iso, 713 MB, to E: at 16x'
+        try {
+            $w | Should -Not -BeNullOrEmpty
+            $w.Form.Visible | Should -BeTrue
+            $w.Form.Text | Should -Be 'Writing disc 1 of 2'
+            $w.What.Text | Should -Match 'GAME D1\.iso'
+            $w.Form.Owner | Should -Be $script:form -Because 'an unowned window goes behind the app and gets lost'
+        } finally { Close-BurnWindow $w }
+    }
+
+    It 'offers no way to close it while a disc is being written' {
+        # Closing it would not stop the burn. The burn owns this thread and the
+        # window is only what it draws on, so a close button would be a button
+        # that promises to cancel a write and does nothing of the kind.
+        $w = Show-BurnWindow 'Writing the disc' 'something'
+        try { $w.Form.ControlBox | Should -BeFalse } finally { Close-BurnWindow $w }
+    }
+
+    It 'moves when the drive reports' {
+        $w = Show-BurnWindow 'Writing the disc' 'something'
+        try {
+            Update-BurnWindow $w 46 'writing' '328 MB of 713 MB written' 'Elapsed 02:14, about 02:40 left'
+            $w.Bar.Value | Should -Be 460
+            $w.Phase.Text | Should -Be 'writing   46%'
+            $w.Clock.Text | Should -Match 'about 02:40 left'
+        } finally { Close-BurnWindow $w }
+    }
+
+    It 'keeps painting while something else owns the thread' {
+        # The load-bearing property of the whole design. The burn blocks this
+        # thread from start to finish, and the only thing keeping the window
+        # alive is the pump inside each update.
+        $w = Show-BurnWindow 'Writing the disc' 'something'
+        try {
+            foreach ($pct in 10, 20, 30, 40) {
+                Update-BurnWindow $w $pct 'writing' "$pct per cent" 'Elapsed 00:10'
+            }
+            $w.Form.Visible | Should -BeTrue
+            $w.Bar.Value | Should -Be 400
+        } finally { Close-BurnWindow $w }
+    }
+
+    It 'is gone once it is closed' {
+        $w = Show-BurnWindow 'Writing the disc' 'something'
+        Close-BurnWindow $w
+        $w.Form.IsDisposed | Should -BeTrue -Because 'a window left behind sits on top of the warning that explains the failure'
+    }
+}

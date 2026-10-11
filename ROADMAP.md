@@ -21,6 +21,26 @@ that happens, and a request other people turn up and agree with moves up.
 
 ## Delivered
 
+**Watching a burn happen** — asked for after burning a set the other way round: a disc
+written behind a frozen window, then read back behind the same frozen window, with
+nothing on screen for either. The Windows burning engine has reported progress all
+along and DiscWright never listened, so both halves now draw on a progress window: the
+phase the drive is in, how many megabytes have gone down, and how long the drive itself
+says is left.
+
+The write reports through an IMAPI2 event sink, which is the only way to hear it from
+PowerShell: the engine calls back on the thread doing the writing, while it writes, and
+PowerShell's own event handlers cannot run there because that thread is the one blocked
+inside the write. The read back counts bytes rather than files, because a cut set is one
+enormous part file beside a handful of small ones and a bar counting files jumps to 89
+per cent and then sits there.
+
+Still to do, and deliberately not done here: **cancelling**. IMAPI will stop a write on
+request, but a write-once disc abandoned halfway is a coaster and a rewritable needs
+erasing before anything else can use it, so a Cancel button has to explain more than it
+looks like it would. The window says what it cannot do instead of offering a button
+that lies.
+
 **Cutting a file so it fits** — asked for twice by xniwo, who also worked out the risk
 before anyone else did, and who asked whether it would need "a database of some sort to
 remember a game's original state". It does, and `Disc set.txt` already was one.
