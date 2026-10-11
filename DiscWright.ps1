@@ -6656,7 +6656,8 @@ function Write-CheckReport($w, [int]$done, [int]$total, [string]$rel, [long]$byt
 # $what names this disc for the progress window, as 'disc 2 of 3'. A set burns
 # three identical looking windows one after another, and the title is the only
 # thing that says which of them is on screen.
-function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblock]$log, [string]$what = '') {
+function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblock]$log, [string]$what = '',
+                                 [string]$drive = '') {
     if (-not (Test-Path -LiteralPath $isoPath)) { return @{ Ok = $false; Why = "There is no ISO at $isoPath." } }
     if (-not (Test-Path -LiteralPath $stageDir)) {
         return @{ Ok = $false; Why = "There is nothing at $stageDir to check the disc against, so it was not burned." }
@@ -6665,12 +6666,19 @@ function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblo
 
     try { $burners = @(Get-BurnerInfo) }
     catch { return @{ Ok = $false; Why = "The burning service could not be asked anything: $($_.Exception.Message)" } }
-    if (-not $burners.Count) { return @{ Ok = $false; Why = 'No disc recorder was found on this machine.' } }
-    $d = $burners | Where-Object { $_.Ready } | Select-Object -First 1
-    if (-not $d) {
+    # The drive the walk settled on, once, before the first disc. Passing it in
+    # rather than finding it again per disc is what stops a set wandering
+    # between two writers, and what stops the question being asked three times.
+    $pick = Get-BurnTarget $burners $drive
+    if ($pick.Why) { return @{ Ok = $false; Why = $pick.Why } }
+    if ($pick.Ask) {
+        # Nothing here can put a question on screen, and guessing between two
+        # drives is how a disc ends up in the wrong one.
         return @{ Ok = $false
-                  Why = 'No drive is ready: ' + (($burners | ForEach-Object { "$($_.Drive) $($_.Why)" }) -join '; ') }
+                  Why = ('More than one drive is ready and none was chosen: ' +
+                         ((@($pick.Ask) | ForEach-Object { $_.Drive }) -join ', ')) }
     }
+    $d = $pick.Target
 
     $fit = Test-IsoFitsMedia -IsoBytes $iso.Length -FreeSectors $d.FreeSectors
     if (-not $fit.Fits) {
@@ -6807,6 +6815,12 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
         return
     }
 
+    # Which writer is settled on the first disc and then kept, because a set
+    # belongs in one drive. Not asked here, where no blank is in anything yet
+    # and no drive would be ready to offer: asked below, once the first blank
+    # is in and the answer can be a real one.
+    $onDrive = ''
+
     for ($i = 0; $i -lt $n; $i++) {
         $d = $i + 1
         $name = Split-Path $isos[$i] -Leaf
@@ -6832,7 +6846,26 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
             # Invoke-DiscBurnAndCheck to report, not a reason to fall over
             # while working out a folder name.
             $stage = (Split-Path $isos[$i] -Parent).TrimEnd([char]92) + [char]92 + ('disc D{0}' -f $d)
-            $res = Invoke-DiscBurnAndCheck $isos[$i] $stage $log "disc $d of $n"
+
+            # Asked at most once per set, and only on a machine with two drives
+            # holding blanks. Until somebody plugged a second writer in, the
+            # answer was whichever drive happened to be enumerated first, which
+            # was right by luck and silently wrong by the same luck.
+            if (-not $onDrive) {
+                try { $target = Get-BurnTarget @(Get-BurnerInfo) } catch { $target = @{ Ask = $null } }
+                if ($target.Ask) {
+                    $picked = Select-BurnDrive $target.Ask $parent
+                    if (-not $picked) {
+                        & $log "Stopped at disc $d of $n. The rest are written and can be burned later."
+                        return
+                    }
+                    $onDrive = [string]$picked.Drive
+                    & $log "Writing every disc of this set in $onDrive."
+                }
+                # One ready drive, or none yet: nothing to choose between, and
+                # Invoke-DiscBurnAndCheck says so properly if there is none.
+            }
+            $res = Invoke-DiscBurnAndCheck $isos[$i] $stage $log "disc $d of $n" $onDrive
             if (-not $res.Ok) {
                 & $log "ERROR: disc $d of $n did not come out right: $($res.Why)"
                 Show-Warn ("Disc $d of $n did not come out right:" + [Environment]::NewLine + [Environment]::NewLine +
@@ -6873,6 +6906,56 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
 
 # Which program opens the ISO. Lifted out of the Burn with... button so the
 # walk above can ask once and reuse the answer.
+<#
+    Which writer, asked only when there is something to ask.
+
+    Get-BurnTarget decides whether the question exists at all: one drive that
+    could take the disc means no dialog. This only ever sees the list when
+    there are two or more, which on most machines is never.
+#>
+function Select-BurnDrive($ready, $parent) {
+    $rows = @($ready)
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = 'Which drive'; $dlg.Font = $form.Font
+    $dlg.FormBorderStyle = 'FixedDialog'; $dlg.MaximizeBox = $false; $dlg.MinimizeBox = $false
+    $dlg.StartPosition = 'CenterParent'; $dlg.ShowInTaskbar = $false
+    $dlg.ClientSize = New-Object System.Drawing.Size(500, 172)
+
+    $l = New-Object System.Windows.Forms.Label
+    $l.Text = 'This machine has more than one drive with a blank in it. Write to which?'
+    $l.Location = New-Object System.Drawing.Point(15, 14); $l.Size = New-Object System.Drawing.Size(470, 20)
+    $dlg.Controls.Add($l)
+
+    $lst = New-Object System.Windows.Forms.ListBox
+    $lst.Location = New-Object System.Drawing.Point(15, 40); $lst.Size = New-Object System.Drawing.Size(470, 62)
+    foreach ($b in $rows) { [void]$lst.Items.Add((Format-BurnTargetRow $b)) }
+    $lst.SelectedIndex = 0
+    $dlg.Controls.Add($lst)
+
+    # Said because a set is several discs and the answer holds for all of them:
+    # being asked again between disc 1 and disc 2 would be the kind of help
+    # nobody wants, and swapping drives halfway is not a thing to do quietly.
+    $note = New-Object System.Windows.Forms.Label
+    $note.Text = 'Every disc of a set goes in this same drive.'
+    $note.Location = New-Object System.Drawing.Point(15, 108); $note.Size = New-Object System.Drawing.Size(470, 20)
+    $note.ForeColor = [System.Drawing.Color]::DimGray
+    $dlg.Controls.Add($note)
+
+    $ok = New-Object System.Windows.Forms.Button; $ok.Text = 'Use this'
+    $ok.Location = New-Object System.Drawing.Point(315, 136); $ok.Size = New-Object System.Drawing.Size(80, 26)
+    $ok.DialogResult = 'OK'; $dlg.Controls.Add($ok)
+    $cancel = New-Object System.Windows.Forms.Button; $cancel.Text = 'Cancel'
+    $cancel.Location = New-Object System.Drawing.Point(405, 136); $cancel.Size = New-Object System.Drawing.Size(80, 26)
+    $cancel.DialogResult = 'Cancel'; $dlg.Controls.Add($cancel)
+    $dlg.AcceptButton = $ok; $dlg.CancelButton = $cancel
+
+    $r = $dlg.ShowDialog($parent)
+    $i = $lst.SelectedIndex
+    $dlg.Dispose()
+    if ($r -ne [System.Windows.Forms.DialogResult]::OK -or $i -lt 0) { return $null }
+    return $rows[$i]
+}
+
 function Select-IsoHandoff($picks, $parent) {
     $dlg = New-Object System.Windows.Forms.Form
     $dlg.Text = 'Burn with'; $dlg.Font = $form.Font
@@ -7002,12 +7085,17 @@ $btnBurn.Add_Click({
         Show-Warn "The burning service could not be asked anything:`r`n`r`n$($_.Exception.Message)"
         return
     }
-    if (-not $burners.Count) { Show-Warn 'No disc recorder was found on this machine.'; return }
-    $d = $burners | Where-Object { $_.Ready } | Select-Object -First 1
-    if (-not $d) {
-        $why = ($burners | ForEach-Object { "$($_.Drive)  $($_.Why)" }) -join "`r`n"
-        Show-Warn "No drive is ready to be written to:`r`n`r`n$why`r`n`r`nPut a blank disc in and try again."
+    $pick = Get-BurnTarget $burners
+    if ($pick.Why) {
+        Show-Warn ($pick.Why + "`r`n`r`nPut a blank disc in and try again.")
         return
+    }
+    $d = $pick.Target
+    if ($pick.Ask) {
+        # Two writers, two blanks. Asked rather than guessed, which is what it
+        # used to do by taking whichever drive came back first.
+        $d = Select-BurnDrive $pick.Ask $form
+        if (-not $d) { & $log 'Cancelled: no drive was chosen.'; return }
     }
 
     $fit = Test-IsoFitsMedia -IsoBytes $iso.Length -FreeSectors $d.FreeSectors

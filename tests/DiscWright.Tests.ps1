@@ -8264,6 +8264,30 @@ Describe 'Burning a set here, rather than handing it to somebody else' -Tag 'Uni
         }
         function Show-Warn([string]$m) { $script:Warned += , $m }
         function Select-IsoHandoff($picks, $parent) { return $picks[0] }
+
+        # No drives by default, so every test written before this one still
+        # describes a machine where the question never comes up. Get-BurnTarget
+        # answers "no recorder" to an empty list, the walk takes that as
+        # nothing to choose between, and nothing changes.
+        function Get-BurnerInfo { return $script:WalkDrives }
+        function Select-BurnDrive($ready, $parent) {
+            $script:DriveAsks++
+            if ($script:DriveCancel) { return $null }
+            return $ready[$script:DrivePick]
+        }
+        $wast = [System.Management.Automation.Language.Parser]::ParseFile(
+                    (Join-Path (Split-Path $PSScriptRoot -Parent) ('burn' + [char]92 + 'DiscWright.Burn.ps1')),
+                    [ref]$null, [ref]$null)
+        $wfn = ($wast.FindAll({ param($n)
+            $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+            $n.Name -eq 'Get-BurnTarget' }, $false) | Select-Object -First 1)
+        . ([scriptblock]::Create($wfn.Extent.Text))
+
+        function New-WalkDrive([string]$drive, [bool]$ready) {
+            return @{ Drive = $drive; Ready = $ready; Why = $(if ($ready) { 'ready' } else { 'no disc' })
+                      Vendor = 'ASUS'; Product = 'DRW'; MediaName = 'CD-R'; MediaType = 2
+                      FreeBytes = [double]736978944; FreeSectors = 359853; Speeds = @() }
+        }
         function Start-IsoHandoff($chosen, [string]$iso) { $script:Handed += , $iso }
 
         # The burn itself is a drive and a blank disc, which no test has. What
@@ -8274,24 +8298,52 @@ Describe 'Burning a set here, rather than handing it to somebody else' -Tag 'Uni
         # after another need a title saying which disc is on screen. A fake
         # still taking three arguments would fail on the call rather than on an
         # assertion, which is a worse way to find out.
-        function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblock]$log, [string]$what = '') {
+        function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblock]$log, [string]$what = '',
+                                         [string]$drive = '') {
             $script:Burned += , $isoPath
             $script:Stages += , $stageDir
             $script:Named += , $what
+            $script:OnDrive += , $drive
             if ($script:Results.Count -eq 0) { return @{ Ok = $true; Why = 'all 9 files match' } }
             $r = $script:Results[0]
             $script:Results = @($script:Results | Select-Object -Skip 1)
             return $r
         }
 
-        function WalkOwn([int]$discs, [bool[]]$answers, $results = @()) {
+        function WalkOwn([int]$discs, [bool[]]$answers, $results = @(), $drives = @(),
+                         [int]$pick = 0, [bool]$cancelDrive = $false) {
+            $script:WalkDrives = @($drives); $script:DriveAsks = 0
+            $script:DriveCancel = $cancelDrive; $script:DrivePick = $pick
             $script:Asked = @(); $script:Handed = @(); $script:Warned = @()
-            $script:Burned = @(); $script:Stages = @(); $script:Lines = @(); $script:Named = @()
+            $script:Burned = @(); $script:Stages = @(); $script:Lines = @(); $script:Named = @(); $script:OnDrive = @()
             $script:Answers = @($answers); $script:Results = @($results)
             $isos = @(1..$discs | ForEach-Object { "D:\out\GAME D$_.iso" })
             Invoke-SetBurnWalk $isos { param($m) $script:Lines += , $m } $null `
                                @(@{ Name = 'DiscWright'; What = 'writes it here'; Own = $true })
         }
+    }
+
+    It 'never asks which drive on a machine with one writer' {
+        # The question must not appear for the people who will never have two.
+        WalkOwn 2 @($true, $true, $true) @() @((New-WalkDrive 'D:\' $true))
+        $script:DriveAsks | Should -Be 0
+        @($script:Burned).Count | Should -Be 2
+        @($script:OnDrive | Sort-Object -Unique) | Should -Be ''
+    }
+
+    It 'asks once for the whole set and writes every disc in the drive chosen' {
+        # Once, not per disc. A set belongs in one drive, and being asked again
+        # between disc 1 and disc 2 is the kind of help nobody wants.
+        WalkOwn 3 @($true, $true, $true, $true) @() @((New-WalkDrive 'D:\' $true), (New-WalkDrive 'E:\' $true)) 1
+        $script:DriveAsks | Should -Be 1 -Because 'three discs, one question'
+        @($script:Burned).Count | Should -Be 3
+        @($script:OnDrive) | Should -Be @('E:\', 'E:\', 'E:\')
+    }
+
+    It 'writes nothing when the drive question is cancelled' {
+        WalkOwn 2 @($true, $true, $true) @() @((New-WalkDrive 'D:\' $true), (New-WalkDrive 'E:\' $true)) 0 $true
+        @($script:Burned).Count | Should -Be 0 -Because 'cancelling a question must not burn a disc anyway'
+        ($script:Lines -join '|') | Should -Match 'Stopped at disc 1'
     }
 
     It 'names each disc on its own progress window' {
@@ -8403,6 +8455,20 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
             return $script:Verdict
         }
         function Get-BurnerInfo { return $script:Drives }
+
+        # Real, lifted out of the burn file: which drive to write to is the
+        # thing under test in several of these, and a fake of it would be a
+        # test of the fake.
+        $bast = [System.Management.Automation.Language.Parser]::ParseFile(
+                    (Join-Path (Split-Path $PSScriptRoot -Parent) ('burn' + [char]92 + 'DiscWright.Burn.ps1')),
+                    [ref]$null, [ref]$null)
+        foreach ($nm in 'Get-BurnTarget', 'Format-BurnTargetRow') {
+            $bfn = ($bast.FindAll({ param($n)
+                $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                $n.Name -eq $nm }, $false) | Select-Object -First 1)
+            if (-not $bfn) { throw "the burn file has no $nm" }
+            . ([scriptblock]::Create($bfn.Extent.Text))
+        }
 
         # The window itself is real WinForms and belongs to the window suite.
         # What belongs here is which windows are opened, what they are called,
@@ -8527,6 +8593,41 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         $src | Should -Not -Match 'window will not respond'
         $src | Should -Not -Match 'window will stop responding'
         $src | Should -Match 'A window shows how far along the drive is'
+    }
+
+    It 'writes to the drive it was handed, not to whichever came back first' {
+        # A set settles on one drive and then passes it in for every disc.
+        # Without that, disc 2 of a pair can land in the other writer.
+        $other = @{ Drive = 'Z:'; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
+                    FreeSectors = 359853; FreeBytes = 736978944; Vendor = 'OTHER'; Product = 'DRIVE'
+                    Speeds = @([pscustomobject]@{ Kb = 2400; Multiple = 16 }) }
+        $script:Drives = @($other, $script:Drives[0])
+        $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) } '' $script:Root
+        $r.Ok | Should -BeTrue -Because "it said: $($r.Why)"
+        $script:Windows[0].What | Should -Match ([regex]::Escape($script:Root))
+    }
+
+    It 'refuses when the drive it was handed is not the one with the blank in it' {
+        $gone = @{ Drive = 'Z:'; Ready = $false; Why = 'no disc'; MediaType = 2; MediaName = 'CD-R'
+                   FreeSectors = 0; FreeBytes = 0; Vendor = 'OTHER'; Product = 'DRIVE'; Speeds = @() }
+        $script:Drives = @($script:Drives[0], $gone)
+        $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) } '' 'Z:'
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -Match 'Z:'
+        $script:Wrote | Should -Be 0 -Because 'the other drive has a blank in it and must not be written to instead'
+    }
+
+    It 'refuses to guess when two drives are ready and none was chosen' {
+        # Nothing down here can put a question on screen. Guessing is how a
+        # disc ends up in the wrong drive, so it says so and stops.
+        $second = @{ Drive = 'Z:'; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
+                     FreeSectors = 359853; FreeBytes = 736978944; Vendor = 'OTHER'; Product = 'DRIVE'
+                     Speeds = @([pscustomobject]@{ Kb = 2400; Multiple = 16 }) }
+        $script:Drives = @($script:Drives[0], $second)
+        $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
+        $r.Ok | Should -BeFalse
+        $r.Why | Should -Match 'More than one drive is ready'
+        $script:Wrote | Should -Be 0
     }
 
     It 'will not burn without the folder to check the disc against' {

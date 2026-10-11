@@ -321,6 +321,61 @@ function Get-BurnerInfo {
 # runs on a runspace of its own while the interface thread reads those numbers
 # and paints. See Start-BurnRunspace and Watch-BurnProgress.
 
+<#
+    Which drive to write to, when a machine may have more than one.
+
+    One answer for both paths, because until now they each made this decision
+    with the same line copied out twice: take the first drive with a usable
+    blank in it. That is right on a machine with one writer and silently wrong
+    the moment it has two, which is the day somebody plugs in a second writer
+    to find out whether the first one is the thing ruining their discs.
+
+    Exactly one of three comes back. Target: get on with it, no question worth
+    asking. Ask: the caller has to put it to somebody, and these are the drives
+    worth offering. Why: refuse, and this is the sentence to show.
+
+    No question is asked when only one drive could take the disc. Being asked
+    to choose between one thing is not a choice, it is a dialog in the way.
+#>
+function Get-BurnTarget($burners, [string]$want = '') {
+    $all = @($burners)
+    if (-not $all.Count) { return @{ Why = 'No disc recorder was found on this machine.' } }
+    $ready = @($all | Where-Object { $_.Ready })
+
+    if ($want) {
+        # Compared on both sides rather than by building a drive letter out of
+        # what was asked for. "E", "E:" and "E:\" all name the same drive, and
+        # a recorder does not have to be called a letter at all: the tests
+        # stand a folder in for a drive root, because Join-Path asks the
+        # provider about a drive and throws for one this machine does not have.
+        $trim = { param($x) ([string]$x).TrimEnd([char]92).TrimEnd(':') }
+        $wn = & $trim $want
+        $hit = @($ready | Where-Object { (& $trim $_.Drive) -eq $wn }) | Select-Object -First 1
+        if ($hit) { return @{ Target = $hit } }
+        # Named and not ready. Saying so beats quietly writing to the other
+        # drive: on a set that would put disc 2 somewhere disc 1 is not, and
+        # the person would find out when they went looking for the pair.
+        $known = @($all | Where-Object { (& $trim $_.Drive) -eq $wn }) | Select-Object -First 1
+        if ($known) {
+            return @{ Why = "$($known.Drive) is the drive this burn was started on, and it is not ready: $($known.Why)." }
+        }
+        return @{ Why = "$want is the drive this burn was started on, and it is not there any more." }
+    }
+
+    if (-not $ready.Count) {
+        return @{ Why = 'No drive is ready: ' + (($all | ForEach-Object { "$($_.Drive) $($_.Why)" }) -join '; ') }
+    }
+    if ($ready.Count -eq 1) { return @{ Target = $ready[0] } }
+    return @{ Ask = $ready }
+}
+
+# One line of that question. The drive letter first, because that is what the
+# person is about to go and put a disc into.
+function Format-BurnTargetRow($b) {
+    return ('{0}  {1} {2}  ({3}, {4:N0} MB free)' -f
+            ([string]$b.Drive).TrimEnd([char]92), $b.Vendor, $b.Product, $b.MediaName, ($b.FreeBytes / 1MB))
+}
+
 # One sector, on every optical format DiscWright writes to. Named rather than
 # repeated, because this number is what turns a sector count into megabytes.
 $script:BurnSectorBytes = 2048
