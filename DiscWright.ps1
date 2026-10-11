@@ -3031,6 +3031,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(typeof SETJOINING!="undefined"&&SETJOINING.length){
       return "Putting "+SETJOINING+" back together. On a large file this takes a few minutes.";
     }
+    // Same reason as the two above: a disc is slow, and a menu that says
+    // nothing for four minutes is one somebody closes.
+    if(typeof SETCOPYING!="undefined"&&SETCOPYING.length){
+      return "Copying file "+SETCOPYING+" off this disc.";
+    }
     if(!s.total) return "This disc says it is part of a set, but its list of files is missing.";
     if(s.complete) return "All "+s.total+" files are here. The game is ready in that folder.";
     // Every file here but a cut one still in pieces. Says what is left rather
@@ -3143,6 +3148,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var SETARM=false;   // the delete button's second press
   var SETJOINING="";  // the cut file being put back together right now
   var SETCHECKING=""; // which file the hash check is on, out of how many
+  var SETCOPYING="";  // which file is being copied off this disc, out of how many
   function setDir(){ if(!SETDIR.length) SETDIR=setDefaultDir(); return SETDIR; }
   function setChoose(){
     // Shell.Application is used rather than a file dialog because the menu has
@@ -3164,17 +3170,49 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       return;
     }
     if(!setMakeDir(dir)){ alert("That folder could not be created:\n\n"+dir); return; }
-    var mine=setMine(), sh=new ActiveXObject("WScript.Shell"), bad=0, i, code;
-    for(i=0;i<mine.length;i++){
-      // Waited on one at a time, with the window shown, so the person can see
-      // the copy running and can tell a slow disc from a stuck menu.
-      code=sh.Run(setCopyCmd(root,dir,mine[i].f),1,true);
-      if(code>=8){ bad++; }
-    }
+    var mine=setMine();
+    if(!mine.length){ setSay("Nothing on this disc is still missing from that folder.",true); show(); return; }
     SETARM=false;
-    if(bad==0){ setJoinAll(dir,function(){ show(); }); }
-    if(bad>0){ setSay(bad+" of "+mine.length+" files would not copy from this disc.\n\nIt may be scratched. Try it again, or copy them in Explorer.",false); }
-    show();
+    setCopyStep({dir:dir,mine:mine,at:0,bad:0});
+  }
+
+  // One file at a time, started and then polled, exactly as the join and the
+  // check already do.
+  //
+  // This used to be a plain loop around Run(cmd,1,true), which waits. Copying
+  // 694 MB off a CD is four minutes with the script engine held shut, and on
+  // 11 October a real restore put up "Stop running this script? A script on
+  // this page is causing your web browser to run slowly." Answering Yes to
+  // that abandons the restore partway through. Somebody had already moved the
+  // join and the check off the blocking call and left the copy behind, which
+  // is the one that takes longest.
+  //
+  // It also has to be this way for the menu to notice anything while it works:
+  // a frozen engine cannot redraw a bar, and it cannot see a disc being
+  // swapped either.
+  function setCopyStep(st){
+    if(st.at>=st.mine.length){
+      SETCOPYING="";
+      try{ show(); }catch(ex){}
+      if(st.bad==0){ setJoinAll(st.dir,function(){ show(); }); }
+      else{
+        setSay(st.bad+" of "+st.mine.length+" files would not copy from this disc.\n\nIt may be scratched. Try it again, or copy them in Explorer.",false);
+      }
+      show();
+      return;
+    }
+    SETCOPYING=(st.at+1)+" of "+st.mine.length;
+    try{ show(); }catch(ex){}
+    var exec=new ActiveXObject("WScript.Shell").Exec(setCopyCmd(root,st.dir,st.mine[st.at].f));
+    setWaitExec(exec,function(){
+      // robocopy says 8 and up for a real failure; below that is "copied",
+      // "nothing to do" and other things that are not errors.
+      var code=8;
+      try{ code=exec.ExitCode; }catch(ex2){ code=8; }
+      if(code>=8){ st.bad++; }
+      st.at++;
+      setCopyStep(st);
+    });
   }
   // alert() in an HTA always draws the exclamation triangle, so "Every file in
   // that folder is byte for byte what was burned" arrived looking like a
@@ -3278,8 +3316,20 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       if(fso.FileExists(full)){ todo[todo.length]={f:rows[i].f,h:rows[i].h,full:full}; }
     }
     if(!todo.length){ setSay("There is nothing in that folder to check yet.",false); return; }
+    // How much of the set this is actually able to look at. Checking half a
+    // set and reporting "every file is byte for byte what was burned" is true
+    // of what was looked at and reads as though the set were done. Said on
+    // 11 October, after checking with only disc 1 copied.
+    var missing=rows.length-todo.length;
     setCheckRun(todo,0,[],function(bad){
-      if(!bad.length){ setSay("Every file in that folder is byte for byte what was burned.",true); }
+      if(!bad.length){
+        if(missing>0){
+          setSay("The "+todo.length+" files here are byte for byte what was burned.\n\n"+
+                 missing+" more "+(missing==1?"file is":"files are")+" still to come off the other discs.",true);
+        } else {
+          setSay("Every file in that folder is byte for byte what was burned.",true);
+        }
+      }
       else{ setSay(bad.length+" file(s) do not match what was burned:\n\n"+bad.join("\n")+
                    "\n\nCopy them again from the disc they are on.",false); }
     });
