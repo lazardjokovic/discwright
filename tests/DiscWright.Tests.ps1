@@ -8474,24 +8474,50 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         $script:Closed | Should -BeGreaterOrEqual 1
     }
 
-    It 'says in the log when the drive reported nothing as it wrote' {
+    It 'says in the log when the drive would not report at all' {
         # Otherwise a bar that never moved looks like a bug in here, and the
         # first thing anybody would do is go looking for one.
-        $script:WriteResult = @{ Seconds = 11; Watched = $false; Updates = 0 }
+        $script:WriteResult = @{ Seconds = 11; Watched = $false; Updates = 0
+                                 AttachWhy = 'no connection point' }
         # $script:, not $said: the callback runs in a child scope, so += there
         # makes a local copy and the outer variable stays empty. Written the
         # other way it passes whatever the application says, which is how this
         # one earned its comment.
         $script:Said = @()
         $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) $script:Said += , $m }
-        ($script:Said -join '|') | Should -Match 'reported nothing'
+        ($script:Said -join '|') | Should -Match 'would not report progress'
+        ($script:Said -join '|') | Should -Match 'no connection point' -Because 'the reason is the only lead there is'
     }
 
-    It 'keeps quiet about it when the drive did report' {
+    It 'tells the two silences apart' {
+        # A drive that refused the listener and a drive that took it and then
+        # said nothing are different faults with the same symptom, and on
+        # 11 October the second one was the real bug. The log has to name which.
+        $script:WriteResult = @{ Seconds = 11; Watched = $true; Updates = 0 }
         $script:Said = @()
         $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) $script:Said += , $m }
-        ($script:Said -join '|') | Should -Not -Match 'reported nothing'
+        ($script:Said -join '|') | Should -Match 'took the listener and then reported nothing'
+    }
+
+    It 'counts the reports in the log when the drive did report' {
+        # Said on a good burn too. The count is how anybody tells a drive that
+        # reported four hundred times from one that reported twice.
+        $script:Said = @()
+        $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) $script:Said += , $m }
+        ($script:Said -join '|') | Should -Match 'reported 240 times'
+        ($script:Said -join '|') | Should -Not -Match 'could not move'
         $script:Said.Count | Should -BeGreaterThan 0 -Because 'an empty log matches nothing either way'
+    }
+
+    It 'passes on what went wrong reading the reports, rather than eating it' {
+        # The sink swallows its own exceptions on purpose, because throwing
+        # there goes back into the engine mid-write. Swallowing them for good
+        # was the mistake: it left no trace of the one fault that matters.
+        $script:WriteResult = @{ Seconds = 11; Watched = $true; Updates = 3
+                                 SinkError = 'reading progress: it fell over' }
+        $script:Said = @()
+        $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) $script:Said += , $m }
+        ($script:Said -join '|') | Should -Match 'it fell over'
     }
 
     It 'no longer promises the window will stop responding' {
@@ -10556,6 +10582,18 @@ Describe 'The window a burn draws on' -Tag 'Unit' {
             $script:BurnWin = 'something else'
             Close-BurnWindow @{ Form = $null; Watch = $null }
             $script:BurnWin | Should -BeNullOrEmpty
+        }
+
+        It 'switches the main window back on even when there is no window left to close' {
+            # The write happens on another thread now, so the main form is live
+            # during a burn and gets switched off while the progress window
+            # stands. This runs in a finally that may be there because
+            # something threw, and a form left switched off is an application
+            # nobody can use again without restarting it.
+            $owner = [pscustomobject]@{ Enabled = $false }
+            $script:form = $null
+            Close-BurnWindow @{ Form = $null; Watch = $null; Owner = $owner }
+            $owner.Enabled | Should -BeTrue
         }
     }
 

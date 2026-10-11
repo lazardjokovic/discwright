@@ -2133,9 +2133,10 @@ Describe 'What the line says once a disc set has been asked for, in the window' 
 Describe 'The progress window a burn draws on' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     # The logic suite pins everything the window says. This pins the window: a
-    # modeless form owned by the main one, shown while the burn owns the thread.
-    # It cannot be tested there, because Show returns immediately on a machine
-    # with no desktop and the one thing worth checking is that it appears.
+    # modeless form owned by the main one, shown while a disc is being written
+    # on another thread and read back on this one. It cannot be tested there,
+    # because Show returns immediately on a machine with no desktop and the one
+    # thing worth checking is that it appears.
     #
     # Nothing here burns anything. The window is driven by hand with the numbers
     # a drive would send.
@@ -2170,11 +2171,25 @@ Describe 'The progress window a burn draws on' -Tag 'UI' -Skip:(-not $script:Hav
     }
 
     It 'offers no way to close it while a disc is being written' {
-        # Closing it would not stop the burn. The burn owns this thread and the
-        # window is only what it draws on, so a close button would be a button
-        # that promises to cancel a write and does nothing of the kind.
+        # Closing it would not stop the burn, which is running on a thread of
+        # its own and does not watch this window. A close button would be a
+        # button that promises to cancel a write and does nothing of the kind.
         $w = Show-BurnWindow 'Writing the disc' 'something'
         try { $w.Form.ControlBox | Should -BeFalse } finally { Close-BurnWindow $w }
+    }
+
+    It 'switches the main window off while it stands, and back on after' {
+        # The write runs on a thread of its own now, so the main form is live
+        # and clickable for the whole burn. It used to be unclickable by
+        # accident, that thread being stuck inside the write, and a live Build
+        # ISO button beside a disc being written is a second burn waiting for
+        # somebody wondering whether anything is happening at all.
+        $w = Show-BurnWindow 'Writing the disc' 'something'
+        try {
+            $script:form.Enabled | Should -BeFalse
+            $w.Form.Enabled | Should -BeTrue -Because 'switching off the owner must not switch off the window it owns'
+        } finally { Close-BurnWindow $w }
+        $script:form.Enabled | Should -BeTrue -Because 'a form left switched off cannot be used again without a restart'
     }
 
     It 'moves when the drive reports' {
@@ -2188,9 +2203,10 @@ Describe 'The progress window a burn draws on' -Tag 'UI' -Skip:(-not $script:Hav
     }
 
     It 'keeps painting while something else owns the thread' {
-        # The load-bearing property of the whole design. The burn blocks this
-        # thread from start to finish, and the only thing keeping the window
-        # alive is the pump inside each update.
+        # The load-bearing property of the whole design. Reading a disc back
+        # blocks this thread from start to finish, and between one poll of a
+        # write and the next nothing else pumps either, so the only thing
+        # keeping the window alive is the pump inside each update.
         $w = Show-BurnWindow 'Writing the disc' 'something'
         try {
             foreach ($pct in 10, 20, 30, 40) {

@@ -6356,8 +6356,17 @@ function Show-BurnWindow([string]$title, [string]$what) {
         # swallowed it so the burn carried on, and the window sat perfectly
         # still, looking for all the world like a drive that reports nothing.
         $script:BurnWin = $w
-        # Owned by the main window and modeless: the burn is running on this
-        # thread, so a modal dialog would have nothing left to pump it.
+        # Owned by the main window and modeless: reading a disc back runs on
+        # this thread, so a modal dialog would have nothing left to pump it.
+        #
+        # And the main window is switched off while this one stands. It used to
+        # be unclickable by accident, because the thread it lives on was stuck
+        # inside the write. The write happens elsewhere now, so the form is live
+        # the whole time, and a live Build ISO button next to a disc being
+        # written is a second burn waiting to be started by somebody wondering
+        # whether anything is happening.
+        $w.Owner = $form
+        $form.Enabled = $false
         $dlg.Show($form)
         [System.Windows.Forms.Application]::DoEvents()
         return $w
@@ -6365,6 +6374,11 @@ function Show-BurnWindow([string]$title, [string]$what) {
         # A window that will not open is not a burn that cannot run. Nothing is
         # logged here because there is nothing to log it with: this runs before
         # the burn and knows only about drawing.
+        #
+        # The main window is switched back on first, though. Returning nothing
+        # means the caller has nothing to hand Close-BurnWindow, so this is the
+        # only place left that can undo the line above.
+        try { if ($form) { $form.Enabled = $true } } catch { }
         return $null
     }
 }
@@ -6392,9 +6406,11 @@ function Update-BurnWindow($w, [int]$percent, [string]$phase, [string]$detail, [
     }
     if ($detail) { $w.Detail.Text = $detail }
     if ($clock)  { $w.Clock.Text = $clock }
-    # The load-bearing line, exactly as in the build's own progress callback:
-    # the burn owns the interface thread, and this is the only thing keeping
-    # either window painting while it runs.
+    # The load-bearing line, exactly as in the build's own progress callback.
+    # Reading a disc back owns this thread outright, so this is the only thing
+    # keeping that window painting; a write no longer owns it, and this is what
+    # spends the gap between one poll of the drive and the next on painting
+    # rather than on nothing.
     [System.Windows.Forms.Application]::DoEvents()
 }
 
@@ -6403,6 +6419,10 @@ function Close-BurnWindow($w) {
     $script:BurnWin = $null
     try {
         if ($w.Watch) { $w.Watch.Stop() }
+        # Switched back on first. A form left disabled behind a window that has
+        # already gone is an application nobody can use again, and this runs in
+        # a finally that may be here because something threw.
+        if ($w.Owner) { $w.Owner.Enabled = $true }
         $w.Form.Close()
         $w.Form.Dispose()
         [System.Windows.Forms.Application]::DoEvents()
@@ -6516,10 +6536,20 @@ function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblo
     }
     catch { return @{ Ok = $false; Why = "The disc could not be written: $($_.Exception.Message)" } }
     finally { Close-BurnWindow $win }
-    # Said once, after the fact. A drive that reports nothing leaves a window
-    # that sat still for ten minutes, and the log is where somebody looks to
-    # find out whether that was the drive or a bug in here.
-    if (-not $r.Watched) { & $log 'The drive reported nothing while it wrote, so the bar could not move.' }
+    # Said after every burn, not only the bad ones. A window that sat still for
+    # ten minutes is the symptom of four different faults, and the first version
+    # logged none of them: the sink caught its own exception, the burn carried
+    # on, and there was no way afterwards to tell a quiet drive from a listener
+    # that never worked. So the count goes in either way, and the two different
+    # silences are named apart.
+    if (-not $r.Watched) {
+        & $log "The drive would not report progress, so the bar could not move. $($r.AttachWhy)"
+    } elseif ($r.Updates -le 0) {
+        & $log 'The drive took the listener and then reported nothing, so the bar could not move.'
+    } else {
+        & $log "The drive reported $($r.Updates) times while it wrote."
+    }
+    if ($r.SinkError) { & $log "Something went wrong reading the drive's reports: $($r.SinkError)" }
 
     # Written is not the same as readable, which is the entire point. The drive
     # ejects at the end of a write so the next read sees a freshly mounted

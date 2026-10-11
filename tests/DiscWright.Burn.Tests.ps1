@@ -617,6 +617,23 @@ public class DwFakeBurnArgs {
 }
 // A drive from the future, reporting something this build has never heard of.
 public class DwUnknownBurnArgs { public int Nonsense { get; set; } }
+
+// Calls the sink from a thread that has never heard of PowerShell, which is
+// what the burn engine does. Reflection rather than a typed call, because the
+// sink lives in an assembly Add-Type built a moment ago.
+public static class DwOffThread {
+    public static string Call(object sink, object sender, object args) {
+        string err = null;
+        System.Threading.Thread t = new System.Threading.Thread(delegate() {
+            try { sink.GetType().GetMethod("Update").Invoke(sink, new object[] { sender, args }); }
+            catch (System.Exception ex) { err = ex.ToString(); }
+        });
+        t.IsBackground = true;
+        t.Start();
+        t.Join();
+        return err;
+    }
+}
 '@
         }
 
@@ -658,7 +675,7 @@ public class DwUnknownBurnArgs { public int Nonsense { get; set; } }
             # format object, which exists on any Windows.
             $fmt = New-Object -ComObject 'IMAPI2.MsftDiscFormat2Data'
             try {
-                $hook = Register-BurnProgress -Format $fmt -Report { param($s) }
+                $hook = Register-BurnProgress -Format $fmt -Sink (New-BurnProgressSink)
                 $hook.Ok | Should -BeTrue -Because "it said: $($hook.Why)"
                 $hook.Detach()
                 $hook.Ok | Should -BeFalse -Because 'a detached hook is not still listening'
@@ -666,7 +683,7 @@ public class DwUnknownBurnArgs { public int Nonsense { get; set; } }
         }
 
         It 'says why rather than throwing when it is given something that has no events' {
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             $hook.Ok | Should -BeFalse
             $hook.Why | Should -Not -BeNullOrEmpty -Because 'a burn still has to run, and the log has to say why there is no bar'
         }
@@ -675,7 +692,7 @@ public class DwUnknownBurnArgs { public int Nonsense { get; set; } }
     Context 'the numbers the drive sends' {
 
         It 'reads a report into the sink' {
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             $hook.Sink.Update($null, (New-FakeArgs 4 0 178022 356045 134 160 294))
             $hook.Sink.ActionCode       | Should -Be 4
             $hook.Sink.SectorsDone      | Should -Be 178022
@@ -689,20 +706,20 @@ public class DwUnknownBurnArgs { public int Nonsense { get; set; } }
         It 'counts from where this write began, not from the start of the disc' {
             # An append starts partway in. Counting from sector nought would
             # report a disc most of the way through before anything was written.
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             $hook.Sink.Update($null, (New-FakeArgs 4 100000 150000 100000))
             $hook.Sink.SectorsDone | Should -Be 50000
             (ConvertTo-BurnProgress $hook.Sink).Percent | Should -Be 50
         }
 
         It 'turns sectors into a percentage' {
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             $hook.Sink.Update($null, (New-FakeArgs 4 0 89011 356045))
             (ConvertTo-BurnProgress $hook.Sink).Percent | Should -Be 25
         }
 
         It 'never reports more than all of it, whatever the drive claims' {
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             $hook.Sink.Update($null, (New-FakeArgs 5 0 400000 356045))
             $hook.Sink.SectorsDone | Should -Be 356045
             (ConvertTo-BurnProgress $hook.Sink).Percent | Should -Be 100
@@ -711,13 +728,13 @@ public class DwUnknownBurnArgs { public int Nonsense { get; set; } }
         It 'says "not saying" rather than nought when there is no total to divide by' {
             # The difference matters on screen: nought per cent is a bar at the
             # far left, which reads as a burn that has not started.
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             $hook.Sink.Update($null, (New-FakeArgs 2 0 0 0))
             (ConvertTo-BurnProgress $hook.Sink).Percent | Should -Be -1
         }
 
         It 'turns sectors into megabytes at 2048 bytes apiece' {
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             $hook.Sink.Update($null, (New-FakeArgs 4 0 178022 356045))
             $d = (ConvertTo-BurnProgress $hook.Sink).Detail
             $d.BytesDone  | Should -Be (178022 * 2048)
@@ -725,54 +742,210 @@ public class DwUnknownBurnArgs { public int Nonsense { get; set; } }
         }
 
         It 'survives a report with none of the properties it wanted' {
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             { $hook.Sink.Update($null, (New-Object DwUnknownBurnArgs)) } | Should -Not -Throw
             $hook.Sink.ActionCode | Should -Be -1
             (ConvertTo-BurnProgress $hook.Sink).Phase | Should -Be 'step -1' -Because 'a phase it cannot name must not be reported as writing'
         }
 
         It 'survives being handed nothing at all' {
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             { $hook.Sink.Update($null, $null) } | Should -Not -Throw
         }
     }
 
     Context 'progress that goes wrong while a disc is being written' {
 
-        It 'hands every report to the scriptblock it was given' {
-            $seen = New-Object System.Collections.ArrayList
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report {
-                param($s) $null = $seen.Add($s.SectorsDone)
-            }
+        It 'keeps the latest report where the window can read it' {
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink (New-BurnProgressSink)
             foreach ($lba in 1000, 2000, 3000) {
                 $hook.Sink.Update($null, (New-FakeArgs 4 0 $lba 4000))
             }
-            $seen.Count | Should -Be 3
-            $seen[-1] | Should -Be 3000
+            $hook.Sink.Updates | Should -Be 3
+            $hook.Sink.Snapshot().SectorsDone | Should -Be 3000
         }
 
-        It 'swallows a handler that throws, because a bar is not worth a disc' {
-            # This is the whole reason the sink catches: an exception thrown here
-            # goes back into the engine mid-write, and what the engine does with
-            # it is nobody's guess. A window that cannot draw is a cosmetic
-            # fault; a write that stops partway through a CD-R is a dead disc.
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report {
-                param($s) throw 'the window fell over'
-            }
-            { $hook.Sink.Update($null, (New-FakeArgs 4 0 10 100)) } | Should -Not -Throw
-            $hook.Sink.Updates   | Should -Be 1 -Because 'the report itself was read before the handler ran'
-            $hook.Sink.LastError | Should -Match 'the window fell over'
+        It 'takes a report on a thread PowerShell could not run on' {
+            # The bug this whole arrangement exists for, found on 11 October by
+            # burning a disc and watching the bar sit at nought the whole way.
+            #
+            # The sink used to hand every report to a scriptblock. The engine
+            # does not report on the thread that called Write: it reports from
+            # one of its own, where there is no runspace and a scriptblock
+            # cannot run at all. Every report died on "There is no Runspace
+            # available to run scripts in this thread", the catch below
+            # swallowed it so the disc would not suffer for a bar, and the
+            # window showed nought per cent for ten minutes while the burn went
+            # perfectly well.
+            #
+            # So this calls the sink the way the engine does: from a thread that
+            # has never heard of PowerShell. The numbers still have to arrive.
+            $sink = New-BurnProgressSink
+            $err = [DwOffThread]::Call($sink, $null, (New-FakeArgs 4 0 3000 4000 10 20 30))
+            $err | Should -BeNullOrEmpty -Because 'an exception here goes back into the engine mid-write'
+            $sink.Updates     | Should -Be 1
+            $sink.SectorsDone | Should -Be 3000
+            $sink.LastError   | Should -BeNullOrEmpty
         }
 
-        It 'stops reporting once it has been detached' {
-            $count = New-Object System.Collections.ArrayList
-            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report {
-                param($s) $null = $count.Add(1)
-            }
-            $hook.Sink.Update($null, (New-FakeArgs 4 0 10 100))
-            $hook.Detach()
-            $hook.Sink.Update($null, (New-FakeArgs 4 0 20 100))
-            $count.Count | Should -Be 1 -Because 'a sink left live on a reused engine reports one burn into another burn window'
+        It 'records that the report came from somewhere else, for the log to say' {
+            $sink = New-BurnProgressSink
+            $null = [DwOffThread]::Call($sink, $null, (New-FakeArgs 4 0 10 100))
+            $sink.OffThreadCalls | Should -Be 1
+            $sink.LastCallThreadId | Should -Not -Be $sink.OwnerThreadId
+        }
+
+        It 'offers the engine no way to call back into PowerShell' {
+            # A delegate or scriptblock on this object is the whole bug: the
+            # only thread it could ever be invoked on is the one place
+            # PowerShell cannot run. The sink records and the window reads.
+            $t = [DiscWright.BurnProgressSink]
+            $callable = @($t.GetFields() | Where-Object {
+                              $_.FieldType.Name -like 'Action*' -or $_.FieldType.Name -like 'Func*' -or
+                              $_.FieldType.Name -eq 'ScriptBlock' -or $_.FieldType.Name -eq 'Delegate' })
+            $callable | Should -BeNullOrEmpty -Because 'this is the shape of the bug that shipped'
+            $t.GetProperty('Report') | Should -BeNullOrEmpty
+        }
+
+        It 'puts whether it attached onto the sink, where the log can reach it' {
+            # The thread that watches never holds the hook. It holds the sink.
+            $sink = New-BurnProgressSink
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Sink $sink
+            $sink.Attached  | Should -BeFalse
+            $sink.AttachWhy | Should -Be $hook.Why
+            $sink.AttachWhy | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    Context 'the write runs somewhere the window is not' {
+
+        It 'runs the script on a thread that is not this one' {
+            $here = [System.Threading.Thread]::CurrentThread.ManagedThreadId
+            $job = Start-BurnRunspace { [System.Threading.Thread]::CurrentThread.ManagedThreadId } @{}
+            try { $there = @(Wait-BurnRunspace $job)[0] } finally { Close-BurnRunspace $job }
+            $there | Should -Not -Be $here -Because 'a write on this thread is a window that cannot paint'
+        }
+
+        It 'runs it in an apartment IMAPI will talk to' {
+            # COM, and a COM object made on one thread and used from another is
+            # a worse problem than the one this solves.
+            $job = Start-BurnRunspace { [System.Threading.Thread]::CurrentThread.GetApartmentState().ToString() } @{}
+            try { @(Wait-BurnRunspace $job)[0] | Should -Be 'STA' } finally { Close-BurnRunspace $job }
+        }
+
+        It 'hands it the variables it was given, and nothing else at all' {
+            $job = Start-BurnRunspace {
+                       $leaked = $(if (Get-Command Get-BurnPhaseName -ErrorAction SilentlyContinue)
+                                   { 'functions leaked' } else { 'clean' })
+                       "$Given|$leaked"
+                   } @{ Given = 'a value' }
+            try { @(Wait-BurnRunspace $job)[0] | Should -Be 'a value|clean' }
+            finally { Close-BurnRunspace $job }
+        }
+
+        It 'throws on this thread whatever the other one threw' {
+            # A write that failed over there is still a failed write, and the
+            # dialog that has to report it runs here. No wildcards: EndInvoke
+            # wraps the real message inside a sentence about calling EndInvoke,
+            # and that sentence was what the failure dialog ended up showing.
+            $job = Start-BurnRunspace { throw 'the drive said no' } @{}
+            try { { Wait-BurnRunspace $job } | Should -Throw -ExpectedMessage 'the drive said no' }
+            finally { Close-BurnRunspace $job }
+        }
+
+        It 'repeats a warning from over there rather than losing it' {
+            # The speed a drive refuses is a warning, and it is raised on a
+            # thread nobody is listening to.
+            $job = Start-BurnRunspace { Write-Warning 'the drive would not take 8x' } @{}
+            try {
+                $null = Wait-BurnRunspace $job -WarningVariable w -WarningAction SilentlyContinue
+                ($w -join '|') | Should -Match 'would not take 8x'
+            } finally { Close-BurnRunspace $job }
+        }
+
+        It 'attaches the listener over there and says so back here' {
+            # Production's own path, and the one no other test covers: the type
+            # crossing into the runspace, the format object being made on that
+            # thread so the engine never has to reach across an apartment to
+            # report, and the answer coming back on the sink because the
+            # watching thread never holds the hook.
+            $sink = New-BurnProgressSink
+            $job = Start-BurnRunspace {
+                      $fmt = New-Object -ComObject 'IMAPI2.MsftDiscFormat2Data'
+                      $hook = $HookType::Attach($fmt, $Sink)
+                      $hook.Ok
+                      $hook.Detach()
+                  } @{ HookType = [DiscWright.BurnProgressHook]; Sink = $sink }
+            try { @(Wait-BurnRunspace $job)[0] | Should -BeTrue }
+            finally { Close-BurnRunspace $job }
+            $sink.Attached | Should -BeTrue
+        }
+
+        It 'can be closed twice' {
+            $job = Start-BurnRunspace { 1 } @{}
+            $null = Wait-BurnRunspace $job
+            Close-BurnRunspace $job
+            { Close-BurnRunspace $job } | Should -Not -Throw -Because 'it is called from a finally that may run after a throw'
+        }
+    }
+
+    Context 'watching from the thread that owns the window' {
+
+        It 'reports once per turn until the write is over' {
+            $sink = New-BurnProgressSink
+            $sink.Update($null, (New-FakeArgs 4 0 500 1000 10 10 20))
+            $script:left = 3
+            $script:seen = @()
+            $n = Watch-BurnProgress -Sink $sink -IntervalMs 1 `
+                     -Running { $script:left--; $script:left -ge 0 } `
+                     -OnProgress { param($pct, $phase, $detail) $script:seen += $pct }
+            $n | Should -Be 3
+            $script:seen | Should -Be @(50, 50, 50)
+        }
+
+        It 'reports nothing at all when the write is already over' {
+            $sink = New-BurnProgressSink
+            $script:seen = @()
+            $n = Watch-BurnProgress -Sink $sink -IntervalMs 1 -Running { $false } `
+                     -OnProgress { param($pct, $phase, $detail) $script:seen += $pct }
+            $n | Should -Be 0
+            $script:seen.Count | Should -Be 0
+        }
+
+        It 'is content with no handler at all' {
+            $sink = New-BurnProgressSink
+            $script:left = 2
+            { Watch-BurnProgress -Sink $sink -IntervalMs 1 -Running { $script:left--; $script:left -ge 0 } } |
+                Should -Not -Throw
+        }
+
+        It 'counts the seconds itself while the drive says nothing' {
+            # Some drives report nothing for the whole write. The window still
+            # has to look alive, so the elapsed time is ours and only the
+            # estimate of what is left is the drive's.
+            $sink = New-BurnProgressSink
+            $script:left = 1
+            $script:detail = $null
+            $null = Watch-BurnProgress -Sink $sink -IntervalMs 1 -Started (Get-Date).AddSeconds(-95) `
+                        -Running { $script:left--; $script:left -ge 0 } `
+                        -OnProgress { param($pct, $phase, $detail) $script:detail = $detail }
+            $script:detail.ElapsedSeconds   | Should -BeGreaterOrEqual 95
+            $script:detail.RemainingSeconds | Should -Be -1 -Because 'only the drive can say how much longer'
+        }
+
+        It 'says the drive is being got ready rather than naming a phase it has not been told' {
+            # Before the first report there is no phase. "step -1" is what that
+            # came out as, which is worse on screen than saying nothing.
+            $sink = New-BurnProgressSink
+            $p = ConvertTo-BurnProgress $sink
+            $p.Phase   | Should -Be 'getting the drive ready'
+            $p.Percent | Should -Be -1
+        }
+
+        It 'prefers the clock the drive keeps to the one we keep' {
+            $sink = New-BurnProgressSink
+            $sink.Update($null, (New-FakeArgs 4 0 500 1000 42 60 102))
+            (ConvertTo-BurnProgress $sink 95).Detail.ElapsedSeconds | Should -Be 42
         }
     }
 
