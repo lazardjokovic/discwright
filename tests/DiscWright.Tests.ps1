@@ -11225,7 +11225,8 @@ Describe 'The disc menu copying without holding the script engine shut' {
                 'var SAID = []; function setSay(m, good){ SAID[SAID.length] = m; }'
                 'var SHOWN = 0; function show(){ SHOWN++; }'
                 'var JOINED = 0; function setJoinAll(dir, after){ JOINED++; if (after) after(0); }'
-                'var SETWANT = 0;'
+                'var SETWANT = 0, SETGOING = false;'
+                'function setInstall(){ }'
                 'function setScan(dir){ return {complete:true, need:""}; }'
                 'var WAITED = 0; function setWaitDisc(dir){ WAITED++; }'
                 (Get-JsFn3 $script:MenuSrc 'setQuote')
@@ -11622,6 +11623,152 @@ WScript.Echo("two=" + setNeedsDisc(s,2) + " three=" + setNeedsDisc(s,3) + " one=
             $fn = Get-JsFn5 $script:SwSrc 'setCopyStep'
             $fn | Should -Match 'SETWANT'
             $fn | Should -Match 'setWaitDisc'
+        }
+    }
+}
+
+Describe 'Installing a set the way it was done when games came on several discs' {
+
+    # Asked for on 11 October: "Install, disc 1, insert disc 2 the app waits
+    # for disc 2 and so on". One button, and nothing said about folders or
+    # hashes unless something is wrong with them.
+    #
+    # The first button on a set disc used to be "Copy disc 1 of 2", which
+    # reads as a chore rather than as installing a game, and left the person
+    # to work out that there were three more steps after it.
+
+    BeforeDiscovery {
+        $script:HaveCs7 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:Cs7 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:GoSrc = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+
+        function Get-JsFn6([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        $script:GoDir = Join-Path ([IO.Path]::GetTempPath()) ('dwgo_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:GoDir | Out-Null
+
+        # setGo with everything it leans on stubbed, so what is under test is
+        # the order it does things in and what it refuses.
+        function Invoke-GoJs([string]$tail, [string]$prelude = '') {
+            $js = @(
+                'var SETWANT = 0, SETGOING = false;'
+                'var ALERTED = []; function alert(m){ ALERTED[ALERTED.length] = m; }'
+                'var SHOWN = 0; function show(){ SHOWN++; }'
+                'var COPIED = 0; function setCopy(){ COPIED++; }'
+                'var INSTALLED = 0; function setInstall(){ INSTALLED++; }'
+                'var WAITED = 0; function setWaitDisc(d){ WAITED++; }'
+                'var MADE = 0; function setMakeDir(d){ MADE++; return true; }'
+                'function setDir(){ return "D:' + [string][char]92 + [string][char]92 + 'out"; }'
+                'function setRoomForAll(d){ return {ok:true, need:10, free:100}; }'
+                'function setMine(){ return [{f:"one.bin"}]; }'
+                'function setScan(d){ return {complete:false, need:"2", mineHere:0, mineTotal:1}; }'
+                $prelude
+                (Get-JsFn6 $script:GoSrc 'setGo')
+                $tail
+            )
+            $f = Join-Path $script:GoDir ('g_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            return ((@(& $script:Cs7 //Nologo //E:JScript $f 2>&1) -join "`n").Trim())
+        }
+    }
+
+    AfterAll {
+        if ($script:GoDir -and (Test-Path $script:GoDir)) {
+            Remove-Item $script:GoDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'room for the whole thing, asked before anything starts' {
+
+        It 'counts the set plus the biggest finished file, not just this disc' {
+            # A cut file is written out whole while its pieces are all still
+            # there, so the high point is both at once. Hollow Knight is
+            # 1.2 GB of discs and a 1.2 GB installer at the same moment, and
+            # asking for one disc's worth means finding out at ninety per cent.
+            $fn = Get-JsFn6 $script:GoSrc 'setSetBytes'
+            $fn | Should -Match 'setRows'
+            $fn | Should -Match 'setJoins'
+            $fn | Should -Match 'biggest'
+        }
+
+        It 'refuses with both numbers rather than starting and failing' -Skip:(-not $script:HaveCs7) {
+            $out = Invoke-GoJs 'setGo(); WScript.Echo("copied=" + COPIED + " alerts=" + ALERTED.join("|"));' `
+                               'function setRoomForAll(d){ return {ok:false, need:2621440000, free:104857600}; }'
+            $out | Should -Match 'copied=0'
+            $out | Should -Match 'not enough room'
+            $out | Should -Match '2500 MB free while it works'
+            $out | Should -Match 'drive has 100 MB'
+        }
+
+        It 'refuses when there is no hard drive to install from' -Skip:(-not $script:HaveCs7) {
+            $out = Invoke-GoJs 'setGo(); WScript.Echo("copied=" + COPIED + " alerts=" + ALERTED.join("|"));' `
+                               'function setDir(){ return ""; }'
+            $out | Should -Match 'copied=0'
+            $out | Should -Match 'No hard drive was found'
+        }
+    }
+
+    Context 'what it does once it starts' -Skip:(-not $script:HaveCs7) {
+
+        It 'copies this disc, and remembers it is doing the whole job' {
+            $out = Invoke-GoJs 'setGo(); WScript.Echo("copied=" + COPIED + " going=" + SETGOING + " installed=" + INSTALLED);'
+            $out | Should -Match 'copied=1'
+            $out | Should -Match 'going=true'
+            $out | Should -Match 'installed=0' -Because 'there is a disc still to come'
+        }
+
+        It 'installs straight away when everything is already there' {
+            $out = Invoke-GoJs 'setGo(); WScript.Echo("copied=" + COPIED + " installed=" + INSTALLED);' `
+                               'function setScan(d){ return {complete:true, need:"", mineHere:1, mineTotal:1}; }'
+            $out | Should -Match 'copied=0'
+            $out | Should -Match 'installed=1'
+        }
+
+        It 'waits for the next disc when this one is already copied' {
+            # Put disc 1 back in after copying it. There is nothing to take
+            # off it, and the thing to do is ask for disc 2, not to say the
+            # set is incomplete and stop.
+            $out = Invoke-GoJs 'setGo(); WScript.Echo("copied=" + COPIED + " waited=" + WAITED + " want=" + SETWANT);' `
+                               'function setScan(d){ return {complete:false, need:"2", mineHere:1, mineTotal:1}; }'
+            $out | Should -Match 'copied=0'
+            $out | Should -Match 'waited=1'
+            $out | Should -Match 'want=2'
+        }
+    }
+
+    Context 'and the end of the chain' {
+
+        It 'runs the installer after the last disc, but only when Install started it' {
+            # Somebody who pressed "Copy disc 1 of 2 only" asked for files,
+            # not for an installer to open itself in front of them.
+            $fn = Get-JsFn6 $script:GoSrc 'setCopyStep'
+            $fn | Should -Match 'SETGOING'
+            $fn | Should -Match ([regex]::Escape('if(s.complete&&SETGOING){ SETGOING=false; setInstall(); }'))
+        }
+
+        It 'puts the whole job first and the single disc underneath it' {
+            $panel = Get-JsFn6 $script:GoSrc 'renderSet'
+            $panel | Should -Match 'btn_SetGo'
+            $panel | Should -Match 'setGo\(\)'
+            $panel | Should -Match 'Copy disc "\+setNow\(\)\+" of "\+SET\.of\+" only'
         }
     }
 }
