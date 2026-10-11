@@ -315,6 +315,12 @@ is in, how many megabytes have actually gone down, and how long the drive itself
 says is left. The drive reports that through an event sink about once a second,
 so the countdown is its own estimate rather than arithmetic done out here.
 
+The write itself runs on a thread of its own, so the window stays painted the
+whole way through instead of greying over for ten minutes. That is not only
+cosmetic. The engine reports from a thread of its own too, and a window whose
+thread is sitting inside the write cannot be repainted by anyone, which is how
+the first version of this came to sit at nought per cent for an entire burn.
+
 Afterwards it reads every file back off the disc and compares it with what was
 built, by SHA-256. A burn that ends without an error is not the same thing as a
 disc holding the right bytes, and that check is the reason to burn from here

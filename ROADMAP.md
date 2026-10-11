@@ -29,11 +29,27 @@ phase the drive is in, how many megabytes have gone down, and how long the drive
 says is left.
 
 The write reports through an IMAPI2 event sink, which is the only way to hear it from
-PowerShell: the engine calls back on the thread doing the writing, while it writes, and
-PowerShell's own event handlers cannot run there because that thread is the one blocked
-inside the write. The read back counts bytes rather than files, because a cut set is one
-enormous part file beside a handful of small ones and a bar counting files jumps to 89
-per cent and then sits there.
+PowerShell: PowerShell's own event handlers run when the runspace is free, and the
+runspace is the thing blocked inside the write, so every update would arrive in a heap
+after the burn had finished. The read back counts bytes rather than files, because a cut
+set is one enormous part file beside a handful of small ones and a bar counting files
+jumps to 89 per cent and then sits there.
+
+**Where the engine actually reports from** — the first version of the above shipped on
+11 October and the bar did not move: nought per cent for the whole write, then a hundred
+at the end, which are the two numbers the code produces by itself. The engine does not
+report on the thread that called Write. It reports from a thread of its own, where there
+is no runspace and a PowerShell scriptblock cannot run at all, so every report died and
+the sink swallowed it exactly as designed so that a bar could never cost a disc. Posting
+the report across to the interface thread would not have helped either, because a thread
+sitting inside the write stops pumping messages, which is the same reason the window
+used to grey over.
+
+So the sink now only records, in C# where no thread owns anything, and the write runs in
+a runspace of its own while the interface thread reads those numbers and paints. The
+application no longer freezes during a burn, and the log says after every disc how many
+times the drive reported, which is what tells a quiet drive apart from a broken listener
+the next time a bar sits still.
 
 Still to do, and deliberately not done here: **cancelling**. IMAPI will stop a write on
 request, but a write-once disc abandoned halfway is a coaster and a rewritable needs

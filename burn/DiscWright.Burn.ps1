@@ -304,9 +304,22 @@ function Get-BurnerInfo {
 #
 # PowerShell's own Register-ObjectEvent cannot do this job. Its handlers run
 # when the runspace is free, and the runspace is the very thing blocked inside
-# Write, so every update would arrive in a heap once the burn had finished. A
-# managed sink is called on the thread doing the writing, while it writes, which
-# is the only moment the news is any use.
+# Write, so every update would arrive in a heap once the burn had finished.
+#
+# Nor can a managed sink hand each report to a scriptblock, which is how this
+# was built first and why the bar did not move on 11 October. The engine does
+# not report on the thread that called Write. It reports from a thread of its
+# own, and PowerShell cannot run a scriptblock on a thread that has no runspace:
+# every report died on "There is no Runspace available to run scripts in this
+# thread", the sink caught it so the disc would not suffer for a bar, and the
+# window sat at nought per cent for the whole write. Posting the report to the
+# interface thread instead would not have helped either, because a thread
+# sitting inside Write stops pumping, which is exactly why the main window used
+# to freeze.
+#
+# So the sink only records, in C#, where no thread owns anything, and the write
+# runs on a runspace of its own while the interface thread reads those numbers
+# and paints. See Start-BurnRunspace and Watch-BurnProgress.
 
 # One sector, on every optical format DiscWright writes to. Named rather than
 # repeated, because this number is what turns a sector count into megabytes.
@@ -319,6 +332,7 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
+using System.Threading;
 
 namespace DiscWright
 {
@@ -334,8 +348,9 @@ namespace DiscWright
                     [In, MarshalAs(UnmanagedType.IDispatch)] object progress);
     }
 
-    [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-    public class BurnProgressSink : IBurnEvents
+    // One report, copied out of the sink in a single lock so the window never
+    // draws a frame that mixes this second's sectors with last second's clock.
+    public class BurnProgressSnapshot
     {
         public int ActionCode = -1;
         public long SectorsDone = 0;
@@ -344,37 +359,106 @@ namespace DiscWright
         public int RemainingSeconds = -1;
         public int TotalSeconds = -1;
         public int Updates = 0;
+        public int OffThreadCalls = 0;
         public string LastError = "";
-        public Action<object> Report;
+    }
+
+    // The listener the engine talks to. It records and it does nothing else.
+    //
+    // It used to hand each report straight to a scriptblock, which looked
+    // obvious and could never have worked: the engine reports from a thread of
+    // its own, and PowerShell cannot run a scriptblock on a thread that has no
+    // runspace. Every report died on "There is no Runspace available to run
+    // scripts in this thread", the catch below swallowed it so the burn would
+    // not suffer for a bar, and the window sat at nought per cent for the whole
+    // write. So nothing here calls out. The window reads these fields from its
+    // own thread, which is free because the write happens on another one.
+    [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+    public class BurnProgressSink : IBurnEvents
+    {
+        readonly object gate = new object();
+
+        // Which thread built this, so a report arriving on a different one is a
+        // fact in the log rather than a guess. On the machine this was written
+        // for, every single report arrives on another thread.
+        public readonly int OwnerThreadId;
+        public int LastCallThreadId = 0;
+        public int OffThreadCalls = 0;
+
+        // Set by the hook, read after the write: whether there was ever going
+        // to be a bar, and why not.
+        public bool Attached = false;
+        public string AttachWhy = "";
+
+        public int ActionCode = -1;
+        public long SectorsDone = 0;
+        public long SectorsTotal = 0;
+        public int ElapsedSeconds = -1;
+        public int RemainingSeconds = -1;
+        public int TotalSeconds = -1;
+        public int Updates = 0;
+        public string LastError = "";
+
+        public BurnProgressSink()
+        {
+            OwnerThreadId = Thread.CurrentThread.ManagedThreadId;
+        }
 
         public void Update(object sender, object progress)
         {
+            // A disc is being written while this runs. Nothing in here may
+            // throw back into the engine, and nothing in here may need a
+            // particular thread to be on.
             try
             {
-                ActionCode = ToInt(Read(progress, "CurrentAction"), -1);
+                int action = ToInt(Read(progress, "CurrentAction"), -1);
                 long start = ToLong(Read(progress, "StartLba"), 0);
                 long last = ToLong(Read(progress, "LastWrittenLba"), 0);
-                SectorsTotal = ToLong(Read(progress, "SectorCount"), 0);
-                // Counted from where this write began rather than from the start
-                // of the disc: a write that appends starts partway in.
-                SectorsDone = last - start;
-                if (SectorsDone < 0) { SectorsDone = 0; }
-                if (SectorsTotal > 0 && SectorsDone > SectorsTotal) { SectorsDone = SectorsTotal; }
-                ElapsedSeconds = ToInt(Read(progress, "ElapsedTime"), -1);
-                RemainingSeconds = ToInt(Read(progress, "RemainingTime"), -1);
-                TotalSeconds = ToInt(Read(progress, "TotalTime"), -1);
-                Updates++;
+                long total = ToLong(Read(progress, "SectorCount"), 0);
+                // Counted from where this write began rather than from the
+                // start of the disc: a write that appends starts partway in.
+                long done = last - start;
+                if (done < 0) { done = 0; }
+                if (total > 0 && done > total) { done = total; }
+                int elapsed = ToInt(Read(progress, "ElapsedTime"), -1);
+                int remaining = ToInt(Read(progress, "RemainingTime"), -1);
+                int whole = ToInt(Read(progress, "TotalTime"), -1);
+                int tid = Thread.CurrentThread.ManagedThreadId;
+                lock (gate)
+                {
+                    ActionCode = action;
+                    SectorsDone = done;
+                    SectorsTotal = total;
+                    ElapsedSeconds = elapsed;
+                    RemainingSeconds = remaining;
+                    TotalSeconds = whole;
+                    LastCallThreadId = tid;
+                    if (tid != OwnerThreadId) { OffThreadCalls++; }
+                    Updates++;
+                }
             }
-            catch (Exception ex) { LastError = "reading progress: " + ex.Message; }
-
-            // Nothing in here may throw back into the engine. A disc is being
-            // written. A bar that cannot be drawn is not a reason to lose it.
-            Action<object> r = Report;
-            if (r != null)
+            catch (Exception ex)
             {
-                try { r(this); }
-                catch (Exception ex) { LastError = "showing progress: " + ex.Message; }
+                lock (gate) { LastError = "reading progress: " + ex.Message; }
             }
+        }
+
+        public BurnProgressSnapshot Snapshot()
+        {
+            BurnProgressSnapshot s = new BurnProgressSnapshot();
+            lock (gate)
+            {
+                s.ActionCode = ActionCode;
+                s.SectorsDone = SectorsDone;
+                s.SectorsTotal = SectorsTotal;
+                s.ElapsedSeconds = ElapsedSeconds;
+                s.RemainingSeconds = RemainingSeconds;
+                s.TotalSeconds = TotalSeconds;
+                s.Updates = Updates;
+                s.OffThreadCalls = OffThreadCalls;
+                s.LastError = LastError;
+            }
+            return s;
         }
 
         // Late bound on purpose. The event argument is an IDispatch, and naming
@@ -401,13 +485,16 @@ namespace DiscWright
         public string Why = "";
         public bool Ok { get { return cookie != 0; } }
 
-        public static BurnProgressHook Attach(object format, Action<object> report)
+        // The sink is made by the caller and passed in, because it outlives
+        // this: the window reads it from one thread while the engine fills it
+        // from another, and the hook itself lives and dies with the write.
+        public static BurnProgressHook Attach(object format, BurnProgressSink sink)
         {
             BurnProgressHook h = new BurnProgressHook();
-            h.Sink = new BurnProgressSink();
-            h.Sink.Report = report;
+            h.Sink = sink;
             try
             {
+                if (sink == null) { h.Why = "no listener was made"; return h; }
                 IConnectionPointContainer c = format as IConnectionPointContainer;
                 if (c == null) { h.Why = "the burn engine offers no events at all"; return h; }
                 Guid iid = typeof(IBurnEvents).GUID;
@@ -415,12 +502,16 @@ namespace DiscWright
                 c.FindConnectionPoint(ref iid, out cp);
                 if (cp == null) { h.Why = "no connection point for " + iid.ToString("B"); return h; }
                 int ck;
-                cp.Advise(h.Sink, out ck);
+                cp.Advise(sink, out ck);
                 if (ck == 0) { h.Why = "the engine took the listener and handed back no cookie"; return h; }
                 h.point = cp;
                 h.cookie = ck;
             }
             catch (Exception ex) { h.Why = ex.GetType().Name + ": " + ex.Message; }
+            finally
+            {
+                if (sink != null) { sink.Attached = h.Ok; sink.AttachWhy = h.Why; }
+            }
             return h;
         }
 
@@ -434,7 +525,6 @@ namespace DiscWright
             catch { }
             cookie = 0;
             point = null;
-            if (Sink != null) { Sink.Report = null; }
         }
     }
 }
@@ -442,22 +532,165 @@ namespace DiscWright
 }
 
 <#
-    Start listening to a burn, and hand every update to a scriptblock.
+    A listener for one burn, ready to be attached.
+
+    Made on the thread that will watch, not on the thread that will write: it
+    remembers which one that was, so the log can say afterwards whether the
+    engine reported from somewhere else.
+#>
+function New-BurnProgressSink {
+    Add-BurnProgressType
+    return New-Object DiscWright.BurnProgressSink
+}
+
+<#
+    Start listening to a burn.
 
     Returns the hook whether or not it worked: .Ok says which and .Why says why
-    not. A drive that will not report progress is a worse burn to sit through,
-    never a reason to refuse to burn.
+    not, and both are copied onto the sink so the watching thread can read them
+    without holding the hook. A drive that will not report progress is a worse
+    burn to sit through, never a reason to refuse to burn.
 #>
 function Register-BurnProgress {
     param(
         [Parameter(Mandatory)]$Format,
-        [Parameter(Mandatory)][scriptblock]$Report
+        [Parameter(Mandatory)]$Sink
     )
     Add-BurnProgressType
-    # Cast here rather than at the call site. The sink field is a delegate, and a
-    # scriptblock handed over as one runs on whichever thread calls it, which is
-    # the thread inside Write. That is the entire point of doing it this way.
-    return [DiscWright.BurnProgressHook]::Attach($Format, [Action[object]]$Report)
+    return [DiscWright.BurnProgressHook]::Attach($Format, $Sink)
+}
+
+<#
+    Run a scriptblock on a thread of its own, with named variables set on it.
+
+    STA because everything it is used for here is COM, and IMAPI in particular
+    wants an apartment it can call home. ReuseThread because the whole script
+    has to run on ONE thread: a COM object made on one thread and used from
+    another is a different and much worse problem than the one this solves.
+
+    The runspace starts empty. Nothing from this file is in it, which is the
+    point: the script it runs can only use what it is handed.
+#>
+function Start-BurnRunspace([scriptblock]$Script, [hashtable]$Variables) {
+    $rs = [runspacefactory]::CreateRunspace()
+    $rs.ApartmentState = 'STA'
+    $rs.ThreadOptions = 'ReuseThread'
+    $rs.Open()
+    if ($Variables) {
+        foreach ($k in $Variables.Keys) { $rs.SessionStateProxy.SetVariable($k, $Variables[$k]) }
+    }
+    $ps = [powershell]::Create()
+    $ps.Runspace = $rs
+    $null = $ps.AddScript($Script.ToString())
+    return [pscustomobject]@{ Shell = $ps; Runspace = $rs; Async = $ps.BeginInvoke() }
+}
+
+<#
+    Wait for one of those to finish, and answer for it.
+
+    Whatever it threw is thrown again here, on the thread that asked, because a
+    write that failed on another thread is still a write that failed. Warnings
+    are repeated rather than lost: the speed the drive refused is said there.
+#>
+function Wait-BurnRunspace {
+    [CmdletBinding()]
+    param($Job)
+    if (-not $Job) { return @() }
+    try { return $Job.Shell.EndInvoke($Job.Async) }
+    catch {
+        # EndInvoke wraps whatever the other thread threw inside a sentence of
+        # its own about calling EndInvoke. That sentence ends up in the dialog
+        # that tells somebody their disc failed, so it is unwrapped back to
+        # what actually went wrong before it goes any further.
+        $real = $_.Exception
+        while ($real.InnerException) { $real = $real.InnerException }
+        throw $real
+    }
+    finally {
+        foreach ($w in @($Job.Shell.Streams.Warning)) { Write-Warning $w.Message }
+    }
+}
+
+# Idempotent, because it is called from a finally that may run after a throw.
+function Close-BurnRunspace($Job) {
+    if (-not $Job) { return }
+    try { $Job.Shell.Dispose() } catch { Write-Verbose "The burn shell would not close: $($_.Exception.Message)" }
+    try { $Job.Runspace.Dispose() } catch { Write-Verbose "The burn runspace would not close: $($_.Exception.Message)" }
+}
+
+<#
+    Watch a sink being filled, and report what is in it, until the write ends.
+
+    This runs on the thread that owns the window, which is free the whole time
+    because the write is somewhere else. Every report therefore happens where
+    the controls can actually be touched, and the sleep between them is what
+    keeps the bar from costing the burn anything.
+
+    Started is passed in so the window has an elapsed time to show even before
+    the drive says anything, which on some drives is never.
+#>
+function Watch-BurnProgress {
+    param(
+        [Parameter(Mandatory)]$Sink,
+        [Parameter(Mandatory)][scriptblock]$Running,
+        [scriptblock]$OnProgress,
+        [int]$IntervalMs = 250,
+        [datetime]$Started = (Get-Date)
+    )
+    $reports = 0
+    while (& $Running) {
+        if ($OnProgress) {
+            $snap = $Sink.Snapshot()
+            $mine = [int]((Get-Date) - $Started).TotalSeconds
+            $p = ConvertTo-BurnProgress $snap $mine
+            & $OnProgress $p.Percent $p.Phase $p.Detail
+            $reports++
+        }
+        Start-Sleep -Milliseconds $IntervalMs
+    }
+    return $reports
+}
+
+# What runs on the other thread. Kept here as one piece rather than inline in
+# Write-IsoToDisc so that all of it can be read at once, and so it is obvious
+# that it closes over nothing: the runspace it lands in has none of these
+# functions and none of these variables except the ones handed to it by name.
+$script:BurnWriteScript = {
+    $recorder = New-Object -ComObject 'IMAPI2.MsftDiscRecorder2'
+    $recorder.InitializeDiscRecorder($RecorderId)
+    $fmt = New-Object -ComObject 'IMAPI2.MsftDiscFormat2Data'
+    $fmt.Recorder = $recorder
+    $fmt.ClientName = 'DiscWright'
+    $fmt.ForceMediaToBeClosed = $CloseMedia
+    if ($SpeedKb -gt 0) {
+        try { $fmt.SetWriteSpeed($SpeedKb, $false) }
+        catch {
+            Write-Warning ("The drive would not take $SpeedText ($SpeedKb KB/s), so its own choice is used. " +
+                           "It offers: $Speeds")
+        }
+    }
+
+    # Attached from in here, on the thread that will do the writing, so the
+    # engine never has to reach across an apartment to deliver a report.
+    $hook = $HookType::Attach($fmt, $Sink)
+
+    # ADODB.Stream is the way to hand an existing file to IMAPI as an IStream
+    # from PowerShell. Type 1 is binary; without it the ISO is read as text and
+    # arrives corrupted.
+    $stream = New-Object -ComObject ADODB.Stream
+    $stream.Open()
+    $stream.Type = 1
+    $stream.LoadFromFile($IsoPath)
+    try {
+        $fmt.Write($stream)
+    } finally {
+        $hook.Detach()
+        $stream.Close()
+        # Eject so the next step reads a freshly mounted volume rather than
+        # whatever Windows cached about the blank that used to be in there.
+        try { $recorder.EjectMedia() }
+        catch { Write-Warning "The drive would not eject: $($_.Exception.Message)" }
+    }
 }
 
 # The eight phases a data burn reports, in the words this application uses.
@@ -502,7 +735,7 @@ function Format-BurnClock([int]$seconds) {
     Percent is -1 for "the drive is not saying", which is not the same fact as
     nought per cent and must not be drawn the same way.
 #>
-function ConvertTo-BurnProgress($sink) {
+function ConvertTo-BurnProgress($sink, [int]$fallbackElapsedSeconds = -1) {
     $pct = -1
     if ($sink.SectorsTotal -gt 0) {
         $pct = [int](100.0 * $sink.SectorsDone / $sink.SectorsTotal)
@@ -511,14 +744,18 @@ function ConvertTo-BurnProgress($sink) {
     }
     return [pscustomobject]@{
         Percent = $pct
-        Phase   = Get-BurnPhaseName $sink.ActionCode
+        # Before the first report there is no phase to name. Naming it anyway
+        # put "step -1" on the window for the first quarter second of a burn.
+        Phase   = $(if ($sink.Updates -gt 0) { Get-BurnPhaseName $sink.ActionCode }
+                    else { Get-BurnPhaseName 2 })
         Detail  = [pscustomobject]@{
             ActionCode       = $sink.ActionCode
             SectorsDone      = $sink.SectorsDone
             SectorsTotal     = $sink.SectorsTotal
             BytesDone        = [long]$sink.SectorsDone * $script:BurnSectorBytes
             BytesTotal       = [long]$sink.SectorsTotal * $script:BurnSectorBytes
-            ElapsedSeconds   = $sink.ElapsedSeconds
+            ElapsedSeconds   = $(if ($sink.ElapsedSeconds -ge 0) { $sink.ElapsedSeconds }
+                                 else { $fallbackElapsedSeconds })
             RemainingSeconds = $sink.RemainingSeconds
             TotalSeconds     = $sink.TotalSeconds
             Updates          = $sink.Updates
@@ -617,62 +854,38 @@ function Write-IsoToDisc {
         }
     }
 
-    $recorder = New-Object -ComObject 'IMAPI2.MsftDiscRecorder2'
-    $recorder.InitializeDiscRecorder($target.Id)
-    $fmt = New-Object -ComObject 'IMAPI2.MsftDiscFormat2Data'
-    $fmt.Recorder = $recorder
-    $fmt.ClientName = 'DiscWright'
-    $fmt.ForceMediaToBeClosed = $CloseMedia
-    if ($Speed) {
-        $kb = ConvertTo-WriteSpeedKb -Speed $Speed -MediaType $target.MediaType
-        try { $fmt.SetWriteSpeed($kb, $false) }
-        catch {
-            Write-Warning ("The drive would not take $Speed ($kb KB/s), so its own choice is used. " +
-                           "It offers: " + (($target.Speeds | ForEach-Object { "$($_.Multiple)x" }) -join ', '))
-        }
-    }
+    # From here on the write belongs to another thread, and this one does
+    # nothing but watch. That is not a nicety: the engine reports progress from
+    # a thread of its own, PowerShell cannot run a scriptblock on a thread that
+    # has no runspace, and a thread sitting inside Write stops pumping messages
+    # so nothing posted to it gets painted either. Writing over there and
+    # watching from here is the only arrangement in which the bar can move at
+    # all, and it is why the main window no longer freezes for ten minutes.
+    $speedKb = 0
+    if ($Speed) { $speedKb = ConvertTo-WriteSpeedKb -Speed $Speed -MediaType $target.MediaType }
 
-    # ADODB.Stream is the way to hand an existing file to IMAPI as an IStream
-    # from PowerShell. Type 1 is binary; without it the ISO is read as text and
-    # arrives corrupted.
-    $stream = New-Object -ComObject ADODB.Stream
-    $stream.Open()
-    $stream.Type = 1
-    $stream.LoadFromFile($iso.FullName)
-
+    $sink = New-BurnProgressSink
     $started = Get-Date
-
-    # The sink goes on the format object before Write and comes off afterwards,
-    # in the same finally as the stream. What it reports is turned into percent
-    # and words here rather than in the sink, so the C# stays numbers only and
-    # everything anybody reads on screen can be tested without a drive.
-    $relay = {
-        param($s)
-        $p = ConvertTo-BurnProgress $s
-        & $OnProgress $p.Percent $p.Phase $p.Detail
-    }
-    $hook = $null
-    if ($OnProgress) {
-        $hook = Register-BurnProgress -Format $fmt -Report $relay
-        if ($hook.Ok) {
-            & $OnProgress 0 (Get-BurnPhaseName 2) $null
-        } else {
-            # Said once, in the log, and then the burn carries on. A bar that
-            # cannot be drawn is not a disc that cannot be written.
-            Write-Warning "The drive is not reporting progress: $($hook.Why)"
-            & $OnProgress -1 (Get-BurnPhaseName 4) $null
-        }
+    $job = Start-BurnRunspace $script:BurnWriteScript @{
+        RecorderId = $target.Id
+        IsoPath    = $iso.FullName
+        SpeedKb    = $speedKb
+        CloseMedia = $CloseMedia
+        Sink       = $sink
+        HookType   = [DiscWright.BurnProgressHook]
+        SpeedText  = $(if ($Speed) { $Speed } else { "the drive's own choice" })
+        Speeds     = (($target.Speeds | ForEach-Object { "$($_.Multiple)x" }) -join ', ')
     }
     try {
-        $fmt.Write($stream)
+        if ($OnProgress) { & $OnProgress 0 (Get-BurnPhaseName 2) $null }
+        $null = Watch-BurnProgress -Sink $sink -OnProgress $OnProgress -Started $started `
+                                   -Running { -not $job.Async.IsCompleted }
+        # Throws here if the write threw over there, which is the whole reason
+        # this is not fire and forget.
+        $null = Wait-BurnRunspace $job
         if ($OnProgress) { & $OnProgress 100 (Get-BurnPhaseName 6) $null }
     } finally {
-        if ($hook) { $hook.Detach() }
-        $stream.Close()
-        # Eject so the next step reads a freshly mounted volume rather than
-        # whatever Windows cached about the blank that used to be in there.
-        try { $recorder.EjectMedia() }
-        catch { Write-Verbose "The drive would not eject: $($_.Exception.Message)" }
+        Close-BurnRunspace $job
     }
 
     return [pscustomobject]@{
@@ -684,11 +897,15 @@ function Write-IsoToDisc {
         IsoBytes  = $iso.Length
         Fit       = $fit
         Seconds   = [int]((Get-Date) - $started).TotalSeconds
-        # Whether this burn could be watched, and how many times the drive said
-        # anything. A burn that reports nothing is worth knowing about after the
-        # fact, because the alternative is guessing why the window sat still.
-        Watched   = [bool]($hook -and $hook.Ok)
-        Updates   = $(if ($hook) { $hook.Sink.Updates } else { 0 })
+        # Whether this burn could be watched, how many times the drive said
+        # anything, and whether it said it from somewhere else. A burn that
+        # reports nothing is worth knowing about after the fact, because the
+        # alternative is guessing why the window sat still.
+        Watched   = [bool]$sink.Attached
+        Updates   = $sink.Updates
+        OffThread = $sink.OffThreadCalls
+        AttachWhy = $sink.AttachWhy
+        SinkError = $sink.LastError
     }
 }
 
