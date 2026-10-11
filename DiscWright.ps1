@@ -6906,6 +6906,53 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
              else { "All $n discs have been handed over. Label them 1 to $n if you have not already." })
 }
 
+<#
+    Which image, asked only when the folder holds more than one.
+
+    A build that makes one image needs no question. A set makes several, and
+    until now Burn to disc took the newest, which on a set is always the last
+    disc. Same rule as the drive: ask only where there is a choice to make.
+#>
+function Select-BurnIso($isos, $parent) {
+    $rows = @($isos)
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = 'Which disc'; $dlg.Font = $form.Font
+    $dlg.FormBorderStyle = 'FixedDialog'; $dlg.MaximizeBox = $false; $dlg.MinimizeBox = $false
+    $dlg.StartPosition = 'CenterParent'; $dlg.ShowInTaskbar = $false
+    $dlg.ClientSize = New-Object System.Drawing.Size(560, 196)
+
+    $l = New-Object System.Windows.Forms.Label
+    $l.Text = 'This folder holds more than one disc image. Write which one?'
+    $l.Location = New-Object System.Drawing.Point(15, 14); $l.Size = New-Object System.Drawing.Size(530, 20)
+    $dlg.Controls.Add($l)
+
+    $lst = New-Object System.Windows.Forms.ListBox
+    $lst.Location = New-Object System.Drawing.Point(15, 40); $lst.Size = New-Object System.Drawing.Size(530, 86)
+    foreach ($i in $rows) { [void]$lst.Items.Add((Format-BurnIsoRow $i)) }
+    $lst.SelectedIndex = 0
+    $dlg.Controls.Add($lst)
+
+    $note = New-Object System.Windows.Forms.Label
+    $note.Text = 'A set is written in order, and Build offers to walk the whole set in one go.'
+    $note.Location = New-Object System.Drawing.Point(15, 132); $note.Size = New-Object System.Drawing.Size(530, 20)
+    $note.ForeColor = [System.Drawing.Color]::DimGray
+    $dlg.Controls.Add($note)
+
+    $ok = New-Object System.Windows.Forms.Button; $ok.Text = 'Use this'
+    $ok.Location = New-Object System.Drawing.Point(375, 160); $ok.Size = New-Object System.Drawing.Size(80, 26)
+    $ok.DialogResult = 'OK'; $dlg.Controls.Add($ok)
+    $cancel = New-Object System.Windows.Forms.Button; $cancel.Text = 'Cancel'
+    $cancel.Location = New-Object System.Drawing.Point(465, 160); $cancel.Size = New-Object System.Drawing.Size(80, 26)
+    $cancel.DialogResult = 'Cancel'; $dlg.Controls.Add($cancel)
+    $dlg.AcceptButton = $ok; $dlg.CancelButton = $cancel
+
+    $r = $dlg.ShowDialog($parent)
+    $i = $lst.SelectedIndex
+    $dlg.Dispose()
+    if ($r -ne [System.Windows.Forms.DialogResult]::OK -or $i -lt 0) { return $null }
+    return $rows[$i]
+}
+
 # Which program opens the ISO. Lifted out of the Burn with... button so the
 # walk above can ask once and reuse the answer.
 <#
@@ -7076,12 +7123,22 @@ $btnBurn.Add_Click({
     }
     . $burner
 
-    # The newest ISO in the folder. A set writes several, and the one just built
-    # is the one somebody means; the confirmation names it so a wrong guess can
-    # be refused rather than discovered afterwards.
-    $iso = Get-ChildItem -LiteralPath $t -Filter '*.iso' -File -EA SilentlyContinue |
-           Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if (-not $iso) { Show-Warn "There is no ISO in:`r`n`r`n$t"; return }
+    # Which image, and which folder it was built from. This used to take the
+    # newest and look for staging in one fixed place called "disc". A set
+    # writes several images and stages into "disc D1" and "disc D2", so the
+    # newest was always the LAST disc of the set, and the check afterwards
+    # found no staging folder and said it had nothing to compare against.
+    # Burning a disc of a set and being unable to check it is the one thing
+    # this button exists not to do.
+    $isos = @(Get-BurnableIsos $t)
+    if (-not $isos.Count) { Show-Warn "There is no ISO in:`r`n`r`n$t"; return }
+    $want = $isos[0]
+    if ($isos.Count -gt 1) {
+        $want = Select-BurnIso $isos $form
+        if (-not $want) { & $log 'Cancelled: no disc image was chosen.'; return }
+    }
+    $iso = Get-Item -LiteralPath $want.Path
+    $stage = $want.Stage
 
     try { $burners = Get-BurnerInfo } catch {
         Show-Warn "The burning service could not be asked anything:`r`n`r`n$($_.Exception.Message)"
@@ -7157,10 +7214,11 @@ $btnBurn.Add_Click({
             'Burned', [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
 
-        $stage = Join-Path $t 'disc'
+        # Worked out from the image, above, and not from a fixed folder name.
         $root = ($d.Drive.TrimEnd('\') + '\')
-        if (-not (Test-Path $stage)) {
-            & $log "No staging folder at $stage, so nothing to compare the disc against."
+        if (-not $stage -or -not (Test-Path $stage)) {
+            & $log ("Nothing in $t was built from $($iso.Name), so there is nothing to " +
+                    'compare the disc against. The disc was written but not checked.')
         } elseif (-not (Test-Path $root)) {
             & $log "$root is not readable yet, so the disc was not checked."
         } else {
