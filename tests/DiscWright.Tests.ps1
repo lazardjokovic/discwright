@@ -10715,3 +10715,341 @@ Describe 'The label a project keeps once the set has been built' {
         $back.Menu     | Should -BeTrue
     }
 }
+
+Describe 'Everything a disc in a set says about itself' {
+
+    BeforeDiscovery {
+        $script:HaveCs3 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+
+    # Asked for on 11 October: "do not hesitate and write everything, all
+    # details that are needed in those txt files", and "keep them on all discs".
+    #
+    # The disc outlives the computer that made it and everything that was on
+    # that computer. Whatever somebody holding one disc in ten years needs to
+    # know has to be ON the disc, in a file a text editor opens, or it may as
+    # well never have been written down. A few kilobytes of seven hundred
+    # megabytes is not a reason to leave anything out.
+
+    BeforeAll {
+        # Worked out here as well as during discovery, for the same reason the
+        # GOG block does it twice: -Skip: is decided while discovering and
+        # BeforeAll has not run yet.
+        $script:Cs3 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        $script:MfDir = Join-Path ([IO.Path]::GetTempPath()) ('dwmf_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:MfDir | Out-Null
+
+        # The real thing: Hollow Knight as it was actually cut and burned on
+        # 11 October, numbers and all.
+        $script:Whole = 'setup_hollow_knight.exe'
+        $script:MfEntries = @(
+            @{ Disc = 1; Rel = "$($script:Whole).dwpart01"; Bytes = [double]727469302
+               Sha256 = ('d' * 64); PartOf = $script:Whole; PartIndex = 1; PartCount = 2
+               WholeSha256 = ('a' * 64); WholeBytes = [double]1241037720 }
+            @{ Disc = 2; Rel = "$($script:Whole).dwpart02"; Bytes = [double]513568418
+               Sha256 = ('8' * 64); PartOf = $script:Whole; PartIndex = 2; PartCount = 2
+               WholeSha256 = ('a' * 64); WholeBytes = [double]1241037720 }
+        )
+        $script:When = [datetime]'2026-10-11 18:52'
+        $script:Mf1 = New-DiscSetManifest $script:MfEntries 'Hollow Knight' 1 2 'CD-R 700 MB' '0.10.0' $true $script:When
+        $script:Mf2 = New-DiscSetManifest $script:MfEntries 'Hollow Knight' 2 2 'CD-R 700 MB' '0.10.0' $true $script:When
+
+        # The same lift the GOG block uses, kept here because a BeforeAll helper
+        # belongs to the Describe that declares it.
+        function Get-JsFn([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+    }
+
+    AfterAll {
+        if ($script:MfDir -and (Test-Path $script:MfDir)) {
+            Remove-Item $script:MfDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'the name of this particular burn' {
+
+        It 'is twelve hex characters' {
+            Get-SetFingerprint $script:MfEntries | Should -Match '^[0-9a-f]{12}$'
+        }
+
+        It 'is the same on every disc of one burn' {
+            # The point of it. Disc 1 and disc 2 of the same build agree, and
+            # that is what makes a mismatch mean something.
+            $a = ($script:Mf1 -split "`r`n" | Where-Object { $_ -match 'Set id' })
+            $b = ($script:Mf2 -split "`r`n" | Where-Object { $_ -match 'Set id' })
+            $a | Should -Be $b
+            $a | Should -Match '^  Set id      [0-9a-f]{12}$'
+        }
+
+        It 'changes when any file in the set changes' {
+            # Mixing disc 1 from one burn with disc 2 from a later one is the
+            # failure this names. The JOIN hash catches the result and cannot
+            # say why; this says why.
+            $other = @($script:MfEntries | ForEach-Object { $h = @{}; foreach ($k in $_.Keys) { $h[$k] = $_[$k] }; $h })
+            $other[1].Sha256 = ('9' * 64)
+            Get-SetFingerprint $other | Should -Not -Be (Get-SetFingerprint $script:MfEntries)
+        }
+
+        It 'does not depend on the order the files are handed over in' {
+            $rev = @($script:MfEntries[1], $script:MfEntries[0])
+            Get-SetFingerprint $rev | Should -Be (Get-SetFingerprint $script:MfEntries)
+        }
+    }
+
+    Context 'what the disc is able to tell you' {
+
+        It 'says what wrote it and when' {
+            # A disc that cannot say which version wrote it is a disc nobody can
+            # reason about when that version turns out to have had a bug.
+            $script:Mf1 | Should -Match 'Written     2026-10-11 18:52 by DiscWright 0\.10\.0'
+        }
+
+        It 'says which disc it was planned for' {
+            $script:Mf1 | Should -Match 'Planned for CD-R 700 MB'
+        }
+
+        It 'says that every disc carries this same file' {
+            $script:Mf1 | Should -Match 'Every disc in this set carries this same file'
+            $script:Mf2 | Should -Match 'Every disc in this set carries this same file'
+        }
+
+        It 'breaks the set down disc by disc, and marks the one in your hand' {
+            $lines = $script:Mf1 -split "`r`n"
+            ($lines | Where-Object { $_ -match '^  1 ' }) | Should -Match 'the disc you are holding'
+            ($lines | Where-Object { $_ -match '^  2 ' }) | Should -Not -Match 'the disc you are holding'
+            ($lines | Where-Object { $_ -match '^  all ' }) | Should -Match '1241037720'
+        }
+
+        It 'marks a different row on disc two' {
+            ($script:Mf2 -split "`r`n" | Where-Object { $_ -match '^  2 ' }) |
+                Should -Match 'the disc you are holding'
+        }
+
+        It 'can be put back together on something that is not Windows' {
+            # copy /b is Windows only, and a disc meant to still work later
+            # should not assume the machine reading it is the one that wrote it.
+            $script:Mf1 | Should -Match 'On Linux or macOS'
+            $script:Mf1 | Should -Match ([regex]::Escape("cat 'setup_hollow_knight.exe.dwpart01' 'setup_hollow_knight.exe.dwpart02' > 'setup_hollow_knight.exe'"))
+        }
+
+        It 'puts the pieces in the cat command in the order they go back together' {
+            $cat = ($script:Mf1 -split "`r`n" | Where-Object { $_ -match '^  cat ' })
+            $cat.IndexOf('dwpart01') | Should -BeLessThan $cat.IndexOf('dwpart02')
+        }
+
+        It 'says to check the finished file, and how' {
+            # Every part can be perfect and the join still wrong, if they went
+            # back together in the wrong order or one of them went in twice.
+            $script:Mf1 | Should -Match 'the parts being right does not prove the join was'
+            $script:Mf1 | Should -Match ([regex]::Escape("(Get-FileHash 'setup_hollow_knight.exe' -Algorithm SHA256).Hash"))
+            $script:Mf1 | Should -Match ([regex]::Escape("sha256sum 'setup_hollow_knight.exe'"))
+        }
+
+        It 'says what to do when one disc of the set has gone bad' {
+            $script:Mf1 | Should -Match 'If one disc will not read'
+            $script:Mf1 | Should -Match 'Only the files listed against that disc are affected'
+            $script:Mf1 | Should -Match 'reads slowly'
+        }
+
+        It 'points at the list that checks this one disc on its own' {
+            $script:Mf1 | Should -Match ([regex]::Escape('sha256sum -c checksums.sha256'))
+            $script:Mf1 | Should -Match 'if it lists fewer than that it has been truncated'
+        }
+
+        It 'says nothing about a checksum list on a disc that carries none' {
+            $none = New-DiscSetManifest $script:MfEntries 'Hollow Knight' 1 2 'CD-R 700 MB' '0.10.0' $false $script:When
+            $none | Should -Not -Match 'checksums\.sha256'
+        }
+
+        It 'leaves no trailing spaces on any line' {
+            # A trailing space on a line that ends in a file name is part of the
+            # file name as far as every parser here is concerned.
+            @($script:Mf1 -split "`r`n" | Where-Object { $_ -match ' $' }) | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'and none of it confuses anything that reads the file' {
+
+        # Three things parse this file and all three take a table row to be a
+        # line that starts with a digit and holds a star. Everything added for
+        # a person to read is therefore indented. Getting that wrong would not
+        # break a text assertion anywhere: it would quietly add a row to the
+        # set, and the first anyone would know is a restore reporting a file
+        # that was never on any disc.
+
+        It 'has exactly as many unindented rows as there are files in the set' {
+            $rows = @($script:Mf1 -split "`r`n" | Where-Object { $_ -match '^[0-9]' })
+            $rows.Count | Should -Be 2 -Because 'the per-disc summary and the totals must not read as files'
+        }
+
+        It 'still answers the pasteable check with the real files and nothing else' {
+            $dir = Join-Path $script:MfDir 'paste'
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            $ent = @()
+            foreach ($n in 'one.bin', 'two.bin') {
+                $p = Join-Path $dir $n
+                Set-Content -LiteralPath $p -Value $n -Encoding Ascii -NoNewline
+                $ent += , @{ Disc = $(if ($n -eq 'one.bin') { 1 } else { 2 }); Rel = $n
+                             Bytes = (Get-Item $p).Length; Sha256 = (Get-FileSha256 $p) }
+            }
+            $man = New-DiscSetManifest $ent 'Paste' 1 2 'CD-R 700 MB' '0.10.0' $true $script:When
+            Set-Content (Join-Path $dir (Get-DiscSetFileName)) $man -Encoding Ascii -NoNewline
+
+            $all = $man -split "`r`n"
+            $from = ($all | Select-String -SimpleMatch "Get-Content '$(Get-DiscSetFileName)'").LineNumber - 1
+            $to = $from
+            while ($all[$to].Trim() -ne '}') { $to++ }
+            $snippet = (($all[$from..$to]) | ForEach-Object { $_ -replace '^  ', '' }) -join "`n"
+
+            Push-Location $dir
+            try { $out = @(& ([scriptblock]::Create($snippet))) } finally { Pop-Location }
+            $out | Should -BeNullOrEmpty -Because 'both files are there and right, and nothing else is a file'
+        }
+
+        It 'is read by the menu as two files, not as the summary as well' -Skip:(-not $script:HaveCs3) {
+            # The menu's own parser, lifted out of the application and run by
+            # cscript against the real file. A text assertion cannot cover this:
+            # the question is what the shipped JScript makes of it.
+            $dir = Join-Path $script:MfDir 'rows'
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            Set-Content (Join-Path $dir (Get-DiscSetFileName)) $script:Mf1 -Encoding Ascii -NoNewline
+            $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+            $js = @(
+                'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+                'var root = ' + (ConvertTo-Json $dir) + ';'
+                'var SETFILE = ' + (ConvertTo-Json (Get-DiscSetFileName)) + ';'
+                'var SEP = String.fromCharCode(92);'
+                (Get-JsFn $src 'setRows')
+                'var r = setRows();'
+                'var s = "n=" + r.length; for (var i = 0; i < r.length; i++) { s += " [" + r[i].d + ":" + r[i].f + "]"; }'
+                'WScript.Echo(s);'
+            )
+            $f = Join-Path $dir 'rows.js'
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            $out = ((@(& $script:Cs3 //Nologo //E:JScript $f 2>&1) -join "`n").Trim())
+            $out | Should -Match 'n=2'
+            $out | Should -Match ([regex]::Escape('[1:setup_hollow_knight.exe.dwpart01]'))
+            $out | Should -Match ([regex]::Escape('[2:setup_hollow_knight.exe.dwpart02]'))
+        }
+    }
+}
+
+Describe 'A checksum list that can be caught lying' {
+
+    BeforeDiscovery {
+        $script:HaveCs3 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+
+    # A list that has lost its tail verifies the files it still mentions and
+    # reports every one of them right. It is the one way a checksum list can
+    # mislead, and the count that would catch it was already written in the
+    # header and thrown away by the only thing that read the file.
+
+    BeforeAll {
+        # Worked out here as well as during discovery, for the same reason the
+        # GOG block does it twice: -Skip: is decided while discovering and
+        # BeforeAll has not run yet.
+        $script:Cs3 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        $script:CkDir = Join-Path ([IO.Path]::GetTempPath()) ('dwck_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:CkDir 'disc') | Out-Null
+        $script:CkStage = Join-Path $script:CkDir 'disc'
+        foreach ($n in 'a.txt', 'b.txt', 'c.txt') {
+            Set-Content -LiteralPath (Join-Path $script:CkStage $n) -Value $n -Encoding Ascii -NoNewline
+        }
+        $script:CkFile = New-ChecksumManifest $script:CkStage 'Test Disc' $null
+        $script:CkText = Get-Content -LiteralPath $script:CkFile -Raw
+
+        function Get-JsFn2([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        function Invoke-SumsJs([string]$dir) {
+            $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+            $js = @(
+                'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+                'var root = ' + (ConvertTo-Json $dir) + ';'
+                'var SEP = String.fromCharCode(92);'
+                (Get-JsFn2 $src 'discSums')
+                'var l = discSums();'
+                'WScript.Echo("n=" + l.length + " declared=" + l.declared);'
+            )
+            $f = Join-Path $script:CkDir ('s_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            return ((@(& $script:Cs3 //Nologo //E:JScript $f 2>&1) -join "`n").Trim())
+        }
+    }
+
+    AfterAll {
+        if ($script:CkDir -and (Test-Path $script:CkDir)) {
+            Remove-Item $script:CkDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'says how many files it covers and how many bytes' {
+        $script:CkText | Should -Match '# 3 files, \d+ bytes, SHA-256, sha256sum format\.'
+    }
+
+    It 'counts the bytes it actually hashed' {
+        # Not the folder as it stands now. The list itself is sitting in there
+        # by the time anybody looks, and it is the one file it cannot cover.
+        $want = (Get-ChildItem -LiteralPath $script:CkStage -File |
+                 Where-Object { $_.Name -ne (Get-ChecksumFileName) } |
+                 Measure-Object Length -Sum).Sum
+        $script:CkText | Should -Match ("# 3 files, $([long]$want) bytes")
+    }
+
+    It 'hands the menu the count as well as the list' -Skip:(-not $script:HaveCs3) {
+        (Invoke-SumsJs $script:CkStage) | Should -Match 'n=3 declared=3'
+    }
+
+    It 'lets the menu see a list that has lost its tail' -Skip:(-not $script:HaveCs3) {
+        # The whole point. Three files declared, two listed: the menu must be
+        # able to tell, rather than checking two and reporting success.
+        $cut = Join-Path $script:CkDir 'cut'
+        New-Item -ItemType Directory -Force -Path $cut | Out-Null
+        $lines = @(Get-Content -LiteralPath $script:CkFile)
+        [IO.File]::WriteAllText((Join-Path $cut (Get-ChecksumFileName)),
+                                (($lines[0..($lines.Count - 2)] -join "`n") + "`n"))
+        (Invoke-SumsJs $cut) | Should -Match 'n=2 declared=3'
+    }
+
+    It 'refuses to report on a list whose count does not match' {
+        # Scoped to discCheck rather than to the file, because the comparison
+        # has to happen where the answer is given to somebody.
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $fn = $src.Substring($src.IndexOf('function discCheck('), 1200)
+        $fn | Should -Match 'declared'
+        $fn | Should -Match 'damaged, so nothing it says about this disc can be relied on'
+    }
+}

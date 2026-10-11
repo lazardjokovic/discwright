@@ -764,7 +764,45 @@ function Get-DiscSetPlan([array]$files, [double]$capacityBytes, [double]$overhea
 # Human first, because somebody will open it in Notepad on a machine that has
 # never heard of DiscWright. Machine-readable second, in the shape
 # checksums.sha256 already uses, so the menu reads it with parsing it has.
-function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [int]$discCount) {
+# A short name for this particular burn, the same on every disc of it and
+# different for any other. Two discs that disagree about it were built from
+# different sources, which is the one thing a failed JOIN hash cannot tell you:
+# it says the finished file is wrong without saying that disc 2 came from a
+# later download than disc 1.
+#
+# Twelve hex characters. Not a security measure, a label: enough that two burns
+# of the same game in the same week cannot be confused for one another.
+function Get-SetFingerprint([array]$entries) {
+    $sep = [string][char]92
+    $rows = @($entries |
+              Sort-Object @{ e = { [int]$_.Disc } }, @{ e = { [string]$_.Rel } } |
+              ForEach-Object {
+                  '{0}|{1}|{2}|{3}' -f [int]$_.Disc, (([string]$_.Rel).Replace($sep, '/')),
+                                       [long]$_.Bytes, [string]$_.Sha256
+              })
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { $h = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes(($rows -join "`n"))) }
+    finally { $sha.Dispose() }
+    return ((($h | ForEach-Object { $_.ToString('x2') }) -join '').Substring(0, 12))
+}
+
+# Everything a disc in a set has to be able to say for itself, written to every
+# disc rather than only to the first.
+#
+# The guiding rule here is that the disc outlives the computer that made it and
+# everything that was on that computer. Whatever somebody holding one disc in
+# ten years needs to know has to be ON the disc, in a file a text editor can
+# open, or it may as well never have been recorded. These files cost a few
+# kilobytes of seven hundred megabytes, so the only reason to leave something
+# out is that it is not true.
+#
+# Three parsers read this file: the pasteable snippet below, the menu's setRows
+# on the disc, and a person. All three take a table row to be a line that
+# STARTS WITH A DIGIT and holds a star. Every other row written here is
+# therefore indented, which keeps the prose out of the parsers.
+function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [int]$discCount,
+                             [string]$mediaName = '', [string]$appVersion = '',
+                             [bool]$hasChecksums = $false, [datetime]$written = (Get-Date)) {
     $total = [double]0
     foreach ($e in $entries) { $total += [double]$e.Bytes }
     $mine = @($entries | Where-Object { [int]$_.Disc -eq $thisDisc })
@@ -778,6 +816,18 @@ function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [i
     $o.Add("  $label")
     $o.Add(("  disc {0} of {1}.  {2} files in the set, {3:N2} GB in all." -f `
             $thisDisc, $discCount, $entries.Count, ($total / 1GB)))
+    $o.Add('')
+    # What made this disc, and when. A disc that cannot say what wrote it is a
+    # disc nobody can reason about when it turns out to have been written by a
+    # version with a bug in it.
+    $o.Add(("  Set id      {0}" -f (Get-SetFingerprint $entries)))
+    $o.Add(("              the same on every disc of this burn, and on no other"))
+    $maker = $(if ($appVersion) { "DiscWright $appVersion" } else { 'DiscWright' })
+    $o.Add(("  Written     {0} by {1}" -f $written.ToString('yyyy-MM-dd HH:mm'), $maker))
+    if ($mediaName) { $o.Add(("  Planned for {0}" -f $mediaName)) }
+    $o.Add('')
+    $o.Add('Every disc in this set carries this same file, describing every file on')
+    $o.Add('every disc. Any one disc can tell you what the whole set should be.')
     $o.Add('')
     $o.Add('This disc cannot install the game on its own, and neither can any other')
     $o.Add("disc in the set. The parts are spread across $discCount discs.")
@@ -793,6 +843,19 @@ function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [i
     $o.Add('file afterwards. This file is here so it can be done by hand as well.')
     $o.Add('')
     $o.Add(("On this disc: {0} of the {1} files." -f $mine.Count, $entries.Count))
+    $o.Add('')
+    $o.Add('What each disc holds')
+    $o.Add('--------------------')
+    $o.Add('')
+    $o.Add('  disc   files  bytes')
+    for ($d = 1; $d -le $discCount; $d++) {
+        $on = @($entries | Where-Object { [int]$_.Disc -eq $d })
+        $b = [double]0
+        foreach ($e in $on) { $b += [double]$e.Bytes }
+        $here = $(if ($d -eq $thisDisc) { '   <- the disc you are holding' } else { '' })
+        $o.Add(("  {0,-6} {1,-6} {2,-14}{3}" -f $d, $on.Count, [long]$b, $here))
+    }
+    $o.Add(("  {0,-6} {1,-6} {2,-14}" -f 'all', $entries.Count, [long]$total))
     $o.Add('')
     $o.Add('Every file in the set')
     $o.Add('---------------------')
@@ -835,13 +898,27 @@ function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [i
         $o.Add("enough to hold one of them whole. The menu puts them back together after")
         $o.Add("the last disc is copied, and checks the result against the hash below.")
         $o.Add("")
-        $o.Add("To do it by hand, from inside the folder you copied the discs into:")
+        $o.Add("To do it by hand, from inside the folder you copied the discs into.")
+        $o.Add("On Windows:")
         $o.Add("")
         foreach ($grp in $joins) {
             $ps = @($grp.Group | Sort-Object { [int]$_.PartIndex })
             $whole = ([string]$ps[0].PartOf).Replace($sep, "/")
             $names = @($ps | ForEach-Object { ([string]$_.Rel).Replace($sep, "/") })
             $o.Add("  copy /b " + ($names -join "+") + " " + $whole)
+        }
+        # The same job on anything else. A disc meant to still work later should
+        # not assume the machine reading it is the one that wrote it, and these
+        # pieces are plain concatenation: any system that can add two files
+        # together can do it.
+        $o.Add("")
+        $o.Add("On Linux or macOS:")
+        $o.Add("")
+        foreach ($grp in $joins) {
+            $ps = @($grp.Group | Sort-Object { [int]$_.PartIndex })
+            $whole = ([string]$ps[0].PartOf).Replace($sep, "/")
+            $names = @($ps | ForEach-Object { "'" + (([string]$_.Rel).Replace($sep, "/")) + "'" })
+            $o.Add("  cat " + ($names -join " ") + " > '" + $whole + "'")
         }
         $o.Add("")
         $o.Add("and then delete the pieces. Each JOIN line below is the finished file:")
@@ -856,8 +933,58 @@ function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [i
                 $o.Add(("PART {0,-3} *{1}" -f [int]$pt.PartIndex, ([string]$pt.Rel).Replace($sep, "/")))
             }
         }
+        # The one check that proves the join rather than the pieces. Every part
+        # can be perfect and the finished file still wrong, if they went back
+        # together in the wrong order or one of them was joined twice.
+        $o.Add("")
+        $o.Add("Check the finished file afterwards. This is the whole point of the JOIN")
+        $o.Add("line: the parts being right does not prove the join was. It should come")
+        $o.Add("back with exactly the SHA-256 printed above.")
+        $o.Add("")
+        foreach ($grp in $joins) {
+            $ps = @($grp.Group | Sort-Object { [int]$_.PartIndex })
+            $whole = ([string]$ps[0].PartOf).Replace($sep, "/")
+            $o.Add('  (Get-FileHash ' + $q + $whole + $q + ' -Algorithm SHA256).Hash')
+            $o.Add('  sha256sum ' + $q + $whole + $q)
+        }
     }
-    return (($o -join "`r`n") + "`r`n")
+
+    # What to do when one of them has gone bad, which on optical media is a
+    # question of when. Written here because the disc that still reads is the
+    # one that has to explain what to do about the disc that does not.
+    $o.Add('')
+    $o.Add('If one disc will not read')
+    $o.Add('-------------------------')
+    $o.Add('')
+    $o.Add('Only the files listed against that disc are affected. Every other disc in')
+    $o.Add('the set is still good and nothing on them needs copying again. Burn that')
+    $o.Add('one disc from its own image, copy it into the same folder as the rest, and')
+    $o.Add('check again.')
+    $o.Add('')
+    $o.Add('A disc that reads slowly, or that only gives a file up after several')
+    $o.Add('attempts, is failing even when nothing reports an error. Copy what is on')
+    $o.Add('it now, while it still reads at all.')
+
+    if ($hasChecksums) {
+        $o.Add('')
+        $o.Add('Checking this one disc on its own')
+        $o.Add('---------------------------------')
+        $o.Add('')
+        $o.Add(('{0} at the root of this disc lists every other file on this' -f (Get-ChecksumFileName)))
+        $o.Add('disc, this one included, with its SHA-256. Its header says how many it')
+        $o.Add('should list: if it lists fewer than that it has been truncated, and what')
+        $o.Add('it reports means nothing.')
+        $o.Add('')
+        $o.Add('  sha256sum -c ' + (Get-ChecksumFileName))
+        $o.Add('')
+        $o.Add('That answers "did this disc come out right". The table above answers "is')
+        $o.Add('the whole set here", which is a different question and needs every disc.')
+    }
+
+    # Trailing spaces trimmed off every line. The padded columns leave them on
+    # rows whose last field is empty, and to anything parsing this a trailing
+    # space on a line that ends in a file name is part of the file name.
+    return ((($o | ForEach-Object { $_.TrimEnd() }) -join "`r`n") + "`r`n")
 }
 
 # The other half: is the folder somebody copied the discs into complete? Answered
@@ -918,7 +1045,8 @@ function Get-DiscSetSteps([hashtable]$s, $plan, [array]$entries) {
         $ds.StageDir    = Join-Path $s.OutDir ('disc D{0}' -f $d.Number)
         $ds.OnlyFiles   = $only
         $ds.CutParts    = @($cuts)
-        $ds.SetManifest = New-DiscSetManifest $entries $s.Label $d.Number $n
+        $ds.SetManifest = New-DiscSetManifest $entries $s.Label $d.Number $n `
+                              (Get-MediaNameFromKey $s.MediaKey) $APP_VERSION ([bool]$s.Checksums)
         $ds.DiscNum     = $d.Number
         $ds.DiscOf      = $n
         # The label without the disc number on it. The menu's title shows
@@ -2218,7 +2346,12 @@ function New-ChecksumManifest([string]$stage, [string]$label, [scriptblock]$log)
     $sep = [string][char]92
     $lines = New-Object System.Collections.Generic.List[string]
     $lines.Add("# DiscWright checksum list for $label")
-    $lines.Add("# $($files.Count) files, SHA-256, sha256sum format.")
+    $totalBytes = [double]0
+    foreach ($f in $files) { $totalBytes += [double]$f.Length }
+    # The count is here to be CHECKED, not only read. A list that has lost its
+    # tail verifies the files it still mentions and reports success, which is
+    # the one way a checksum list can lie. Anything reading this must compare.
+    $lines.Add("# $($files.Count) files, $([long]$totalBytes) bytes, SHA-256, sha256sum format.")
     $lines.Add('#')
     $lines.Add('# To check a copy, from the folder holding these files:')
     $lines.Add('#   sha256sum -c ' + $name)
@@ -3081,12 +3214,22 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // which is a different question from the set's Check every file, and the one
   // somebody asks with a disc in their hand.
   function discSums(){
-    var out=[], p=fso.BuildPath(root,"checksums.sha256");
+    var out=[], p=fso.BuildPath(root,"checksums.sha256"), m;
+    out.declared=-1;
     if(!fso.FileExists(p)) return out;
     var t=fso.OpenTextFile(p,1), line, star;
     while(!t.AtEndOfStream){
       line=t.ReadLine();
-      if(!line.length||line.charAt(0)=="#") continue;
+      if(!line.length) continue;
+      if(line.charAt(0)=="#"){
+        // "# 8 files, 123456 bytes, SHA-256, sha256sum format." The count is
+        // written to be CHECKED, not only read. A list that has lost its tail
+        // verifies the files it still mentions and reports every one of them
+        // right, which is the single way a checksum list can lie to you.
+        m=line.match(/^#\s+(\d+)\s+files\b/);
+        if(m) out.declared=parseInt(m[1],10);
+        continue;
+      }
       star=line.indexOf(" *");
       if(star<64) continue;
       // Forward slashes in the list, backslashes on the disc.
@@ -3101,6 +3244,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var list=discSums(), here=[], i;
     if(!list.length){
       setSay("This disc does not carry a checksum list, so there is nothing to check against.",false);
+      return;
+    }
+    if(list.declared>=0 && list.declared!=list.length){
+      setSay("The checksum list on this disc says it covers "+list.declared+" files and lists "+
+             list.length+". It is damaged, so nothing it says about this disc can be relied on.",false);
       return;
     }
     var missing=[];
