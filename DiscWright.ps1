@@ -3827,7 +3827,20 @@ function Save-Project([hashtable]$s,[string]$outDir) {
                                         Source=$(if($_.Source -eq 'Files'){'Files'}else{'GOG'})
                                         Parent=[int]$_.ParentIndex
                                         Manual=$_.ManualPath; Extras=$_.ExtrasPath } })
-        Label        = $s.Label
+        # The set's own label, not the label of whichever disc was built last.
+        #
+        # One project file describes a whole set and is written once, after the
+        # last disc, from that disc's copy of the settings. That copy's label
+        # ends in " D2" deliberately: it is what gives each disc its own ISO
+        # name, its own icon filename and its own title. Saving it meant the
+        # label grew another suffix every time the project was reopened and
+        # rebuilt. Burning Hollow Knight on 11 October turned "Hollow Knight -
+        # Initial Test" into "Hollow Knight - Initial Test D2", then into
+        # "... D2 D2", and the ISOs came out named after it.
+        #
+        # SetLabel is that original, kept on every disc's copy by
+        # Get-DiscSetSteps, and set only when there is a set at all.
+        Label        = $(if ($s.SetLabel) { [string]$s.SetLabel } else { $s.Label })
         IconPath     = $s.IconPath
         IconIsIco    = [bool]$s.IconIsIco
         Menu         = [bool]$s.Menu

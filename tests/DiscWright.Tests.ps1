@@ -10622,3 +10622,96 @@ Describe 'The window a burn draws on' -Tag 'Unit' {
         }
     }
 }
+
+Describe 'The label a project keeps once the set has been built' {
+
+    # One project file describes a whole set, and it is written once, after the
+    # last disc, from that disc's own copy of the settings. That copy's label
+    # ends in " D2" on purpose: it is what gives each disc its own ISO name, its
+    # own icon filename and its own title. Writing it into the project made the
+    # label grow another suffix every time the project was reopened and rebuilt.
+    #
+    # Found while burning Hollow Knight on 11 October. The label went from
+    # "Hollow Knight - Initial Test" to "Hollow Knight - Initial Test D2" to
+    # "... D2 D2", and the images came out as "Initial Test D2 D1.iso". It had
+    # been invisible because a label is usually retyped rather than reopened.
+
+    BeforeAll {
+        $script:LblOut = Join-Path ([IO.Path]::GetTempPath()) ('dwlbl_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:LblOut | Out-Null
+
+        function New-SetSteps([string]$label, [int]$discs = 2) {
+            # A plan shaped like the real one, without needing files that size.
+            $plan = @{ Ok = $true; Discs = @(); ExtrasDisc = 0 }
+            for ($i = 1; $i -le $discs; $i++) {
+                $plan.Discs += , @{ Number = $i; Bytes = [double]1000
+                                    Files = @(@{ Rel = "part-$i.bin"; Bytes = [double]1000
+                                                 Path = "C:\src\part-$i.bin" }) }
+            }
+            $entries = @()
+            foreach ($d in $plan.Discs) {
+                foreach ($f in $d.Files) {
+                    $entries += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes; Sha256 = ('a' * 64) }
+                }
+            }
+            $s = New-BuildSettings -Games @() -Label $label -OutDir $script:LblOut
+            return @(Get-DiscSetSteps $s $plan $entries)
+        }
+    }
+
+    AfterAll {
+        if ($script:LblOut -and (Test-Path $script:LblOut)) {
+            Remove-Item $script:LblOut -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'writes the name of the set, not the name of the last disc' {
+        $steps = New-SetSteps 'Hollow Knight'
+        $steps[-1].Label | Should -Be 'Hollow Knight D2' -Because 'that disc keeps its own name, which is what it is for'
+        Save-Project $steps[-1] $script:LblOut
+        (Import-Project (Join-Path $script:LblOut $PROJECT_FILE)).Label | Should -Be 'Hollow Knight'
+    }
+
+    It 'does not grow another suffix every time the set is rebuilt' {
+        # Three rounds rather than one. One round of this reads like a typo;
+        # three is what it actually did, and the third name is the one that
+        # made it obvious something was wrong rather than mistyped.
+        $label = 'Hollow Knight - Initial Test'
+        foreach ($round in 1, 2, 3) {
+            $steps = New-SetSteps $label
+            Save-Project $steps[-1] $script:LblOut
+            $label = (Import-Project (Join-Path $script:LblOut $PROJECT_FILE)).Label
+            $label | Should -Be 'Hollow Knight - Initial Test' -Because "it had changed by round $round"
+        }
+    }
+
+    It 'leaves a single disc alone, having no set label to go back to' {
+        $s = New-BuildSettings -Games @() -Label 'Just The One' -OutDir $script:LblOut
+        $s.SetLabel | Should -BeNullOrEmpty -Because 'only a set has one'
+        Save-Project $s $script:LblOut
+        (Import-Project (Join-Path $script:LblOut $PROJECT_FILE)).Label | Should -Be 'Just The One'
+    }
+
+    It 'still gives every disc in the set a name of its own to build with' {
+        # The suffix is not the bug and must not be removed to fix it. Without
+        # it the discs in a set share an ISO filename, an icon filename and a
+        # title, and Explorer caches disc icons by name: disc 2 would show
+        # disc 1's face.
+        $steps = New-SetSteps 'Hollow Knight' 3
+        @($steps | ForEach-Object { $_.Label }) |
+            Should -Be @('Hollow Knight D1', 'Hollow Knight D2', 'Hollow Knight D3')
+        @($steps | ForEach-Object { $_.SetLabel } | Sort-Object -Unique) | Should -Be 'Hollow Knight'
+    }
+
+    It 'keeps everything else the last disc knew' {
+        # The fix reaches one key. A project that came back with the right name
+        # and the wrong output folder would be a worse bug than the one fixed.
+        $steps = New-SetSteps 'Hollow Knight'
+        Save-Project $steps[-1] $script:LblOut
+        $back = Import-Project (Join-Path $script:LblOut $PROJECT_FILE)
+        $back.OutDir   | Should -Be $script:LblOut
+        $back.IconPath | Should -Be $script:Art
+        $back.BgPath   | Should -Be $script:Bg
+        $back.Menu     | Should -BeTrue
+    }
+}
