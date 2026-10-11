@@ -354,9 +354,10 @@ Describe 'The Burn to disc button' -Tag 'Unit' {
 
 Describe 'Telling somebody how long a burn will take' -Tag 'Unit' {
 
-    # The window is locked and silent for the whole write, because the drive
-    # does it in one go and reports nothing until it ends. An expected wait is
-    # tolerable; an unexplained one looks like a hang.
+    # Still worth knowing before a burn starts, even now that the write reports
+    # as it goes: the estimate is what the confirmation dialog shows, before
+    # anybody has committed a disc. An expected wait is tolerable; an
+    # unexplained one looks like a hang.
 
     It 'is in the right place against the only real burn there has been' {
         # 241.7 MB to a CD-R took 93 seconds all in, at the drive's own speed.
@@ -540,5 +541,352 @@ Describe 'Which program writes the discs of a set' -Tag 'Unit' {
     It 'marks only itself as its own' {
         Mock Get-IsoHandoffs { $script:Fake }
         @(@(Get-SetBurnChoices) | Where-Object { $_.Own }).Count | Should -Be 1
+    }
+}
+
+Describe 'Watching a burn as it happens' -Tag 'Unit' {
+
+    # The write itself cannot be tested without spending a disc. Everything
+    # around it can: that the sink is declared the way the engine expects, that
+    # the numbers it reads turn into the right percentage and the right words,
+    # and that nothing it does is able to take a burn down with it.
+    #
+    # The two magic numbers are checked against imapi2.dll's own typelib rather
+    # than written down twice, because the first pair this was built with were
+    # both wrong, and a sink declaring the wrong dispid is advised perfectly
+    # happily and then never called. That failure is indistinguishable from a
+    # drive that does not report progress, which is the worst kind: it looks
+    # like the hardware's fault.
+
+    BeforeAll {
+        Add-BurnProgressType
+
+        if (-not ('DwTlb' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using CT = System.Runtime.InteropServices.ComTypes;
+
+public static class DwTlb
+{
+    [DllImport("oleaut32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
+    static extern void LoadTypeLibEx(string file, int regkind, out ITypeLib tlb);
+
+    // "{iid}|dispid" for a named dispinterface, straight out of the typelib.
+    public static string Describe(string file, string wantName, string member)
+    {
+        ITypeLib tlb;
+        LoadTypeLibEx(file, 0, out tlb);
+        int n = tlb.GetTypeInfoCount();
+        for (int i = 0; i < n; i++)
+        {
+            string nm, doc, help; int ctx;
+            tlb.GetDocumentation(i, out nm, out doc, out ctx, out help);
+            if (nm != wantName) { continue; }
+            ITypeInfo ti;
+            tlb.GetTypeInfo(i, out ti);
+            IntPtr pAttr;
+            ti.GetTypeAttr(out pAttr);
+            CT.TYPEATTR ta = (CT.TYPEATTR)Marshal.PtrToStructure(pAttr, typeof(CT.TYPEATTR));
+            Guid iid = ta.guid;
+            ti.ReleaseTypeAttr(pAttr);
+            int[] ids = new int[1];
+            ti.GetIDsOfNames(new string[] { member }, 1, ids);
+            return iid.ToString("B").ToUpperInvariant() + "|" + ids[0];
+        }
+        return "";
+    }
+}
+'@
+        }
+
+        # Stands in for the event argument the engine passes. A real CLR type
+        # rather than a pscustomobject, because the sink reads properties by
+        # late binding and a PowerShell object does not answer that way.
+        if (-not ('DwFakeBurnArgs' -as [type])) {
+            Add-Type -TypeDefinition @'
+public class DwFakeBurnArgs {
+    public int CurrentAction { get; set; }
+    public int StartLba { get; set; }
+    public int LastWrittenLba { get; set; }
+    public int SectorCount { get; set; }
+    public int ElapsedTime { get; set; }
+    public int RemainingTime { get; set; }
+    public int TotalTime { get; set; }
+}
+// A drive from the future, reporting something this build has never heard of.
+public class DwUnknownBurnArgs { public int Nonsense { get; set; } }
+'@
+        }
+
+        $script:Imapi2Dll = Join-Path $env:SystemRoot 'System32\imapi2.dll'
+        $script:TlbFacts = [DwTlb]::Describe($script:Imapi2Dll, 'DDiscFormat2DataEvents', 'Update')
+
+        function New-FakeArgs([int]$action, [int]$start, [int]$last, [int]$count,
+                              [int]$elapsed = -1, [int]$remaining = -1, [int]$total = -1) {
+            $a = New-Object DwFakeBurnArgs
+            $a.CurrentAction = $action; $a.StartLba = $start; $a.LastWrittenLba = $last
+            $a.SectorCount = $count
+            $a.ElapsedTime = $elapsed; $a.RemainingTime = $remaining; $a.TotalTime = $total
+            return $a
+        }
+    }
+
+    Context 'declared the way the engine expects' {
+
+        It 'reads the facts off the typelib at all, or the next two tests prove nothing' {
+            $script:TlbFacts | Should -Not -BeNullOrEmpty -Because 'imapi2.dll ships with Windows and carries its own typelib'
+        }
+
+        It 'declares the interface id imapi2.dll names for burn events' {
+            $iid = $script:TlbFacts.Split('|')[0]
+            ('{' + [DiscWright.IBurnEvents].GUID.ToString().ToUpperInvariant() + '}') | Should -Be $iid
+        }
+
+        It 'declares the dispid the engine calls Update on' {
+            # 0x200. Written as 0x100 first, which advises and never fires.
+            $want = [int]$script:TlbFacts.Split('|')[1]
+            $attr = [DiscWright.IBurnEvents].GetMethod('Update').GetCustomAttributes(
+                        [System.Runtime.InteropServices.DispIdAttribute], $false)
+            @($attr).Count | Should -Be 1 -Because 'without one the CCW numbers the method itself'
+            $attr[0].Value | Should -Be $want
+        }
+
+        It 'is taken as a listener by the real burn engine' {
+            # No disc and no drive needed: the connection point lives on the
+            # format object, which exists on any Windows.
+            $fmt = New-Object -ComObject 'IMAPI2.MsftDiscFormat2Data'
+            try {
+                $hook = Register-BurnProgress -Format $fmt -Report { param($s) }
+                $hook.Ok | Should -BeTrue -Because "it said: $($hook.Why)"
+                $hook.Detach()
+                $hook.Ok | Should -BeFalse -Because 'a detached hook is not still listening'
+            } finally { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($fmt) }
+        }
+
+        It 'says why rather than throwing when it is given something that has no events' {
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook.Ok | Should -BeFalse
+            $hook.Why | Should -Not -BeNullOrEmpty -Because 'a burn still has to run, and the log has to say why there is no bar'
+        }
+    }
+
+    Context 'the numbers the drive sends' {
+
+        It 'reads a report into the sink' {
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook.Sink.Update($null, (New-FakeArgs 4 0 178022 356045 134 160 294))
+            $hook.Sink.ActionCode       | Should -Be 4
+            $hook.Sink.SectorsDone      | Should -Be 178022
+            $hook.Sink.SectorsTotal     | Should -Be 356045
+            $hook.Sink.ElapsedSeconds   | Should -Be 134
+            $hook.Sink.RemainingSeconds | Should -Be 160
+            $hook.Sink.Updates          | Should -Be 1
+            $hook.Sink.LastError        | Should -BeNullOrEmpty
+        }
+
+        It 'counts from where this write began, not from the start of the disc' {
+            # An append starts partway in. Counting from sector nought would
+            # report a disc most of the way through before anything was written.
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook.Sink.Update($null, (New-FakeArgs 4 100000 150000 100000))
+            $hook.Sink.SectorsDone | Should -Be 50000
+            (ConvertTo-BurnProgress $hook.Sink).Percent | Should -Be 50
+        }
+
+        It 'turns sectors into a percentage' {
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook.Sink.Update($null, (New-FakeArgs 4 0 89011 356045))
+            (ConvertTo-BurnProgress $hook.Sink).Percent | Should -Be 25
+        }
+
+        It 'never reports more than all of it, whatever the drive claims' {
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook.Sink.Update($null, (New-FakeArgs 5 0 400000 356045))
+            $hook.Sink.SectorsDone | Should -Be 356045
+            (ConvertTo-BurnProgress $hook.Sink).Percent | Should -Be 100
+        }
+
+        It 'says "not saying" rather than nought when there is no total to divide by' {
+            # The difference matters on screen: nought per cent is a bar at the
+            # far left, which reads as a burn that has not started.
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook.Sink.Update($null, (New-FakeArgs 2 0 0 0))
+            (ConvertTo-BurnProgress $hook.Sink).Percent | Should -Be -1
+        }
+
+        It 'turns sectors into megabytes at 2048 bytes apiece' {
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            $hook.Sink.Update($null, (New-FakeArgs 4 0 178022 356045))
+            $d = (ConvertTo-BurnProgress $hook.Sink).Detail
+            $d.BytesDone  | Should -Be (178022 * 2048)
+            $d.BytesTotal | Should -Be (356045 * 2048)
+        }
+
+        It 'survives a report with none of the properties it wanted' {
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            { $hook.Sink.Update($null, (New-Object DwUnknownBurnArgs)) } | Should -Not -Throw
+            $hook.Sink.ActionCode | Should -Be -1
+            (ConvertTo-BurnProgress $hook.Sink).Phase | Should -Be 'step -1' -Because 'a phase it cannot name must not be reported as writing'
+        }
+
+        It 'survives being handed nothing at all' {
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report { param($s) }
+            { $hook.Sink.Update($null, $null) } | Should -Not -Throw
+        }
+    }
+
+    Context 'progress that goes wrong while a disc is being written' {
+
+        It 'hands every report to the scriptblock it was given' {
+            $seen = New-Object System.Collections.ArrayList
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report {
+                param($s) $null = $seen.Add($s.SectorsDone)
+            }
+            foreach ($lba in 1000, 2000, 3000) {
+                $hook.Sink.Update($null, (New-FakeArgs 4 0 $lba 4000))
+            }
+            $seen.Count | Should -Be 3
+            $seen[-1] | Should -Be 3000
+        }
+
+        It 'swallows a handler that throws, because a bar is not worth a disc' {
+            # This is the whole reason the sink catches: an exception thrown here
+            # goes back into the engine mid-write, and what the engine does with
+            # it is nobody's guess. A window that cannot draw is a cosmetic
+            # fault; a write that stops partway through a CD-R is a dead disc.
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report {
+                param($s) throw 'the window fell over'
+            }
+            { $hook.Sink.Update($null, (New-FakeArgs 4 0 10 100)) } | Should -Not -Throw
+            $hook.Sink.Updates   | Should -Be 1 -Because 'the report itself was read before the handler ran'
+            $hook.Sink.LastError | Should -Match 'the window fell over'
+        }
+
+        It 'stops reporting once it has been detached' {
+            $count = New-Object System.Collections.ArrayList
+            $hook = Register-BurnProgress -Format (New-Object PSObject) -Report {
+                param($s) $null = $count.Add(1)
+            }
+            $hook.Sink.Update($null, (New-FakeArgs 4 0 10 100))
+            $hook.Detach()
+            $hook.Sink.Update($null, (New-FakeArgs 4 0 20 100))
+            $count.Count | Should -Be 1 -Because 'a sink left live on a reused engine reports one burn into another burn window'
+        }
+    }
+
+    Context 'what it all says on screen' {
+
+        It 'names phase <Code> as <Words>' -ForEach @(
+            @{ Code = 0; Words = 'checking the disc' }
+            @{ Code = 1; Words = 'formatting the disc' }
+            @{ Code = 2; Words = 'getting the drive ready' }
+            @{ Code = 3; Words = 'setting the laser power' }
+            @{ Code = 4; Words = 'writing' }
+            @{ Code = 5; Words = 'closing the disc' }
+            @{ Code = 6; Words = 'finished' }
+            @{ Code = 7; Words = 'the drive is reading back what it wrote' }
+        ) {
+            Get-BurnPhaseName $Code | Should -Be $Words
+        }
+
+        It 'reports a phase it has never heard of as itself' {
+            Get-BurnPhaseName 11 | Should -Be 'step 11'
+        }
+
+        It 'writes <Seconds> seconds on the clock as <Text>' -ForEach @(
+            @{ Seconds = 0;    Text = '00:00' }
+            @{ Seconds = 9;    Text = '00:09' }
+            @{ Seconds = 95;   Text = '01:35' }
+            @{ Seconds = 599;  Text = '09:59' }
+            @{ Seconds = 3725; Text = '1:02:05' }
+        ) {
+            Format-BurnClock $Seconds | Should -Be $Text
+        }
+
+        It 'floors the clock rather than rounding it, so it never reads ahead of itself' {
+            # The same trap Format-Elapsed carries in the app: a cast rounds, so
+            # 95 seconds would show as 02:35 on a stopwatch that has not got there.
+            Format-BurnClock 95 | Should -Be '01:35'
+        }
+
+        It 'says nothing about a clock with nothing on it' {
+            Format-BurnClock -1 | Should -Be ''
+        }
+
+        It 'puts the elapsed time and the drive own estimate on one line' {
+            Format-BurnProgressLine 134 160 | Should -Be 'Elapsed 02:14, about 02:40 left'
+        }
+
+        It 'leaves out an estimate the drive has not made' {
+            Format-BurnProgressLine 134 -1 | Should -Be 'Elapsed 02:14'
+            Format-BurnProgressLine 134 0  | Should -Be 'Elapsed 02:14'
+        }
+
+        It 'admits it when the drive says nothing at all' {
+            Format-BurnProgressLine -1 -1 | Should -Match 'not saying'
+        }
+    }
+}
+
+Describe 'How far along reading a disc back is' -Tag 'Unit' {
+
+    # The file count was the only thing reported until now, and on a set it is
+    # close to useless: eight small files and one 728 MB part file means the bar
+    # jumps to 89 per cent and then sits there for four minutes.
+
+    BeforeAll {
+        function New-SizedTree([string]$root, [hashtable]$files) {
+            New-Item -ItemType Directory -Force -Path $root | Out-Null
+            foreach ($name in $files.Keys) {
+                $fs = [IO.File]::Create((Join-Path $root $name))
+                $fs.SetLength([long]$files[$name])
+                $fs.Close()
+            }
+            return $root
+        }
+    }
+
+    It 'counts bytes as well as files, and ends on all of both' {
+        $sizes = @{ 'small.bin' = 1KB; 'big.bin' = 64KB; 'middling.bin' = 8KB }
+        $a = New-SizedTree (Join-Path $script:Sandbox 'bytes-src') $sizes
+        $b = New-SizedTree (Join-Path $script:Sandbox 'bytes-disc') $sizes
+        $last = New-Object System.Collections.ArrayList
+        $null = Test-BurnedDisc -DiscRoot $b -StagingFolder $a -OnProgress {
+            param($done, $total, $rel, $bytesDone, $bytesTotal)
+            $null = $last.Add(('{0}/{1} {2}/{3}' -f $done, $total, $bytesDone, $bytesTotal))
+        }
+        $last.Count | Should -Be 3
+        $last[-1] | Should -Be ('3/3 {0}/{0}' -f (1KB + 64KB + 8KB))
+    }
+
+    It 'reports the big file as most of the disc, not as one file in three' {
+        $sizes = @{ 'a.bin' = 1KB; 'b.bin' = 1KB; 'huge.bin' = 1MB }
+        $a = New-SizedTree (Join-Path $script:Sandbox 'weight-src') $sizes
+        $b = New-SizedTree (Join-Path $script:Sandbox 'weight-disc') $sizes
+        $seen = New-Object System.Collections.ArrayList
+        $null = Test-BurnedDisc -DiscRoot $b -StagingFolder $a -OnProgress {
+            param($done, $total, $rel, $bytesDone, $bytesTotal)
+            if ($rel -eq 'b.bin') {
+                $null = $seen.Add([int](100.0 * $bytesDone / $bytesTotal))
+            }
+        }
+        # Two files of three are done, and nothing worth watching has happened.
+        $seen[0] | Should -BeLessThan 5 -Because 'by files it would read as 67 per cent'
+    }
+
+    It 'still moves for a file that came out wrong' {
+        # It did not. The count was raised after the checks, so a wrong file
+        # skipped it, and the bar stopped short of the end on exactly the discs
+        # anybody would be watching.
+        $a = New-SizedTree (Join-Path $script:Sandbox 'short-src') @{ 'one.bin' = 4KB; 'two.bin' = 4KB }
+        $b = New-SizedTree (Join-Path $script:Sandbox 'short-disc') @{ 'one.bin' = 4KB; 'two.bin' = 2KB }
+        $last = New-Object System.Collections.ArrayList
+        $v = Test-BurnedDisc -DiscRoot $b -StagingFolder $a -OnProgress {
+            param($done, $total, $rel, $bytesDone, $bytesTotal) $null = $last.Add($done)
+        }
+        $v.WrongSize.Count | Should -Be 1 -Because 'the fixture is a short file on the disc'
+        $last[-1] | Should -Be 2 -Because 'both files were looked at, whatever the verdict on them'
     }
 }

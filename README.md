@@ -310,9 +310,10 @@ larger than the space.
 
 It burns below the drive's top speed, 16× on a CD and 8× on a DVD, because cheap
 media written flat out is the usual way to make a coaster and the minute saved is
-not worth a disc. The window stops responding while the drive writes, which the
-dialog says beforehand along with roughly how long it will take: the drive writes
-in one go and reports nothing until it finishes.
+not worth a disc. A progress window follows both slow halves: the phase the drive
+is in, how many megabytes have actually gone down, and how long the drive itself
+says is left. The drive reports that through an event sink about once a second,
+so the countdown is its own estimate rather than arithmetic done out here.
 
 Afterwards it reads every file back off the disc and compares it with what was
 built, by SHA-256. A burn that ends without an error is not the same thing as a

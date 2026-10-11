@@ -6272,6 +6272,185 @@ $txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Upda
 # The ISO is handed over and that is all. Driving another burner's command line
 # would mean knowing every one of them, and getting it wrong costs a disc.
 
+# A window for the two slow halves of burning a disc.
+#
+# Both of them used to happen behind a frozen form. The write said nothing at
+# all until it ended, and the read back moved a 150 pixel bar at the bottom of
+# the main window, labelled in the 160 pixels before the log box starts. Ten
+# minutes of that, for a disc that may still turn out to be a coaster.
+#
+# So: one window, used by the write and by the read back, and by the single
+# disc button and the set walk alike. It carries what the main window has no
+# room for, which is the phase the drive is in, how much has actually gone
+# down, and how long the drive itself thinks is left.
+#
+# It is deliberately shut out of being closed. There is no close button and no
+# system menu, because closing it would not stop the burn: the burn owns this
+# thread, and the window is only what the burn draws on. A window that looks
+# like it can cancel a write and cannot would be worse than no window.
+#
+# Every one of these refuses to do anything at all without a main form, and
+# that is not only for tests: it is what makes the progress code safe to call
+# from anywhere, including a path that has no interface.
+
+function Show-BurnWindow([string]$title, [string]$what) {
+    # No main window, no progress window, and no complaint either. The logic
+    # suite dot-sources these functions on their own, with no interface around
+    # them, and progress reporting has no business being the thing that fails.
+    if (-not $form) { return $null }
+    try {
+        $w = @{}
+        $dlg = New-Object System.Windows.Forms.Form
+        $dlg.Text = $title
+        $dlg.Font = $form.Font
+        $dlg.FormBorderStyle = 'FixedDialog'
+        $dlg.ControlBox = $false
+        $dlg.MaximizeBox = $false; $dlg.MinimizeBox = $false
+        $dlg.StartPosition = 'CenterParent'; $dlg.ShowInTaskbar = $false
+        $dlg.ClientSize = New-Object System.Drawing.Size(470, 196)
+
+        $lblWhat = New-Object System.Windows.Forms.Label
+        $lblWhat.Text = $what
+        $lblWhat.Location = New-Object System.Drawing.Point(15, 14)
+        $lblWhat.Size = New-Object System.Drawing.Size(440, 20)
+        $dlg.Controls.Add($lblWhat)
+
+        $bar = New-Object System.Windows.Forms.ProgressBar
+        $bar.Location = New-Object System.Drawing.Point(15, 42)
+        $bar.Size = New-Object System.Drawing.Size(440, 20)
+        $bar.Minimum = 0; $bar.Maximum = 1000
+        $dlg.Controls.Add($bar)
+
+        $lblPhase = New-Object System.Windows.Forms.Label
+        $lblPhase.Location = New-Object System.Drawing.Point(15, 70)
+        $lblPhase.Size = New-Object System.Drawing.Size(440, 20)
+        $dlg.Controls.Add($lblPhase)
+
+        $lblDetail = New-Object System.Windows.Forms.Label
+        $lblDetail.Location = New-Object System.Drawing.Point(15, 94)
+        $lblDetail.Size = New-Object System.Drawing.Size(440, 20)
+        $dlg.Controls.Add($lblDetail)
+
+        $lblClock = New-Object System.Windows.Forms.Label
+        $lblClock.Location = New-Object System.Drawing.Point(15, 118)
+        $lblClock.Size = New-Object System.Drawing.Size(440, 20)
+        $lblClock.ForeColor = [System.Drawing.Color]::DimGray
+        $dlg.Controls.Add($lblClock)
+
+        $lblHint = New-Object System.Windows.Forms.Label
+        $lblHint.Text = 'Leave the drive alone until this finishes. Nothing else should read or write the disc while it runs.'
+        $lblHint.Location = New-Object System.Drawing.Point(15, 148)
+        $lblHint.Size = New-Object System.Drawing.Size(440, 36)
+        $lblHint.ForeColor = [System.Drawing.Color]::DimGray
+        $dlg.Controls.Add($lblHint)
+
+        $w.Form = $dlg; $w.Bar = $bar; $w.What = $lblWhat
+        $w.Phase = $lblPhase; $w.Detail = $lblDetail; $w.Clock = $lblClock; $w.Hint = $lblHint
+        $w.Watch = [Diagnostics.Stopwatch]::StartNew()
+        # Owned by the main window and modeless: the burn is running on this
+        # thread, so a modal dialog would have nothing left to pump it.
+        $dlg.Show($form)
+        [System.Windows.Forms.Application]::DoEvents()
+        return $w
+    } catch {
+        # A window that will not open is not a burn that cannot run. Nothing is
+        # logged here because there is nothing to log it with: this runs before
+        # the burn and knows only about drawing.
+        return $null
+    }
+}
+
+<#
+    Put one report on the window.
+
+    A percent below nought means the drive will not say how far along it is,
+    which is a different thing from nought per cent and has to look different:
+    a bar sitting at the far left reads as a burn that has not started. It
+    becomes a marquee instead, which says "running, cannot say how far" without
+    claiming a number.
+#>
+function Update-BurnWindow($w, [int]$percent, [string]$phase, [string]$detail, [string]$clock) {
+    if (-not $w) { return }
+    if ($percent -lt 0) {
+        if ($w.Bar.Style -ne 'Marquee') { $w.Bar.Style = 'Marquee' }
+        $w.Phase.Text = $phase
+    } else {
+        if ($w.Bar.Style -ne 'Continuous') { $w.Bar.Style = 'Continuous' }
+        $v = [int](10 * $percent)
+        if ($v -lt 0) { $v = 0 } elseif ($v -gt 1000) { $v = 1000 }
+        $w.Bar.Value = $v
+        $w.Phase.Text = '{0}   {1}%' -f $phase, $percent
+    }
+    if ($detail) { $w.Detail.Text = $detail }
+    if ($clock)  { $w.Clock.Text = $clock }
+    # The load-bearing line, exactly as in the build's own progress callback:
+    # the burn owns the interface thread, and this is the only thing keeping
+    # either window painting while it runs.
+    [System.Windows.Forms.Application]::DoEvents()
+}
+
+function Close-BurnWindow($w) {
+    if (-not $w) { return }
+    try {
+        if ($w.Watch) { $w.Watch.Stop() }
+        $w.Form.Close()
+        $w.Form.Dispose()
+        [System.Windows.Forms.Application]::DoEvents()
+    } catch { }
+}
+
+# Handed to Write-IsoToDisc as -OnProgress. A closure rather than a scriptblock
+# written at each call site, because there are two call sites and the words on
+# screen should not be allowed to drift between them.
+function New-BurnReporter($w) {
+    return {
+        param($percent, $phase, $detail)
+        $bytes = ''
+        $clock = ''
+        if ($detail) {
+            if ($detail.BytesTotal -gt 0) {
+                $bytes = '{0} of {1} written' -f (Format-Size $detail.BytesDone), (Format-Size $detail.BytesTotal)
+            }
+            $clock = Format-BurnProgressLine $detail.ElapsedSeconds $detail.RemainingSeconds
+        }
+        Update-BurnWindow $w $percent $phase $bytes $clock
+    }.GetNewClosure()
+}
+
+<#
+    How much longer the read back has, from how long it has taken so far.
+
+    The drive estimates its own write; nobody estimates a read, so this does.
+    Bytes rather than files, and -1 until there is enough done to divide by:
+    the first file off a disc arrives after the drive has spun up and seeked,
+    so an estimate from it would say half an hour and then fall to two minutes.
+#>
+function Get-CheckRemainingSeconds([double]$elapsedSeconds, [long]$bytesDone, [long]$bytesTotal) {
+    if ($bytesDone -le 0 -or $bytesTotal -le 0 -or $elapsedSeconds -le 0) { return -1 }
+    if ($bytesDone -ge $bytesTotal) { return 0 }
+    if ($bytesDone * 20 -lt $bytesTotal -and $elapsedSeconds -lt 5) { return -1 }
+    $rate = $bytesDone / $elapsedSeconds
+    if ($rate -le 0) { return -1 }
+    return [int][Math]::Ceiling(($bytesTotal - $bytesDone) / $rate)
+}
+
+# Handed to Test-BurnedDisc as -OnProgress. The file name is passed on from
+# there and shown here, because unlike the label on the main window this one
+# has a line to itself: on a cut set the file being read is the whole story.
+function New-CheckReporter($w) {
+    return {
+        param($done, $total, $rel, $bytesDone, $bytesTotal)
+        $pct = -1
+        if ($bytesTotal -gt 0) { $pct = [int](100.0 * $bytesDone / $bytesTotal) }
+        elseif ($total -gt 0)  { $pct = [int](100.0 * $done / $total) }
+        $detail = "file $done of $total"
+        if ($rel) { $detail = "$rel   ($done of $total)" }
+        $elapsed = if ($w -and $w.Watch) { $w.Watch.Elapsed.TotalSeconds } else { 0 }
+        $left = Get-CheckRemainingSeconds $elapsed $bytesDone $bytesTotal
+        Update-BurnWindow $w $pct 'checking every file against what was built' $detail (Format-BurnProgressLine ([int]$elapsed) $left)
+    }.GetNewClosure()
+}
+
 # One disc, written here and then read back, for the set walk.
 #
 # The Burn to disc button has done this for a single disc since burning
@@ -6287,7 +6466,11 @@ $txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Upda
 # $stageDir is the folder this disc was built from, 'disc D1' beside the ISO.
 # Without it there is a burn and no check, which is the state this whole change
 # exists to end, so a missing one is a refusal rather than a shrug.
-function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblock]$log) {
+#
+# $what names this disc for the progress window, as 'disc 2 of 3'. A set burns
+# three identical looking windows one after another, and the title is the only
+# thing that says which of them is on screen.
+function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblock]$log, [string]$what = '') {
     if (-not (Test-Path -LiteralPath $isoPath)) { return @{ Ok = $false; Why = "There is no ISO at $isoPath." } }
     if (-not (Test-Path -LiteralPath $stageDir)) {
         return @{ Ok = $false; Why = "There is nothing at $stageDir to check the disc against, so it was not burned." }
@@ -6316,13 +6499,21 @@ function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblo
     if (-not $pick) { $pick = $d.Speeds | Select-Object -Last 1 }
     $speedText = if ($pick) { "$($pick.Multiple)x" } else { "the drive's own choice" }
 
+    $win = Show-BurnWindow $(if ($what) { 'Writing ' + $what } else { 'Writing the disc' }) (
+               '{0}, {1}, to {2} at {3}' -f $iso.Name, (Format-Size $iso.Length), $d.Drive, $speedText)
     try {
-        $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false }
+        $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false
+                       OnProgress = (New-BurnReporter $win) }
         if ($pick) { $burnArgs.Speed = "$($pick.Multiple)x" }
-        & $log "Writing $($iso.Name) to $($d.Drive) at $speedText. The window will not respond until it finishes."
+        & $log "Writing $($iso.Name) to $($d.Drive) at $speedText. A window shows how far along the drive is."
         $r = Write-IsoToDisc @burnArgs
     }
     catch { return @{ Ok = $false; Why = "The disc could not be written: $($_.Exception.Message)" } }
+    finally { Close-BurnWindow $win }
+    # Said once, after the fact. A drive that reports nothing leaves a window
+    # that sat still for ten minutes, and the log is where somebody looks to
+    # find out whether that was the drive or a bug in here.
+    if (-not $r.Watched) { & $log 'The drive reported nothing while it wrote, so the bar could not move.' }
 
     # Written is not the same as readable, which is the entire point. The drive
     # ejects at the end of a write so the next read sees a freshly mounted
@@ -6339,8 +6530,11 @@ function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblo
     }
 
     & $log "Checking every file on $root against what was built..."
-    try { $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stageDir }
+    $win = Show-BurnWindow $(if ($what) { 'Checking ' + $what } else { 'Checking the disc' }) (
+               'Reading every file off {0} and hashing it against the folder it was built from' -f $root)
+    try { $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stageDir -OnProgress (New-CheckReporter $win) }
     catch { return @{ Ok = $false; Seconds = $r.Seconds; Why = "The disc could not be checked: $($_.Exception.Message)" } }
+    finally { Close-BurnWindow $win }
     if ($v.Ok) { return @{ Ok = $true; Seconds = $r.Seconds; Why = "all $($v.FilesOnDisc) files match" } }
 
     $detail = @()
@@ -6437,7 +6631,7 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
             # Invoke-DiscBurnAndCheck to report, not a reason to fall over
             # while working out a folder name.
             $stage = (Split-Path $isos[$i] -Parent).TrimEnd([char]92) + [char]92 + ('disc D{0}' -f $d)
-            $res = Invoke-DiscBurnAndCheck $isos[$i] $stage $log
+            $res = Invoke-DiscBurnAndCheck $isos[$i] $stage $log "disc $d of $n"
             if (-not $res.Ok) {
                 & $log "ERROR: disc $d of $n did not come out right: $($res.Why)"
                 Show-Warn ("Disc $d of $n did not come out right:" + [Environment]::NewLine + [Environment]::NewLine +
@@ -6638,8 +6832,8 @@ $btnBurn.Add_Click({
         ''
         "It should take $estimate."
         'This cannot be undone, and a write-once disc cannot be reused.'
-        'The window will stop responding for that long. That is normal:'
-        'the drive does the writing in one go and reports nothing until it ends.'
+        'A window will show the phase the drive is in, how much has gone down,'
+        'and how long the drive itself says is left.'
         ''
         'Every file is checked against what was built once it finishes.'
     ) -join "`r`n"
@@ -6652,15 +6846,19 @@ $btnBurn.Add_Click({
     Set-FormBusy $true
     $btnBurn.Enabled = $false
     try {
-        & $log "Burning $($iso.Name) to $($d.Drive) at $speedText, $estimate. The window will not respond until it finishes."
+        & $log "Burning $($iso.Name) to $($d.Drive) at $speedText, $estimate. A window shows how far along the drive is."
         $lblElapsed.Text = 'Burning...'
         [System.Windows.Forms.Application]::DoEvents()
         # Not $args: that is an automatic variable, and splatting over it is a
         # way to get a call that does something other than it reads.
-        $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false }
+        $win = Show-BurnWindow 'Writing the disc' (
+                   '{0}, {1}, to {2} at {3}' -f $iso.Name, (Format-Size $iso.Length), $d.Drive, $speedText)
+        $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false
+                       OnProgress = (New-BurnReporter $win) }
         if ($pick) { $burnArgs.Speed = "$($pick.Multiple)x" }
-        $r = Write-IsoToDisc @burnArgs
+        try { $r = Write-IsoToDisc @burnArgs } finally { Close-BurnWindow $win }
         & $log "Written in $($r.Seconds) seconds. Close the tray to check it."
+        if (-not $r.Watched) { & $log 'The drive reported nothing while it wrote, so the bar could not move.' }
 
         [System.Windows.Forms.MessageBox]::Show(
             "Written in $($r.Seconds) seconds.`r`n`r`nThe disc was ejected. Close the tray, wait for Windows to read it, then press OK to check every file against what was built.",
@@ -6676,18 +6874,15 @@ $btnBurn.Add_Click({
         } else {
             & $log 'Checking every file on the disc against what was built...'
             # Reading a disc back is slow, so this one does report as it goes.
-            $checkWatch = [Diagnostics.Stopwatch]::StartNew()
-            $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stage -OnProgress {
-                # The file name is passed too, and deliberately not shown: the
-                # label has 160px before it runs under the log box, and a disc
-                # with thousands of files would scroll it into noise.
-                param($done, $total)
-                if ($total -gt 0) {
-                    $pbBuild.Value = [int](1000.0 * $done / $total)
-                    $lblElapsed.Text = 'Checking {0}/{1}   {2}' -f $done, $total, (Format-Elapsed $checkWatch.Elapsed)
-                }
-                [System.Windows.Forms.Application]::DoEvents()
-            }
+            # It used to report onto the main window, where the label has 160px
+            # before it runs under the log box and the file name had to be
+            # thrown away to fit. The progress window has a line for it, and on
+            # a cut set the file being read is the whole story.
+            $win = Show-BurnWindow 'Checking the disc' (
+                       'Reading every file off {0} and hashing it against the folder it was built from' -f $root)
+            try {
+                $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stage -OnProgress (New-CheckReporter $win)
+            } finally { Close-BurnWindow $win }
             $pbBuild.Value = 0
             $lblElapsed.Text = ''
             if ($v.Ok) {
