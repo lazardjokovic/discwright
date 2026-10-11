@@ -8412,8 +8412,8 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
             return $null
         }
         function Close-BurnWindow($w) { $script:Closed++ }
-        function New-BurnReporter($w) { return { param($percent, $phase, $detail) } }
-        function New-CheckReporter($w) { return { param($done, $total, $rel, $bytesDone, $bytesTotal) } }
+        function Write-BurnReport($w, $percent, $phase, $detail) { $script:Reported++ }
+        function Write-CheckReport($w, $done, $total, $rel, $bytesDone, $bytesTotal) { $script:Reported++ }
 
         # Real, this one: the line on the window names the image and its size,
         # and a fake would only be testing the fake's formatting.
@@ -8424,7 +8424,7 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
     }
 
     BeforeEach {
-        $script:Windows = @(); $script:Closed = 0; $script:Wrote = 0
+        $script:Windows = @(); $script:Closed = 0; $script:Wrote = 0; $script:Reported = 0
         $script:WriteThrows = $false
         $script:WriteResult = @{ Seconds = 11; Watched = $true; Updates = 240 }
         $script:Drives = @(@{ Drive = $script:Root; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
@@ -8478,15 +8478,20 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         # Otherwise a bar that never moved looks like a bug in here, and the
         # first thing anybody would do is go looking for one.
         $script:WriteResult = @{ Seconds = 11; Watched = $false; Updates = 0 }
-        $said = @()
-        $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) $said += , $m }
-        ($said -join '|') | Should -Match 'reported nothing'
+        # $script:, not $said: the callback runs in a child scope, so += there
+        # makes a local copy and the outer variable stays empty. Written the
+        # other way it passes whatever the application says, which is how this
+        # one earned its comment.
+        $script:Said = @()
+        $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) $script:Said += , $m }
+        ($script:Said -join '|') | Should -Match 'reported nothing'
     }
 
     It 'keeps quiet about it when the drive did report' {
-        $said = @()
-        $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) $said += , $m }
-        ($said -join '|') | Should -Not -Match 'reported nothing'
+        $script:Said = @()
+        $null = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) $script:Said += , $m }
+        ($script:Said -join '|') | Should -Not -Match 'reported nothing'
+        $script:Said.Count | Should -BeGreaterThan 0 -Because 'an empty log matches nothing either way'
     }
 
     It 'no longer promises the window will stop responding' {
@@ -10363,7 +10368,7 @@ Describe 'The window a burn draws on' -Tag 'Unit' {
         $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
         $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
         foreach ($want in 'Show-BurnWindow', 'Update-BurnWindow', 'Close-BurnWindow',
-                          'New-BurnReporter', 'New-CheckReporter', 'Get-CheckRemainingSeconds',
+                          'Write-BurnReport', 'Write-CheckReport', 'Get-CheckRemainingSeconds',
                           'Format-Size') {
             $fn = ($ast.FindAll({ param($n)
                 $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
@@ -10411,12 +10416,12 @@ Describe 'The window a burn draws on' -Tag 'Unit' {
         }
 
         It 'reports to a window that is not there without throwing' {
-            # The reporter is built before the burn and called from inside it.
-            # Throwing in there goes back into the drive mid-write.
-            $r = New-BurnReporter $null
-            { & $r 42 'writing' ([pscustomobject]@{ BytesDone = 1MB; BytesTotal = 2MB
-                                                    ElapsedSeconds = 10; RemainingSeconds = 10 }) } |
-                Should -Not -Throw
+            # Called from inside the write. Throwing in there goes back into the
+            # drive mid-burn, which is why the sink catches as well.
+            { Write-BurnReport $null 42 'writing' ([pscustomobject]@{
+                  BytesDone = 1MB; BytesTotal = 2MB
+                  ElapsedSeconds = 10; RemainingSeconds = 10 }) } | Should -Not -Throw
+            { Write-CheckReport $null 4 9 'x.bin' 1MB 2MB } | Should -Not -Throw
         }
     }
 
@@ -10469,8 +10474,7 @@ Describe 'The window a burn draws on' -Tag 'Unit' {
         BeforeEach { $script:W = New-FakeWindow }
 
         It 'says how much has actually gone down, not just a percentage' {
-            $r = New-BurnReporter $script:W
-            & $r 46 'writing' ([pscustomobject]@{
+            Write-BurnReport $script:W 46 'writing' ([pscustomobject]@{
                 BytesDone = 328MB; BytesTotal = 713MB; ElapsedSeconds = 134; RemainingSeconds = 160 })
             $script:W.Detail.Text | Should -Be '328 MB of 713 MB written'
         }
@@ -10478,15 +10482,13 @@ Describe 'The window a burn draws on' -Tag 'Unit' {
         It 'puts the drive own estimate on the clock line' {
             # The drive knows about its buffer and the speed it settled on.
             # Nothing out here does, so nothing out here estimates the write.
-            $r = New-BurnReporter $script:W
-            & $r 46 'writing' ([pscustomobject]@{
+            Write-BurnReport $script:W 46 'writing' ([pscustomobject]@{
                 BytesDone = 328MB; BytesTotal = 713MB; ElapsedSeconds = 134; RemainingSeconds = 160 })
             $script:W.Clock.Text | Should -Be 'Elapsed 02:14, about 02:40 left'
         }
 
         It 'says nothing about megabytes before the drive has said anything' {
-            $r = New-BurnReporter $script:W
-            & $r 0 'getting the drive ready' $null
+            Write-BurnReport $script:W 0 'getting the drive ready' $null
             $script:W.Phase.Text | Should -Be 'getting the drive ready   0%'
             $script:W.Detail.Text | Should -BeNullOrEmpty
         }
@@ -10499,23 +10501,61 @@ Describe 'The window a burn draws on' -Tag 'Unit' {
         It 'names the file it is reading, which the main window had no room for' {
             # On a cut set the file being read IS the story: one 728 MB part
             # file is the whole reason the disc matters.
-            $r = New-CheckReporter $script:W
-            & $r 4 9 'setup_hollow_knight.exe.dwpart01' 512MB 713MB
+            Write-CheckReport $script:W 4 9 'setup_hollow_knight.exe.dwpart01' 512MB 713MB
             $script:W.Detail.Text | Should -Be 'setup_hollow_knight.exe.dwpart01   (4 of 9)'
         }
 
         It 'measures the disc in bytes rather than in files' {
             # Eight small files and one enormous one: by files this is 89 per
             # cent done with four minutes to go.
-            $r = New-CheckReporter $script:W
-            & $r 8 9 'small.txt' 2MB 713MB
+            Write-CheckReport $script:W 8 9 'small.txt' 2MB 713MB
             $script:W.Bar.Value | Should -BeLessThan 50 -Because 'by files it would read as 889'
         }
 
         It 'falls back to counting files when nothing knows the sizes' {
-            $r = New-CheckReporter $script:W
-            & $r 5 10 'x.bin' 0 0
+            Write-CheckReport $script:W 5 10 'x.bin' 0 0
             $script:W.Bar.Value | Should -Be 500
+        }
+    }
+
+    Context 'built so the burn can actually call it' {
+
+        It 'draws through functions rather than a closure handed to the drive' {
+            # GetNewClosure binds a scriptblock to a module of its own, and from
+            # inside that module the application's own functions are not in
+            # scope. The first version did exactly that: the report threw on
+            # Update-BurnWindow, the sink swallowed it so the burn carried on,
+            # and the window sat still looking like a silent drive.
+            #
+            # Scoped to the burn, not to the file. A closure is the right answer
+            # for the dialog handlers that use one, which capture a control and
+            # call nothing: this is only wrong where the scriptblock has to
+            # reach back out and call the application.
+            $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+            $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+            foreach ($name in 'Invoke-DiscBurnAndCheck', 'Show-BurnWindow',
+                              'Write-BurnReport', 'Write-CheckReport') {
+                $fn = ($ast.FindAll({ param($n)
+                    $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                    $n.Name -eq $name }, $false) | Select-Object -First 1)
+                $fn | Should -Not -BeNullOrEmpty -Because "DiscWright.ps1 should still have $name"
+                # The comment in Show-BurnWindow names it, so the word alone is
+                # not the test: a call to it is.
+                [string]$fn.Extent.Text | Should -Not -Match '\}\.GetNewClosure\(\)'
+            }
+            $src | Should -Not -Match 'New-BurnReporter'
+            $src | Should -Not -Match 'New-CheckReporter'
+            $src | Should -Match ([regex]::Escape('Write-BurnReport $script:BurnWin'))
+            $src | Should -Match ([regex]::Escape('Write-CheckReport $script:BurnWin'))
+        }
+
+        It 'lets go of the window on the way out' {
+            # The progress scriptblock looks the window up by name, so a name
+            # left pointing at a closed window is a report drawn on a corpse.
+            $script:form = $null
+            $script:BurnWin = 'something else'
+            Close-BurnWindow @{ Form = $null; Watch = $null }
+            $script:BurnWin | Should -BeNullOrEmpty
         }
     }
 

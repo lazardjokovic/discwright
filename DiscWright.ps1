@@ -6347,6 +6347,15 @@ function Show-BurnWindow([string]$title, [string]$what) {
         $w.Form = $dlg; $w.Bar = $bar; $w.What = $lblWhat
         $w.Phase = $lblPhase; $w.Detail = $lblDetail; $w.Clock = $lblClock; $w.Hint = $lblHint
         $w.Watch = [Diagnostics.Stopwatch]::StartNew()
+        # Kept here as well as returned. The scriptblock handed to the burn is
+        # invoked from inside the write, and it cannot be a closure over this
+        # window: GetNewClosure binds a scriptblock to a module of its own, and
+        # from inside that module the application's own functions are out of
+        # scope. It failed exactly the way it would have in the wild. The first
+        # report threw CommandNotFoundException on Update-BurnWindow, the sink
+        # swallowed it so the burn carried on, and the window sat perfectly
+        # still, looking for all the world like a drive that reports nothing.
+        $script:BurnWin = $w
         # Owned by the main window and modeless: the burn is running on this
         # thread, so a modal dialog would have nothing left to pump it.
         $dlg.Show($form)
@@ -6391,6 +6400,7 @@ function Update-BurnWindow($w, [int]$percent, [string]$phase, [string]$detail, [
 
 function Close-BurnWindow($w) {
     if (-not $w) { return }
+    $script:BurnWin = $null
     try {
         if ($w.Watch) { $w.Watch.Stop() }
         $w.Form.Close()
@@ -6399,22 +6409,20 @@ function Close-BurnWindow($w) {
     } catch { }
 }
 
-# Handed to Write-IsoToDisc as -OnProgress. A closure rather than a scriptblock
-# written at each call site, because there are two call sites and the words on
-# screen should not be allowed to drift between them.
-function New-BurnReporter($w) {
-    return {
-        param($percent, $phase, $detail)
-        $bytes = ''
-        $clock = ''
-        if ($detail) {
-            if ($detail.BytesTotal -gt 0) {
-                $bytes = '{0} of {1} written' -f (Format-Size $detail.BytesDone), (Format-Size $detail.BytesTotal)
-            }
-            $clock = Format-BurnProgressLine $detail.ElapsedSeconds $detail.RemainingSeconds
+# One report from a write, put on the window. A function rather than a closure
+# built per burn, for the reason Show-BurnWindow records above, and a function
+# rather than the same lines at both call sites, so the words on screen cannot
+# drift between the single disc button and the set walk.
+function Write-BurnReport($w, [int]$percent, [string]$phase, $detail) {
+    $bytes = ''
+    $clock = ''
+    if ($detail) {
+        if ($detail.BytesTotal -gt 0) {
+            $bytes = '{0} of {1} written' -f (Format-Size $detail.BytesDone), (Format-Size $detail.BytesTotal)
         }
-        Update-BurnWindow $w $percent $phase $bytes $clock
-    }.GetNewClosure()
+        $clock = Format-BurnProgressLine $detail.ElapsedSeconds $detail.RemainingSeconds
+    }
+    Update-BurnWindow $w $percent $phase $bytes $clock
 }
 
 <#
@@ -6434,21 +6442,18 @@ function Get-CheckRemainingSeconds([double]$elapsedSeconds, [long]$bytesDone, [l
     return [int][Math]::Ceiling(($bytesTotal - $bytesDone) / $rate)
 }
 
-# Handed to Test-BurnedDisc as -OnProgress. The file name is passed on from
-# there and shown here, because unlike the label on the main window this one
-# has a line to itself: on a cut set the file being read is the whole story.
-function New-CheckReporter($w) {
-    return {
-        param($done, $total, $rel, $bytesDone, $bytesTotal)
-        $pct = -1
-        if ($bytesTotal -gt 0) { $pct = [int](100.0 * $bytesDone / $bytesTotal) }
-        elseif ($total -gt 0)  { $pct = [int](100.0 * $done / $total) }
-        $detail = "file $done of $total"
-        if ($rel) { $detail = "$rel   ($done of $total)" }
-        $elapsed = if ($w -and $w.Watch) { $w.Watch.Elapsed.TotalSeconds } else { 0 }
-        $left = Get-CheckRemainingSeconds $elapsed $bytesDone $bytesTotal
-        Update-BurnWindow $w $pct 'checking every file against what was built' $detail (Format-BurnProgressLine ([int]$elapsed) $left)
-    }.GetNewClosure()
+# One report from a read back. The file name is passed on from Test-BurnedDisc
+# and shown, because unlike the label on the main window this one has a line to
+# itself: on a cut set the file being read is the whole story.
+function Write-CheckReport($w, [int]$done, [int]$total, [string]$rel, [long]$bytesDone, [long]$bytesTotal) {
+    $pct = -1
+    if ($bytesTotal -gt 0) { $pct = [int](100.0 * $bytesDone / $bytesTotal) }
+    elseif ($total -gt 0)  { $pct = [int](100.0 * $done / $total) }
+    $detail = "file $done of $total"
+    if ($rel) { $detail = "$rel   ($done of $total)" }
+    $elapsed = if ($w -and $w.Watch) { $w.Watch.Elapsed.TotalSeconds } else { 0 }
+    $left = Get-CheckRemainingSeconds $elapsed $bytesDone $bytesTotal
+    Update-BurnWindow $w $pct 'checking every file against what was built' $detail (Format-BurnProgressLine ([int]$elapsed) $left)
 }
 
 # One disc, written here and then read back, for the set walk.
@@ -6503,7 +6508,8 @@ function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblo
                '{0}, {1}, to {2} at {3}' -f $iso.Name, (Format-Size $iso.Length), $d.Drive, $speedText)
     try {
         $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false
-                       OnProgress = (New-BurnReporter $win) }
+                       OnProgress = { param($pct, $phase, $detail)
+                                      Write-BurnReport $script:BurnWin $pct $phase $detail } }
         if ($pick) { $burnArgs.Speed = "$($pick.Multiple)x" }
         & $log "Writing $($iso.Name) to $($d.Drive) at $speedText. A window shows how far along the drive is."
         $r = Write-IsoToDisc @burnArgs
@@ -6532,7 +6538,11 @@ function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblo
     & $log "Checking every file on $root against what was built..."
     $win = Show-BurnWindow $(if ($what) { 'Checking ' + $what } else { 'Checking the disc' }) (
                'Reading every file off {0} and hashing it against the folder it was built from' -f $root)
-    try { $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stageDir -OnProgress (New-CheckReporter $win) }
+    try {
+        $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stageDir -OnProgress {
+                 param($done, $total, $rel, $bytesDone, $bytesTotal)
+                 Write-CheckReport $script:BurnWin $done $total $rel $bytesDone $bytesTotal }
+    }
     catch { return @{ Ok = $false; Seconds = $r.Seconds; Why = "The disc could not be checked: $($_.Exception.Message)" } }
     finally { Close-BurnWindow $win }
     if ($v.Ok) { return @{ Ok = $true; Seconds = $r.Seconds; Why = "all $($v.FilesOnDisc) files match" } }
@@ -6854,7 +6864,8 @@ $btnBurn.Add_Click({
         $win = Show-BurnWindow 'Writing the disc' (
                    '{0}, {1}, to {2} at {3}' -f $iso.Name, (Format-Size $iso.Length), $d.Drive, $speedText)
         $burnArgs = @{ IsoPath = $iso.FullName; Drive = $d.Drive; Confirm = $false
-                       OnProgress = (New-BurnReporter $win) }
+                       OnProgress = { param($pct, $phase, $detail)
+                                      Write-BurnReport $script:BurnWin $pct $phase $detail } }
         if ($pick) { $burnArgs.Speed = "$($pick.Multiple)x" }
         try { $r = Write-IsoToDisc @burnArgs } finally { Close-BurnWindow $win }
         & $log "Written in $($r.Seconds) seconds. Close the tray to check it."
@@ -6881,7 +6892,9 @@ $btnBurn.Add_Click({
             $win = Show-BurnWindow 'Checking the disc' (
                        'Reading every file off {0} and hashing it against the folder it was built from' -f $root)
             try {
-                $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stage -OnProgress (New-CheckReporter $win)
+                $v = Test-BurnedDisc -DiscRoot $root -StagingFolder $stage -OnProgress {
+                         param($done, $total, $rel, $bytesDone, $bytesTotal)
+                         Write-CheckReport $script:BurnWin $done $total $rel $bytesDone $bytesTotal }
             } finally { Close-BurnWindow $win }
             $pbBuild.Value = 0
             $lblElapsed.Text = ''
