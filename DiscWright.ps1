@@ -6664,7 +6664,9 @@ function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblo
     }
     $iso = Get-Item -LiteralPath $isoPath
 
-    try { $burners = @(Get-BurnerInfo) }
+    # Not @(Get-BurnerInfo): that function returns its list wrapped, so the
+    # @() makes an array holding an array. See Get-BurnTarget.
+    try { $burners = Get-BurnerInfo }
     catch { return @{ Ok = $false; Why = "The burning service could not be asked anything: $($_.Exception.Message)" } }
     # The drive the walk settled on, once, before the first disc. Passing it in
     # rather than finding it again per disc is what stops a set wandering
@@ -6852,7 +6854,7 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
             # answer was whichever drive happened to be enumerated first, which
             # was right by luck and silently wrong by the same luck.
             if (-not $onDrive) {
-                try { $target = Get-BurnTarget @(Get-BurnerInfo) } catch { $target = @{ Ask = $null } }
+                try { $target = Get-BurnTarget (Get-BurnerInfo) } catch { $target = @{ Ask = $null } }
                 if ($target.Ask) {
                     $picked = Select-BurnDrive $target.Ask $parent
                     if (-not $picked) {

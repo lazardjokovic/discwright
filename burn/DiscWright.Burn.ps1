@@ -338,7 +338,19 @@ function Get-BurnerInfo {
     to choose between one thing is not a choice, it is a dialog in the way.
 #>
 function Get-BurnTarget($burners, [string]$want = '') {
-    $all = @($burners)
+    # Flattened, not trusted. Get-BurnerInfo ends with "return , $out" so that
+    # a machine with one recorder still hands back a list, which means
+    # @(Get-BurnerInfo) is an array holding an array. Two call sites wrote it
+    # that way and got away with it for a year, because the next thing they
+    # did was pipe it and a pipe unrolls. The first code to ask it for .Count
+    # instead saw one drive, picked it, and handed a burner that was really
+    # two burners to Test-IsoFitsMedia. Found on a machine with a second
+    # writer plugged in, which is the only machine where it shows.
+    # The Where-Object is not decoration either: a function that returns an
+    # empty list hands back nothing at all, $burners is then $null, and piping
+    # $null yields one $null rather than nothing. Without this, a machine with
+    # no recorder reports "no drive is ready" about a drive that is not there.
+    $all = @($burners | ForEach-Object { $_ } | Where-Object { $_ })
     if (-not $all.Count) { return @{ Why = 'No disc recorder was found on this machine.' } }
     $ready = @($all | Where-Object { $_.Ready })
 
