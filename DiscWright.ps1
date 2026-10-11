@@ -2753,9 +2753,27 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // {n:2,of:3,label:"NAME"}, and the menu stops offering to play or install,
   // because no disc in a set can do either on its own.
   var SEP=String.fromCharCode(92);
+
+  // State the set-mode code itself reads, so it lives inside the markers with
+  // the code that reads it. Put after them at first, which left every one of
+  // the four blocks the tests lift unable to run: a function referring to a
+  // variable that is not in the lifted text fails on the first call.
+  //
+  // SETROWS and SETJOINS are the table, read once. Every disc in a set
+  // carries the same one, so there is nothing to gain by reading it again and
+  // everything to lose: the menu goes on running when its own disc is
+  // ejected, and a panel that re-reads the disc to draw itself turns into
+  // "its list of files is missing" the moment somebody takes the disc out to
+  // put the next one in.
+  var SETROWS=null;
+  var SETJOINS=null;
+  var SETWANT=0;      // the disc being waited for, 0 when nothing is
+
   function setRows(){
     // Read off the disc's own set file rather than baked into this menu, so the
-    // two can never disagree about what the set holds.
+    // two can never disagree about what the set holds. Kept once it has been
+    // read: see SETROWS.
+    if(SETROWS) return SETROWS;
     var out=[], p=fso.BuildPath(root,SETFILE);
     if(!fso.FileExists(p)) return out;
     var t=fso.OpenTextFile(p,1), line, parts, star;
@@ -2775,8 +2793,48 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
                        f:line.substring(star+1)};
     }
     t.Close();
+    if(out.length) SETROWS=out;
     return out;
   }
+
+  // Which disc is in the drive right now, read off the disc rather than taken
+  // from what this menu was built as.
+  //
+  // One menu drives the whole set. SET.n is baked in when the disc is built,
+  // so disc 1's menu believed it was disc 1 for ever, and swapping the disc
+  // under it left it copying files that were no longer there. The disc itself
+  // says which one it is, on a line near the top, and that line is the only
+  // thing worth asking the drive for once the table is in memory.
+  //
+  // Nought when the drive is empty or holds something else, which is a state
+  // the panel has to be able to show rather than an error.
+  function setDiscIn(){
+    try{
+      var p=fso.BuildPath(root,SETFILE);
+      if(!fso.FileExists(p)) return 0;
+      var t=fso.OpenTextFile(p,1), line, m, n=0;
+      while(!t.AtEndOfStream){
+        line=t.ReadLine();
+        m=line.match(/^\s*disc\s+(\d+)\s+of\s+(\d+)/i);
+        if(m){ n=parseInt(m[1],10); break; }
+      }
+      t.Close();
+      return n;
+    }catch(ex){ return 0; }
+  }
+  // The disc to treat as "this one". What is in the drive, or what this menu
+  // was built as when the drive cannot say, which is the state at startup
+  // before anything has been read.
+  function setNow(){ var n=setDiscIn(); return n>0?n:SET.n; }
+
+  // Is this one of the discs still wanted?
+  function setNeedsDisc(s,n){
+    if(!s.need.length||!n) return false;
+    var list=s.need.split(", "), i;
+    for(i=0;i<list.length;i++){ if(parseFloat(list[i])==n) return true; }
+    return false;
+  }
+
   // The set file writes forward slashes, the way the checksum list does.
   function setPath(dir,rel){
     var parts=rel.split("/"), p=dir;
@@ -2809,6 +2867,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   //   JOIN <sha256 of the finished file> <bytes> *name
   //   PART <n> *name.dwpart01
   function setJoins(){
+    if(SETJOINS) return SETJOINS;
     var out=[], p=fso.BuildPath(root,SETFILE), cur=null;
     if(!fso.FileExists(p)) return out;
     var t=fso.OpenTextFile(p,1), line, star, head;
@@ -2829,6 +2888,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       }
     }
     t.Close();
+    if(out.length) SETJOINS=out;
     return out;
   }
   // Has this cut file already been put back together? The join deletes the
@@ -2937,6 +2997,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var rows=setRows();
     var r={total:rows.length,ok:0,missing:0,bad:0,here:0,need:"",bytes:0,mineTotal:0,mineHere:0};
     var needed={}, i, row, full, want, got;
+    // Asked once rather than per row: it reads the drive, and a set of nine
+    // files would otherwise go and ask the disc nine times to draw one panel.
+    var mine=setNow();
     // A piece whose finished file is already here is not missing: it was used
     // and deleted. Worked out once rather than per row, so a set of six pieces
     // does not go looking for the same finished file six times.
@@ -2961,13 +3024,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     for(i=0;i<rows.length;i++){
       row=rows[i];
       r.bytes+=parseFloat(row.b);
-      if(row.d==SET.n){ r.mineTotal++; }
+      if(row.d==mine){ r.mineTotal++; }
       full=setPath(dir,row.f);
       if(joined[row.f]){
         // Counted as arrived, because it did arrive and then became part of
         // the file it was cut from.
         r.ok++;
-        if(row.d==SET.n){ r.mineHere++; }
+        if(row.d==mine){ r.mineHere++; }
         continue;
       }
       if(!dir.length||!fso.FileExists(full)){
@@ -2983,7 +3046,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         continue;
       }
       r.ok++;
-      if(row.d==SET.n){ r.mineHere++; }
+      if(row.d==mine){ r.mineHere++; }
     }
     r.here=r.ok;
     var list=[];
@@ -3036,6 +3099,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(typeof SETCOPYING!="undefined"&&SETCOPYING.length){
       return "Copying file "+SETCOPYING+" off this disc.";
     }
+    // Waiting for a disc to be put in. Said plainly and with nothing else on
+    // the line, because at this moment it is the only thing anybody has to do.
+    if(typeof SETWANT!="undefined"&&SETWANT){
+      return "Please put disc "+SETWANT+" in the drive. This carries on by itself once it is there.";
+    }
     if(!s.total) return "This disc says it is part of a set, but its list of files is missing.";
     if(s.complete) return "All "+s.total+" files are here. The game is ready in that folder.";
     // Every file here but a cut one still in pieces. Says what is left rather
@@ -3052,8 +3120,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       // reading that sentence off disc 2, and the first thing anybody saw on
       // disc 1 was "Still to come: discs 1, 2" rather than "copy this one".
       var list=s.need.split(", "), mineNeeded=false, rest=[], i;
+      var here=setNow();
       for(i=0;i<list.length;i++){
-        if(parseFloat(list[i])==SET.n){ mineNeeded=true; } else { rest[rest.length]=list[i]; }
+        if(parseFloat(list[i])==here){ mineNeeded=true; } else { rest[rest.length]=list[i]; }
       }
       if(mineNeeded){
         if(!rest.length) m+=" Copy this disc to finish.";
@@ -3067,8 +3136,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   }
   // The rows that belong to the disc in the drive.
   function setMine(){
-    var rows=setRows(), out=[];
-    for(var i=0;i<rows.length;i++){ if(rows[i].d==SET.n){ out[out.length]=rows[i]; } }
+    var rows=setRows(), out=[], mine=setNow();
+    for(var i=0;i<rows.length;i++){ if(rows[i].d==mine){ out[out.length]=rows[i]; } }
     return out;
   }
   function setMineBytes(){
@@ -3194,11 +3263,24 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(st.at>=st.mine.length){
       SETCOPYING="";
       try{ show(); }catch(ex){}
-      if(st.bad==0){ setJoinAll(st.dir,function(){ show(); }); }
-      else{
+      if(st.bad>0){
         setSay(st.bad+" of "+st.mine.length+" files would not copy from this disc.\n\nIt may be scratched. Try it again, or copy them in Explorer.",false);
+        show();
+        return;
       }
-      show();
+      setJoinAll(st.dir,function(){
+        // This disc is done. If the set is not, ask for the next one and then
+        // watch the drive for it, which is what an installer did: you are told
+        // which disc, you put it in, and it carries on. Nothing else is asked
+        // of anybody and no second menu has to be opened.
+        var s=setScan(st.dir);
+        if(!s.complete&&s.need.length){
+          var list=s.need.split(", ");
+          SETWANT=parseFloat(list[0]);
+          setWaitDisc(st.dir);
+        }
+        show();
+      });
       return;
     }
     SETCOPYING=(st.at+1)+" of "+st.mine.length;
@@ -3305,6 +3387,34 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
                "\n\nA disc that reads badly is usually scratched or was burned badly.",false);
       }
     });
+  }
+
+  // Watch the drive until a disc the set still wants turns up, then carry on
+  // copying from it.
+  //
+  // Polled rather than told, because Windows has no event an HTA can hear for
+  // a disc arriving, and the poll is a four kilobyte read of one line. It only
+  // runs while something is actually being waited for.
+  //
+  // This is the half the menu could not do before: it kept running when its
+  // own disc was ejected, because mshta lives on the hard disk and the page
+  // was already parsed, but everything it read afterwards came off the disc
+  // that had just been taken out. The table is in memory now, so the only
+  // thing it asks the drive is which disc this is.
+  function setWaitDisc(dir){
+    if(!SETWANT) return;
+    var s=setScan(dir);
+    if(s.complete){ SETWANT=0; try{ show(); }catch(ex){} return; }
+    var n=setDiscIn();
+    if(setNeedsDisc(s,n)){
+      SETWANT=0;
+      try{ show(); }catch(ex){}
+      setCopy();
+      return;
+    }
+    if(typeof window!="undefined"&&window.setTimeout){
+      window.setTimeout(function(){ setWaitDisc(dir); },1500);
+    }
   }
 
   function setVerify(){
@@ -3422,7 +3532,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   function renderSet(){
     var dir=setDir(), s=setScan(dir), h="";
     h+='<div class="setinfo" id="setinfo">'+
-       "Disc "+SET.n+" of "+SET.of+". No disc in a set installs on its own."+
+       "Disc "+setNow()+" of "+SET.of+". No disc in a set installs on its own."+
        "<br><br>Copy every disc into one folder, then install from there."+
        (dir.length ? "<br><br>"+dir : "")+
        "<br><br>"+setSentence(s)+
@@ -3433,7 +3543,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       // Numbered, so the sequence reads itself: a person who has just put
       // disc 1 in sees "Copy disc 1 of 2" and knows there is a disc 2 coming
       // without having to read the paragraph above it.
-      h+=btnHtml("btn_SetCopy","install","Copy disc "+SET.n+" of "+SET.of,"setCopy()",
+      h+=btnHtml("btn_SetCopy","install","Copy disc "+setNow()+" of "+SET.of,"setCopy()",
                  "Copy this disc's share of the game into "+dir);
     }
     // Every file here and a cut one still in pieces. Without this the panel
