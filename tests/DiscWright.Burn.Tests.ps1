@@ -294,8 +294,18 @@ Describe 'The Burn to disc button' -Tag 'Unit' {
     }
 
     It 'will not write to a drive that is not ready, and says why not' {
-        $script:Handler | Should -Match '\$_\.Ready'
-        $script:Handler | Should -Match '\$_\.Why'
+        # The readiness rule itself moved into Get-BurnTarget, so that this
+        # button and the set walk stop deciding it with the same line copied
+        # out twice. What the button still owes is asking, and showing the
+        # reason it is handed rather than a sentence of its own.
+        $script:Handler | Should -Match 'Get-BurnTarget'
+        $script:Handler | Should -Match '\$pick\.Why'
+        $script:Handler | Should -Match 'Put a blank disc in and try again'
+    }
+
+    It 'asks which writer to use when more than one of them is ready' {
+        $script:Handler | Should -Match '\$pick\.Ask'
+        $script:Handler | Should -Match 'Select-BurnDrive'
     }
 
     It 'burns below the drive top speed, which is what cheap media wants' {
@@ -1061,5 +1071,101 @@ Describe 'How far along reading a disc back is' -Tag 'Unit' {
         }
         $v.WrongSize.Count | Should -Be 1 -Because 'the fixture is a short file on the disc'
         $last[-1] | Should -Be 2 -Because 'both files were looked at, whatever the verdict on them'
+    }
+}
+
+Describe 'Choosing which writer to use, on a machine that has two' {
+
+    # Asked for on 11 October, with a Blu-ray writer about to be plugged in to
+    # find out whether the old drive is the thing ruining discs. Until then
+    # both burn paths made this decision with the same line copied out twice,
+    # take the first drive with a usable blank in it, which is right on a
+    # machine with one writer and silently wrong on a machine with two.
+
+    BeforeAll {
+        function New-Burner([string]$drive, [bool]$ready, [string]$why = 'ready',
+                            [string]$product = 'DRW-24D5MT', [string]$media = 'CD-RW') {
+            return @{ Drive = $drive; Ready = $ready; Why = $why; Vendor = 'ASUS'; Product = $product
+                      MediaName = $media; MediaType = 3; FreeBytes = [double]736966656
+                      FreeSectors = 359847; Speeds = @() }
+        }
+    }
+
+    Context 'when there is nothing to ask about' {
+
+        It 'refuses when the machine has no writer at all' {
+            (Get-BurnTarget @()).Why | Should -Match 'No disc recorder'
+        }
+
+        It 'takes the only drive without asking anything' {
+            $r = Get-BurnTarget @((New-Burner 'D:\' $true))
+            $r.Target.Drive | Should -Be 'D:\'
+            $r.Ask | Should -BeNullOrEmpty -Because 'being asked to choose between one thing is a dialog in the way'
+        }
+
+        It 'takes the only READY drive without asking, even with two writers' {
+            # The common case once a second writer is plugged in: a blank in
+            # one of them and nothing in the other. There is no question here.
+            $r = Get-BurnTarget @((New-Burner 'D:\' $false 'no disc'), (New-Burner 'E:\' $true))
+            $r.Target.Drive | Should -Be 'E:\'
+            $r.Ask | Should -BeNullOrEmpty
+        }
+
+        It 'says which drives it looked at when none of them is ready' {
+            $r = Get-BurnTarget @((New-Burner 'D:\' $false 'no disc'), (New-Burner 'E:\' $false 'the disc is not blank'))
+            $r.Why | Should -Match 'D:'
+            $r.Why | Should -Match 'the disc is not blank'
+            $r.Target | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'when there really is a choice' {
+
+        It 'asks, rather than taking whichever came back first' {
+            $r = Get-BurnTarget @((New-Burner 'D:\' $true), (New-Burner 'E:\' $true))
+            $r.Target | Should -BeNullOrEmpty -Because 'guessing between two blanks is how a disc ends up in the wrong drive'
+            @($r.Ask).Count | Should -Be 2
+        }
+
+        It 'offers only the drives that could actually take the disc' {
+            $r = Get-BurnTarget @((New-Burner 'D:\' $true), (New-Burner 'E:\' $false 'no disc'), (New-Burner 'F:\' $true))
+            @($r.Ask | ForEach-Object { $_.Drive }) | Should -Be @('D:\', 'F:\')
+        }
+
+        It 'names the drive, the writer and the disc on each line of the question' {
+            $row = Format-BurnTargetRow (New-Burner 'E:\' $true 'ready' 'BW-16D1HT' 'BD-R')
+            $row | Should -Be 'E:  ASUS BW-16D1HT  (BD-R, 703 MB free)'
+        }
+    }
+
+    Context 'once a drive has been chosen' {
+
+        It 'uses the one it was given, not the first one' {
+            $r = Get-BurnTarget @((New-Burner 'D:\' $true), (New-Burner 'E:\' $true)) 'E:'
+            $r.Target.Drive | Should -Be 'E:\'
+        }
+
+        It 'takes the drive written any of the ways somebody writes a drive' {
+            foreach ($spelling in 'E', 'E:', 'E:\') {
+                (Get-BurnTarget @((New-Burner 'D:\' $true), (New-Burner 'E:\' $true)) $spelling).Target.Drive |
+                    Should -Be 'E:\' -Because "'$spelling' names a drive"
+            }
+        }
+
+        It 'refuses rather than quietly using the other drive' {
+            # Disc 2 of a set, with the blank put in the wrong writer. Writing
+            # it to the other drive would leave the pair split across two
+            # machines' worth of discs and nobody told.
+            $r = Get-BurnTarget @((New-Burner 'D:\' $true), (New-Burner 'E:\' $false 'no disc')) 'E:'
+            $r.Target | Should -BeNullOrEmpty
+            $r.Why | Should -Match 'E:'
+            $r.Why | Should -Match 'not ready'
+            $r.Why | Should -Match 'no disc'
+        }
+
+        It 'says so when the drive it was told to use has gone' {
+            $r = Get-BurnTarget @((New-Burner 'D:\' $true)) 'E:'
+            $r.Why | Should -Match 'not there any more'
+        }
     }
 }
