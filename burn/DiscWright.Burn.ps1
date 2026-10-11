@@ -388,6 +388,68 @@ function Format-BurnTargetRow($b) {
             ([string]$b.Drive).TrimEnd([char]92), $b.Vendor, $b.Product, $b.MediaName, ($b.FreeBytes / 1MB))
 }
 
+<#
+    The folder a given image was built from.
+
+    Burn to disc used to look in one place, "disc" under the output folder,
+    which is where a single disc stages. A set stages into "disc D1" and
+    "disc D2", so the button wrote the disc and then said it had nothing to
+    compare it against: it burned a disc of a set and could not check it,
+    which is the one thing that button is for.
+
+    The image carries the answer in its own name. A set disc is built with the
+    label plus " D2", and the image is named after the label, so the number on
+    the end of the image is the number of the staging folder.
+#>
+function Get-StagingFolderFor([string]$isoPath, [string]$outDir) {
+    if (-not $isoPath -or -not $outDir) { return '' }
+    $base = [IO.Path]::GetFileNameWithoutExtension($isoPath)
+    $tries = @()
+    if ($base -match '\sD(\d+)$') { $tries += ('disc D{0}' -f [int]$Matches[1]) }
+    # "disc" second for a set image and first for anything else. A label that
+    # happens to end in " D2" on a single disc still finds its own folder.
+    $tries += 'disc'
+    foreach ($t in $tries) {
+        $p = (([string]$outDir).TrimEnd([char]92) + [char]92 + $t)
+        if (Test-Path -LiteralPath $p) { return $p }
+    }
+    return ''
+}
+
+<#
+    Every image in an output folder, in the order somebody would burn them.
+
+    Newest first was right while a build made one image. A set makes several,
+    and newest first means the button silently offers the LAST disc of the set
+    every time, which is never the one to start with.
+#>
+function Get-BurnableIsos([string]$outDir) {
+    if (-not $outDir -or -not (Test-Path -LiteralPath $outDir)) { return @() }
+    $out = @()
+    foreach ($f in @(Get-ChildItem -LiteralPath $outDir -Filter '*.iso' -File -ErrorAction SilentlyContinue)) {
+        $base = [IO.Path]::GetFileNameWithoutExtension($f.Name)
+        $n = $(if ($base -match '\sD(\d+)$') { [int]$Matches[1] } else { 0 })
+        $stage = Get-StagingFolderFor $f.FullName $outDir
+        $out += , [pscustomobject]@{
+            Path = $f.FullName; Name = $f.Name; Bytes = [long]$f.Length
+            Disc = $n; Stage = $stage; HasStage = [bool]$stage
+        }
+    }
+    # Emitted plainly, NOT as ", $out". Wrapping is what Get-BurnerInfo does to
+    # keep a single result a list, and it is why @(Get-BurnerInfo) turned out
+    # to be an array holding an array and cost a bug on the one machine with
+    # two writers. Written this way a caller wraps with @() and gets what it
+    # expects for none, one or many, which is the shape that composes.
+    return @($out | Sort-Object @{ e = { $_.Disc } }, @{ e = { $_.Name } })
+}
+
+# One line of the question, when there is more than one image to choose from.
+function Format-BurnIsoRow($i) {
+    $what = $(if ($i.HasStage) { 'checks against ' + (Split-Path $i.Stage -Leaf) }
+              else { 'nothing to check it against' })
+    return ('{0}   {1:N1} MB   ({2})' -f $i.Name, ($i.Bytes / 1MB), $what)
+}
+
 # One sector, on every optical format DiscWright writes to. Named rather than
 # repeated, because this number is what turns a sector count into megabytes.
 $script:BurnSectorBytes = 2048

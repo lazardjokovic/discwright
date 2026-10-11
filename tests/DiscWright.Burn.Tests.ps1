@@ -1320,3 +1320,143 @@ Describe 'Watching a long file be read, not just the gaps between files' {
         }
     }
 }
+
+Describe 'Burning one disc out of a set from the Burn to disc button' {
+
+    # Found on 11 October, burning disc 2 of Hollow Knight by hand. The button
+    # looked for the staging folder in one fixed place, "disc" under the output
+    # folder, which is where a SINGLE disc stages. A set stages into "disc D1"
+    # and "disc D2", so the button wrote a disc of a set and then said it had
+    # nothing to compare it against. Writing a disc and being unable to check
+    # it is the one thing that button exists not to do.
+    #
+    # And it always took the newest image, which on a set is always the last
+    # disc, so disc 1 could not be reached from there at all.
+
+    BeforeAll {
+        $script:SbDir = Join-Path ([IO.Path]::GetTempPath()) ('dwsb_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        $script:SbSet = Join-Path $script:SbDir 'set'
+        $script:SbOne = Join-Path $script:SbDir 'one'
+        $script:SbBare = Join-Path $script:SbDir 'bare'
+        foreach ($d in $script:SbSet, $script:SbOne, $script:SbBare) {
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+        }
+        foreach ($d in 'disc D1', 'disc D2') {
+            New-Item -ItemType Directory -Force -Path (Join-Path $script:SbSet $d) | Out-Null
+        }
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:SbOne 'disc') | Out-Null
+
+        function New-Iso([string]$dir, [string]$name, [int]$mb, [datetime]$when) {
+            # Megabytes, because the row this feeds prints megabytes and a
+            # test that pins the wording has to pin a real number with it.
+            $p = Join-Path $dir $name
+            [IO.File]::WriteAllBytes($p, (New-Object byte[] ($mb * 1MB)))
+            (Get-Item -LiteralPath $p).LastWriteTime = $when
+            return $p
+        }
+        # Disc 2 written after disc 1, which is what a set build does and what
+        # made "newest" the wrong answer.
+        $script:SbD1 = New-Iso $script:SbSet 'Big Game D1.iso' 8 ([datetime]'2026-10-11 20:00')
+        $script:SbD2 = New-Iso $script:SbSet 'Big Game D2.iso' 4 ([datetime]'2026-10-11 20:05')
+        $script:SbSingle = New-Iso $script:SbOne 'Big Game.iso' 2 ([datetime]'2026-10-11 20:00')
+        # A single disc whose label just happens to end the way a set disc does.
+        $script:SbOdd = New-Iso $script:SbOne 'Quake D2.iso' 2 ([datetime]'2026-10-11 20:01')
+        $script:SbLost = New-Iso $script:SbBare 'Orphan.iso' 1 ([datetime]'2026-10-11 20:00')
+    }
+
+    AfterAll {
+        if ($script:SbDir -and (Test-Path $script:SbDir)) {
+            Remove-Item $script:SbDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'the folder an image was built from' {
+
+        It 'finds the numbered folder for a disc of a set' {
+            (Split-Path (Get-StagingFolderFor $script:SbD1 $script:SbSet) -Leaf) | Should -Be 'disc D1'
+            (Split-Path (Get-StagingFolderFor $script:SbD2 $script:SbSet) -Leaf) | Should -Be 'disc D2'
+        }
+
+        It 'finds the plain folder for a single disc' {
+            (Split-Path (Get-StagingFolderFor $script:SbSingle $script:SbOne) -Leaf) | Should -Be 'disc'
+        }
+
+        It 'falls back to the plain folder for a label that merely ends like a set' {
+            # "Quake D2" is a name somebody could give one disc. There is no
+            # "disc D2" beside it, so the only folder there is is the answer.
+            (Split-Path (Get-StagingFolderFor $script:SbOdd $script:SbOne) -Leaf) | Should -Be 'disc'
+        }
+
+        It 'answers with nothing when there is no folder at all' {
+            Get-StagingFolderFor $script:SbLost $script:SbBare | Should -BeNullOrEmpty
+        }
+
+        It 'answers with nothing rather than throwing when asked about nothing' {
+            Get-StagingFolderFor '' '' | Should -BeNullOrEmpty
+            Get-StagingFolderFor $null $null | Should -BeNullOrEmpty
+        }
+    }
+
+    Context 'which images there are to choose from' {
+
+        It 'offers disc 1 first, although disc 2 is the newer file' {
+            # The whole reason disc 1 could not be burned from this button.
+            $i = @(Get-BurnableIsos $script:SbSet)
+            @($i | ForEach-Object { $_.Name }) | Should -Be @('Big Game D1.iso', 'Big Game D2.iso')
+            (Get-Item $script:SbD2).LastWriteTime |
+                Should -BeGreaterThan (Get-Item $script:SbD1).LastWriteTime -Because 'newest really is the other one'
+        }
+
+        It 'gives each image its own staging folder' {
+            $i = @(Get-BurnableIsos $script:SbSet)
+            (Split-Path $i[0].Stage -Leaf) | Should -Be 'disc D1'
+            (Split-Path $i[1].Stage -Leaf) | Should -Be 'disc D2'
+            $i[0].HasStage | Should -BeTrue
+        }
+
+        It 'still offers an image with nothing to check it against, and says so' {
+            # Refusing to burn it would be worse: somebody may have put an ISO
+            # in there on purpose. Being told it cannot be checked is the point.
+            $i = @(Get-BurnableIsos $script:SbBare)
+            @($i).Count | Should -Be 1
+            $i[0].HasStage | Should -BeFalse
+            (Format-BurnIsoRow $i[0]) | Should -Match 'nothing to check it against'
+        }
+
+        It 'says which folder an image will be checked against' {
+            $i = @(Get-BurnableIsos $script:SbSet)
+            (Format-BurnIsoRow $i[0]) | Should -Be 'Big Game D1.iso   8.0 MB   (checks against disc D1)'
+        }
+
+        It 'finds nothing in a folder with no images, and does not throw' {
+            $empty = Join-Path $script:SbDir 'empty'
+            New-Item -ItemType Directory -Force -Path $empty | Out-Null
+            @(Get-BurnableIsos $empty).Count | Should -Be 0
+            @(Get-BurnableIsos (Join-Path $script:SbDir 'not-there')).Count | Should -Be 0
+        }
+    }
+
+    Context 'and what the button does with them' {
+
+        BeforeAll {
+            $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+            $i = $src.IndexOf('$btnBurn.Add_Click({')
+            $script:SbHandler = $src.Substring($i, 6000)
+        }
+
+        It 'asks the images, rather than taking the newest file in the folder' {
+            $script:SbHandler | Should -Match 'Get-BurnableIsos'
+            $script:SbHandler | Should -Not -Match "Filter '\*\.iso'[\s\S]{0,120}LastWriteTime -Descending"
+        }
+
+        It 'asks which one only when there is more than one' {
+            $script:SbHandler | Should -Match '\$isos\.Count -gt 1'
+            $script:SbHandler | Should -Match 'Select-BurnIso'
+        }
+
+        It 'checks against the folder that image came from, not a fixed name' {
+            $script:SbHandler | Should -Match '\$stage = \$want\.Stage'
+            $script:SbHandler | Should -Not -Match "Join-Path \`$t 'disc'"
+        }
+    }
+}
