@@ -8910,10 +8910,16 @@ Describe 'What the set sentence tells you to do next' -Tag 'Unit' {
     # anybody saw on disc 1 was "Still to come: discs 1, 2", which reports a
     # state instead of saying "copy this one".
     #
-    # setSentence touches only s.* and SET.n, so these run it with a scan result
-    # made by hand. That is deliberate: building two discs of files to reach
-    # each wording would make a slow test out of a pure function. The function
-    # itself is lifted out of DiscWright.ps1 rather than copied here.
+    # setSentence touches only s.* and which disc is in the drive, so these run
+    # it with a scan result made by hand. That is deliberate: building two
+    # discs of files to reach each wording would make a slow test out of a
+    # pure function. The function itself is lifted out of DiscWright.ps1
+    # rather than copied here.
+    #
+    # The disc in the drive used to be SET.n, the number baked into the disc
+    # when it was built. One menu drives the whole set now, so it asks the
+    # drive instead, and these say the answer directly rather than through a
+    # number that no longer means that.
 
     BeforeDiscovery {
         $script:HaveCScript3 = @(
@@ -8940,6 +8946,7 @@ Describe 'What the set sentence tells you to do next' -Tag 'Unit' {
 
         function Get-Sentence([int]$inDrive, [int]$of, [hashtable]$scan) {
             $js = @("var SET={n:$inDrive,of:$of,label:""Game""};"
+                    "function setNow(){ return $inDrive; }"
                     $script:SentenceJs
                     ('var s={total:' + $scan.total + ',ok:' + $scan.ok + ',bad:' + $scan.bad +
                      ',complete:' + $scan.complete + ',need:"' + $scan.need + '"};')
@@ -10190,10 +10197,13 @@ Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
         # Both callers used to read the result on the next line, which is no
         # longer there to read.
         #
-        # The copy's caller says st.dir rather than dir now: the copy became a
-        # stepped loop carrying its own state, so that it stops holding the
-        # script engine shut. Same folder, named by where it is kept.
-        $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(st.dir,function(){ show(); })'))
+        # Matched on the handing over of a function, not on the body of it.
+        # This assertion pinned the exact one-liner and broke twice on changes
+        # that were nothing to do with it: once when the copy became a stepped
+        # loop carrying its own state and started saying st.dir, and again
+        # when that callback grew a body to ask for the next disc. What it is
+        # really about is that the caller is given a way to carry on.
+        $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(st.dir,function(){'))
         $script:AllSrc | Should -Match ([regex]::Escape('setJoinAll(dir,function(){ show(); setInstall(); }); return;'))
     }
 }
@@ -11040,6 +11050,7 @@ Describe 'Everything a disc in a set says about itself' {
                 'var root = ' + (ConvertTo-Json $dir) + ';'
                 'var SETFILE = ' + (ConvertTo-Json (Get-DiscSetFileName)) + ';'
                 'var SEP = String.fromCharCode(92);'
+                'var SETROWS = null;'
                 (Get-JsFn $src 'setRows')
                 'var r = setRows();'
                 'var s = "n=" + r.length; for (var i = 0; i < r.length; i++) { s += " [" + r[i].d + ":" + r[i].f + "]"; }'
@@ -11214,6 +11225,9 @@ Describe 'The disc menu copying without holding the script engine shut' {
                 'var SAID = []; function setSay(m, good){ SAID[SAID.length] = m; }'
                 'var SHOWN = 0; function show(){ SHOWN++; }'
                 'var JOINED = 0; function setJoinAll(dir, after){ JOINED++; if (after) after(0); }'
+                'var SETWANT = 0;'
+                'function setScan(dir){ return {complete:true, need:""}; }'
+                'var WAITED = 0; function setWaitDisc(dir){ WAITED++; }'
                 (Get-JsFn3 $script:MenuSrc 'setQuote')
                 (Get-JsFn3 $script:MenuSrc 'setCopyCmd')
                 (Get-JsFn3 $script:MenuSrc 'setWaitExec')
@@ -11381,5 +11395,233 @@ Describe 'What the disc menu claims after checking only part of a set' {
     It 'keeps the plain sentence once the whole set is there' -Skip:(-not $script:HaveCs5) {
         # The good case has to stay short. It is the one people see most.
         (Invoke-VerifyJs 9 9) | Should -Be 'Every file in that folder is byte for byte what was burned.'
+    }
+}
+
+Describe 'One disc menu driving a whole set, through the swaps' {
+
+    # Asked for on 11 October: install the way it was done in the good old
+    # days. Disc 1, then "insert disc 2", and it carries on. No folders, no
+    # hashes, no second menu to open.
+    #
+    # What stood in the way was that each disc's menu had its disc number
+    # baked in when the disc was built, so disc 1's menu believed it was disc
+    # 1 for ever. Swap the disc under it and it went on looking for disc 1's
+    # files on a disc 2, found none, and reported them as missing from a
+    # scratched disc. And the panel re-read the table off the disc to draw
+    # itself, so with the tray open it collapsed to "its list of files is
+    # missing".
+    #
+    # The menu itself survives the eject: mshta lives on the hard disk and the
+    # page is already parsed by then. It was only ever what it READ afterwards
+    # that was on the disc. So the table is read once into memory, and the one
+    # thing still asked of the drive is which disc is in it.
+
+    BeforeDiscovery {
+        $script:HaveCs6 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:Cs6 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:SwSrc = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+
+        function Get-JsFn5([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        $script:SwDir = Join-Path ([IO.Path]::GetTempPath()) ('dwsw_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:SwDir | Out-Null
+
+        # A set file the way a real one reads: a header line saying which disc
+        # this is, then the table every disc carries.
+        function New-SetFile([string]$dir, [int]$n) {
+            $t = @(
+                'DiscWright disc set'
+                '==================='
+                ''
+                '  Big Game'
+                ("  disc {0} of 2.  3 files in the set, 1.00 GB in all." -f $n)
+                ''
+                'disc  sha256                                                            bytes         file'
+                ('1     ' + ('a' * 64) + ' 100           *one.bin')
+                ('1     ' + ('b' * 64) + ' 100           *AUTORUN/two.bin')
+                ('2     ' + ('c' * 64) + ' 100           *three.bin')
+            ) -join "`r`n"
+            Set-Content -LiteralPath (Join-Path $dir 'Disc set.txt') -Value $t -Encoding Ascii
+        }
+
+        function Invoke-SwapJs([string]$drive, [string]$tail, [int]$builtAs = 1) {
+            $js = @(
+                'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+                'var SEP = String.fromCharCode(92);'
+                'var root = ' + (ConvertTo-Json $drive) + ';'
+                'var SETFILE = "Disc set.txt";'
+                ('var SET = {n:' + $builtAs + ', of:2, label:"Big Game"};')
+                'var SETROWS = null, SETJOINS = null, SETWANT = 0;'
+                'var SAID = []; function setSay(m, good){ SAID[SAID.length] = m; }'
+                'var SHOWN = 0; function show(){ SHOWN++; }'
+                'var COPIED = 0; function setCopy(){ COPIED++; }'
+                (Get-JsFn5 $script:SwSrc 'setRows')
+                (Get-JsFn5 $script:SwSrc 'setDiscIn')
+                (Get-JsFn5 $script:SwSrc 'setNow')
+                (Get-JsFn5 $script:SwSrc 'setNeedsDisc')
+                (Get-JsFn5 $script:SwSrc 'setMine')
+                (Get-JsFn5 $script:SwSrc 'setWaitDisc')
+                $tail
+            )
+            $f = Join-Path $script:SwDir ('s_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            return ((@(& $script:Cs6 //Nologo //E:JScript $f 2>&1) -join "`n").Trim())
+        }
+    }
+
+    AfterAll {
+        if ($script:SwDir -and (Test-Path $script:SwDir)) {
+            Remove-Item $script:SwDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'knowing which disc is in the drive' -Skip:(-not $script:HaveCs6) {
+
+        It 'reads the number off the disc' {
+            $d = Join-Path $script:SwDir 'd1'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            New-SetFile $d 1
+            (Invoke-SwapJs $d 'WScript.Echo("n=" + setDiscIn());') | Should -Match 'n=1'
+            New-SetFile $d 2
+            (Invoke-SwapJs $d 'WScript.Echo("n=" + setDiscIn());') | Should -Match 'n=2'
+        }
+
+        It 'answers nought with the tray open, rather than guessing' {
+            $d = Join-Path $script:SwDir 'empty'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            (Invoke-SwapJs $d 'WScript.Echo("n=" + setDiscIn());') | Should -Match 'n=0'
+        }
+
+        It 'falls back to what it was built as when the drive says nothing' {
+            # The state at startup, before anything has been read, and the
+            # state while the tray is open. Neither is an error.
+            $d = Join-Path $script:SwDir 'empty2'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            (Invoke-SwapJs $d 'WScript.Echo("now=" + setNow());' 2) | Should -Match 'now=2'
+        }
+    }
+
+    Context 'the swap itself' -Skip:(-not $script:HaveCs6) {
+
+        It 'copies the files of the disc that is in, not of the disc it was built as' {
+            # The whole bug. This menu was built as disc 1 and there is a disc
+            # 2 in the drive, so disc 2's files are the ones to take.
+            $d = Join-Path $script:SwDir 'swap'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            New-SetFile $d 2
+            $out = Invoke-SwapJs $d @'
+var m = setMine(), s = "";
+for (var i = 0; i < m.length; i++) { s += "[" + m[i].d + ":" + m[i].f + "]"; }
+WScript.Echo("mine=" + m.length + " " + s);
+'@ 1
+            $out | Should -Match 'mine=1'
+            $out | Should -Match ([regex]::Escape('[2:three.bin]'))
+        }
+
+        It 'keeps the table it has already read, so an ejected disc cannot blank it' {
+            # The panel re-read the set file to draw itself. With the tray open
+            # that is nothing, and the panel said the list of files was
+            # missing, on a disc that was merely in somebody's hand.
+            $d = Join-Path $script:SwDir 'eject'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            New-SetFile $d 1
+            $out = Invoke-SwapJs $d @'
+var before = setRows().length;
+fso.DeleteFile(fso.BuildPath(root, SETFILE));
+WScript.Echo("before=" + before + " after=" + setRows().length + " disc=" + setDiscIn());
+'@
+            $out | Should -Match 'before=3 after=3 disc=0'
+        }
+    }
+
+    Context 'waiting for the next disc' -Skip:(-not $script:HaveCs6) {
+
+        It 'carries on by itself the moment a disc it wants is there' {
+            $d = Join-Path $script:SwDir 'wait1'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            New-SetFile $d 2
+            $out = Invoke-SwapJs $d @'
+function setScan(dir){ return {complete:false, need:"2"}; }
+SETWANT = 2;
+setWaitDisc("X:");
+WScript.Echo("copied=" + COPIED + " want=" + SETWANT);
+'@
+            $out | Should -Match 'copied=1'
+            $out | Should -Match 'want=0' -Because 'it is not waiting any more'
+        }
+
+        It 'goes on waiting while the wrong disc is in' {
+            $d = Join-Path $script:SwDir 'wait2'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            New-SetFile $d 1
+            $out = Invoke-SwapJs $d @'
+function setScan(dir){ return {complete:false, need:"2"}; }
+SETWANT = 2;
+setWaitDisc("X:");
+WScript.Echo("copied=" + COPIED + " want=" + SETWANT);
+'@
+            $out | Should -Match 'copied=0'
+            $out | Should -Match 'want=2'
+        }
+
+        It 'stops waiting once the set is complete' {
+            $d = Join-Path $script:SwDir 'wait3'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            New-SetFile $d 2
+            $out = Invoke-SwapJs $d @'
+function setScan(dir){ return {complete:true, need:""}; }
+SETWANT = 2;
+setWaitDisc("X:");
+WScript.Echo("copied=" + COPIED + " want=" + SETWANT);
+'@
+            $out | Should -Match 'copied=0 want=0'
+        }
+
+        It 'knows which discs it is still short of' {
+            $d = Join-Path $script:SwDir 'needs'
+            New-Item -ItemType Directory -Force -Path $d | Out-Null
+            New-SetFile $d 1
+            $out = Invoke-SwapJs $d @'
+var s = {need:"2, 3"};
+WScript.Echo("two=" + setNeedsDisc(s,2) + " three=" + setNeedsDisc(s,3) + " one=" + setNeedsDisc(s,1) +
+             " none=" + setNeedsDisc({need:""},2) + " zero=" + setNeedsDisc(s,0));
+'@
+            $out | Should -Match 'two=true three=true one=false none=false zero=false'
+        }
+    }
+
+    Context 'and what it tells the person' {
+
+        It 'asks for the disc by number, and says nothing else is needed of them' {
+            $fn = Get-JsFn5 $script:SwSrc 'setSentence'
+            $fn | Should -Match 'SETWANT'
+            $fn | Should -Match 'Please put disc'
+            $fn | Should -Match 'carries on by itself'
+        }
+
+        It 'asks for the next disc once a disc is finished, rather than stopping' {
+            $fn = Get-JsFn5 $script:SwSrc 'setCopyStep'
+            $fn | Should -Match 'SETWANT'
+            $fn | Should -Match 'setWaitDisc'
+        }
     }
 }
