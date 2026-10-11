@@ -423,9 +423,15 @@ Describe 'Telling somebody how long a burn will take' -Tag 'Unit' {
         $null = Test-BurnedDisc -DiscRoot $b -StagingFolder $a -OnProgress {
             param($done, $total, $file) $null = $seen.Add($done)
         }
-        # Five files, so five reports, ending at five.
-        $seen.Count | Should -Be 5
+        # Five files and at least five reports, ending at five. Not exactly
+        # five any more: a long file now reports as it is being read rather
+        # than only once it is finished, so the count is no longer the number
+        # of files and must not be asserted as though it were. What has to
+        # hold is that every file is accounted for and the last report says
+        # all of them.
+        $seen.Count | Should -BeGreaterOrEqual 5
         $seen[-1] | Should -Be 5
+        @($seen | Sort-Object -Unique) | Should -Be @(1, 2, 3, 4, 5)
     }
 }
 
@@ -1040,8 +1046,12 @@ Describe 'How far along reading a disc back is' -Tag 'Unit' {
             param($done, $total, $rel, $bytesDone, $bytesTotal)
             $null = $last.Add(('{0}/{1} {2}/{3}' -f $done, $total, $bytesDone, $bytesTotal))
         }
-        $last.Count | Should -Be 3
+        # Three files and at least three reports. A file bigger than one read
+        # now reports while it is being read, so counting reports stopped
+        # being the same as counting files. The end is what this is about.
+        $last.Count | Should -BeGreaterOrEqual 3
         $last[-1] | Should -Be ('3/3 {0}/{0}' -f (1KB + 64KB + 8KB))
+        @($last | Where-Object { $_ -like '3/3 *' }) | Should -Not -BeNullOrEmpty
     }
 
     It 'reports the big file as most of the disc, not as one file in three' {
@@ -1194,6 +1204,119 @@ Describe 'Choosing which writer to use, on a machine that has two' {
         It 'says so when the drive it was told to use has gone' {
             $r = Get-BurnTarget @((New-Burner 'D:\' $true)) 'E:'
             $r.Why | Should -Match 'not there any more'
+        }
+    }
+}
+
+Describe 'Watching a long file be read, not just the gaps between files' {
+
+    # Noticed on 11 October while watching a real check happen: the window sat
+    # at nought per cent for four and a half minutes and then jumped to a
+    # hundred. Weighting the bar by bytes had already fixed the easier version
+    # of this complaint, a bar that counts files, and could not help here. A
+    # cut disc is one enormous part file beside a handful of small ones, so a
+    # report sent only when a file FINISHES has exactly two positions on it.
+
+    BeforeAll {
+        $script:WDir = Join-Path ([IO.Path]::GetTempPath()) ('dww_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        $script:WSrc = Join-Path $script:WDir 'src'
+        $script:WDisc = Join-Path $script:WDir 'disc'
+        foreach ($d in $script:WSrc, $script:WDisc) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
+        # One file several chunks long and one that is not, which is the shape
+        # of every cut disc this writes.
+        $big = New-Object byte[] (9MB)
+        foreach ($d in $script:WSrc, $script:WDisc) {
+            [IO.File]::WriteAllBytes((Join-Path $d 'big.bin'), $big)
+            Set-Content -LiteralPath (Join-Path $d 'small.txt') -Value 'small' -Encoding Ascii -NoNewline
+        }
+        $script:WBig = Join-Path $script:WSrc 'big.bin'
+    }
+
+    AfterAll {
+        if ($script:WDir -and (Test-Path $script:WDir)) {
+            Remove-Item $script:WDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'the hash itself' {
+
+        It 'answers exactly what Get-FileHash answers' {
+            # It replaces Get-FileHash in the check, so a different answer
+            # would not be a slower bar, it would be every disc reported bad.
+            (Get-FileSha256Watched $script:WBig) |
+                Should -Be (Get-FileHash -LiteralPath $script:WBig -Algorithm SHA256).Hash
+        }
+
+        It 'reports more than once while reading one file' {
+            $script:Reads = @()
+            $null = Get-FileSha256Watched $script:WBig { param($r) $script:Reads += $r }
+            $script:Reads.Count | Should -BeGreaterThan 1
+            $script:Reads[-1] | Should -Be (Get-Item $script:WBig).Length
+        }
+
+        It 'counts up and never back' {
+            $script:Reads = @()
+            $null = Get-FileSha256Watched $script:WBig { param($r) $script:Reads += $r }
+            for ($i = 1; $i -lt $script:Reads.Count; $i++) {
+                $script:Reads[$i] | Should -BeGreaterThan $script:Reads[$i - 1]
+            }
+        }
+
+        It 'is content with nobody listening' {
+            { $null = Get-FileSha256Watched $script:WBig } | Should -Not -Throw
+        }
+
+        It 'names the file it could not read' {
+            # This wording goes on the dialog somebody reads when their disc
+            # has failed, so it has to keep naming the file.
+            # Beside the staging folder, not inside it. Dropped in there it
+            # becomes a file the later tests expect to find on the disc, and
+            # they then fail for a reason that has nothing to do with them.
+            # The fail-watch caught exactly that.
+            $p = Join-Path $script:WDir 'locked.bin'
+            Set-Content -LiteralPath $p -Value 'x' -Encoding Ascii -NoNewline
+            $h = [IO.File]::Open($p, 'Open', 'Read', 'None')
+            try { { Get-FileSha256Watched $p } | Should -Throw -ExpectedMessage '*locked.bin*cannot be read*' }
+            finally { $h.Dispose() }
+        }
+    }
+
+    Context 'and what the check does with it' {
+
+        It 'moves while the big file is being read, not only once it is over' {
+            # The bug itself. Two files meant two reports, and the one that
+            # mattered arrived when the long wait was already finished.
+            $script:Seen = @()
+            $null = Test-BurnedDisc -DiscRoot $script:WDisc -StagingFolder $script:WSrc -OnProgress {
+                param($done, $total, $rel, $bytesDone, $bytesTotal)
+                $script:Seen += , @{ Rel = $rel; Bytes = $bytesDone; Total = $bytesTotal }
+            }
+            @($script:Seen).Count | Should -BeGreaterThan 2 -Because 'two files used to mean exactly two reports'
+            $mid = @($script:Seen | Where-Object { $_.Rel -eq 'big.bin' -and $_.Bytes -gt 0 -and $_.Bytes -lt $_.Total })
+            $mid.Count | Should -BeGreaterThan 0 -Because 'a report from inside the long read is the whole point'
+        }
+
+        It 'still finishes with the whole disc counted' {
+            $script:Seen = @()
+            $v = Test-BurnedDisc -DiscRoot $script:WDisc -StagingFolder $script:WSrc -OnProgress {
+                param($done, $total, $rel, $bytesDone, $bytesTotal)
+                $script:Seen += , @{ Bytes = $bytesDone; Total = $bytesTotal }
+            }
+            $v.Ok | Should -BeTrue
+            $script:Seen[-1].Bytes | Should -Be $script:Seen[-1].Total
+        }
+
+        It 'still catches a file that came back as different bytes' {
+            # The reports are new. The verdict must be exactly what it was.
+            $other = Join-Path $script:WDir 'wrong'
+            New-Item -ItemType Directory -Force -Path $other | Out-Null
+            Copy-Item (Join-Path $script:WDisc 'small.txt') $other
+            $b = New-Object byte[] (9MB)
+            $b[4MB] = 7
+            [IO.File]::WriteAllBytes((Join-Path $other 'big.bin'), $b)
+            $v = Test-BurnedDisc -DiscRoot $other -StagingFolder $script:WSrc
+            $v.Ok | Should -BeFalse
+            $v.WrongContent | Should -Contain 'big.bin'
         }
     }
 }

@@ -977,6 +977,55 @@ function Write-IsoToDisc {
 }
 
 <#
+    The SHA-256 of a file, reported on as it is read.
+
+    Get-FileHash reads the whole file and says nothing until it has finished.
+    On a cut set that is four and a half minutes of silence: the disc is one
+    enormous part file beside a handful of small ones, so a bar fed only when a
+    file completes has exactly two positions, nought and a hundred. Noticed on
+    11 October while watching a real check, after the byte weighting had
+    already fixed the easier version of the same complaint. Weighting by bytes
+    moves the bar between files. It cannot help when one file IS the disc.
+
+    Reads in chunks and hands back how far it has got, so the window has
+    something to draw every second or so.
+
+    The message on a read failure is built here and matches what Get-FileHash
+    said, because that wording is what is printed on the dialog somebody reads
+    when their disc has failed, and it names the file.
+#>
+function Get-FileSha256Watched {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [scriptblock]$OnRead,
+        [int]$ChunkBytes = 4MB
+    )
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $fs = $null
+    try {
+        $fs = [System.IO.File]::Open($Path, 'Open', 'Read', 'Read')
+        $buf = New-Object byte[] $ChunkBytes
+        $read = [long]0
+        while ($true) {
+            $n = $fs.Read($buf, 0, $buf.Length)
+            if ($n -le 0) { break }
+            $null = $sha.TransformBlock($buf, 0, $n, $null, 0)
+            $read += $n
+            if ($OnRead) { & $OnRead $read }
+        }
+        $null = $sha.TransformFinalBlock((New-Object byte[] 0), 0, 0)
+        return ((($sha.Hash | ForEach-Object { $_.ToString('x2') }) -join '').ToUpperInvariant())
+    }
+    catch {
+        throw "The file '$Path' cannot be read: $($_.Exception.Message)"
+    }
+    finally {
+        if ($fs) { $fs.Dispose() }
+        $sha.Dispose()
+    }
+}
+
+<#
     Compare what is on a disc against the folder it was built from.
 
     Every file hashed on both sides, because a burn that finishes without an
@@ -1032,6 +1081,9 @@ function Test-BurnedDisc {
         # out wrong still moves the bar. Counting only the good ones left a bar
         # that stopped short of the end on exactly the discs worth watching.
         $done++
+        # What was finished before this file started, so the reports coming out
+        # of the hash below can be added to it rather than guessed at.
+        $before = $bytesDone
         $bytesDone += $source[$rel].Length
         if ($source[$rel].Length -ne $onDisc[$rel].Length) {
             $sizeOff += "$rel ($($source[$rel].Length) built, $($onDisc[$rel].Length) on disc)"
@@ -1051,10 +1103,17 @@ function Test-BurnedDisc {
             # WrongContent because they are different facts: one file came back
             # as different bytes, the other did not come back at all.
             $a = $null; $b = $null
-            try { $a = (Get-FileHash -LiteralPath $source[$rel].FullName -Algorithm SHA256 -ErrorAction Stop).Hash }
+            # The staged side is on a hard disc and takes seconds, so it is not
+            # worth reporting on. The disc side is the one somebody is watching.
+            try { $a = Get-FileSha256Watched $source[$rel].FullName }
             catch { $unread += "$rel (as built: $($_.Exception.Message))" }
             if ($null -ne $a) {
-                try { $b = (Get-FileHash -LiteralPath $onDisc[$rel].FullName -Algorithm SHA256 -ErrorAction Stop).Hash }
+                try {
+                    $b = Get-FileSha256Watched $onDisc[$rel].FullName {
+                             param($read)
+                             if ($OnProgress) { & $OnProgress $done $total $rel ($before + $read) $bytesTotal }
+                         }
+                }
                 catch { $unread += "$rel ($($_.Exception.Message))" }
             }
             if ($null -ne $a -and $null -ne $b -and $a -ne $b) { $hashOff += $rel }
