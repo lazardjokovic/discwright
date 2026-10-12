@@ -2768,6 +2768,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var SETROWS=null;
   var SETJOINS=null;
   var SETWANT=0;      // the disc being waited for, 0 when nothing is
+  var SETGOING=false; // the whole set is being done in one go, ending in the
+                      // installer. Set by Install and by nothing else, so
+                      // somebody who copied one disc on purpose is not handed
+                      // an installer they did not ask for.
 
   function setRows(){
     // Read off the disc's own set file rather than baked into this menu, so the
@@ -3145,6 +3149,21 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     for(var i=0;i<mine.length;i++){ n+=parseFloat(mine[i].b); }
     return n;
   }
+  // What the whole set needs before it is finished with, which is not the
+  // same as what the discs hold.
+  //
+  // A cut file is written out whole while its pieces are all still there, so
+  // the high point is the set plus the largest finished file. For Hollow
+  // Knight that is 1.2 GB of discs and a 1.2 GB installer at the same moment.
+  // Asking for the size of one disc and finding out at ninety per cent is the
+  // way to waste somebody's evening.
+  function setSetBytes(){
+    var rows=setRows(), n=0, i;
+    for(i=0;i<rows.length;i++){ n+=parseFloat(rows[i].b); }
+    var js=setJoins(), biggest=0;
+    for(i=0;i<js.length;i++){ if(parseFloat(js[i].b)>biggest){ biggest=parseFloat(js[i].b); } }
+    return n+biggest;
+  }
   // One file, with robocopy rather than a copy in script. Robocopy shows what it
   // is doing and how far through it is, and a 4 GiB file copied by script looks
   // exactly like a menu that has hung.
@@ -3201,8 +3220,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     return {files:files,dirs:dirs};
   }
   // Is there room for this disc's share, where the game is being put back?
-  function setRoomFor(dir){
-    var need=setMineBytes();
+  function setRoomFor(dir){ return setRoomNeeding(dir,setMineBytes()); }
+  function setRoomForAll(dir){ return setRoomNeeding(dir,setSetBytes()); }
+  function setRoomNeeding(dir,need){
     try{
       var d=fso.GetDrive(fso.GetDriveName(dir));
       return {need:need,free:d.FreeSpace,ok:(d.FreeSpace>need)};
@@ -3280,6 +3300,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
           setWaitDisc(st.dir);
         }
         show();
+        // The last disc. Only when Install started this: somebody who copied
+        // one disc deliberately gets their folder and nothing else.
+        if(s.complete&&SETGOING){ SETGOING=false; setInstall(); }
       });
       return;
     }
@@ -3476,6 +3499,33 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       setCheckRun(list,at+1,bad,after);
     });
   }
+  // The whole thing, as one action: work out where it goes, make sure there
+  // is room for all of it, copy this disc, ask for the next, put the cut file
+  // back together, and install. Asked for as "the way we used to install a
+  // game back in the good old days", and that is the measure: nothing is said
+  // about folders or hashes unless something is wrong with them.
+  function setGo(){
+    var dir=setDir();
+    if(!dir.length){ alert("No hard drive was found to install from."); return; }
+    var room=setRoomForAll(dir);
+    if(!room.ok){
+      alert("There is not enough room to install this game.\n\nIt needs "+
+            Math.round(room.need/1048576)+" MB free while it works, and the drive has "+
+            Math.round(room.free/1048576)+" MB.");
+      return;
+    }
+    if(!setMakeDir(dir)){ alert("That folder could not be created:\n\n"+dir); return; }
+    SETGOING=true;
+    var s=setScan(dir);
+    if(s.complete){ setInstall(); return; }
+    // Already has everything this disc holds, and is waiting on another one.
+    if(!setMine().length||s.mineHere>=s.mineTotal){
+      var list=s.need.split(", ");
+      if(list.length&&list[0].length){ SETWANT=parseFloat(list[0]); setWaitDisc(dir); show(); return; }
+    }
+    setCopy();
+  }
+
   function setInstall(){
     var dir=setDir(), s=setScan(dir);
     // Put any outstanding pieces together first. Cheap when there is nothing to
@@ -3540,11 +3590,19 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // The copy is offered while anything of this disc is still missing from
     // the folder, and the install only once the whole set is there.
     if(s.mineHere<s.mineTotal){
-      // Numbered, so the sequence reads itself: a person who has just put
-      // disc 1 in sees "Copy disc 1 of 2" and knows there is a disc 2 coming
-      // without having to read the paragraph above it.
-      h+=btnHtml("btn_SetCopy","install","Copy disc "+setNow()+" of "+SET.of,"setCopy()",
-                 "Copy this disc's share of the game into "+dir);
+      // The first button is the whole job: it copies this disc, asks for the
+      // next, puts the cut file back together and installs, without being
+      // told to do each of those. Asked for as the way a game was installed
+      // when it came on several discs, and on those the button said Install
+      // and the rest was the installer's business.
+      //
+      // Copy disc N of M is kept underneath it for anybody who wants the
+      // files and not the game. It was the only button here, and it read as
+      // a chore rather than as installing something.
+      h+=btnHtml("btn_SetGo","install",setDoneVerb(GAMES[cur]),"setGo()",
+                 "Put the game back together from all "+SET.of+" discs, and run it");
+      h+=btnHtml("btn_SetCopy","","Copy disc "+setNow()+" of "+SET.of+" only","setCopy()",
+                 "Copy this disc's share of the game into "+dir+", and stop there");
     }
     // Every file here and a cut one still in pieces. Without this the panel
     // says "still has to be put back together" and offers no way to do it:
