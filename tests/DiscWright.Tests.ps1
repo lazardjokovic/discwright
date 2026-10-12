@@ -10490,7 +10490,8 @@ Describe 'Installing a game off five discs, with the discs really changing' -Tag
         $script:SwapRestore = Join-Path $script:SwapWork 'restore'
         $menu = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
         $lifted = 'setRows', 'setDiscIn', 'setNow', 'setNeedsDisc', 'setPath', 'setDefaultDir',
-                  'setJoins', 'setJoinDone', 'setWaitExec', 'setJoinAll', 'setJoinStep',
+                  'setJoins', 'setJoinDone', 'setStartJob', 'setWaitJob', 'setJobCode', 'setClock',
+                  'setJoinAll', 'setJoinStep',
                   'setQuote', 'setScan', 'setMine', 'setMineBytes', 'setSetBytes',
                   'setCopyCmd', 'setMakeDir', 'setRoomFor', 'setRoomForAll', 'setRoomNeeding',
                   'setSentence', 'setPlayable', 'setDoneVerb', 'setDir',
@@ -10504,6 +10505,7 @@ Describe 'Installing a game off five discs, with the discs really changing' -Tag
             'var SETFILE = "Disc set.txt";'
             ('var SET = {n:1, of:' + $script:SwapCount + ', label:"SWAP"};')
             'var SETROWS=null, SETJOINS=null, SETWANT=0, SETGOING=false;'
+            'var SETJOBN=0, SETSTARTED=0;'
             ('var SETDIR = ' + (ConvertTo-Json $script:SwapRestore) + ';')
             'var SETARM=false, SETJOINING="", SETCHECKING="", SETCOPYING="";'
             'var GAMES=[{n:"Swap Game", m:"swap game", s:"setup_game.exe", files:false}], cur=0;'
@@ -10633,6 +10635,220 @@ Describe 'Installing a game off five discs, with the discs really changing' -Tag
     }
 }
 
+Describe 'Running a command without a window and without a pipe to fill' -Tag 'Unit' {
+
+    # The bug this replaced, found by a real install off a real disc on
+    # 12 October.
+    #
+    # The menu used WScript.Shell.Exec, which gives the child process a pipe
+    # for its output. Nothing on this side ever reads that pipe. robocopy
+    # prints a running percentage as it copies, the buffer fills, and the
+    # writer blocks for ever. On the night: 692 MB had copied correctly, and
+    # robocopy then sat there for five minutes with 0.2 seconds of processor
+    # time over 378 seconds of life and every thread waiting, while the menu
+    # politely polled exec.Status for a process that was never going to
+    # finish. The install stopped there with nothing on screen to say why.
+    #
+    # Exec also shows a console window, which lands on top of the menu. Said
+    # the same night: "Huge Window that above the menu also not user friendly".
+    # Closing that window kills the copy it belongs to, which is how a join
+    # ended up half written.
+    #
+    # Nothing here copies a disc. What it checks is the one property that
+    # matters: a command that writes far more than a pipe would hold still
+    # comes back.
+
+    BeforeDiscovery {
+        $script:HaveCsJob = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:CsJob = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:JobSrc = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+
+        function Get-JsFn9([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        $script:JobDir = Join-Path ([IO.Path]::GetTempPath()) ('dwjb_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:JobDir | Out-Null
+
+        # The real functions, under cscript, where there is no window.setTimeout
+        # and setWaitJob therefore takes its WScript.Sleep branch. The timer
+        # branch is the one a disc takes, and the five-disc install test above
+        # runs that one.
+        function Invoke-JobJs([string]$command, [int]$timeoutSec = 180) {
+            $js = @(
+                'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+                'var SETJOBN = 0, SETSTARTED = 0;'
+                (Get-JsFn9 $script:JobSrc 'setQuote')
+                (Get-JsFn9 $script:JobSrc 'setStartJob')
+                (Get-JsFn9 $script:JobSrc 'setWaitJob')
+                (Get-JsFn9 $script:JobSrc 'setJobCode')
+                'var t0 = new Date();'
+                ('var job = setStartJob(' + (ConvertTo-Json $command) + ');')
+                'WScript.Echo("flag=" + job.flag);'
+                'setWaitJob(job, function(){'
+                '  WScript.Echo("seconds=" + Math.round((new Date() - t0) / 1000));'
+                '  WScript.Echo("flagleft=" + (fso.FileExists(job.flag) ? "yes" : "no"));'
+                '});'
+            )
+            $f = Join-Path $script:JobDir ('j_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            $p = Start-Process $script:CsJob -PassThru -WindowStyle Hidden `
+                -ArgumentList '//Nologo', '//E:JScript', ('"' + $f + '"') `
+                -RedirectStandardOutput ($f + '.out') -RedirectStandardError ($f + '.err')
+            $finished = $p.WaitForExit($timeoutSec * 1000)
+            if (-not $finished) { try { $p.Kill() } catch { } }
+            $out = @{ Finished = $finished }
+            foreach ($line in @(Get-Content ($f + '.out') -ErrorAction SilentlyContinue)) {
+                if ($line -match '^([a-z]+)=(.*)$') { $out[$Matches[1]] = $Matches[2].Trim() }
+            }
+            return $out
+        }
+    }
+
+    AfterAll {
+        if ($script:JobDir -and (Test-Path $script:JobDir)) {
+            Remove-Item $script:JobDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'the thing that hung' -Skip:(-not $script:HaveCsJob) {
+
+        It 'comes back from a command that prints far more than a pipe holds' {
+            # 20,000 lines of 60 characters is about 1.2 MB. A pipe buffer is a
+            # few kilobytes. Under Exec, with nobody draining it, the writer
+            # blocks at the first few kilobytes and never exits.
+            $noise = 'for /l %i in (1,1,20000) do @echo ' + ('x' * 60)
+            $r = Invoke-JobJs $noise 180
+            $r.Finished | Should -BeTrue -Because 'this is the deadlock, and it never came back'
+            $r['seconds'] | Should -Not -BeNullOrEmpty
+            [int]$r['seconds'] | Should -BeLessThan 170
+        }
+
+        It 'tidies up the file it waited on' {
+            $r = Invoke-JobJs 'echo hello'
+            $r['flagleft'] | Should -Be 'no'
+            Test-Path -LiteralPath $r['flag'] | Should -BeFalse -Because 'TEMP is not a place to leave litter'
+        }
+
+        It 'does not let the command finish the job on its behalf' {
+            # Without the brackets, "A & B" puts "echo done" on the end of the
+            # command's own chain, the flag appears while the first part is
+            # still running, and the menu carries on over the top of work that
+            # has not finished. Three seconds of ping, so a job that comes back
+            # instantly is the bug.
+            $r = Invoke-JobJs 'echo first & ping -n 4 127.0.0.1 >nul' 60
+            $r.Finished | Should -BeTrue
+            [int]$r['seconds'] | Should -BeGreaterThan 1
+        }
+    }
+
+    Context 'what it writes into the command line' {
+
+        It 'runs hidden, and does not wait on the call' {
+            # 0 is hidden. false is "do not block", because blocking here is
+            # what put "Stop running this script?" on screen in the first place.
+            $script:JobSrc | Should -Match ([regex]::Escape('sh.Run("cmd /c ("+cmd+") & call echo %^errorlevel%> "+setQuote(flag),0,false)'))
+        }
+
+        It 'quotes the flag file, and keeps the ampersand outside the quotes' {
+            # A game file called "Rock & Roll.pak" is quoted by setCopyCmd, so
+            # its ampersand is literal. This one has to stay an operator.
+            $fn = Get-JsFn9 $script:JobSrc 'setStartJob'
+            $fn | Should -Match ([regex]::Escape('setQuote(flag)'))
+            $fn | Should -Match ([regex]::Escape('") & call echo %^errorlevel%> "'))
+        }
+
+        It 'uses nothing that needs a process handle' {
+            # Run hands back an exit code or nothing at all, never a handle. Any
+            # leftover Status or ExitCode would be reading a process that is not
+            # there any more.
+            $fn = Get-JsFn9 $script:JobSrc 'setWaitJob'
+            $fn | Should -Not -Match 'Status'
+            $fn | Should -Not -Match 'ExitCode'
+        }
+    }
+
+    Context 'and what the copy checks instead of an exit code' {
+
+        It 'judges a copied file by its size against the table' {
+            # robocopy's exit code is gone with the process handle, which is no
+            # loss: the file is a better answer, and it is the same question
+            # setScan asks afterwards. A disc that stopped reading halfway
+            # leaves a short file, and this catches it there and then.
+            $fn = Get-JsFn9 $script:JobSrc 'setCopyStep'
+            $fn | Should -Match ([regex]::Escape('fso.GetFile(full).Size==parseFloat(row.b)'))
+            $fn | Should -Not -Match 'ExitCode'
+        }
+    }
+
+    Context 'the clock' {
+
+        It 'says nothing when nothing is running' {
+            $js = @(
+                'var SETSTARTED = 0;'
+                (Get-JsFn9 $script:JobSrc 'setClock')
+                'WScript.Echo("clock=[" + setClock() + "]");'
+            )
+            $f = Join-Path $script:JobDir 'clock0.js'
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            ((@(& $script:CsJob //Nologo //E:JScript $f 2>&1) -join '').Trim()) | Should -Be 'clock=[]'
+        }
+
+        It 'counts in seconds, and then in minutes and seconds' -Skip:(-not $script:HaveCsJob) {
+            foreach ($case in @(@{ Ago = 9; Want = '9 s so far.' }, @{ Ago = 75; Want = '1 min 15 s so far.' })) {
+                $js = @(
+                    ('var SETSTARTED = new Date(new Date() - ' + ($case.Ago * 1000) + ');')
+                    (Get-JsFn9 $script:JobSrc 'setClock')
+                    'WScript.Echo("clock=" + setClock());'
+                )
+                $f = Join-Path $script:JobDir ('clock' + $case.Ago + '.js')
+                Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+                ((@(& $script:CsJob //Nologo //E:JScript $f 2>&1) -join '').Trim()) | Should -Be ('clock= ' + $case.Want)
+            }
+        }
+
+        It 'is on the end of all three sentences that mean something is running' {
+            foreach ($line in 'Copying file "+SETCOPYING+" off this disc."+setClock()',
+                              'back together. On a large file this takes a few minutes."+setClock()',
+                              'against what was burned."+setClock()') {
+                $script:JobSrc | Should -Match ([regex]::Escape($line))
+            }
+        }
+
+        It 'redraws one line rather than the whole panel' {
+            # renderSet asks the drive which disc is in it and stats every file
+            # in the folder. Doing that once a second while the drive is busy
+            # reading a disc is how a copy gets slower the longer you watch it.
+            $fn = Get-JsFn9 $script:JobSrc 'setTick'
+            $fn | Should -Match ([regex]::Escape('document.getElementById("setinfo")'))
+            $fn | Should -Match ([regex]::Escape('el.innerHTML=setInfoHtml(SETLASTSCAN)'))
+            $fn | Should -Not -Match 'renderSet'
+            $fn | Should -Not -Match 'setScan'
+        }
+
+        It 'stops ticking when there is nothing left to time' {
+            $fn = Get-JsFn9 $script:JobSrc 'setTick'
+            $fn | Should -Match ([regex]::Escape('if(!busy){ SETSTARTED=0; return; }'))
+        }
+    }
+}
+
 Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
 
     # Found on real discs, joining a 1.18 GB Hollow Knight installer off two
@@ -10668,21 +10884,26 @@ Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
     It 'starts the copy rather than waiting for it' {
         # Exec hands back a process to watch. Run with bWaitOnReturn blocks
         # until it finishes, which is the thing that earned the dialog.
-        $script:StepSrc | Should -Match 'Exec\(cmd\)'
+        $script:StepSrc | Should -Match ([regex]::Escape('setWaitJob(setStartJob(cmd),function(){'))
         $script:StepSrc | Should -Not -Match 'Run\(cmd,0,true\)'
     }
 
+    It 'starts it hidden, and with nothing listening to it' {
+        # Exec was the first answer and it carried two bugs: a console window
+        # on top of the menu, and a pipe nobody reads. What the second one did
+        # to a real install is a Describe of its own further down.
+        $script:AllSrc | Should -Match ([regex]::Escape('sh.Run("cmd /c ("+cmd+") & call echo %^errorlevel%> "+setQuote(flag),0,false)'))
+        $script:AllSrc | Should -Not -Match ([regex]::Escape('.Exec(setCopyCmd'))
+    }
+
     It 'watches it on a timer when there is a window to keep alive' {
-        # Renamed from setJoinWait when the hash check started using it too: two
-        # features share the waiter now, and a name saying join would be read
-        # as belonging to one of them.
-        $script:AllSrc | Should -Match ([regex]::Escape('window.setTimeout(function(){ setWaitExec(exec,after); },400)'))
+        $script:AllSrc | Should -Match ([regex]::Escape('window.setTimeout(function(){ setWaitJob(job,after); },400)'))
     }
 
     It 'still waits where there is no window, so the suite can run it' {
         # cscript has no window and no timer. Without this the tests would
         # exercise a path the disc never takes, or not run at all.
-        $script:AllSrc | Should -Match ([regex]::Escape('while(exec.Status==0){ WScript.Sleep(50); }'))
+        $script:AllSrc | Should -Match ([regex]::Escape('while(!fso.FileExists(job.flag)){ WScript.Sleep(50); }'))
     }
 
     It 'deletes the pieces only after the finished file checks out' {
@@ -10797,10 +11018,12 @@ Describe 'Checking a disc against its own checksum list' -Tag 'Unit' {
                 'var SEP = String.fromCharCode(92);'
                 'var root = ' + (ConvertTo-Json $root) + ';'
                 'var PREVIEW = false; var SETCHECKING = "";'
+                'var SETJOBN = 0, SETSTARTED = 0;'
                 'function show(){}'
                 'function setSay(m, good){ WScript.Echo((good ? "GOOD:" : "BAD:") + m); }'
             )
-            foreach ($fn in 'setWaitExec', 'discSums', 'setCheckRun', 'discCheck') { $js += (Get-SumJs $fn) }
+            foreach ($fn in 'setQuote', 'setStartJob', 'setWaitJob', 'setJobCode', 'setClock',
+                             'discSums', 'setCheckRun', 'discCheck') { $js += (Get-SumJs $fn) }
             $js += 'discCheck();'
             $f = Join-Path $script:Sandbox ('dc_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
             Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
@@ -10912,16 +11135,20 @@ Describe 'Hashing a game without the window seizing up' -Tag 'Unit' {
         $script:VSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
     }
 
-    It 'no longer waits on certutil' {
+    It 'no longer waits on certutil, and no longer holds a pipe open to it' {
+        # It was Run and blocking, then Exec and non-blocking, and Exec brought
+        # a console window and a pipe that deadlocked a real install. Now it
+        # goes through the same hidden job as the copy and the join.
         $script:VSrc | Should -Not -Match ([regex]::Escape("sh.Run('cmd /c certutil"))
-        $script:VSrc | Should -Match ([regex]::Escape("sh.Exec('cmd /c certutil"))
+        $script:VSrc | Should -Not -Match ([regex]::Escape("sh.Exec('cmd /c certutil"))
+        $script:VSrc | Should -Match ([regex]::Escape("setWaitJob(setStartJob('certutil -hashfile"))
     }
 
     It 'walks the list one process at a time, through the shared waiter' {
         # One loop, used by the set check and by the disc check, so there is one
         # place where "how do we wait" is decided.
         $script:VSrc | Should -Match ([regex]::Escape('function setCheckRun(list,at,bad,after){'))
-        $script:VSrc | Should -Match ([regex]::Escape('setWaitExec(exec,function(){'))
+        $script:VSrc | Should -Match ([regex]::Escape('setWaitJob(setStartJob('))
     }
 
     It 'says which file it is on while it works' {
@@ -10937,7 +11164,7 @@ Describe 'Hashing a game without the window seizing up' -Tag 'Unit' {
     It 'names the waiter for what it does, not for the join that needed it first' {
         # Two features use it now. A name that says join would be read as one.
         $script:VSrc | Should -Not -Match 'setJoinWait'
-        $script:VSrc | Should -Match ([regex]::Escape('function setWaitExec(exec,after){'))
+        $script:VSrc | Should -Match ([regex]::Escape('function setWaitJob(job,after){'))
     }
 }
 
@@ -11745,15 +11972,26 @@ Describe 'The disc menu copying without holding the script engine shut' {
 
         # Runs the real copy loop out of the application under cscript, with
         # only the things it talks to stubbed. Under cscript there is no
-        # window.setTimeout, so setWaitExec takes its WScript.Sleep branch,
+        # window.setTimeout, so setWaitJob takes its WScript.Sleep branch,
         # which is the same shape of poll.
+        # A row the way setRows builds one, size and all. It was {f:"name"}
+        # until 12 October, when the copy started checking what it had copied
+        # against the size the table gives: a fixture missing the one field
+        # under test reports every file as badly copied, which is a test
+        # failing for being wrong about itself. The size is read off the real
+        # source file, so the fixture cannot drift from what it copies.
         function Invoke-CopyJs([string]$src, [string]$dst, [string[]]$files) {
-            $list = ($files | ForEach-Object { '{f:' + (ConvertTo-Json $_) + '}' }) -join ','
+            $list = ($files | ForEach-Object {
+                $full = Join-Path $src ($_ -replace '/', '\')
+                $bytes = if (Test-Path -LiteralPath $full) { (Get-Item -LiteralPath $full).Length } else { 0 }
+                '{f:' + (ConvertTo-Json $_) + ',b:"' + $bytes + '"}'
+            }) -join ','
             $js = @(
                 'var fso = new ActiveXObject("Scripting.FileSystemObject");'
                 'var SEP = String.fromCharCode(92);'
                 'var root = ' + (ConvertTo-Json $src) + ';'
                 'var SETCOPYING = "";'
+                'var SETJOBN = 0, SETSTARTED = 0;'
                 'var SAID = []; function setSay(m, good){ SAID[SAID.length] = m; }'
                 'var SHOWN = 0; function show(){ SHOWN++; }'
                 'var JOINED = 0; function setJoinAll(dir, after){ JOINED++; if (after) after(0); }'
@@ -11762,8 +12000,12 @@ Describe 'The disc menu copying without holding the script engine shut' {
                 'function setScan(dir){ return {complete:true, need:""}; }'
                 'var WAITED = 0; function setWaitDisc(dir){ WAITED++; }'
                 (Get-JsFn3 $script:MenuSrc 'setQuote')
+                (Get-JsFn3 $script:MenuSrc 'setPath')
                 (Get-JsFn3 $script:MenuSrc 'setCopyCmd')
-                (Get-JsFn3 $script:MenuSrc 'setWaitExec')
+                (Get-JsFn3 $script:MenuSrc 'setStartJob')
+                (Get-JsFn3 $script:MenuSrc 'setWaitJob')
+                (Get-JsFn3 $script:MenuSrc 'setJobCode')
+                (Get-JsFn3 $script:MenuSrc 'setClock')
                 (Get-JsFn3 $script:MenuSrc 'setCopyStep')
                 'setCopyStep({dir:' + (ConvertTo-Json $dst) + ',mine:[' + $list + '],at:0,bad:0});'
                 'WScript.Echo("joined=" + JOINED + " shown=" + SHOWN + " said=" + SAID.join("|"));'
@@ -11790,9 +12032,11 @@ Describe 'The disc menu copying without holding the script engine shut' {
         }
 
         It 'starts each copy and polls it, the way the join and the check do' {
+            # It was Exec until 12 October, when a pipe nobody reads stopped a
+            # real install dead. All three go through the same hidden job now.
             $fn = Get-JsFn3 $script:MenuSrc 'setCopyStep'
-            $fn | Should -Match '\.Exec\('
-            $fn | Should -Match 'setWaitExec'
+            $fn | Should -Not -Match '\.Exec\('
+            $fn | Should -Match ([regex]::Escape('setWaitJob(setStartJob(setCopyCmd(root,st.dir,row.f))'))
         }
 
         It 'says which file it is on while it works' {
