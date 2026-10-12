@@ -77,6 +77,67 @@ Pester 5.x is needed and was not found.
 Pester 6 can stay installed alongside it; this runner asks for 5.x by version.
 '@
 }
+# Is Pester still Pester?
+#
+# Pester runs every block by dot-sourcing one small file of its own, Pester.ps1,
+# which sits beside the module and is four lines long: it takes a scriptblock
+# and runs it. Nothing in a test run works without it.
+#
+# It gets overwritten. The hazard is written up thirty lines above this one -
+# Invoke-Pester leaves a variable called $p behind, holding the path of that
+# very file - and on 12 October the suite was found with DiscWright.ps1 sitting
+# in it, dated 4 October. What that looks like from outside is the worst
+# failure this runner can have:
+#
+#   Discovery found 1388 tests in 11.93s.
+#   Running tests.
+#
+# and then nothing, for ever, with the application's own window open on the
+# desktop. Pester dot-sources what it believes is its four-line helper, gets an
+# application instead, and blocks on ShowDialog with nobody to close it.
+# Discovery still works, which is the cruel part: the run looks like it has
+# started. Forty minutes went into finding it by hand.
+#
+# So it is checked, in the two ways that tell a four-line file from a program:
+# how big it is, and whether the code above the signature block still mentions
+# the scriptblock it is supposed to run.
+function Test-PesterHelper([string]$moduleBase) {
+    $helper = Join-Path $moduleBase 'Pester.ps1'
+    if (-not (Test-Path -LiteralPath $helper)) {
+        return "$helper is missing. Pester cannot run a single test without it."
+    }
+    $size = (Get-Item -LiteralPath $helper).Length
+    # 16 KB of it is the Authenticode signature. A program is hundreds of KB.
+    if ($size -gt 64KB) {
+        return ("$helper is {0:N0} bytes. The real one is a four-line file of about 17 KB, " +
+                'so something has been written over it.') -f $size
+    }
+    $text = Get-Content -LiteralPath $helper -Raw
+    $code = $text -split '# SIG # Begin signature block', 2
+    if ($code[0] -notmatch '\$ScriptBlock') {
+        return "$helper no longer runs the scriptblock it is handed. Something has been written over it."
+    }
+    return ''
+}
+
+$why = Test-PesterHelper $pester5.ModuleBase
+if ($why) {
+    throw @"
+Pester $($pester5.Version) is damaged, so no test can run.
+
+    $why
+
+Put it back:
+
+    Install-Module Pester -RequiredVersion $($pester5.Version) -Force -SkipPublisherCheck -Scope CurrentUser
+
+or, to replace only that one file:
+
+    Save-Module Pester -RequiredVersion $($pester5.Version) -Path `$env:TEMP
+    Copy-Item "`$env:TEMP\Pester\$($pester5.Version)\Pester.ps1" '$($pester5.ModuleBase)' -Force
+"@
+}
+
 Import-Module Pester -RequiredVersion $pester5.Version -Force
 Write-Host "Pester $((Get-Module Pester).Version)" -ForegroundColor DarkGray
 
