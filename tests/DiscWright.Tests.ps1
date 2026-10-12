@@ -11772,3 +11772,139 @@ Describe 'Installing a set the way it was done when games came on several discs'
         }
     }
 }
+
+Describe 'A set disc offering Play once the game is actually installed' {
+
+    # Said on 11 October after installing Hollow Knight off the two discs it
+    # had just burned and checked: "after game is installed is still offers
+    # install - no play".
+    #
+    # The verb described what the disc CARRIES, not what is on the machine. A
+    # GOG disc carries an installer, so the answer was always Install. The
+    # ordinary one-disc menu has asked the registry for years, with findGame,
+    # and lights its Play button the moment the installer finishes. A set
+    # never asked.
+    #
+    # The registry is the right place to ask. GOG writes gameName, path and
+    # exe under HKLM\SOFTWARE\WOW6432Node\GOG.com\Games, which is how this
+    # machine knows Hollow Knight is at C:\dwspan\Hollow Knight. The disc
+    # cannot remember where somebody installed it, and does not have to.
+
+    BeforeDiscovery {
+        $script:HaveCs8 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:Cs8 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:PlaySrc = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+
+        function Get-JsFn7([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        $script:PlayDir = Join-Path ([IO.Path]::GetTempPath()) ('dwpl_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+        New-Item -ItemType Directory -Force -Path $script:PlayDir | Out-Null
+
+        # findGame is the registry, so it is stubbed: what is under test is
+        # whether the set panel asks it and what it does with the answer.
+        function Invoke-VerbJs([string]$game, [string]$installed) {
+            $js = @(
+                'var SETPLAY = null;'
+                "var GAMES = [$game], cur = 0;"
+                "function findGame(m){ return $installed; }"
+                'var LAUNCHED = ""; function launchExe(e, a, d){ LAUNCHED = e; }'
+                'var fso = { GetParentFolderName: function(p){ return "D:"; } };'
+                (Get-JsFn7 $script:PlaySrc 'setPlayable')
+                (Get-JsFn7 $script:PlaySrc 'setDoneVerb')
+                'WScript.Echo("verb=" + setDoneVerb(GAMES[0]));'
+            )
+            $f = Join-Path $script:PlayDir ('p_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            return ((@(& $script:Cs8 //Nologo //E:JScript $f 2>&1) -join "`n").Trim())
+        }
+    }
+
+    AfterAll {
+        if ($script:PlayDir -and (Test-Path $script:PlayDir)) {
+            Remove-Item $script:PlayDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    Context 'what the button says' -Skip:(-not $script:HaveCs8) {
+
+        It 'says Install while the game is not on the machine' {
+            (Invoke-VerbJs '{n:"Hollow Knight", m:"hollow knight", s:"setup.exe", files:false}' 'null') |
+                Should -Match 'verb=Install'
+        }
+
+        It 'says Play once it is' {
+            # The report, in one line.
+            $hit = '{exe:"C:' + [string][char]92 + [string][char]92 + 'dwspan' + [string][char]92 + [string][char]92 + 'Hollow Knight' + [string][char]92 + [string][char]92 + 'Hollow Knight.exe", dir:"C:' + [string][char]92 + [string][char]92 + 'dwspan"}'
+            (Invoke-VerbJs '{n:"Hollow Knight", m:"hollow knight", s:"setup.exe", files:false}' $hit) |
+                Should -Match 'verb=Play'
+        }
+
+        It 'still says Open Folder for a disc of files with nothing to run' {
+            # The two older answers have to survive. This one is a folder of
+            # game files where nothing was picked to run, and it opens.
+            (Invoke-VerbJs '{n:"Loose", m:"loose", s:"", files:true}' 'null') |
+                Should -Match 'verb=Open Folder'
+        }
+
+        It 'still says Play for a disc that is the game rather than an installer' {
+            (Invoke-VerbJs '{n:"Loose", m:"loose", s:"run.exe", files:true}' 'null') |
+                Should -Match 'verb=Play'
+        }
+
+        It 'asks the registry once per drawing, not once per button' {
+            # findGame goes through WMI. The panel asks for the verb more than
+            # once while it builds itself.
+            $js = @(
+                'var SETPLAY = null;'
+                'var GAMES = [{n:"G", m:"g", s:"s.exe", files:false}], cur = 0;'
+                'var ASKED = 0; function findGame(m){ ASKED++; return null; }'
+                (Get-JsFn7 $script:PlaySrc 'setPlayable')
+                (Get-JsFn7 $script:PlaySrc 'setDoneVerb')
+                'setDoneVerb(GAMES[0]); setDoneVerb(GAMES[0]); setDoneVerb(GAMES[0]);'
+                'WScript.Echo("asked=" + ASKED);'
+            )
+            $f = Join-Path $script:PlayDir 'once.js'
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            ((@(& $script:Cs8 //Nologo //E:JScript $f 2>&1) -join "`n").Trim()) | Should -Match 'asked=1'
+        }
+    }
+
+    Context 'and what it does' {
+
+        It 'runs the game rather than the installer when the game is there' {
+            $fn = Get-JsFn7 $script:PlaySrc 'setInstall'
+            $fn | Should -Match 'findGame'
+            $fn | Should -Match ([regex]::Escape('if(hit){ launchExe(hit.exe,"",fso.GetParentFolderName(hit.exe)); return; }'))
+        }
+
+        It 'asks again when the menu comes back, so Play appears after installing' {
+            # The installer takes minutes and the menu is behind it the whole
+            # time. The one-disc menu has done this for years; a set panel is
+            # redrawn rather than poked at, because its first button changes
+            # word rather than just going from grey to lit.
+            $script:PlaySrc | Should -Match ([regex]::Escape('if(SET && cur>=0 && !tasks){ SETPLAY=null;'))
+        }
+
+        It 'forgets what it knew each time the panel is drawn' {
+            Get-JsFn7 $script:PlaySrc 'renderSet' | Should -Match 'SETPLAY=null'
+        }
+    }
+}

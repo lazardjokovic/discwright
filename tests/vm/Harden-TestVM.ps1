@@ -73,4 +73,23 @@ Set-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' -N
 New-Item -Path 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting' -Force | Out-Null
 Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting' -Name DontShowUI -Value 1 -Type DWord
 
+# Defender, on the two folders the suite works in.
+#
+# Several tests write a small JScript file to the temp folder and run it with
+# cscript, which is how the menu's own code gets tested by the engine that
+# will really run it rather than by reading its source. That is also the exact
+# shape of script malware, and on 12 October Defender's machine learning
+# started answering Trojan:Script/ObfusScript.A!ml to one of them. The file
+# was byte for byte what it had been the day before: a model changed its mind,
+# not the test.
+#
+# cscript then cannot load the file at all, so the test fails with a message
+# about a virus rather than about the menu, which is a confusing half hour for
+# whoever reads it next. Scoped to the two folders a test machine works in and
+# nowhere else.
+foreach ($p in 'C:\dw', (Join-Path $env:LOCALAPPDATA 'Temp')) {
+    try { Add-MpPreference -ExclusionPath $p -ErrorAction Stop }
+    catch { Write-Warning "Could not exclude $p from Defender: $($_.Exception.Message)" }
+}
+
 Write-Information 'Hardened. Reboot, then check that the foreground can be TAKEN, not merely that a window can be seen.' -InformationAction Continue
