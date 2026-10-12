@@ -2960,14 +2960,87 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // window able to redraw and the person able to read what is happening.
   // cscript has no window and no timer, so it waits there instead; the test
   // suite runs that path and the disc runs the other.
-  function setWaitExec(exec,after){
+  // Start a command with no window, and with nothing listening to it.
+  //
+  // This was WScript.Shell.Exec, which does two things that both turned out to
+  // be bugs. It shows a console window, which lands on top of the menu, and
+  // the menu is the one thing somebody is meant to be reading while a disc
+  // copies. And it gives the child process a pipe for its output.
+  //
+  // The pipe is the serious one. Nothing on this side ever reads it, robocopy
+  // prints a running percentage as it goes, the buffer fills, and the writer
+  // blocks for ever. Measured on 12 October during a real install off a real
+  // disc: 692 MB had copied correctly and robocopy then sat there for five
+  // minutes, 0.2 seconds of processor time over 378 seconds of life and every
+  // thread waiting, while the menu politely polled exec.Status for a process
+  // that was never going to finish. The install stopped dead at that point
+  // with nothing on screen to say why.
+  //
+  // Run with a window style of 0 is hidden and has no pipes at all. What it
+  // does not hand back is anything to poll, so the command writes a small file
+  // when it is finished and that file is what gets polled instead. The
+  // ampersand runs it whatever the command did, and sits outside the quoted
+  // paths, so a game file called "Rock & Roll.pak" cannot break the line.
+  //
+  // The command is wrapped in brackets before the ampersand is added. Without
+  // them, anything the command does with an operator of its own takes the
+  // echo with it: a for loop writes the flag on its first turn and the menu
+  // carries on while the work is still going.
+  //
+  // What goes into the flag is the exit code, because losing it turned out to
+  // matter. robocopy sets the destination to its full size before it writes a
+  // byte, so a copy that stops halfway leaves a file of exactly the right
+  // length with a tail of nothing in it. Measured on 12 October: 725,360,334
+  // bytes, the size the table asks for to the byte, and a SHA-256 of
+  // 07A38ED8 where the disc says 0195F434. A check on the size alone calls
+  // that file good. robocopy's own answer catches it, and call is what makes
+  // the code survive being read on the same line it was set.
+  var SETJOBN=0, SETSTARTED=0;
+  function setStartJob(cmd){
+    var sh=new ActiveXObject("WScript.Shell");
+    var flag=fso.BuildPath(sh.ExpandEnvironmentStrings("%TEMP%"),
+                           "dwjob"+(++SETJOBN)+"_"+(new Date()).getTime()+".done");
+    try{ if(fso.FileExists(flag)) fso.DeleteFile(flag); }catch(ex){}
+    if(!SETSTARTED){ SETSTARTED=new Date(); }
+    if(typeof setTick=="function"){ setTick(); }
+    sh.Run("cmd /c ("+cmd+") & call echo %^errorlevel%> "+setQuote(flag),0,false);
+    return {flag:flag};
+  }
+  // Waited for the same way everything else here is waited for: on a timer
+  // where there is a window to keep alive, and in place where there is not.
+  // cscript has no timer, so the suite runs the second branch and a disc runs
+  // the first.
+  function setWaitJob(job,after){
+    if(fso.FileExists(job.flag)){ after(setJobCode(job)); return; }
     if(typeof window!="undefined"&&window.setTimeout){
-      if(exec.Status==0){ window.setTimeout(function(){ setWaitExec(exec,after); },400); return; }
-      after();
+      window.setTimeout(function(){ setWaitJob(job,after); },400);
     } else {
-      while(exec.Status==0){ WScript.Sleep(50); }
-      after();
+      while(!fso.FileExists(job.flag)){ WScript.Sleep(50); }
+      after(setJobCode(job));
     }
+  }
+  // What the command said on its way out, and then the file is gone: TEMP is
+  // not a place to leave litter. Anything unreadable counts as a failure
+  // rather than as a nought, because the one thing worse than a copy that
+  // failed is a copy that failed quietly.
+  function setJobCode(job){
+    var code=8;
+    try{
+      var t=fso.OpenTextFile(job.flag,1), s=t.ReadAll(); t.Close();
+      var n=parseInt(s,10);
+      if(!isNaN(n)) code=n;
+    }catch(ex){ code=8; }
+    try{ fso.DeleteFile(job.flag); }catch(ex2){}
+    return code;
+  }
+  // How long whatever is running has been running. Said out loud because the
+  // alternative is a still window for four minutes, and "I am not sure it is
+  // even copying" is what somebody says about one of those.
+  function setClock(){
+    if(!SETSTARTED) return "";
+    var secs=Math.floor(((new Date())-SETSTARTED)/1000), m=Math.floor(secs/60), s=secs%60;
+    if(m) return " "+m+" min "+(s<10?"0":"")+s+" s so far.";
+    return " "+s+" s so far.";
   }
   function setJoinAll(dir,after){
     var js=setJoins(), todo=[], i, k;
@@ -3002,9 +3075,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     // minutes of apparently nothing happening.
     SETJOINING=j.f;
     try{ show(); }catch(ex){}
-    var cmd="cmd /c copy /b "+names.join("+")+" "+setQuote(setPath(st.dir,j.f));
-    var exec=new ActiveXObject("WScript.Shell").Exec(cmd);
-    setWaitExec(exec,function(){
+    var cmd="copy /b "+names.join("+")+" "+setQuote(setPath(st.dir,j.f));
+    setWaitJob(setStartJob(cmd),function(){
       if(setJoinDone(st.dir,j)){
         for(var m=0;m<j.parts.length;m++){
           try{ fso.DeleteFile(setPath(st.dir,j.parts[m])); }catch(ex2){}
@@ -3123,18 +3195,18 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   function setSentence(s){
     // Hashing a game is minutes of a window that otherwise looks asleep.
     if(typeof SETCHECKING!="undefined"&&SETCHECKING.length){
-      return "Checking file "+SETCHECKING+" against what was burned.";
+      return "Checking file "+SETCHECKING+" against what was burned."+setClock();
     }
     // While a join is running. Minutes can pass with copy /b working through
     // a gigabyte and nothing else to show for it, and an empty-looking menu is
     // how somebody decides it has hung and closes it.
     if(typeof SETJOINING!="undefined"&&SETJOINING.length){
-      return "Putting "+SETJOINING+" back together. On a large file this takes a few minutes.";
+      return "Putting "+SETJOINING+" back together. On a large file this takes a few minutes."+setClock();
     }
     // Same reason as the two above: a disc is slow, and a menu that says
     // nothing for four minutes is one somebody closes.
     if(typeof SETCOPYING!="undefined"&&SETCOPYING.length){
-      return "Copying file "+SETCOPYING+" off this disc.";
+      return "Copying file "+SETCOPYING+" off this disc."+setClock();
     }
     // Waiting for a disc to be put in. Said plainly and with nothing else on
     // the line, because at this moment it is the only thing anybody has to do.
@@ -3344,13 +3416,19 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     }
     SETCOPYING=(st.at+1)+" of "+st.mine.length;
     try{ show(); }catch(ex){}
-    var exec=new ActiveXObject("WScript.Shell").Exec(setCopyCmd(root,st.dir,st.mine[st.at].f));
-    setWaitExec(exec,function(){
+    var row=st.mine[st.at];
+    setWaitJob(setStartJob(setCopyCmd(root,st.dir,row.f)),function(code){
+      // Both questions, because neither answer is enough on its own.
+      //
       // robocopy says 8 and up for a real failure; below that is "copied",
       // "nothing to do" and other things that are not errors.
-      var code=8;
-      try{ code=exec.ExitCode; }catch(ex2){ code=8; }
-      if(code>=8){ st.bad++; }
+      //
+      // And then the file itself, which is the question setScan asks later
+      // anyway. A disc that goes unreadable partway leaves a short one.
+      var full=setPath(st.dir,row.f), ok=false;
+      try{ ok=fso.FileExists(full)&&fso.GetFile(full).Size==parseFloat(row.b); }
+      catch(ex2){ ok=false; }
+      if(code>=8||!ok){ st.bad++; }
       st.at++;
       setCopyStep(st);
     });
@@ -3518,8 +3596,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var it=list[at];
     var sh=new ActiveXObject("WScript.Shell");
     var tmp=fso.BuildPath(sh.ExpandEnvironmentStrings("%TEMP%"),"dwverify.txt");
-    var exec=sh.Exec('cmd /c certutil -hashfile "'+it.full+'" SHA256 > "'+tmp+'"');
-    setWaitExec(exec,function(){
+    setWaitJob(setStartJob('certutil -hashfile "'+it.full+'" SHA256 > "'+tmp+'"'),function(){
       var hash="", f, line;
       try{
         f=fso.OpenTextFile(tmp,1);
@@ -3620,17 +3697,35 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // only work once every disc has been copied into one folder, and a button
   // that cannot work is worse than no button: the whole reason item 7 was a
   // bug was a Play button on a disc that could never play anything.
+  // What goes inside that one div, kept apart from the rest of the panel so
+  // the clock can rewrite it once a second. Redrawing the whole panel to move
+  // a clock would ask the drive which disc is in it and stat every file in the
+  // folder, once a second, while the drive is busy reading a disc.
+  var SETLASTSCAN=null;
+  function setInfoHtml(s){
+    var dir=setDir();
+    return "Disc "+setNow()+" of "+SET.of+". No disc in a set installs on its own."+
+           "<br><br>Copy every disc into one folder, then install from there."+
+           (dir.length ? "<br><br>"+dir : "")+
+           "<br><br>"+setSentence(s);
+  }
+  // Tick while something is running, and stop when nothing is. Nothing else
+  // on the page moves, so a still window is how somebody decides it has hung.
+  function setTick(){
+    if(typeof document=="undefined") return;
+    var busy=(SETCOPYING.length||SETJOINING.length||SETCHECKING.length);
+    if(!busy){ SETSTARTED=0; return; }
+    var el=document.getElementById("setinfo");
+    if(el&&SETLASTSCAN){ try{ el.innerHTML=setInfoHtml(SETLASTSCAN); }catch(ex){} }
+    if(typeof window!="undefined"&&window.setTimeout){ window.setTimeout(setTick,1000); }
+  }
   function renderSet(){
     // Asked again each time the panel is drawn: the game can arrive between
     // one drawing and the next, which is the whole point of the focus hook.
     SETPLAY=null;
     var dir=setDir(), s=setScan(dir), h="";
-    h+='<div class="setinfo" id="setinfo">'+
-       "Disc "+setNow()+" of "+SET.of+". No disc in a set installs on its own."+
-       "<br><br>Copy every disc into one folder, then install from there."+
-       (dir.length ? "<br><br>"+dir : "")+
-       "<br><br>"+setSentence(s)+
-       "</div>";
+    SETLASTSCAN=s;
+    h+='<div class="setinfo" id="setinfo">'+setInfoHtml(s)+"</div>";
     // The copy is offered while anything of this disc is still missing from
     // the folder, and the install only once the whole set is there.
     if(s.mineHere<s.mineTotal){
