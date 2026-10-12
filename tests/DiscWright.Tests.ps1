@@ -10367,6 +10367,272 @@ Describe 'The check somebody pastes into PowerShell, off the disc' -Tag 'Unit' {
     }
 }
 
+Describe 'Installing a game off five discs, with the discs really changing' -Tag 'Build' {
+
+    # The thing nobody could test. Asked for on 11 October: "Install, disc 1,
+    # insert disc 2 the app waits for disc 2 and so on, in the background that
+    # will actually copy the files and than the last disc will actually install
+    # it". Every piece of that is covered somewhere above with its neighbours
+    # stubbed out. The piece that was not covered anywhere is the join between
+    # them: the menu asks for a disc, a disc arrives, and it carries on by
+    # itself, four times over, without anybody pressing anything again.
+    #
+    # It could not be tested because a disc swap needs hands and the menu is an
+    # HTA that no automation can drive. So the drive here is a junction and a
+    # swap repoints it: the path the menu reads never changes while what is
+    # behind it does, which is the shape of a real drive. The person standing at
+    # it is the timer shim, which puts in whichever disc the menu has just asked
+    # for and nothing else.
+    #
+    # Nothing is stubbed but the document, the dialogs and the registry. The
+    # copy is robocopy, the join is copy /b, the table is read off the disc, and
+    # the question at the end is the only one that matters: is the file that
+    # comes out the file that went in.
+    #
+    # It also runs the two waiting loops down their window.setTimeout branch,
+    # which is the branch a real disc takes and which no test had ever entered:
+    # cscript has no timer, so every other test here runs the other one.
+
+    BeforeDiscovery {
+        $script:HaveCsSwap = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+        # A junction is how the disc gets swapped. It needs no administrator on
+        # NTFS, but it needs NTFS, so the whole block skips rather than fails
+        # where there is none.
+        $script:CanJunction = $false
+        try {
+            $probe = Join-Path ([IO.Path]::GetTempPath()) ('dwj_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+            $target = Join-Path ([IO.Path]::GetTempPath()) ('dwt_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
+            New-Item -ItemType Directory -Force -Path $target | Out-Null
+            New-Item -ItemType Junction -Path $probe -Target $target -ErrorAction Stop | Out-Null
+            $script:CanJunction = $true
+            & cmd /c rmdir "$probe" | Out-Null
+            Remove-Item $target -Recurse -Force -ErrorAction SilentlyContinue
+        } catch { }
+    }
+
+    BeforeAll {
+        $script:Cs9 = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:SwapWork = Join-Path $script:Sandbox 'swapchain'
+        New-Item -ItemType Directory -Force -Path $script:SwapWork | Out-Null
+
+        function Get-JsFn8([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        # --- the game, cut across as many discs as it takes ------------------
+        $src = Join-Path $script:SwapWork 'game'
+        New-Item -ItemType Directory -Force -Path $src | Out-Null
+        $rnd = New-Object Random 2026
+        $big = New-Object byte[] 900001
+        $rnd.NextBytes($big)
+        [IO.File]::WriteAllBytes((Join-Path $src 'setup_game.exe'), $big)
+        $small = New-Object byte[] 40000
+        $rnd.NextBytes($small)
+        [IO.File]::WriteAllBytes((Join-Path $src 'readme.bin'), $small)
+        $script:SwapSha = Get-FileSha256 (Join-Path $src 'setup_game.exe')
+
+        $files = @(Get-ChildItem -File $src | ForEach-Object {
+            @{ Rel = $_.Name; Bytes = [double]$_.Length; Path = $_.FullName } })
+        $plan = Get-DiscSetPlan $files 300000 0 0 $true
+        $entries = @()
+        foreach ($d in $plan.Discs) {
+            foreach ($f in $d.Files) {
+                $sha = if ($f.PartOf) { Get-FilePartSha256 $f.Path ([long]$f.PartOffset) ([long]$f.Bytes) }
+                       else { Get-FileSha256 $f.Path }
+                $entries += , @{ Disc = $d.Number; Rel = $f.Rel; Bytes = $f.Bytes; Sha256 = $sha
+                                 PartOf = $f.PartOf; PartIndex = $f.PartIndex
+                                 PartCount = $f.PartCount; WholeBytes = $f.WholeBytes
+                                 WholeSha256 = $(if ($f.PartOf) { $script:SwapSha }) }
+            }
+        }
+        $state = @{ Label = 'SWAP'; OutDir = (Join-Path $script:SwapWork 'out'); MediaKey = 'CD'
+                    ExtraItems = @(); ManualPath = $null; ExtrasPath = $null }
+        $script:SwapDiscs = @()
+        foreach ($st in @(Get-DiscSetSteps $state $plan $entries)) {
+            $dir = Join-Path $script:SwapWork ('d' + $st.DiscNum)
+            New-Item -ItemType Directory -Force -Path $dir | Out-Null
+            foreach ($cp in @($st.CutParts | Where-Object { $_ })) {
+                [void](Write-FilePart $cp.Path ([long]$cp.Offset) ([long]$cp.Bytes) (Join-Path $dir $cp.Rel))
+            }
+            foreach ($one in @($st.OnlyFiles.Keys)) {
+                Copy-Item $one (Join-Path $dir (Split-Path $one -Leaf)) -Force
+            }
+            Set-Content (Join-Path $dir (Get-DiscSetFileName)) $st.SetManifest -Encoding Ascii -NoNewline
+            $script:SwapDiscs += $dir
+        }
+        $script:SwapCount = $script:SwapDiscs.Count
+
+        # --- the drive, and the person standing at it ------------------------
+        $script:SwapDrive = Join-Path $script:SwapWork 'drive'
+        New-Item -ItemType Junction -Path $script:SwapDrive -Target $script:SwapDiscs[0] | Out-Null
+        $swapCmd = Join-Path $script:SwapWork 'swap.cmd'
+        # rmdir on a junction removes the junction and leaves the folder it
+        # points at alone. That is the whole swap: same path, different disc.
+        @('@echo off'
+          ('rmdir "' + $script:SwapDrive + '" 2>nul')
+          ('mklink /J "' + $script:SwapDrive + '" "' + $script:SwapWork + '\d%1" >nul')
+        ) -join "`r`n" | Set-Content -LiteralPath $swapCmd -Encoding Ascii
+
+        $script:SwapRestore = Join-Path $script:SwapWork 'restore'
+        $menu = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $lifted = 'setRows', 'setDiscIn', 'setNow', 'setNeedsDisc', 'setPath', 'setDefaultDir',
+                  'setJoins', 'setJoinDone', 'setWaitExec', 'setJoinAll', 'setJoinStep',
+                  'setQuote', 'setScan', 'setMine', 'setMineBytes', 'setSetBytes',
+                  'setCopyCmd', 'setMakeDir', 'setRoomFor', 'setRoomForAll', 'setRoomNeeding',
+                  'setSentence', 'setPlayable', 'setDoneVerb', 'setDir',
+                  'setCopy', 'setCopyStep', 'setWaitDisc', 'setGo', 'setInstall'
+
+        $js = @(
+            'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+            'var sh  = new ActiveXObject("WScript.Shell");'
+            'var SEP = String.fromCharCode(92);'
+            ('var root = ' + (ConvertTo-Json ($script:SwapDrive + [string][char]92)) + ';')
+            'var SETFILE = "Disc set.txt";'
+            ('var SET = {n:1, of:' + $script:SwapCount + ', label:"SWAP"};')
+            'var SETROWS=null, SETJOINS=null, SETWANT=0, SETGOING=false;'
+            ('var SETDIR = ' + (ConvertTo-Json $script:SwapRestore) + ';')
+            'var SETARM=false, SETJOINING="", SETCHECKING="", SETCOPYING="";'
+            'var GAMES=[{n:"Swap Game", m:"swap game", s:"setup_game.exe", files:false}], cur=0;'
+            '// The document, the dialogs and the registry. Everything else is real.'
+            'var SHOWN=0; function show(){ SHOWN++; }'
+            'var ALERTED=[]; function alert(m){ ALERTED[ALERTED.length]=m; }'
+            'var SAID=[]; function setSay(m,g){ SAID[SAID.length]=(g?"ok":"bad"); }'
+            'function findGame(m){ return null; }'
+            'var LAUNCHED=""; function launchExe(e,a,d){ LAUNCHED=e; }'
+            'var OPENED=""; function openItem(p,d){ OPENED=p; }'
+            '// The person standing at the drive with the discs in their hand.'
+            ('var SWAP = ' + (ConvertTo-Json $swapCmd) + ';')
+            'var INDRIVE=1, PUTIN=[], ASKED=[];'
+            'function putDiscIn(n){ sh.Run(String.fromCharCode(34)+SWAP+String.fromCharCode(34)+" "+n,0,true); INDRIVE=n; PUTIN[PUTIN.length]=n; }'
+            '// The window timer, which cscript has not got. The sleeps are cut'
+            '// short because what is under test is the sequence, not the clock.'
+            'var window = { setTimeout: function(fn, ms){'
+            '    if(SETWANT && SETWANT!=INDRIVE){ ASKED[ASKED.length]=SETWANT; putDiscIn(SETWANT); }'
+            '    WScript.Sleep(ms>250?250:ms);'
+            '    fn();'
+            '} };'
+        ) + @($lifted | ForEach-Object { Get-JsFn8 $menu $_ }) + @(
+            'setGo();'
+            'var s = setScan(SETDIR);'
+            'WScript.Echo("asked=" + ASKED.join(","));'
+            'WScript.Echo("putin=" + PUTIN.join(","));'
+            'WScript.Echo("alerts=" + ALERTED.length);'
+            'WScript.Echo("said=" + SAID.length);'
+            'WScript.Echo("launched=" + LAUNCHED);'
+            'WScript.Echo("opened=" + OPENED);'
+            'WScript.Echo("complete=" + s.complete);'
+            'WScript.Echo("ok=" + s.ok);'
+            'WScript.Echo("total=" + s.total);'
+            'WScript.Echo("pending=" + s.pending);'
+            'WScript.Echo("sentence=" + setSentence(s));'
+            'WScript.Echo("want=" + SETWANT);'
+            'WScript.Echo("going=" + SETGOING);'
+        )
+        $probe = Join-Path $script:SwapWork 'probe.js'
+        Set-Content -LiteralPath $probe -Value ($js -join "`r`n") -Encoding Ascii
+
+        $script:SwapOut = @{}
+        if ($script:Cs9) {
+            foreach ($line in @(& $script:Cs9 //Nologo //E:JScript $probe 2>&1)) {
+                $t = [string]$line
+                if ($t -match '^([a-z]+)=(.*)$') { $script:SwapOut[$Matches[1]] = $Matches[2].Trim() }
+            }
+        }
+    }
+
+    AfterAll {
+        # The junction first. A recursive delete that walks into it would take
+        # the disc folder it points at with it.
+        if ($script:SwapDrive -and (Test-Path $script:SwapDrive)) {
+            & cmd /c rmdir "$script:SwapDrive" 2>&1 | Out-Null
+        }
+    }
+
+    Context 'one press of Install' -Skip:(-not ($script:HaveCsSwap -and $script:CanJunction)) {
+
+        It 'needs more than two discs, so the waiting happens more than once' {
+            # A chain, not a single swap. The first version of this waited once
+            # and would have passed on a two-disc set while being wrong about
+            # every set after it.
+            $script:SwapCount | Should -BeGreaterThan 2
+        }
+
+        It 'asks for every later disc, in order, and for no others' {
+            $want = (2..$script:SwapCount) -join ','
+            $script:SwapOut['asked'] | Should -Be $want
+        }
+
+        It 'notices each one arriving and carries on without being touched again' {
+            # Not merely that the two agree. With the waiting loop taken out
+            # they agree by both being empty, which is how this test was
+            # caught passing against a menu that had stopped watching the
+            # drive altogether.
+            $script:SwapOut['putin'] | Should -Not -BeNullOrEmpty
+            $script:SwapOut['putin'] | Should -Be $script:SwapOut['asked']
+        }
+
+        It 'says nothing to anybody on the way through' {
+            # The measure asked for: "no need to actually inform the user about
+            # copying and all that". Every message here is a failure message, so
+            # a silent run is the whole claim.
+            $script:SwapOut['alerts'] | Should -Be '0'
+            $script:SwapOut['said'] | Should -Be '0'
+        }
+
+        It 'ends with the set complete and nothing left in pieces' {
+            $script:SwapOut['complete'] | Should -Be 'true'
+            $script:SwapOut['ok'] | Should -Be ([string]$script:SwapCount)
+            $script:SwapOut['total'] | Should -Be ([string]$script:SwapCount)
+            $script:SwapOut['pending'] | Should -Be '0'
+        }
+
+        It 'runs the installer it has just put back together' {
+            $script:SwapOut['launched'] | Should -Be (Join-Path $script:SwapRestore 'setup_game.exe')
+            $script:SwapOut['opened'] | Should -BeNullOrEmpty
+        }
+
+        It 'hands back the installer that went in, byte for byte' {
+            # The question the whole feature answers to.
+            $made = Join-Path $script:SwapRestore 'setup_game.exe'
+            Test-Path -LiteralPath $made | Should -BeTrue
+            (Get-Item -LiteralPath $made).Length | Should -Be 900001
+            (Get-FileSha256 $made) | Should -Be $script:SwapSha
+        }
+
+        It 'leaves the folder holding the game and nothing else' {
+            # The pieces are deleted by the join, and only once the finished
+            # file is the right size.
+            @(Get-ChildItem $script:SwapRestore -Recurse -File | ForEach-Object { $_.Name } | Sort-Object) |
+                Should -Be @('readme.bin', 'setup_game.exe')
+        }
+
+        It 'stops waiting, and puts the one-go flag down behind it' {
+            # SETGOING left up would hand the next person an installer they did
+            # not ask for, the next time they copied a single disc.
+            $script:SwapOut['want'] | Should -Be '0'
+            $script:SwapOut['going'] | Should -Be 'false'
+        }
+
+        It 'ends on the sentence somebody reads when it is done' {
+            $script:SwapOut['sentence'] | Should -Be "All $script:SwapCount files are here. The game is ready in that folder."
+        }
+    }
+}
+
 Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
 
     # Found on real discs, joining a 1.18 GB Hollow Knight installer off two

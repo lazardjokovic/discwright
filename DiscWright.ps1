@@ -2941,13 +2941,6 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // The size is checked here and the hash is not: hashing a 4 GB file takes
   // minutes and this runs with every disc. Check every file does the hashing,
   // and the panel says so.
-  // Put a cut file back together, once every piece of it is here.
-  //
-  // copy /b is the whole mechanism: it is in Windows, it needs nothing
-  // installed, and it is what the set file tells somebody to type if they are
-  // doing this by hand. The pieces are only deleted once the finished file is
-  // the right size, because a join that half worked and then removed its own
-  // evidence is the one failure here that cannot be recovered from.
   //
   // It does NOT wait for copy /b to return. Waiting is what the first version
   // did, and on a real game it earned this, every time, more than once per
@@ -3121,7 +3114,6 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     return "Run the installer from "+dir;
   }
   // One sentence about where the set stands, for the panel.
-  // One sentence about where the set stands, for the panel.
   //
   // It ends on what to do next, not on a fact. "Still needed: disc 2" is a
   // status line and leaves somebody to work out that they should go and get
@@ -3129,16 +3121,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // which is what a person standing at a drive with a disc in their hand
   // actually wants.
   function setSentence(s){
-    // Not "ready to install": a folder of game files has nothing to install,
-    // and the button below already says whether it installs, plays or opens.
-    // Saying it twice is how one of them comes to be wrong.
-    // While a join is running. Minutes can pass with copy /b working through
-    // a gigabyte and nothing else to show for it, and an empty-looking menu is
-    // how somebody decides it has hung and closes it.
     // Hashing a game is minutes of a window that otherwise looks asleep.
     if(typeof SETCHECKING!="undefined"&&SETCHECKING.length){
       return "Checking file "+SETCHECKING+" against what was burned.";
     }
+    // While a join is running. Minutes can pass with copy /b working through
+    // a gigabyte and nothing else to show for it, and an empty-looking menu is
+    // how somebody decides it has hung and closes it.
     if(typeof SETJOINING!="undefined"&&SETJOINING.length){
       return "Putting "+SETJOINING+" back together. On a large file this takes a few minutes.";
     }
@@ -3153,6 +3142,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       return "Please put disc "+SETWANT+" in the drive. This carries on by itself once it is there.";
     }
     if(!s.total) return "This disc says it is part of a set, but its list of files is missing.";
+    // Not "ready to install": a folder of game files has nothing to install,
+    // and the button below already says whether it installs, plays or opens.
+    // Saying it twice is how one of them comes to be wrong.
     if(s.complete) return "All "+s.total+" files are here. The game is ready in that folder.";
     // Every file here but a cut one still in pieces. Says what is left rather
     // than naming a disc, because no disc is missing: the work is on this
