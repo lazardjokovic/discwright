@@ -12511,6 +12511,131 @@ WScript.Echo("two=" + setNeedsDisc(s,2) + " three=" + setNeedsDisc(s,3) + " one=
     }
 }
 
+Describe 'A set disc asking for one thing' -Tag 'Unit' {
+
+    # Said on 12 October, after installing a game off two real discs:
+    #
+    #   "put files back together, again not simple adds complexity. it should
+    #    be simple as it was before, install/play insert disc 2 ... back than
+    #    there was not put files back together, check every file, delete the
+    #    copied files even choose folder."
+    #
+    # That is the measure the whole feature was asked for against, and the
+    # panel had drifted away from it one honest button at a time. A game on
+    # five discs in 1998 had Install, and the installer asked for disc 2 when
+    # it wanted disc 2.
+    #
+    # Nothing is deleted. Somebody who copied the discs in Explorer and came
+    # back needs the join; a folder that cannot be guessed has to be chosen; a
+    # set that will not verify has to be checked. They moved behind a line of
+    # small grey text that is not a button.
+
+    BeforeAll {
+        $script:PanelSrc = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+
+        function Get-JsFnP([string]$text, [string]$name) {
+            $start = $text.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $text.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $text.Length; $j++) {
+                if ($text[$j] -eq '{') { $depth++ }
+                elseif ($text[$j] -eq '}') { $depth--; if ($depth -eq 0) { return $text.Substring($start, $j - $start + 1) } }
+            }
+            throw "unbalanced braces in $name"
+        }
+        $script:RenderSet = Get-JsFnP $script:PanelSrc 'renderSet'
+        # Everything the panel draws before the Options line is what somebody
+        # meets without asking for it.
+        $at = $script:RenderSet.IndexOf('class="setopts"')
+        if ($at -lt 0) { throw 'the set panel has no Options line' }
+        $script:UpFront = $script:RenderSet.Substring(0, $at)
+        $script:Behind  = $script:RenderSet.Substring($at)
+    }
+
+    Context 'what somebody meets without asking' {
+
+        It 'offers the one button that does the whole job' {
+            $script:UpFront | Should -Match ([regex]::Escape('btn_SetGo'))
+            $script:UpFront | Should -Match ([regex]::Escape('setDoneVerb(GAMES[cur])'))
+        }
+
+        It 'offers it whether the folder is empty, half full or holding pieces' {
+            # setGo copies this disc, asks for the next, joins the cut file and
+            # installs. There is no state of a half-done set where it is the
+            # wrong button, which is what lets the other three go away.
+            $script:UpFront | Should -Match ([regex]::Escape('if(s.complete){'))
+            $script:UpFront | Should -Match ([regex]::Escape('} else {'))
+            $script:UpFront | Should -Match ([regex]::Escape('"setGo()"'))
+            $script:UpFront | Should -Match ([regex]::Escape('"setInstall()"'))
+        }
+
+        It 'shows none of the machinery' -ForEach @(
+            @{ Button = 'btn_SetCopy';   What = 'copying one disc on its own' }
+            @{ Button = 'btn_SetJoin';   What = 'putting the files back together' }
+            @{ Button = 'btn_SetVerify'; What = 'checking every file' }
+            @{ Button = 'btn_SetDelete'; What = 'deleting the copied files' }
+            @{ Button = 'btn_SetWhere';  What = 'choosing the folder' }
+        ) {
+            $script:UpFront | Should -Not -Match ([regex]::Escape($Button)) -Because "$What is how the install works, not what somebody came to do"
+        }
+
+        It 'keeps the buttons a disc would have had anyway' {
+            # Manual, Extras and Exit are on an ordinary disc too, and nobody
+            # ever called them machinery.
+            foreach ($b in 'btn_Manual', 'btn_Extras', 'btn_Exit') {
+                $script:UpFront | Should -Match ([regex]::Escape($b))
+            }
+        }
+    }
+
+    Context 'and what is behind the word' {
+
+        It 'still has every one of them' -ForEach @(
+            @{ Button = 'btn_SetCopy' }
+            @{ Button = 'btn_SetJoin' }
+            @{ Button = 'btn_SetVerify' }
+            @{ Button = 'btn_SetDelete' }
+            @{ Button = 'btn_SetWhere' }
+        ) {
+            $script:Behind | Should -Match ([regex]::Escape($Button))
+        }
+
+        It 'is a line of text rather than a button' {
+            # btnHtml draws the big bordered buttons. This one must not be one.
+            $line = [regex]::Match($script:RenderSet, '<div class="setopts".{0,120}').Value
+            $line | Should -Not -Match 'btnHtml'
+            $line | Should -Match ([regex]::Escape('onclick="setMore()"'))
+        }
+
+        It 'is shut when the menu opens' {
+            # The point of it is that nobody has to meet it.
+            $script:PanelSrc | Should -Match ([regex]::Escape('var SETMORE=false;'))
+        }
+
+        It 'opens and shuts again' {
+            $fn = Get-JsFnP $script:PanelSrc 'setMore'
+            $fn | Should -Match ([regex]::Escape('SETMORE=!SETMORE'))
+            $fn | Should -Match ([regex]::Escape('show()'))
+        }
+
+        It 'says which way it will go' {
+            # A word on its own is not obviously a thing to press.
+            $script:RenderSet | Should -Match ([regex]::Escape('SETMORE?"Options &#9662;":"Options &#9656;"'))
+        }
+    }
+
+    Context 'the styling it is given' {
+
+        It 'is small, grey and quiet' {
+            $css = [regex]::Match($script:PanelSrc, '\.setopts\{[^}]*\}').Value
+            $css | Should -Not -BeNullOrEmpty
+            $css | Should -Match 'font-size:11px'
+            $css | Should -Match 'color:#6f8a94'
+            $css | Should -Match 'cursor:pointer'
+        }
+    }
+}
+
 Describe 'Installing a set the way it was done when games came on several discs' {
 
     # Asked for on 11 October: "Install, disc 1, insert disc 2 the app waits

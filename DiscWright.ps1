@@ -2508,6 +2508,12 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   .setinfo{width:250px;margin:0 0 12px 0;font-family:'Segoe UI',Arial;font-size:12px;
     line-height:16px;color:#cfdce3;background:#0d3038;border:1px solid #16545a;
     padding:8px;word-wrap:break-word;}
+  /* Deliberately not a button. Everything the install does for itself lives
+     behind this word, and somebody who only wants to install a game should be
+     able to read straight past it. */
+  .setopts{width:250px;margin:10px 0 6px 0;font-family:'Segoe UI',Arial;font-size:11px;
+    letter-spacing:1px;text-transform:uppercase;color:#6f8a94;cursor:pointer;}
+  .setopts:hover{color:#9fb8c2;}
   #cap .capn{display:block;font-size:17px;font-weight:600;letter-spacing:1px;text-transform:uppercase;
     color:#dfe9ee;white-space:normal;overflow:hidden;}
   #status{position:absolute;left:%%PANELLEFT%%px;bottom:18px;width:250px;text-align:center;display:none;
@@ -3719,6 +3725,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(el&&SETLASTSCAN){ try{ el.innerHTML=setInfoHtml(SETLASTSCAN); }catch(ex){} }
     if(typeof window!="undefined"&&window.setTimeout){ window.setTimeout(setTick,1000); }
   }
+  // Whether the machinery is on show. Off every time the menu opens, because
+  // the point of it is that nobody has to meet it.
+  var SETMORE=false;
+  function setMore(){ SETMORE=!SETMORE; show(); }
   function renderSet(){
     // Asked again each time the panel is drawn: the game can arrive between
     // one drawing and the next, which is the whole point of the focus hook.
@@ -3738,36 +3748,60 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       // Copy disc N of M is kept underneath it for anybody who wants the
       // files and not the game. It was the only button here, and it read as
       // a chore rather than as installing something.
-      h+=btnHtml("btn_SetGo","install",setDoneVerb(GAMES[cur]),"setGo()",
-                 "Put the game back together from all "+SET.of+" discs, and run it");
-      h+=btnHtml("btn_SetCopy","","Copy disc "+setNow()+" of "+SET.of+" only","setCopy()",
-                 "Copy this disc's share of the game into "+dir+", and stop there");
+      h+="";
     }
-    // Every file here and a cut one still in pieces. Without this the panel
-    // says "still has to be put back together" and offers no way to do it:
-    // Install is hidden because the set is not complete, and the join only
-    // runs by itself at the end of a copy. Anybody who copied the discs in
-    // Explorer, or who closed the menu and came back, lands exactly here.
-    if(s.pending&&!s.complete){
-      h+=btnHtml("btn_SetJoin","install",
-                 (s.pending==1?"Put the file back together":"Put the files back together"),
-                 "setJoinNow()",
-                 "Join the pieces that were cut to fit, and check the result");
-    }
+    // One button, and everything else behind a word.
+    //
+    // Said on 12 October, after installing a game off two real discs: "put
+    // files back together, again not simple adds complexity. it should be
+    // simple as it was before, install/play insert disc 2 ... back than there
+    // was not put files back together, check every file, delete the copied
+    // files even choose folder."
+    //
+    // That is the measure this whole feature was asked for against, and the
+    // panel had drifted away from it one honest button at a time. A game on
+    // five discs in 1998 had Install, and the installer asked for disc 2 when
+    // it wanted disc 2. Everything else here is how the install works rather
+    // than what somebody came to do.
+    //
+    // None of it is deleted. Somebody who copied the discs in Explorer and
+    // came back needs the join; a folder that cannot be guessed has to be
+    // chosen; a set that will not verify has to be checked. They live behind
+    // Options, which is a line of small grey text and not a button.
     if(s.complete){
       h+=btnHtml("btn_SetInstall","install",setDoneVerb(GAMES[cur]),"setInstall()",
                  setDoneTip(GAMES[cur],dir));
+    } else {
+      // setGo does the lot: copies this disc, asks for the next, puts the cut
+      // file back together and installs. It is the same button whether the
+      // folder is empty, half full, or holding every piece unjoined, which is
+      // why the join no longer needs one of its own out here.
+      h+=btnHtml("btn_SetGo","install",setDoneVerb(GAMES[cur]),"setGo()",
+                 "Put the game back together from all "+SET.of+" discs, and run it");
     }
-    if(s.ok>0){
-      h+=btnHtml("btn_SetVerify","","Check every file","setVerify()",
-                 "Hash every file in the folder against what was burned. This takes a while.");
-      h+=btnHtml("btn_SetDelete","exit",(SETARM?"Really delete?":"Delete the copied files"),"setDelete()",
-                 "Remove only the files this set put in "+dir);
-    }
-    h+=btnHtml("btn_SetWhere","","Choose folder...","setChoose()","Put the game back somewhere else");
     if(has("Manual")) h+=btnHtml("btn_Manual","","Game Manual","doManual()","");
     if(has("Extras")) h+=btnHtml("btn_Extras","","Extras","doExtras()","");
     if(has("Exit"))   h+=btnHtml("btn_Exit","exit","Exit","doExit()","");
+    h+='<div class="setopts" id="setopts" onclick="setMore()">'+(SETMORE?"Options &#9662;":"Options &#9656;")+'</div>';
+    if(SETMORE){
+      if(s.mineHere<s.mineTotal){
+        h+=btnHtml("btn_SetCopy","","Copy disc "+setNow()+" of "+SET.of+" only","setCopy()",
+                   "Copy this disc's share of the game into "+dir+", and stop there");
+      }
+      if(s.pending&&!s.complete){
+        h+=btnHtml("btn_SetJoin","install",
+                   (s.pending==1?"Put the file back together":"Put the files back together"),
+                   "setJoinNow()",
+                   "Join the pieces that were cut to fit, and check the result");
+      }
+      if(s.ok>0){
+        h+=btnHtml("btn_SetVerify","","Check every file","setVerify()",
+                   "Hash every file in the folder against what was burned. This takes a while.");
+        h+=btnHtml("btn_SetDelete","exit",(SETARM?"Really delete?":"Delete the copied files"),"setDelete()",
+                   "Remove only the files this set put in "+dir);
+      }
+      h+=btnHtml("btn_SetWhere","","Choose folder...","setChoose()","Put the game back somewhere else");
+    }
     setPanel(h,capFor(GAMES[cur]?GAMES[cur].n:""));
   }
   function renderGame(){
