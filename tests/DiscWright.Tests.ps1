@@ -9662,8 +9662,12 @@ Describe 'Cutting a file that no disc in the set could hold' -Tag 'Unit' {
             $script:CutManifest | Should -Match ([regex]::Escape('*game.bin.dwpart02'))
         }
 
-        It 'says how to put it back by hand' {
-            $script:CutManifest | Should -Match ([regex]::Escape('copy /b game.bin.dwpart01+game.bin.dwpart02 game.bin'))
+        It 'says how to put it back by hand, in a line cmd can run' {
+            # Quoted, and with backslashes, since 12 October. Unquoted it breaks
+            # on a space in the name and on a forward slash in a subfolder, both
+            # of which cmd's copy reads as something other than a path. The
+            # Describe below pastes this line into cmd and checks what comes out.
+            $script:CutManifest | Should -Match ([regex]::Escape('copy /b "game.bin.dwpart01"+"game.bin.dwpart02" "game.bin"'))
         }
 
         It 'records the finished file, its size and its hash' {
@@ -10098,6 +10102,268 @@ Describe 'A cut file, built onto real discs and put back together' -Tag 'Build' 
     It 'records that same hash in the set file, so a bad join is caught' {
         $txt = Get-Content (Join-Path $script:E2EDiscDirs[0] (Get-DiscSetFileName)) -Raw
         $txt | Should -Match ('JOIN ' + $script:E2EWholeSha + '\s+900001\s+\*setup_game\.exe')
+    }
+}
+
+Describe 'The join somebody does by hand, with no DiscWright anywhere near it' -Tag 'Unit' {
+
+    # Every disc in a set carries instructions for putting a cut file back
+    # together without this application: a copy /b line for Windows and a cat
+    # line for everything else. They are the one part of a disc that has to
+    # work when nothing else is left, so they are RUN here rather than read.
+    # Both of them, verbatim, exactly as somebody would paste them, against
+    # real pieces on disk.
+    #
+    # The fixture's name is deliberately awkward: a subfolder, a space and an
+    # ampersand. A GOG installer has none of the three, which is how two real
+    # sets went out carrying a Windows line that answers
+    #
+    #     The syntax of the command is incorrect.
+    #
+    # and nobody noticed. cmd's copy took the forward slashes in the path as
+    # switches, and the unquoted space ended the first argument. Read, both
+    # lines looked right. Run, only one of them was.
+
+    BeforeAll {
+        $script:HandDir = Join-Path $script:Sandbox 'handjoin'
+        $script:HandWork = Join-Path $script:HandDir 'restore'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:HandWork 'Game Data') | Out-Null
+
+        # A folder of game files keeps its subfolders, so a cut file can be
+        # down one. Random bytes and an odd total, so a piece written from the
+        # wrong offset cannot pass by accident and the last piece is a
+        # different length from the others.
+        $script:HandRel = 'Game Data\big & slow.pak'
+        $whole = New-Object byte[] 30011
+        (New-Object Random 7).NextBytes($whole)
+        $src = Join-Path $script:HandDir 'whole.pak'
+        [IO.File]::WriteAllBytes($src, $whole)
+        $script:HandSha = Get-FileSha256 $src
+
+        $script:HandEntries = @()
+        $sizes = 12000, 12000, 6011
+        $off = [long]0
+        for ($i = 0; $i -lt $sizes.Count; $i++) {
+            $rel = ('{0}.dwpart{1:00}' -f $script:HandRel, ($i + 1))
+            $dest = Join-Path $script:HandWork $rel
+            [void](Write-FilePart $src $off ([long]$sizes[$i]) $dest)
+            $script:HandEntries += , @{ Disc = ($i + 1); Rel = $rel; Bytes = [double]$sizes[$i]
+                                        Sha256 = (Get-FilePartSha256 $src $off ([long]$sizes[$i]))
+                                        PartOf = $script:HandRel; PartIndex = ($i + 1)
+                                        PartCount = $sizes.Count; WholeBytes = 30011
+                                        WholeSha256 = $script:HandSha }
+            $off += [long]$sizes[$i]
+        }
+        $script:HandText = New-DiscSetManifest $script:HandEntries 'Awkward Name' 1 3 'CD-R 700 MB' '0.10.0' $false (Get-Date)
+        $script:HandWin = @($script:HandText -split "`r`n" | Where-Object { $_ -match '^\s+copy /b' })[0].Trim()
+        $script:HandNix = @($script:HandText -split "`r`n" | Where-Object { $_ -match '^\s+cat ' })[0].Trim()
+        $script:HandMade = Join-Path $script:HandWork $script:HandRel
+
+        # A native command takes the process's working directory, which is not
+        # the one Set-Location moved. Both are set, and put back afterwards, so
+        # the line can be pasted with the relative names the disc printed -
+        # which is the whole claim being tested: "from inside the folder you
+        # copied the discs into".
+        function Invoke-InFolder([string]$dir, [string]$line) {
+            $wasPs = (Get-Location).Path
+            $wasEnv = [Environment]::CurrentDirectory
+            $bat = Join-Path $script:HandDir 'byhand.cmd'
+            Set-Content -LiteralPath $bat -Value ("@echo off`r`n" + $line) -Encoding Ascii
+            try {
+                Set-Location $dir
+                [Environment]::CurrentDirectory = $dir
+                return ((@(& cmd /c $bat 2>&1) -join ' / ').Trim())
+            } finally {
+                Set-Location $wasPs
+                [Environment]::CurrentDirectory = $wasEnv
+            }
+        }
+    }
+
+    Context 'the Windows line' {
+
+        It 'hands back the file that was cut, byte for byte' {
+            # The only question that matters. Everything below says why this one
+            # passes, so that when it stops passing the reason is on the screen.
+            $out = Invoke-InFolder $script:HandWork $script:HandWin
+            Test-Path -LiteralPath $script:HandMade |
+                Should -BeTrue -Because "cmd said: $out"
+            (Get-Item -LiteralPath $script:HandMade).Length | Should -Be 30011
+            (Get-FileSha256 $script:HandMade) | Should -Be $script:HandSha
+        }
+
+        It 'writes Windows paths, because cmd reads a forward slash as a switch' {
+            # copy /b sub/a.dwpart01+sub/a.dwpart02 sub/a
+            #     The syntax of the command is incorrect.
+            # Measured at a prompt. The /b is a switch and so, as far as copy is
+            # concerned, is the /a that follows it.
+            ($script:HandWin -replace '^copy /b ', '') | Should -Not -Match '/'
+            $script:HandWin | Should -Match ([regex]::Escape('Game Data\big & slow.pak.dwpart01'))
+        }
+
+        It 'quotes every name, because an unquoted space ends the argument' {
+            # copy /b with space.bin.dwpart01+with space.bin.dwpart02 with space.bin
+            #     The system cannot find the file specified.
+            $script:HandWin | Should -Match ([regex]::Escape('copy /b "Game Data\big & slow.pak.dwpart01"+'))
+            $script:HandWin | Should -Match ([regex]::Escape('" "Game Data\big & slow.pak"'))
+        }
+
+        It 'puts the pieces in the order they go back together' {
+            $script:HandWin.IndexOf('dwpart01') | Should -BeLessThan $script:HandWin.IndexOf('dwpart02')
+            $script:HandWin.IndexOf('dwpart02') | Should -BeLessThan $script:HandWin.IndexOf('dwpart03')
+        }
+    }
+
+    Context 'the Linux and macOS line' -Skip:(-not $script:HasWsl) {
+
+        It 'hands back the same file, run by a real shell' {
+            # cat takes forward slashes and single quotes, and the line has
+            # always had both. Run anyway: it is on the disc beside a line that
+            # looked just as right and did not work.
+            $wsl = (& wsl.exe -- wslpath -a (($script:HandWork -replace '\\', '/'))).Trim()
+            Remove-Item -LiteralPath $script:HandMade -Force -ErrorAction SilentlyContinue
+            $null = & wsl.exe -- bash -c ("cd '" + $wsl + "' && " + $script:HandNix)
+            $LASTEXITCODE | Should -Be 0
+            (Get-FileSha256 $script:HandMade) | Should -Be $script:HandSha
+        }
+    }
+
+    Context 'and the lists it sits beside' {
+
+        It 'keeps forward slashes in the table, which is a list of files' {
+            # The table is read by the menu, by the pasteable PowerShell check
+            # and by anybody's eye, and all three take a forward slash. Only the
+            # cmd line had to change.
+            $script:HandText | Should -Match ([regex]::Escape('*Game Data/big & slow.pak.dwpart01'))
+            $script:HandText | Should -Match ([regex]::Escape('PART 1   *Game Data/big & slow.pak.dwpart01'))
+            $script:HandText | Should -Match ([regex]::Escape('JOIN ' + $script:HandSha))
+        }
+
+        It 'quotes the file name in the hash check it prints' {
+            # Same two characters, same fix, and this one was already right.
+            $script:HandText | Should -Match ([regex]::Escape("(Get-FileHash 'Game Data/big & slow.pak' -Algorithm SHA256).Hash"))
+            $script:HandText | Should -Match ([regex]::Escape("sha256sum 'Game Data/big & slow.pak'"))
+        }
+    }
+}
+
+Describe 'The check somebody pastes into PowerShell, off the disc' -Tag 'Unit' {
+
+    # The set file prints a seven-line block that checks a folder the discs
+    # have been copied into: every file there, against the size and the SHA-256
+    # the disc recorded. It is the answer to "I have no DiscWright and I want to
+    # know whether this copy is good", and it has been printed on every disc of
+    # every set without anybody running it.
+    #
+    # So it is lifted out of the file the discs carry and run, in a folder where
+    # one file is right, one is missing, one is the wrong size and one is the
+    # right size with the wrong bytes in it. All four answers are checked, and
+    # so is the silence that means nothing is wrong.
+    #
+    # Names with spaces in them throughout, because the block splits each table
+    # line into four on runs of spaces and the file name is the fourth: a split
+    # that took them one at a time would cut every one of these names in half.
+
+    BeforeAll {
+        $script:PastDir = Join-Path $script:Sandbox 'pasted'
+        New-Item -ItemType Directory -Force -Path (Join-Path $script:PastDir 'Game Data') | Out-Null
+
+        function New-PastFile([string]$rel, [byte[]]$bytes) {
+            $p = Join-Path $script:PastDir $rel
+            New-Item -ItemType Directory -Force -Path (Split-Path $p -Parent) | Out-Null
+            [IO.File]::WriteAllBytes($p, $bytes)
+            return $p
+        }
+        $rnd = New-Object Random 11
+        $good = New-Object byte[] 4096; $rnd.NextBytes($good)
+        $short = New-Object byte[] 2048; $rnd.NextBytes($short)
+        $bad = New-Object byte[] 4096; $rnd.NextBytes($bad)
+
+        # What the disc says is there.
+        $script:PastEntries = @(
+            @{ Disc = 1; Rel = 'Game Data\text ures.pak'; Bytes = 4096
+               Sha256 = (Get-FileSha256 (New-PastFile 'Game Data\text ures.pak' $good)) }
+            @{ Disc = 1; Rel = 'a missing one.bin'; Bytes = 4096; Sha256 = ('a' * 64) }
+            @{ Disc = 2; Rel = 'half of it.bin'; Bytes = 4096
+               Sha256 = (Get-FileSha256 (New-PastFile 'half of it.bin' $short)) }
+            @{ Disc = 2; Rel = 'the wrong bytes.bin'; Bytes = 4096; Sha256 = ('b' * 64) }
+        )
+        # half of it.bin is on disc as 2048 bytes and claimed as 4096, which is
+        # what a copy cut short by a full drive looks like. the wrong bytes.bin
+        # is the right size with a hash that cannot match, which is what a disc
+        # that read badly looks like.
+        [void](New-PastFile 'the wrong bytes.bin' $bad)
+
+        $text = New-DiscSetManifest $script:PastEntries 'Pasted Check' 1 2 'CD-R 700 MB' '0.10.0' $false (Get-Date)
+        Set-Content -LiteralPath (Join-Path $script:PastDir 'Disc set.txt') -Value $text -Encoding Ascii -NoNewline
+
+        # The block, taken out of the file the disc carries rather than retyped,
+        # so this cannot drift away from what is printed.
+        $lines = @($text -split "`r`n")
+        $at = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^  Get-Content 'Disc set\.txt'") { $at = $i; break }
+        }
+        if ($at -lt 0) { throw 'the set file no longer prints a pasteable check' }
+        $block = @()
+        for ($i = $at; $i -lt $lines.Count; $i++) {
+            $block += $lines[$i]
+            if ($lines[$i] -eq '  }') { break }
+        }
+        $script:PastBlock = ($block -join "`n")
+
+        function Invoke-Pasted([string]$dir) {
+            $was = (Get-Location).Path
+            try {
+                Set-Location $dir
+                return @(Invoke-Expression $script:PastBlock)
+            } finally { Set-Location $was }
+        }
+        $script:PastOut = Invoke-Pasted $script:PastDir
+    }
+
+    It 'prints a line for the file that is not there' {
+        @($script:PastOut | Where-Object { $_ -match 'MISSING' }) |
+            Should -Be 'MISSING (disc 1)  a missing one.bin'
+    }
+
+    It 'prints a line for the file that was copied short' {
+        @($script:PastOut | Where-Object { $_ -match 'WRONG SIZE' }) |
+            Should -Be 'WRONG SIZE (disc 2)  half of it.bin'
+    }
+
+    It 'prints a line for the file that is the right size and the wrong bytes' {
+        # The one a size check cannot find, which is why the hash is there.
+        @($script:PastOut | Where-Object { $_ -match 'DAMAGED' }) |
+            Should -Be 'DAMAGED (disc 2)  the wrong bytes.bin'
+    }
+
+    It 'says nothing at all about the file that is right' {
+        $script:PastOut | Should -Not -Match ([regex]::Escape('text ures.pak'))
+    }
+
+    It 'goes silent once the folder is right' {
+        # "Silence means every file is there and every one of them is right",
+        # says the line underneath it on the disc. So it has to be silent.
+        $ok = Join-Path $script:Sandbox 'pastedok'
+        New-Item -ItemType Directory -Force -Path (Join-Path $ok 'Game Data') | Out-Null
+        $rnd = New-Object Random 12
+        $b = New-Object byte[] 1500; $rnd.NextBytes($b)
+        [IO.File]::WriteAllBytes((Join-Path $ok 'Game Data\one & only.pak'), $b)
+        $ent = @(@{ Disc = 1; Rel = 'Game Data\one & only.pak'; Bytes = 1500
+                    Sha256 = (Get-FileSha256 (Join-Path $ok 'Game Data\one & only.pak')) })
+        Set-Content -LiteralPath (Join-Path $ok 'Disc set.txt') -Encoding Ascii -NoNewline `
+            -Value (New-DiscSetManifest $ent 'Pasted Check' 1 1 'CD-R 700 MB' '0.10.0' $false (Get-Date))
+        @(Invoke-Pasted $ok) | Should -BeNullOrEmpty
+    }
+
+    It 'reads the table the same way the menu does' {
+        # Two readers of one table: this block and setRows in the menu. They
+        # agree on which lines are rows, which is why the JOIN and PART lines
+        # begin with letters.
+        foreach ($l in @($script:PastBlock -split "`n")) {
+            if ($l -match 'Where-Object') { $l | Should -Match ([regex]::Escape("'^[0-9]'")) }
+        }
     }
 }
 
