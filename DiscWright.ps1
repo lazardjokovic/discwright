@@ -3064,8 +3064,26 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // folder, or opened when nothing in it was picked to run. The panel used to
   // say Install for all three and then open Explorer for the last one, which
   // is the same mistake as the Play button on a disc that could not play.
+  // Worked out once per drawing of the panel. findGame goes to the registry
+  // through WMI, and the panel asks for the verb more than once.
+  // null means not asked yet, false means asked and it is not here, and an
+  // object is where it is. Three states, because two of them were null to
+  // begin with and the answer "not installed" therefore never stuck: it went
+  // back to the registry for every button on every redraw.
+  var SETPLAY=null;
+  function setPlayable(g){
+    if(SETPLAY===null){ SETPLAY = ((g && g.m) ? findGame(g.m) : null) || false; }
+    return SETPLAY;
+  }
   function setDoneVerb(g){
     if(!g) return "Install";
+    // Already on this machine, so the thing to do with it is play it. Said on
+    // 11 October after installing Hollow Knight off the two discs: the menu
+    // went on offering Install, because the verb described what the disc
+    // CARRIES rather than what is on the machine. The ordinary one-disc menu
+    // has asked the registry for years, with the same findGame, and lights
+    // its Play button when the installer finishes. A set never asked.
+    if(setPlayable(g)) return "Play";
     if(g.files && !g.s) return "Open Folder";
     if(g.files) return "Play";
     return "Install";
@@ -3527,6 +3545,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   }
 
   function setInstall(){
+    // Play, when the button says Play. The installer has nothing left to do
+    // and running it again on a game that is already in would be a strange
+    // thing to do to somebody who pressed a button marked Play.
+    var gp=GAMES[cur], hit=(gp&&gp.m)?findGame(gp.m):null;
+    if(hit){ launchExe(hit.exe,"",fso.GetParentFolderName(hit.exe)); return; }
     var dir=setDir(), s=setScan(dir);
     // Put any outstanding pieces together first. Cheap when there is nothing to
     // do, and it means somebody who copied the discs in Explorer gets the same
@@ -3580,6 +3603,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   // that cannot work is worse than no button: the whole reason item 7 was a
   // bug was a Play button on a disc that could never play anything.
   function renderSet(){
+    // Asked again each time the panel is drawn: the game can arrive between
+    // one drawing and the next, which is the whole point of the focus hook.
+    SETPLAY=null;
     var dir=setDir(), s=setScan(dir), h="";
     h+='<div class="setinfo" id="setinfo">'+
        "Disc "+setNow()+" of "+SET.of+". No disc in a set installs on its own."+
@@ -3907,8 +3933,14 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var t=playTasks(hit.dir);
     if(t.length>1){ tasks=t; show(); return; }
     launchExe(hit.exe,"",fso.GetParentFolderName(hit.exe)); }
-  // Re-check when the menu regains focus, so Play lights up after the installer finishes.
-  window.onfocus = refreshButtons;
+  // Re-check when the menu regains focus, so Play lights up after the
+  // installer finishes. A set panel is redrawn rather than poked at, because
+  // its buttons are built from what is on the machine and on the discs, and
+  // the verb on the first one of them changes when the game arrives.
+  window.onfocus = function(){
+    if(SET && cur>=0 && !tasks){ SETPLAY=null; try{ show(); }catch(ex){} return; }
+    refreshButtons();
+  };
   document.onkeydown=function(){ if(window.event.keyCode==27) window.close(); };
 </script>
 </head>
