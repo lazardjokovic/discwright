@@ -808,6 +808,7 @@ function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [i
     $mine = @($entries | Where-Object { [int]$_.Disc -eq $thisDisc })
     $sep = [string][char]92
     $q = [string][char]39
+    $QQ = [string][char]34
 
     $o = New-Object System.Collections.Generic.List[string]
     $o.Add('DiscWright disc set')
@@ -901,11 +902,36 @@ function New-DiscSetManifest([array]$entries, [string]$label, [int]$thisDisc, [i
         $o.Add("To do it by hand, from inside the folder you copied the discs into.")
         $o.Add("On Windows:")
         $o.Add("")
+        # Backslashes, and a pair of quotes round every name. Both were missing
+        # and either one of them breaks the line on its own. Pasted at a prompt
+        # on 12 October, with a piece in a subfolder and a piece with a space in
+        # its name:
+        #
+        #   copy /b sub/a.bin.dwpart01+sub/a.bin.dwpart02 sub/a.bin
+        #       The syntax of the command is incorrect.
+        #   copy /b with space.bin.dwpart01+with space.bin.dwpart02 with space.bin
+        #       The system cannot find the file specified.
+        #
+        # cmd's copy takes /b as a switch and then takes the /p in a path as
+        # another one, so a forward slash anywhere after the first argument is a
+        # syntax error; and an unquoted space starts a new argument, so the name
+        # is read as two files that are not there. The same two characters are
+        # also why the menu quotes everything it hands to robocopy and copy /b,
+        # which is where setQuote came from.
+        #
+        # The table above and the cat line below keep their forward slashes: one
+        # is a list of files, the other is a shell that is happy with them. This
+        # one line is a Windows command, so it gets Windows paths.
+        #
+        # Every disc in every set carries this file, and this is the line it
+        # tells somebody to type when they have no DiscWright and no menu. A
+        # GOG installer sits at the root of the disc and has no space in its
+        # name, which is how it went out on two real sets without being caught.
         foreach ($grp in $joins) {
             $ps = @($grp.Group | Sort-Object { [int]$_.PartIndex })
-            $whole = ([string]$ps[0].PartOf).Replace($sep, "/")
-            $names = @($ps | ForEach-Object { ([string]$_.Rel).Replace($sep, "/") })
-            $o.Add("  copy /b " + ($names -join "+") + " " + $whole)
+            $whole = ([string]$ps[0].PartOf).Replace("/", $sep)
+            $names = @($ps | ForEach-Object { $QQ + ([string]$_.Rel).Replace("/", $sep) + $QQ })
+            $o.Add("  copy /b " + ($names -join "+") + " " + $QQ + $whole + $QQ)
         }
         # The same job on anything else. A disc meant to still work later should
         # not assume the machine reading it is the one that wrote it, and these
