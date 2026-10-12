@@ -69,6 +69,10 @@ BeforeAll {
     # Script-scope constants the functions read. Script scope, not local: the
     # functions look these up dynamically from whichever It block calls them, and
     # a local here would not be on that chain.
+    # Functions are lifted out of the file one at a time, so $PSScriptRoot
+    # inside them is empty and anything that reaches for a sibling folder has
+    # nothing to reach from. Get-AppRoot reads this.
+    $script:AppRoot = Split-Path $PSScriptRoot -Parent
     $script:PROJECT_FILE = 'discproject.json'
     $script:ISO9660_MAX_FILE =
         [double][regex]::Match((Get-Content $appScript -Raw),
@@ -5282,7 +5286,11 @@ Describe 'What the installer promises to ship' -Tag 'Unit' {
 
     It 'matches the paths the app actually dot-sources' {
         $app = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'DiscWright.ps1')
-        $app | Should -Match ([regex]::Escape("Join-Path `$PSScriptRoot 'print\DiscWright.Print.ps1'"))
+        # print\ is reached through Get-AppRoot, which answers $PSScriptRoot
+        # except where the suite has lifted a function out of the file and
+        # $PSScriptRoot inside it is empty. The installer still has to ship it.
+        $app | Should -Match ([regex]::Escape("Join-Path (Get-AppRoot) 'print\DiscWright.Print.ps1'"))
+        $app | Should -Match ([regex]::Escape("'print\DiscWright.Print.ps1'"))
         $app | Should -Match ([regex]::Escape("Join-Path `$PSScriptRoot 'burn\DiscWright.Burn.ps1'"))
     }
 }
@@ -6321,7 +6329,7 @@ Describe 'Nothing is added to the form and then forgotten' -Tag 'Unit' {
                 WindowBorder=$false; ButtonStyle='Bordered'; MusicFile='C:\a\music.mp3'
                 Buttons=@('Play','Exit'); ManualPath='C:\a\manual.pdf'; ExtrasPath='C:\a\extras'
                 ExtraItems=@('C:\a\readme.txt'); MediaKey='DVD'; LinuxInfo=$true
-                LegacyFs=$true; Checksums=$true
+                LegacyFs=$true; Checksums=$true; ArtworkOnDisc=$true
                 DiscSet=$true; CutFiles=$true }
         Save-Project $s $dir
         $json = Get-Content -Raw (Join-Path $dir 'discproject.json') | ConvertFrom-Json
@@ -7603,6 +7611,125 @@ Describe 'Asking for a disc set from the window' -Tag 'Unit' {
         New-Item -ItemType Directory -Force -Path $dir | Out-Null
         Save-Project @{ Games = @(); Label = 'Set Test'; DiscSet = $true } $dir
         [bool](Import-Project (Join-Path $dir 'discproject.json')).DiscSet | Should -BeTrue
+    }
+}
+
+Describe 'A disc that carries its own artwork' -Tag 'Build' {
+
+    # Said on 12 October: "also artwork for disc and cover rn only exists as
+    # optional i people want that burned to disc also".
+    #
+    # It is the same argument as the checksum list and the set file. A disc
+    # should be able to explain itself with nothing else to hand, and that
+    # includes being reprintable by whoever is holding it in ten years, when
+    # the project file and the original picture are long gone.
+
+    BeforeAll {
+        $script:ArtBox = Join-Path $script:Sandbox 'artdisc'
+        $script:ArtSrc = Join-Path $script:ArtBox 'src'
+        $script:ArtOut = Join-Path $script:ArtBox 'out'
+        New-Item -ItemType Directory -Force -Path $script:ArtSrc, $script:ArtOut | Out-Null
+        foreach ($n in 'setup_art_game_1.0_(1).exe', 'setup_art_game_1.0_(1)-1.bin') {
+            Set-Content -LiteralPath (Join-Path $script:ArtSrc $n) -Value $n -Encoding Ascii -NoNewline
+        }
+        $script:ArtGame = @{
+            Folder = $script:ArtSrc; Source = 'GOG'; Kind = 'Game'; Name = 'Art Game'
+            GameName = 'Art Game'; SetupExe = [IO.FileInfo](Join-Path $script:ArtSrc 'setup_art_game_1.0_(1).exe')
+            Files = @(Get-ChildItem -File $script:ArtSrc); Buttons = @('Install')
+        }
+        $script:ArtBg = New-FixturePng (Join-Path $script:ArtBox 'cover.png') 1280 720
+    }
+
+    Context 'when it is asked for' {
+
+        BeforeAll {
+            $s = New-BuildSettings -Games @($script:ArtGame) -Label 'ART DISC' -OutDir $script:ArtOut
+            $s.MediaKey = 'CD'
+            $s.BgPath = $script:ArtBg
+            $s.ArtworkOnDisc = $true
+            $s.Checksums = $true
+            $script:ArtResult = Invoke-Build $s $script:LogSink
+            $script:ArtStage = Join-Path $script:ArtOut 'disc'
+        }
+
+        It 'builds' {
+            # Invoke-Build hands back the path of the ISO it wrote, not a
+            # result object. Written the other way round first, which passed
+            # every test about the artwork and failed the one asking whether
+            # there was a disc at all.
+            $script:ArtResult | Should -Not -BeNullOrEmpty
+            Test-Path -LiteralPath $script:ArtResult | Should -BeTrue -Because 'the ISO is the whole point'
+        }
+
+        It 'puts the artwork on the disc, in a folder of its own' {
+            $dir = Join-Path $script:ArtStage 'ARTWORK'
+            Test-Path $dir | Should -BeTrue
+            @(Get-ChildItem $dir -File).Count | Should -BeGreaterThan 1 -Because 'a cover and a disc face'
+        }
+
+        It 'makes files worth carrying, not empty ones' {
+            foreach ($f in Get-ChildItem (Join-Path $script:ArtStage 'ARTWORK') -File) {
+                $f.Length | Should -BeGreaterThan 1000 -Because "$($f.Name) is meant to be printable"
+            }
+        }
+
+        It 'is covered by the checksum list, which is why it goes on first' {
+            # The artwork is written before the set file and before the hashing,
+            # so the list the disc carries describes everything on the disc. A
+            # file the list does not mention cannot be checked by anybody.
+            $sums = Get-Content (Join-Path $script:ArtStage (Get-ChecksumFileName)) -Raw
+            $sums | Should -Match 'ARTWORK/'
+        }
+
+    }
+
+    Context 'when it is not' {
+
+        BeforeAll {
+            $out2 = Join-Path $script:ArtBox 'out2'
+            New-Item -ItemType Directory -Force -Path $out2 | Out-Null
+            $s = New-BuildSettings -Games @($script:ArtGame) -Label 'PLAIN DISC' -OutDir $out2
+            $s.MediaKey = 'CD'
+            $s.BgPath = $script:ArtBg
+            $s.ArtworkOnDisc = $false
+            $script:PlainStage = Join-Path $out2 'disc'
+            $null = Invoke-Build $s $script:LogSink
+        }
+
+        It 'puts nothing there' {
+            Test-Path (Join-Path $script:PlainStage 'ARTWORK') | Should -BeFalse
+        }
+    }
+}
+
+Describe 'What the disc builds, and what somebody added' -Tag 'Unit' {
+
+    It 'counts ARTWORK as the disc''s own, not as content somebody added' {
+        # Reopening a built disc folder reads anything unrecognised as Extra
+        # content. Without this the artwork lands in that list, is copied in
+        # again on the next build, and the list grows a folder every time.
+        Test-ReservedDiscName 'ARTWORK' | Should -BeTrue
+    }
+
+    It 'still counts a folder nobody here made as somebody else''s' {
+        Test-ReservedDiscName 'Screenshots' | Should -BeFalse
+    }
+}
+
+Describe 'Remembering whether the artwork goes on the disc' -Tag 'Unit' {
+
+    It 'survives being written and read back' {
+        $dir = Join-Path $script:Sandbox 'artproject'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Save-Project @{ Games = @(); Label = 'Art'; ArtworkOnDisc = $true } $dir
+        [bool](Import-Project (Join-Path $dir 'discproject.json')).ArtworkOnDisc | Should -BeTrue
+    }
+
+    It 'is off in a project that predates it' {
+        $dir = Join-Path $script:Sandbox 'artproject2'
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        Save-Project @{ Games = @(); Label = 'Art' } $dir
+        [bool](Import-Project (Join-Path $dir 'discproject.json')).ArtworkOnDisc | Should -BeFalse
     }
 }
 
@@ -10772,6 +10899,36 @@ Describe 'Running a command without a window and without a pipe to fill' -Tag 'U
             $fn = Get-JsFn9 $script:JobSrc 'setStartJob'
             $fn | Should -Match ([regex]::Escape('setQuote(flag)'))
             $fn | Should -Match ([regex]::Escape('") & call echo %^errorlevel%> "'))
+        }
+
+        It 'names its flag so two menus cannot collide on one' {
+            # The counter starts at one in every copy of this script, so a
+            # counter and a clock agree between two of them that start in the
+            # same millisecond. Each then reads the other's flag as its own.
+            $fn = Get-JsFn9 $script:JobSrc 'setStartJob'
+            $fn | Should -Match ([regex]::Escape('Math.floor(Math.random()*1000000)'))
+        }
+
+        It 'gives two jobs started together two different flags' {
+            # Fifty in a row from one process, which is the cheap half of the
+            # question: the names must not repeat even when the clock does not
+            # move between them.
+            $js = @(
+                'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+                'var SETJOBN = 0, SETSTARTED = 0;'
+                (Get-JsFn9 $script:JobSrc 'setQuote')
+                (Get-JsFn9 $script:JobSrc 'setStartJob')
+                'var seen = {}, dup = 0;'
+                'for (var i = 0; i < 50; i++) {'
+                '  var j = setStartJob("rem");'
+                '  if (seen[j.flag]) { dup++; }'
+                '  seen[j.flag] = true;'
+                '}'
+                'WScript.Echo("dup=" + dup);'
+            )
+            $f = Join-Path $script:JobDir 'flags.js'
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            ((@(& $script:CsJob //Nologo //E:JScript $f 2>&1) -join '').Trim()) | Should -Match 'dup=0'
         }
 
         It 'uses nothing that needs a process handle' {
