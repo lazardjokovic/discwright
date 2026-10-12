@@ -1453,11 +1453,24 @@ function Get-DiscIconName([string]$label) {
 # Names the build pipeline owns at the disc root - extra content may not use them.
 # 'disc.ico' stays reserved even when unused, so extra content cannot collide with
 # discs built before the icon was named after the game.
+# Where the rest of DiscWright lives, print\ in particular.
+#
+# $PSScriptRoot inside a function is empty when the suite lifts that function
+# out of the file and runs it on its own, which is how every logic test here
+# runs the real code. Join-Path then throws on an empty path and the feature
+# cannot be tested at all. So it is read through a variable the suite can set,
+# the same way it sets $PROJECT_FILE and $APP_VERSION.
+function Get-AppRoot {
+    if ($script:AppRoot) { return $script:AppRoot }
+    return $PSScriptRoot
+}
+
 function Test-ReservedDiscName([string]$name,[string]$iconName='disc.ico') {
     if ($name -like 'setup_*') { return $true }
     $png = [IO.Path]::ChangeExtension($iconName,'png')
     return (@('autorun.inf','.xdg-volume-info','disc.ico','disc.png',$iconName,$png,
-              (Get-MenuLauncherName),(Get-ChecksumFileName),'AUTORUN','Extras','Games','Add-ons',$PROJECT_FILE) -contains $name)
+              (Get-MenuLauncherName),(Get-ChecksumFileName),'AUTORUN','ARTWORK','Extras','Games','Add-ons',
+              $PROJECT_FILE) -contains $name)
 }
 
 # Folder name for one game on a multi-game disc. Numbered, so the order in the
@@ -3004,8 +3017,19 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var SETJOBN=0, SETSTARTED=0;
   function setStartJob(cmd){
     var sh=new ActiveXObject("WScript.Shell");
+    // A counter and a clock are not enough to tell two menus apart. The counter
+    // starts at one in every copy of this script, and two of them starting in
+    // the same millisecond then agree on the name: each sees the other's flag,
+    // believes its own command has finished, and carries on over the top of a
+    // file that is still being written.
+    //
+    // Not hypothetical. The suite runs several of these at once and one copy
+    // test failed one run in four with "1 of 2 files would not copy", which is
+    // what a size check says about a file nothing had finished copying yet.
+    // Two drives and two discs would do the same thing on a real machine.
     var flag=fso.BuildPath(sh.ExpandEnvironmentStrings("%TEMP%"),
-                           "dwjob"+(++SETJOBN)+"_"+(new Date()).getTime()+".done");
+                           "dwjob"+(++SETJOBN)+"_"+(new Date()).getTime()+
+                           "_"+Math.floor(Math.random()*1000000)+".done");
     try{ if(fso.FileExists(flag)) fso.DeleteFile(flag); }catch(ex){}
     if(!SETSTARTED){ SETSTARTED=new Date(); }
     if(typeof setTick=="function"){ setTick(); }
@@ -4408,6 +4432,7 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         LinuxInfo    = [bool]$s.LinuxInfo
         LegacyFs     = [bool]$s.LegacyFs
         Checksums    = [bool]$s.Checksums
+        ArtworkOnDisc = [bool]$s.ArtworkOnDisc
         DiscSet      = [bool]$s.DiscSet
         CutFiles     = [bool]$s.CutFiles
         ShowCaption  = $(if ($null -eq $s.ShowCaption) { $true } else { [bool]$s.ShowCaption })
@@ -4462,6 +4487,7 @@ function Import-Project([string]$jsonPath) {
             LinuxInfo=[bool]$j.LinuxInfo
             LegacyFs=[bool]$j.LegacyFs
             Checksums=[bool]$j.Checksums; DiscSet=[bool]$j.DiscSet; CutFiles=[bool]$j.CutFiles
+            ArtworkOnDisc=[bool]$j.ArtworkOnDisc
             ShowCaption=$(if ($null -eq $j.ShowCaption) { $true } else { [bool]$j.ShowCaption })
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             CoverPath=$j.CoverPath; DiscArtPath=$j.DiscArtPath
@@ -4957,6 +4983,52 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     # Last, because it hashes what is on the disc and everything has to be on
     # it by now: the games, the menu, the icon, the launcher.
     # Before the checksum list, so the list covers this file too.
+    # The cover and the disc face, onto the disc itself.
+    #
+    # Asked for on 12 October: "artwork for disc and cover rn only exists as
+    # optional i people want that burned to disc also". It is the same argument
+    # as the checksum list and the set file. A disc should be able to explain
+    # itself with nothing else to hand, and that includes being reprintable by
+    # whoever is holding it in ten years, when the project file and the
+    # original picture are long gone.
+    #
+    # Before the set file and the checksum list, so both cover it.
+    #
+    # print\ is a separate module on purpose: this reaches into it and it never
+    # reaches back, so a copy of DiscWright without it still builds discs. A
+    # missing module, or artwork that will not render, is a note in the log and
+    # not a failed build: nobody should lose a disc over a picture.
+    if ($s.ArtworkOnDisc) {
+        $root = Get-AppRoot
+        $printer = if ($root) { Join-Path $root 'print\DiscWright.Print.ps1' } else { '' }
+        if (-not $printer -or -not (Test-Path $printer)) {
+            & $log 'NOTE: the artwork files are not installed, so no artwork was put on the disc.'
+        } else {
+            try {
+                . $printer
+                $artDir = Join-Path $stage 'ARTWORK'
+                New-Item -ItemType Directory -Force -Path $artDir | Out-Null
+                $artNames = @($s.Games | Where-Object { $_.Kind -ne 'AddOn' } |
+                              ForEach-Object { $_.GameName })
+                $artAddOns = @($s.Games | Where-Object { $_.Kind -eq 'AddOn' }).Count
+                # A picture chosen for the cover wins over the menu background,
+                # which was chosen to sit behind buttons rather than to be a
+                # cover. Same order as the Print artwork button uses.
+                $artCover = if ($s.CoverPath) { $s.CoverPath } else { $s.BgPath }
+                $artFace = if ($s.DiscArtPath) { $s.DiscArtPath } else { $artCover }
+                $art = New-ArtworkForDisc -Title $(if ($s.TitleText) { $s.TitleText } else { $s.Label }) `
+                                          -Label $s.Label -Games $artNames -AddOnCount $artAddOns `
+                                          -CoverImage $artCover -DiscImage $artFace `
+                                          -OutDir $artDir `
+                                          -Case (Get-CaseForMedia $s.MediaKey).Case
+                & $log ("Artwork on the disc: ARTWORK\{0} and ARTWORK\{1}" -f
+                        (Split-Path $art.Wrap -Leaf), (Split-Path $art.DiscFace -Leaf))
+            } catch {
+                & $log "NOTE: the artwork could not be made, so none is on the disc: $($_.Exception.Message)"
+            }
+        }
+    }
+
     if ($s.SetManifest) {
         [IO.File]::WriteAllText((Join-Path $stage (Get-DiscSetFileName)), [string]$s.SetManifest,
                                 (New-Object System.Text.ASCIIEncoding))
@@ -5334,6 +5406,15 @@ $btnEx=New-Object System.Windows.Forms.Button; $btnEx.Text='Browse...'; $btnEx.L
 
 $lblStyle=New-Object System.Windows.Forms.Label; $lblStyle.Text='Look:'; $lblStyle.Location=New-Object System.Drawing.Point(15,250); $lblStyle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblStyle)
 $chkDivider=New-Object System.Windows.Forms.CheckBox; $chkDivider.Text='Divider line'; $chkDivider.Location=New-Object System.Drawing.Point(150,248); $chkDivider.Size=New-Object System.Drawing.Size(100,22); $grp.Controls.Add($chkDivider)
+# Off by default: it is a few megabytes on the disc and most people print the
+# artwork rather than carry it. The ones who want it want it badly, because it
+# is the only copy that travels with the disc.
+$chkArtOnDisc=New-Object System.Windows.Forms.CheckBox
+$chkArtOnDisc.Text='artwork on disc'
+$chkArtOnDisc.Checked=$false
+$chkArtOnDisc.Location=New-Object System.Drawing.Point(620,342)
+$chkArtOnDisc.Size=New-Object System.Drawing.Size(130,22)
+$grp.Controls.Add($chkArtOnDisc)
 $chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Window border'; $chkWinBorder.Checked=$false; $chkWinBorder.Location=New-Object System.Drawing.Point(255,248); $chkWinBorder.Size=New-Object System.Drawing.Size(115,22); $grp.Controls.Add($chkWinBorder)
 $lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,250); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
 $cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,247); $cmbBtnStyle.Size=New-Object System.Drawing.Size(100,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
@@ -5802,6 +5883,19 @@ $tips.SetToolTip($cbExit, (
 $tips.SetToolTip($chkWinBorder, (
     "Draws a thin line around the edge of the menu window, which separates" + [Environment]::NewLine +
     "it from whatever is behind it."))
+$tips.SetToolTip($chkArtOnDisc, (
+    "Writes the case wrap and the disc face into ARTWORK on the disc," + [Environment]::NewLine +
+    "beside the game." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "The same two files the Print artwork button makes, and the same" + [Environment]::NewLine +
+    "pictures: a cover if one was chosen, otherwise the menu background." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "It costs a few megabytes. What it buys is a disc that can be" + [Environment]::NewLine +
+    "reprinted by whoever is holding it, years after the project file" + [Environment]::NewLine +
+    "and the original picture have gone." + [Environment]::NewLine +
+    "" + [Environment]::NewLine +
+    "Needs the print folder. Without it the build says so and carries on."))
+
 $tips.SetToolTip($chkSums, (
     "Writes checksums.sha256 at the disc root: the SHA-256 of every other" + [Environment]::NewLine +
     "file on the disc." + [Environment]::NewLine +
@@ -6669,6 +6763,7 @@ function Reset-Form {
     $chkDivider.Checked = $false
     $chkWinBorder.Checked = $false
     $chkSums.Checked = $true
+    $chkArtOnDisc.Checked = $false
     $cmbBtnStyle.SelectedIndex = 0
 
     $lstExtra.Items.Clear(); $state.ExtraItems = @()
@@ -6752,6 +6847,7 @@ function Open-Project([string]$folder) {
     $chkLinux.Checked = [bool]$p.LinuxInfo
     $chkLegacy.Checked = [bool]$p.LegacyFs
     $chkSums.Checked = [bool]$p.Checksums
+    $chkArtOnDisc.Checked = [bool]$p.ArtworkOnDisc
     $chkSet.Checked = [bool]$p.DiscSet
     # No box of its own: it is answered when a build asks, and it rides with the
     # project so the answer is not asked again every time.
@@ -7713,7 +7809,7 @@ $btnArtwork.Add_Click({
     # reaches back, so the ISO builder stays able to ship without it. A missing
     # copy is a broken install, and saying which file is missing beats failing
     # with nothing.
-    $printer = Join-Path $PSScriptRoot 'print\DiscWright.Print.ps1'
+    $printer = Join-Path (Get-AppRoot) 'print\DiscWright.Print.ps1'
     if (-not (Test-Path $printer)) {
         Show-Warn "The artwork files are not installed:`r`n`r`n$printer`r`n`r`nReinstall DiscWright, or run it from a full copy of the folder."
         return
@@ -8219,6 +8315,7 @@ $btnBuild.Add_Click({
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
          ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey
          LinuxInfo=$chkLinux.Checked; LegacyFs=$chkLegacy.Checked; Checksums=$chkSums.Checked
+         ArtworkOnDisc=$chkArtOnDisc.Checked; CoverPath=$state.CoverPath; DiscArtPath=$state.DiscArtPath
          DiscSet=$chkSet.Checked; CutFiles=[bool]$state.CutFiles }
     $btnBuild.Enabled=$false
     Set-FormBusy $true
