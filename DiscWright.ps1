@@ -5251,7 +5251,12 @@ $chkSums=New-Object System.Windows.Forms.CheckBox
 $chkSums.Text='checksummed'
 $chkSums.Location=New-Object System.Drawing.Point(510,342)
 $chkSums.Size=New-Object System.Drawing.Size(105,22)
-$chkSums.Checked=$false
+# On, since 12 October. It costs one hashing pass at build time, seconds on a
+# modern disk, and about a kilobyte on the disc. What it buys is the only way
+# the menu can answer "did this disc come back the way it went on" without
+# anything installed. A disc set already carries hashes in its own file; this
+# is the same promise for a disc on its own.
+$chkSums.Checked=$true
 $form.Controls.Add($chkSums)
 # Below the Browse button, not beside it: at y=290 this 44px-tall preview sat on
 # top of a 24px-tall button in the same 110px column, and whichever Windows drew
@@ -5295,7 +5300,7 @@ $btnEx=New-Object System.Windows.Forms.Button; $btnEx.Text='Browse...'; $btnEx.L
 
 $lblStyle=New-Object System.Windows.Forms.Label; $lblStyle.Text='Look:'; $lblStyle.Location=New-Object System.Drawing.Point(15,250); $lblStyle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblStyle)
 $chkDivider=New-Object System.Windows.Forms.CheckBox; $chkDivider.Text='Divider line'; $chkDivider.Location=New-Object System.Drawing.Point(150,248); $chkDivider.Size=New-Object System.Drawing.Size(100,22); $grp.Controls.Add($chkDivider)
-$chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Window border'; $chkWinBorder.Checked=$true; $chkWinBorder.Location=New-Object System.Drawing.Point(255,248); $chkWinBorder.Size=New-Object System.Drawing.Size(115,22); $grp.Controls.Add($chkWinBorder)
+$chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Window border'; $chkWinBorder.Checked=$false; $chkWinBorder.Location=New-Object System.Drawing.Point(255,248); $chkWinBorder.Size=New-Object System.Drawing.Size(115,22); $grp.Controls.Add($chkWinBorder)
 $lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,250); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
 $cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,247); $cmbBtnStyle.Size=New-Object System.Drawing.Size(100,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
 $chkCaption=New-Object System.Windows.Forms.CheckBox; $chkCaption.Text='Game name'; $chkCaption.Checked=$true; $chkCaption.Location=New-Object System.Drawing.Point(545,248); $chkCaption.Size=New-Object System.Drawing.Size(95,22); $grp.Controls.Add($chkCaption)
@@ -5698,6 +5703,19 @@ function Show-Choice([string]$msg,[string]$title='DiscWright') {
 # alone is easy to miss, which makes the BUILD button look like it did nothing.
 function Deny-Build([string]$logMsg,[string]$dlgMsg) { & $log "ERROR: $logMsg"; Show-Warn $dlgMsg }
 
+# The same refusal, said as the outcome of a decision rather than as a fault.
+#
+# The build offers a disc set when the payload will not fit, and offers to cut
+# a file when no disc will hold it. Saying no to either ends the build, and
+# somebody who said no still needs to know why it cannot go on: which file,
+# and how much room a disc of that size really leaves. So the explanation
+# stays, word for word.
+#
+# What goes is ERROR in the log in front of somebody who has just been asked a
+# question and answered it. Said on 12 October: "Build iso and if canceled it
+# says there is an error but the app worked after, just a small confusing bug".
+function Stop-Build([string]$logMsg,[string]$dlgMsg) { & $log "Cancelled: $logMsg"; Show-Warn $dlgMsg }
+
 $tips = New-Object System.Windows.Forms.ToolTip
 # Hover text for everything that needed explaining and did not have it.
 # Thirteen of the eighteen tick boxes and lists on this form had none, which
@@ -5845,7 +5863,11 @@ function Test-FormDirty {
     }
     if ($lstExtra.Items.Count) { return $true }
     # Anything switched away from its opening position, in either direction.
-    if (-not $chkMenu.Checked -or -not $chkWinBorder.Checked) { return $true }
+    # Both of these changed sides on 12 October, so it is the opposite answer
+    # that now means somebody has been at the form. Left alone, the window
+    # counted itself dirty the moment it opened, which lit New disc on a window
+    # with nothing in it to clear.
+    if (-not $chkMenu.Checked -or $chkWinBorder.Checked -or -not $chkSums.Checked) { return $true }
     if ($chkBgAsIs.Checked -or $chkTitle.Checked -or $chkMusic.Checked -or $chkDivider.Checked) { return $true }
     if ($cmbSide.SelectedIndex -ne 0 -or $cmbBtnStyle.SelectedIndex -ne 0) { return $true }
     if ($cmbMedia.SelectedIndex -ne 0) { return $true }
@@ -6611,7 +6633,8 @@ function Reset-Form {
     $txtMan.Clear(); $state.ManualPath = $null
     $txtEx.Clear();  $state.ExtrasPath = $null
     $chkDivider.Checked = $false
-    $chkWinBorder.Checked = $true
+    $chkWinBorder.Checked = $false
+    $chkSums.Checked = $true
     $cmbBtnStyle.SelectedIndex = 0
 
     $lstExtra.Items.Clear(); $state.ExtraItems = @()
@@ -7964,6 +7987,9 @@ $btnBuild.Add_Click({
 
     $outDir = $txtOut.Text.Trim()
     $pay    = Get-PayloadBytes
+    # Whether a question was asked and answered no. It changes how the refusal
+    # that follows is worded, and nothing else.
+    $declined = $false
 
     # The media label has always worked out that a payload is too big for any disc,
     # but nothing acted on it - the build ran to completion and handed back an ISO
@@ -8005,6 +8031,11 @@ $btnBuild.Add_Click({
             if (Show-Confirm $ask 'This game needs more than one disc') {
                 $chkSet.Checked = $true
                 & $log "Building as a set of $wouldBe discs."
+            } else {
+                # The refusal below still runs, because declining a set does not
+                # make the payload fit and the person needs to be told what did
+                # not happen. It runs as Stop-Build rather than Deny-Build.
+                $declined = $true
             }
         }
     }
@@ -8037,6 +8068,11 @@ $btnBuild.Add_Click({
                 if (Show-Confirm $ask 'One file is bigger than a disc') {
                     $state.CutFiles = $true
                     & $log ("Cutting {0} into {1} pieces." -f (Split-Path $plain.TooBig.Rel -Leaf), $pieces)
+                } else {
+                    # Same again, and here the refusal is worth more than this
+                    # block could say: the set arithmetic names the file and the
+                    # room a disc of that size leaves. Let it run and say it.
+                    $declined = $true
                 }
             }
         }
@@ -8055,16 +8091,18 @@ $btnBuild.Add_Click({
                        # in whatever order the rows happened to sit in - see ROADMAP.md.
                        "`r`n`r`nRemove an entry in step 1, or choose a larger disc in step 2."
                    }
-            Deny-Build ("payload does not fit a $mName.") $why
+            if ($declined) { Stop-Build ("payload does not fit a $mName.") $why }
+            else            { Deny-Build ("payload does not fit a $mName.") $why }
             return
         }
     
         $rec = Get-MediaRec $pay.Total
         if (-not $fit -and -not $rec.Fit) {
-            Deny-Build ("payload is {0:N1} GB - too big for any single disc." -f ($pay.Total/1GB)) (
-                ("This disc would be {0:N1} GB, which is bigger than any single disc DiscWright can write." -f ($pay.Total/1GB)) +
-                "`r`n`r`nThe largest supported medium is BD-R XL at 100 GB." +
-                "`r`n`r`nRemove an entry in step 1 so what is left fits one disc.")
+            $tooBigWhy = ("This disc would be {0:N1} GB, which is bigger than any single disc DiscWright can write." -f ($pay.Total/1GB)) +
+                         "`r`n`r`nThe largest supported medium is BD-R XL at 100 GB." +
+                         "`r`n`r`nRemove an entry in step 1 so what is left fits one disc."
+            $tooBigLog = "payload is {0:N1} GB - too big for any single disc." -f ($pay.Total/1GB)
+            if ($declined) { Stop-Build $tooBigLog $tooBigWhy } else { Deny-Build $tooBigLog $tooBigWhy }
             return
         }
     }
@@ -8161,7 +8199,11 @@ $btnBuild.Add_Click({
             # this button uses, so the wording and the log line match them;
             # thrown, it arrived as "The build failed:" in front of a sentence
             # explaining that a file is too big, which is not a failure.
-            if (-not $set.Ok) { Deny-Build 'the disc set cannot be laid out.' $set.Why; return }
+            if (-not $set.Ok) {
+                if ($declined) { Stop-Build 'the disc set cannot be laid out.' $set.Why }
+                else           { Deny-Build 'the disc set cannot be laid out.' $set.Why }
+                return
+            }
             $isos = @($set.Isos)
         } else {
             $isos = @(Invoke-Build $s $log $buildProgress)

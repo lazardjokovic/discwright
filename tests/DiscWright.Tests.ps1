@@ -11168,6 +11168,114 @@ Describe 'Hashing a game without the window seizing up' -Tag 'Unit' {
     }
 }
 
+Describe 'What the form is set to before anybody touches it' -Tag 'Unit' {
+
+    # Defaults are an opinion about what most people want, and these two were
+    # the wrong way round. Said on 12 October: "window border should not be
+    # checked by default", and "stuff like checksummed, is there a reason not
+    # to do it? it's required anyway for disc check right?".
+
+    BeforeAll {
+        $script:FormSrc = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+    }
+
+    It 'has the checksum list on' {
+        # It costs one hashing pass at build time and about a kilobyte on the
+        # disc. What it buys is the only way the menu can answer "did this disc
+        # come back the way it went on" with nothing installed.
+        $script:FormSrc | Should -Match ([regex]::Escape('$chkSums.Checked=$true'))
+        $script:FormSrc | Should -Not -Match ([regex]::Escape('$chkSums.Checked=$false'))
+    }
+
+    It 'has the window border off' {
+        $script:FormSrc | Should -Match ([regex]::Escape('$chkWinBorder.Checked=$false; $chkWinBorder.Location'))
+    }
+
+    It 'does not count its own defaults as somebody having changed something' {
+        # Test-FormDirty lights New disc. It listed an unticked border as a
+        # change, so with the border off to begin with the window counted
+        # itself dirty the moment it opened, on a window with nothing in it to
+        # clear. Found by the window suite, which is the only thing that could
+        # have found it.
+        $script:FormSrc | Should -Match ([regex]::Escape('if (-not $chkMenu.Checked -or $chkWinBorder.Checked -or -not $chkSums.Checked) { return $true }'))
+    }
+
+    It 'sets both the same way again when a new disc is started' {
+        # A default that only applies to the first disc of a session is not a
+        # default. New disc resets the form, and it used to put the border back
+        # on and leave the checksums wherever the last project left them.
+        $reset = [regex]::Match($script:FormSrc,
+            '(?s)\$chkDivider\.Checked = \$false(.{0,400}?)\$cmbBtnStyle\.SelectedIndex = 0').Groups[1].Value
+        $reset | Should -Not -BeNullOrEmpty -Because 'the reset block has to be findable'
+        $reset | Should -Match ([regex]::Escape('$chkWinBorder.Checked = $false'))
+        $reset | Should -Match ([regex]::Escape('$chkSums.Checked = $true'))
+    }
+}
+
+Describe 'Saying no to a question the build asked' -Tag 'Unit' {
+
+    # Said on 12 October: "Build iso and if canceled it says there is an error
+    # but the app worked after, just a small confusing bug".
+    #
+    # It was not quite cosmetic. The build offers a disc set when the payload
+    # will not fit, and offers to cut a file when no disc will hold it. Saying
+    # no to either fell through to the refusal the offer was made about, so the
+    # app wrote ERROR in the log and put a warning on screen in front of
+    # somebody who had just been asked a question and answered it.
+
+    BeforeAll {
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $start = $src.IndexOf('$btnBuild.Add_Click({')
+        if ($start -lt 0) { throw 'the Build button has no handler' }
+        $i = $src.IndexOf('{', $start); $depth = 0
+        for ($j = $i; $j -lt $src.Length; $j++) {
+            if ($src[$j] -eq '{') { $depth++ }
+            elseif ($src[$j] -eq '}') { $depth--; if ($depth -eq 0) { break } }
+        }
+        $script:BuildSrc = $src.Substring($start, $j - $start + 1)
+    }
+
+    It 'remembers that <Question> was declined rather than ending there' -ForEach @(
+        @{ Question = 'the disc set'; Ask = 'This game needs more than one disc' }
+        @{ Question = 'the cut';      Ask = 'One file is bigger than a disc' }
+    ) {
+        # Declining does not make the payload fit, so the refusal still runs and
+        # still says which file decided it and how much room the disc leaves.
+        # That explanation is the whole value of the dialog and the window tests
+        # read it. What changes is only how it is worded in the log.
+        $at = $script:BuildSrc.IndexOf("Show-Confirm `$ask '$Ask'")
+        $at | Should -BeGreaterThan 0 -Because 'the question has to still be asked'
+        $after = $script:BuildSrc.Substring($at, [Math]::Min(900, $script:BuildSrc.Length - $at))
+        $after | Should -Match ([regex]::Escape("} else {"))
+        $after | Should -Match ([regex]::Escape('$declined = $true'))
+    }
+
+    It 'words every refusal that followed an answer as Cancelled' {
+        # Deny-Build writes ERROR, which is right for a payload nobody was asked
+        # about and wrong for one somebody has just declined to split.
+        foreach ($pair in 'payload does not fit a $mName.', 'the disc set cannot be laid out.') {
+            $script:BuildSrc | Should -Match ([regex]::Escape('if ($declined) { Stop-Build'))
+        }
+        $script:BuildSrc | Should -Match ([regex]::Escape('if ($declined) { Stop-Build $tooBigLog $tooBigWhy }'))
+    }
+
+    It 'still calls a refusal nobody asked for an error' {
+        # The ERROR wording has to survive where it is earned: a payload that
+        # does not fit, with no question asked about it, is a real refusal.
+        $script:BuildSrc | Should -Match ([regex]::Escape('else            { Deny-Build ("payload does not fit a $mName.") $why }'))
+        $script:BuildSrc | Should -Match 'too big for any single disc'
+    }
+
+    It 'says the same thing on screen either way' {
+        # Stop-Build and Deny-Build differ in one word of log and nothing else.
+        # The dialog is the explanation, and somebody who declined an offer
+        # needs it just as much as somebody who did not.
+        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
+        $src | Should -Match ([regex]::Escape('function Stop-Build([string]$logMsg,[string]$dlgMsg) { & $log "Cancelled: $logMsg"; Show-Warn $dlgMsg }'))
+        $src | Should -Match ([regex]::Escape('function Deny-Build([string]$logMsg,[string]$dlgMsg) { & $log "ERROR: $logMsg"; Show-Warn $dlgMsg }'))
+    }
+}
+
 Describe 'Fields that say which thing they are for' -Tag 'Unit' {
 
     # Three labels xniwo read as something other than what they set, which is
