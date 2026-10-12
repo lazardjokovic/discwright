@@ -7437,8 +7437,8 @@ $btnBurn.Add_Click({
     $pick = $d.Speeds | Where-Object { $_.Multiple -le $cap } | Select-Object -First 1
     if (-not $pick) { $pick = $d.Speeds | Select-Object -Last 1 }
     $speedText = if ($pick) { "$($pick.Multiple)x" } else { "the drive's own choice" }
-    $kb = if ($pick) { $pick.Kb } else { $(if ($d.Speeds.Count) { $d.Speeds[0].Kb } else { 0 }) }
-    $estimate = Format-BurnEstimate (Get-BurnEstimateSeconds -Bytes $iso.Length -SpeedKb $kb -MediaType $d.MediaType)
+    $sectors = if ($pick) { $pick.Sectors } else { $(if ($d.Speeds.Count) { $d.Speeds[0].Sectors } else { 0 }) }
+    $estimate = Format-BurnEstimate (Get-BurnEstimateSeconds -Bytes $iso.Length -SpeedSectors $sectors -MediaType $d.MediaType)
 
     $msg = @(
         "Write $($iso.Name) to the disc in $($d.Drive)?"
