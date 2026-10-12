@@ -8495,7 +8495,7 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         $script:WriteResult = @{ Seconds = 11; Watched = $true; Updates = 240 }
         $script:Drives = @(@{ Drive = $script:Root; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
                               FreeSectors = 359853; FreeBytes = 736978944; Vendor = 'ASUS'; Product = 'DRW'
-                              Speeds = @([pscustomobject]@{ Kb = 7200; Multiple = 48 }, [pscustomobject]@{ Kb = 2400; Multiple = 16 }) })
+                              Speeds = @([pscustomobject]@{ Sectors = 3600; Multiple = 48 }, [pscustomobject]@{ Sectors = 1200; Multiple = 16 }) })
         $script:Verdict = @{ Ok = $true; FilesOnDisc = 9; Unreadable = @(); Missing = @(); Unexpected = @(); WrongSize = @(); WrongContent = @() }
     }
 
@@ -8600,7 +8600,7 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         # Without that, disc 2 of a pair can land in the other writer.
         $other = @{ Drive = 'Z:'; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
                     FreeSectors = 359853; FreeBytes = 736978944; Vendor = 'OTHER'; Product = 'DRIVE'
-                    Speeds = @([pscustomobject]@{ Kb = 2400; Multiple = 16 }) }
+                    Speeds = @([pscustomobject]@{ Sectors = 1200; Multiple = 16 }) }
         $script:Drives = @($other, $script:Drives[0])
         $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) } '' $script:Root
         $r.Ok | Should -BeTrue -Because "it said: $($r.Why)"
@@ -8622,7 +8622,7 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         # disc ends up in the wrong drive, so it says so and stops.
         $second = @{ Drive = 'Z:'; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
                      FreeSectors = 359853; FreeBytes = 736978944; Vendor = 'OTHER'; Product = 'DRIVE'
-                     Speeds = @([pscustomobject]@{ Kb = 2400; Multiple = 16 }) }
+                     Speeds = @([pscustomobject]@{ Sectors = 1200; Multiple = 16 }) }
         $script:Drives = @($script:Drives[0], $second)
         $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
         $r.Ok | Should -BeFalse

@@ -362,6 +362,110 @@ Describe 'The Burn to disc button' -Tag 'Unit' {
     }
 }
 
+Describe 'Reading a drive speed in the unit the drive meant' -Tag 'Unit' {
+
+    # Nothing here had a test, which is how it went wrong and stayed wrong.
+    #
+    # IMAPI measures write speed in SECTORS per second, and says so at both
+    # ends: IWriteSpeedDescriptor::get_WriteSpeed is "measured in sectors per
+    # second", and the parameter of SetWriteSpeed is called
+    # RequestedSectorsPerSecond. This module divided by 150, the KB/s of a 1x
+    # CD, where it should divide by 75, the sectors of one. So every speed
+    # shown was half the truth and every speed asked for was double what was
+    # meant.
+    #
+    # Caught on 12 October: a High Speed CD-RW rated 8-12x went into the BD-RE
+    # BU40N, the drive offered one speed of 750, and DiscWright called it 5x.
+    # No CD-RW is made in 5x. It is 10x, and the burns agree: 690,814,976 bytes
+    # took 496 seconds, which is 1.5 MB a second. At 5x the write alone could
+    # not have finished inside 900.
+
+    Context 'what 1x is' {
+
+        It 'is <Sectors> sectors a second on <What>' -ForEach @(
+            @{ What = 'a CD';      Type = 2;  Sectors = 75 }
+            @{ What = 'a CD-RW';   Type = 3;  Sectors = 75 }
+            @{ What = 'a DVD';     Type = 9;  Sectors = 680 }
+            @{ What = 'a DVD+R';   Type = 6;  Sectors = 680 }
+            @{ What = 'an HD DVD'; Type = 15; Sectors = 4568 }
+            @{ What = 'a BD-R';    Type = 18; Sectors = 2195 }
+            @{ What = 'a BD-RE';   Type = 19; Sectors = 2195 }
+        ) {
+            # Microsoft's own numbers, out of imapi2.idl in the Windows SDK:
+            # IMAPI_SECTORS_PER_SECOND_AT_1X_CD and its three companions.
+            Get-SpeedBaseSectors $Type | Should -Be $Sectors
+        }
+    }
+
+    Context 'turning what the drive says into what the label says' {
+
+        It 'reads the 750 this machine was handed as 10x, not 5x' {
+            # The reading that found the bug. 10x is one of the three High
+            # Speed CD-RW speeds; 5x is not a speed any CD-RW is made in.
+            ConvertTo-SpeedMultiple 750 3 | Should -Be 10
+        }
+
+        It 'reads <Sectors> on media type <Type> as <Multiple>x' -ForEach @(
+            @{ Sectors = 1800;  Type = 2;  Multiple = 24 }
+            @{ Sectors = 1200;  Type = 2;  Multiple = 16 }
+            @{ Sectors = 600;   Type = 2;  Multiple = 8 }
+            @{ Sectors = 680;   Type = 9;  Multiple = 1 }
+            @{ Sectors = 5440;  Type = 9;  Multiple = 8 }
+            @{ Sectors = 2195;  Type = 18; Multiple = 1 }
+            @{ Sectors = 13170; Type = 18; Multiple = 6 }
+        ) {
+            ConvertTo-SpeedMultiple $Sectors $Type | Should -Be $Multiple
+        }
+
+        It 'is why the speed cap can do its job at all' {
+            # The burn picks the fastest speed at or below 16x on a CD, because
+            # cheap media written flat out is the usual way to make a coaster.
+            # Halved, a 24x drive looked like 12x, sailed under the cap, and
+            # burned at 24x anyway. The cap has never once bitten.
+            ConvertTo-SpeedMultiple 1800 2 | Should -BeGreaterThan 16
+        }
+    }
+
+    Context 'turning what somebody typed into what the drive is asked for' {
+
+        It 'asks for <Sectors> when told <Speed> on media type <Type>' -ForEach @(
+            @{ Speed = '8x';  Type = 2;  Sectors = 600 }
+            @{ Speed = '16x'; Type = 2;  Sectors = 1200 }
+            @{ Speed = '10x'; Type = 3;  Sectors = 750 }
+            @{ Speed = '8x';  Type = 9;  Sectors = 5440 }
+            @{ Speed = '6x';  Type = 18; Sectors = 13170 }
+        ) {
+            ConvertTo-WriteSpeedSectors -Speed $Speed -MediaType $Type | Should -Be $Sectors
+        }
+
+        It 'asked for twice what was meant before this was fixed' {
+            # Typing 8x used to send 1200 to SetWriteSpeed, and 1200 sectors a
+            # second is 16x. On the discs in question that is above what they
+            # are rated for, and a CD-RW has a maximum as well as a minimum.
+            ConvertTo-WriteSpeedSectors -Speed '8x' -MediaType 2 | Should -Not -Be 1200
+        }
+
+        It 'comes back to where it started, for <Speed> on media type <Type>' -ForEach @(
+            @{ Speed = '4x';  Type = 2 }
+            @{ Speed = '10x'; Type = 3 }
+            @{ Speed = '8x';  Type = 9 }
+            @{ Speed = '6x';  Type = 18 }
+        ) {
+            $sectors = ConvertTo-WriteSpeedSectors -Speed $Speed -MediaType $Type
+            "$(ConvertTo-SpeedMultiple $sectors $Type)x" | Should -Be $Speed
+        }
+
+        It 'passes a bare number through, because that is already the unit' {
+            ConvertTo-WriteSpeedSectors -Speed '750' -MediaType 3 | Should -Be 750
+        }
+
+        It 'says what it wanted when it cannot read the speed' {
+            { ConvertTo-WriteSpeedSectors -Speed 'fast' -MediaType 2 } |
+                Should -Throw -ExpectedMessage '*sectors per second*'
+        }
+    }
+}
+
 Describe 'Telling somebody how long a burn will take' -Tag 'Unit' {
 
     # Still worth knowing before a burn starts, even now that the write reports
@@ -369,33 +473,48 @@ Describe 'Telling somebody how long a burn will take' -Tag 'Unit' {
     # anybody has committed a disc. An expected wait is tolerable; an
     # unexplained one looks like a hang.
 
-    It 'is in the right place against the only real burn there has been' {
-        # 241.7 MB to a CD-R took 93 seconds all in, at the drive's own speed.
-        $at24 = Get-BurnEstimateSeconds -Bytes 253458944 -SpeedKb 3599 -MediaType 2
+    It 'is in the right place against the first real burn there was' {
+        # 241.7 MB to a CD-R took 93 seconds all in, at the drive's own speed,
+        # which on a 24x writer is 1800 sectors a second.
+        $at24 = Get-BurnEstimateSeconds -Bytes 253458944 -SpeedSectors 1800 -MediaType 2
         $at24 | Should -BeGreaterThan 93 -Because 'an estimate that runs under looks like a hang'
         $at24 | Should -BeLessThan 150   -Because 'and one that runs far over is not an estimate'
     }
 
+    It 'is in the right place against a real burn of a whole disc' {
+        # The one that caught the unit being wrong. 690,814,976 bytes of Hollow
+        # Knight went to a CD-RW at the 750 sectors a second the drive offered,
+        # and the whole thing took 496 seconds including closing the disc.
+        #
+        # Read as KB/s, that same 750 put the estimate at about 1,060 seconds,
+        # which is more than twice what the burn really takes. An estimate that
+        # says eighteen minutes for an eight minute job is how somebody decides
+        # the window has hung.
+        $real = Get-BurnEstimateSeconds -Bytes 690814976 -SpeedSectors 750 -MediaType 3
+        $real | Should -BeGreaterThan 496 -Because 'it is meant to lean slow'
+        $real | Should -BeLessThan 700    -Because 'but not by a factor of two'
+    }
+
     It 'takes longer at a slower speed, which is the whole point of choosing one' {
-        $fast = Get-BurnEstimateSeconds -Bytes 253458944 -SpeedKb 3599 -MediaType 2
-        $slow = Get-BurnEstimateSeconds -Bytes 253458944 -SpeedKb 1199 -MediaType 2
+        $fast = Get-BurnEstimateSeconds -Bytes 253458944 -SpeedSectors 1800 -MediaType 2
+        $slow = Get-BurnEstimateSeconds -Bytes 253458944 -SpeedSectors 600 -MediaType 2
         $slow | Should -BeGreaterThan $fast
     }
 
     It 'still allows for finalising when there is almost nothing to write' {
         # Closing a disc writes a lead-in and lead-out whatever is on it, which
         # is why a tiny disc is not instant.
-        Get-BurnEstimateSeconds -Bytes 1MB -SpeedKb 3599 -MediaType 2 | Should -BeGreaterThan 20
+        Get-BurnEstimateSeconds -Bytes 1MB -SpeedSectors 1800 -MediaType 2 | Should -BeGreaterThan 20
     }
 
     It 'says almost nothing is needed when the disc is left open' {
-        $closed = Get-BurnEstimateSeconds -Bytes 1MB -SpeedKb 3599 -MediaType 2 -CloseMedia $true
-        $open   = Get-BurnEstimateSeconds -Bytes 1MB -SpeedKb 3599 -MediaType 2 -CloseMedia $false
+        $closed = Get-BurnEstimateSeconds -Bytes 1MB -SpeedSectors 1800 -MediaType 2 -CloseMedia $true
+        $open   = Get-BurnEstimateSeconds -Bytes 1MB -SpeedSectors 1800 -MediaType 2 -CloseMedia $false
         $open | Should -BeLessThan $closed
     }
 
     It 'gives up rather than inventing a number when the speed is unknown' {
-        Get-BurnEstimateSeconds -Bytes 1GB -SpeedKb 0 | Should -Be 0
+        Get-BurnEstimateSeconds -Bytes 1GB -SpeedSectors 0 | Should -Be 0
         Format-BurnEstimate 0 | Should -Be 'unknown'
     }
 

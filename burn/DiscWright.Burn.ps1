@@ -63,32 +63,69 @@ $script:SectorBytes = 2048
     1x is 150 KB/s and a DVD 1x is 1385 KB/s. Reporting raw KB/s to somebody
     deciding whether to burn at 8x or 24x is not an answer.
 #>
-function Get-SpeedBaseKb([int]$mediaType) {
-    # CD-ROM, CD-R and CD-RW. Everything else in this table is a DVD or better.
-    if ($mediaType -in 1, 2, 3) { return 150.0 }
-    return 1385.0
+<#
+    What 1x is, in the unit IMAPI speaks.
+
+    Every speed in this module comes from or goes to IMAPI, and IMAPI measures
+    speed in SECTORS PER SECOND, not in KB/s. It says so at both ends:
+
+        IWriteSpeedDescriptor::get_WriteSpeed
+            "Write speed of the current media, measured in sectors per second."
+        IDiscFormat2Data::SetWriteSpeed(LONG RequestedSectorsPerSecond, ...)
+            "Requested write speed measured in disc sectors per second."
+
+    These are Microsoft's own numbers, out of imapi2.idl in the Windows SDK,
+    where they have names of their own:
+
+        const ULONG IMAPI_SECTOR_SIZE = 2048;
+        #define IMAPI_SECTORS_PER_SECOND_AT_1X_CD      75
+        #define IMAPI_SECTORS_PER_SECOND_AT_1X_DVD     680
+        #define IMAPI_SECTORS_PER_SECOND_AT_1X_BD      2195
+        #define IMAPI_SECTORS_PER_SECOND_AT_1X_HD_DVD  4568
+
+    This used to divide by 150, the KB/s of a 1x CD, which is exactly twice the
+    75 it should be. So every speed shown was half the truth and every speed
+    asked for was double what was meant. Found on 12 October when a drive
+    offered 750 for a High Speed CD-RW and the application called it 5x, which
+    is not a speed any CD-RW is made in. It is 10x, and the real burns say so:
+    690,814,976 bytes went to a disc in 496 seconds, which is 1.5 MB a second.
+    At the 5x it claimed, the write alone could not have finished in under 900.
+#>
+$script:SectorsAt1x = @{ CD = 75.0; DVD = 680.0; BD = 2195.0; HDDVD = 4568.0 }
+
+function Get-SpeedBaseSectors([int]$mediaType) {
+    # The media type codes are the table at the top of this file.
+    if ($mediaType -in 1, 2, 3)      { return $script:SectorsAt1x.CD }
+    if ($mediaType -in 14, 15, 16)   { return $script:SectorsAt1x.HDDVD }
+    if ($mediaType -in 17, 18, 19)   { return $script:SectorsAt1x.BD }
+    # Everything left is a DVD of some kind, and so is code 12, which is a hard
+    # disk and can never be written to here anyway.
+    return $script:SectorsAt1x.DVD
 }
 
-function ConvertTo-SpeedMultiple([int]$kb, [int]$mediaType) {
-    return [Math]::Round($kb / (Get-SpeedBaseKb $mediaType), 1)
+function ConvertTo-SpeedMultiple([int]$sectors, [int]$mediaType) {
+    return [Math]::Round($sectors / (Get-SpeedBaseSectors $mediaType), 1)
 }
 
 <#
-    Turn "8x" or "1199" into the KB/s the drive wants, for whatever is loaded.
-    A multiple is what the disc is labelled with, so that is what a person has
-    in their hand when they choose.
+    Turn "8x" or "600" into the sectors per second the drive wants, for
+    whatever is loaded. A multiple is what the disc is labelled with, so that is
+    what a person has in their hand when they choose.
+
+    A bare number is passed through untouched, because that is the unit IMAPI
+    takes and somebody who typed one meant it.
 #>
-function ConvertTo-WriteSpeedKb {
+function ConvertTo-WriteSpeedSectors {
     param(
         [Parameter(Mandatory)][string]$Speed,
         [Parameter(Mandatory)][int]$MediaType
     )
     $t = $Speed.Trim()
     if ($t -match '^(?<n>[0-9]+(\.[0-9]+)?)\s*[xX]$') {
-        return [int][Math]::Round([double]$Matches.n * (Get-SpeedBaseKb $MediaType))
+        return [int][Math]::Round([double]$Matches.n * (Get-SpeedBaseSectors $MediaType))
     }
     if ($t -match '^[0-9]+$') { return [int]$t }
-    throw "Cannot read '$Speed' as a write speed. Use a multiple like 8x, or KB/s like 1199."
+    throw "Cannot read '$Speed' as a write speed. Use a multiple like 8x, or sectors per second like 600."
 }
 
 <#
@@ -103,15 +140,20 @@ function ConvertTo-WriteSpeedKb {
 function Get-BurnEstimateSeconds {
     param(
         [Parameter(Mandatory)][long]$Bytes,
-        [Parameter(Mandatory)][int]$SpeedKb,
+        [Parameter(Mandatory)][int]$SpeedSectors,
         [int]$MediaType = 2,
         [bool]$CloseMedia = $true
     )
-    if ($SpeedKb -le 0) { return 0 }
+    if ($SpeedSectors -le 0) { return 0 }
     # Drives rarely hold their rated speed for the whole write, so this is
     # deliberately a little pessimistic. An estimate that runs under is worse
     # than one that runs over: the first looks like a hang.
-    $write = $Bytes / ($SpeedKb * 1024.0) * 1.15
+    # Sectors per second times 2048 bytes a sector, which is IMAPI_SECTOR_SIZE.
+    # This used to be times 1024, against a number that was already twice what
+    # it should have been, so the two mistakes cancelled and the estimate came
+    # out right by luck. They stopped cancelling the moment somebody typed a
+    # speed, because that path built its number the other way round.
+    $write = $Bytes / ($SpeedSectors * 2048.0) * 1.15
     # Calibrated against the one real burn there has been: 241.7 MB to a CD-R
     # on an ASUS DRW-24D5MT took 93 seconds all in, of which roughly 69 was the
     # write itself. One measurement is not a curve, so this is deliberately a
@@ -134,7 +176,7 @@ function Get-WriteSpeeds($fmt, [int]$mediaType) {
     try {
         foreach ($d in $fmt.SupportedWriteSpeedDescriptors) {
             $out += , [pscustomobject]@{
-                Kb       = [int]$d.WriteSpeed
+                Sectors  = [int]$d.WriteSpeed
                 Multiple = ConvertTo-SpeedMultiple ([int]$d.WriteSpeed) $mediaType
                 PureCav  = [bool]$d.RotationTypeIsPureCAV
             }
@@ -144,7 +186,7 @@ function Get-WriteSpeeds($fmt, [int]$mediaType) {
         # honest answer; a guessed one is not.
         Write-Verbose "The drive would not list its write speeds: $($_.Exception.Message)"
     }
-    return , @($out | Sort-Object Kb -Descending)
+    return , @($out | Sort-Object Sectors -Descending)
 }
 
 function Get-MediaTypeName([int]$code) {
@@ -791,11 +833,11 @@ $script:BurnWriteScript = {
     $fmt.Recorder = $recorder
     $fmt.ClientName = 'DiscWright'
     $fmt.ForceMediaToBeClosed = $CloseMedia
-    if ($SpeedKb -gt 0) {
-        try { $fmt.SetWriteSpeed($SpeedKb, $false) }
+    if ($SpeedSectors -gt 0) {
+        try { $fmt.SetWriteSpeed($SpeedSectors, $false) }
         catch {
-            Write-Warning ("The drive would not take $SpeedText ($SpeedKb KB/s), so its own choice is used. " +
-                           "It offers: $Speeds")
+            Write-Warning ("The drive would not take $SpeedText ($SpeedSectors sectors/s), so its own " +
+                           "choice is used. It offers: $Speeds")
         }
     }
 
@@ -990,15 +1032,15 @@ function Write-IsoToDisc {
     # so nothing posted to it gets painted either. Writing over there and
     # watching from here is the only arrangement in which the bar can move at
     # all, and it is why the main window no longer freezes for ten minutes.
-    $speedKb = 0
-    if ($Speed) { $speedKb = ConvertTo-WriteSpeedKb -Speed $Speed -MediaType $target.MediaType }
+    $speedSectors = 0
+    if ($Speed) { $speedSectors = ConvertTo-WriteSpeedSectors -Speed $Speed -MediaType $target.MediaType }
 
     $sink = New-BurnProgressSink
     $started = Get-Date
     $job = Start-BurnRunspace $script:BurnWriteScript @{
         RecorderId = $target.Id
         IsoPath    = $iso.FullName
-        SpeedKb    = $speedKb
+        SpeedSectors = $speedSectors
         CloseMedia = $CloseMedia
         Sink       = $sink
         HookType   = [DiscWright.BurnProgressHook]
