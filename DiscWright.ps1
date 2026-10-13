@@ -2472,7 +2472,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
 <html>
 <head>
 <hta:application id="app" applicationname="%%APPNAME%%" border="none" caption="no"
-  showintaskbar="yes" singleinstance="yes" sysmenu="no" scroll="no" selection="no"
+  showintaskbar="yes" singleinstance="%%SINGLE%%" sysmenu="no" scroll="no" selection="no"
   contextmenu="no" innerborder="no" maximizebutton="no" minimizebutton="no"
   icon="%%ICONFILE%%" />
 <title>%%TITLE%%</title>
@@ -4138,10 +4138,30 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     $appName = 'DiscMenu_' + (($cfg.GameName -replace '[^A-Za-z0-9]','') )
     if ([string]::IsNullOrWhiteSpace($appName)) { $appName = 'DiscMenu' }
     if ($cfg.Preview) { $appName += '_Preview' }
+    # The disc's own menu stays single instance: double-clicking Start Here twice
+    # should bring the menu forward, not open a second copy of it.
+    #
+    # The preview must not, and this was reported as a bug: "changing background
+    # multiple times does not update the background in the preview menu". Every
+    # preview of one disc got the same applicationname, so the second Preview was
+    # not a launch at all. Windows refocused the window already on screen, which
+    # was still showing the background from the first one. Measured, two launches
+    # four seconds apart with a different bg.png behind each:
+    #
+    #   singleinstance=yes   first loaded bg of 2596 bytes
+    #                        (the second launch loaded nothing at all)
+    #   singleinstance=no    first loaded bg of 2596 bytes
+    #                        second loaded bg of 373547 bytes
+    #
+    # Pressing Preview means "show me what it looks like now", so a new window
+    # opens every time. New-PreviewMenu closes the last one first, so they do not
+    # pile up across an evening of nudging the artwork.
+    $single = if ($cfg.Preview) { 'no' } else { 'yes' }
     # The taskbar icon is cached by path too, so it follows the disc's icon name.
     $iconFile = if ($cfg.IconName) { $cfg.IconName } else { 'disc.ico' }
     $vals = @{
         APPNAME=$appName; ICONFILE=(ConvertTo-HtmlText $iconFile); PREVIEW=$previewFlag
+        SINGLE=$single
         STAGEBORDER=$stageBorder; BTNBORDER=$btnBorder; TITLE=(ConvertTo-HtmlText $cfg.GameName)
         PANELLEFT="$panelLeft"; GAMES=$gamesJs; BTNS=$btnsJs
         MANUAL=(ConvertTo-JsString $cfg.ManualFile); MUSIC=$musicJs
@@ -5099,7 +5119,8 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
 # when you start a second disc.
 $state = @{ Games=@(); IconPath=$null; IconIsIco=$false; BgPath=$null; MusicFile=$null; ManualPath=$null; ExtrasPath=$null; ExtraItems=@()
             CoverPath=$null; DiscArtPath=$null
-            LabelSeededFrom=$null; LastGameBrowse=$null; LastFileBrowse=$null }
+            LabelSeededFrom=$null; LastGameBrowse=$null; LastFileBrowse=$null
+            PreviewProc=$null }
 
 # One game per disc is still the common case, so the disc layout, the UI and the
 # menu are unchanged for it. Only sizing, the build's copy step and the menu need
@@ -6120,6 +6141,24 @@ function Update-ActionButtons {
                                   else{'Leave blank to use the disc label from step 2'}))
 }
 
+# Shuts the preview window this app opened, and nothing else. The handle comes
+# from Start-Process -PassThru, so no other mshta on the machine can be caught by
+# it: somebody may well have a disc menu of their own open while they work.
+#
+# CloseMainWindow first, because that is a window closing normally and an HTA
+# gets to run its own unload. Kill only if it does not take, which it will not if
+# a script error dialog is sitting on top of it.
+function Close-PreviewWindow {
+    $p = $state.PreviewProc
+    $state.PreviewProc = $null
+    if (-not $p) { return }
+    try {
+        if ($p.HasExited) { return }
+        [void]$p.CloseMainWindow()
+        if (-not $p.WaitForExit(2000)) { $p.Kill() }
+    } catch { }
+}
+
 # Renders the CURRENT settings into a temp folder so look changes can be checked
 # without a rebuild. Install/Manual/Extras are inert there - the game files are not
 # in the preview folder - but Play still works, since it finds the game via the registry.
@@ -6132,6 +6171,11 @@ function New-PreviewMenu {
     $btns=@(); if($cbPlay.Checked){$btns+='Play'}; if($cbInst.Checked){$btns+='Install'}
     if($cbMan.Checked){$btns+='Manual'}; if($cbExtra.Checked){$btns+='Extras'}; if($cbExit.Checked){$btns+='Exit'}
     if ($btns.Count -eq 0) { Show-Warn "Tick at least one menu button first (step 4)."; return $null }
+
+    # Before the folder is wiped, not after: an open preview is reading the very
+    # files about to be deleted. After the guards above, so a preview refused for
+    # having no buttons ticked does not shut the window being looked at.
+    Close-PreviewWindow
 
     $prev = Join-Path ([IO.Path]::GetTempPath()) 'DiscWrightPreview'
     if (Test-Path $prev) { Remove-Item $prev -Recurse -Force -EA SilentlyContinue }
@@ -7868,7 +7912,10 @@ $btnPreview.Add_Click({
     $h = New-PreviewMenu
     if (-not $h) { return }
     & $log 'Preview built from the current settings (Install/Manual do nothing in preview).'
-    Start-Process mshta.exe "`"$h`""
+    # Kept so the next Preview can close this one. Without the handle the only way
+    # to find the window again is to go looking through every mshta on the machine,
+    # and one of those may be a disc menu somebody is using.
+    $state.PreviewProc = Start-Process mshta.exe "`"$h`"" -PassThru
 })
 $txtOut.Add_TextChanged({ Update-ActionButtons })
 $btnFolder.Add_Click({

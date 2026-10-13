@@ -1101,6 +1101,116 @@ Describe 'Previewing the menu' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         Test-CtlEnabled $script:Win '*BUILD ISO' | Should -BeTrue
     }
 }
+Describe 'Previewing twice in a row' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # Reported as "changing background multiple times does not update the
+    # background in the preview menu". The background was never the problem.
+    # The menu carried singleinstance="yes" keyed on applicationname, every
+    # preview of one disc was handed the same name, and so the second Preview
+    # was not a launch: Windows brought the window already on screen to the
+    # front, and that window was still drawn with the first background.
+    #
+    # Which is why this presses the one button twice and changes nothing in
+    # between. The defect is the second window not existing, and the only place
+    # that is visible is here - the logic suite can read what the generated menu
+    # asks for, and cannot watch Windows decide what to do about it.
+
+    BeforeAll {
+        $script:App = Start-DiscWright -AppPath $script:AppPath
+        $script:Win = $script:App.Window
+        $script:MshtaBefore = @(Get-Process mshta -ErrorAction SilentlyContinue |
+                                ForEach-Object { $_.Id })
+
+        # Preview needs the menu ticked and a background chosen. Reopening the
+        # fixture supplies both, the same way the block above does.
+        Set-CtlText -Ctl (Get-BoxAfter $script:Win '6)  Output folder*') -Text $script:FancyOut
+        Invoke-CtlNamed $script:Win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $script:Win | Out-Null
+        Start-Sleep -Seconds 2
+
+        # Anything this block started and has not already accounted for. Never
+        # every mshta on the machine: one of them may be a disc menu the person
+        # at the keyboard is using.
+        function Invoke-PreviewPress([int[]]$Ignore) {
+            # The preview that is already up owns the foreground, and the driver
+            # refuses to click a window that is not in front - rightly, because
+            # a click is a click at a screen coordinate and would otherwise land
+            # in the preview. Somebody pressing Preview a second time clicks the
+            # app window to get to the button, so this does the same.
+            $null = Set-WindowFocus $script:Win
+            Invoke-CtlNamed $script:Win 'Preview menu' | Out-Null
+            for ($i = 0; $i -lt 60; $i++) {
+                $new = @(Get-Process mshta -ErrorAction SilentlyContinue |
+                         Where-Object { $script:MshtaBefore -notcontains $_.Id -and
+                                        $Ignore -notcontains $_.Id })
+                if ($new.Count) { return $new[0] }
+                Start-Sleep -Milliseconds 250
+            }
+            return $null
+        }
+
+        $script:FirstPrev = Invoke-PreviewPress @()
+        Start-Sleep -Seconds 3
+        $script:SecondPrev = $null
+        $script:SecondPrevWin = $null
+        if ($script:FirstPrev) {
+            $script:SecondPrev = Invoke-PreviewPress @($script:FirstPrev.Id)
+        }
+        if ($script:SecondPrev) {
+            $script:SecondPrevWin = Wait-AnyWinForProcess -ProcessId $script:SecondPrev.Id -TimeoutSec 20
+        }
+        Start-Sleep -Seconds 2
+        $script:SecondPrevKids = @()
+        if ($script:SecondPrevWin) {
+            $all = $script:SecondPrevWin.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.Condition]::TrueCondition)
+            for ($i = 0; $i -lt $all.Count; $i++) {
+                try { $n = $all.Item($i).Current.Name; if ($n) { $script:SecondPrevKids += $n } } catch {}
+            }
+        }
+        $script:PrevStillUp = @(Get-Process mshta -ErrorAction SilentlyContinue |
+                                Where-Object { $script:MshtaBefore -notcontains $_.Id }).Count
+    }
+
+    AfterAll {
+        Get-Process mshta -ErrorAction SilentlyContinue |
+            Where-Object { $script:MshtaBefore -notcontains $_.Id } |
+            ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+        Stop-DiscWright $script:App; $script:App = $null
+    }
+
+    It 'opens a preview the first time' {
+        $script:FirstPrev | Should -Not -BeNullOrEmpty
+    }
+
+    It 'opens a second one rather than refocusing the first' {
+        # This is the bug. Before the fix there was no second process at all,
+        # because singleinstance="yes" and a shared applicationname made the
+        # second launch a request to bring the first window forward.
+        $script:SecondPrev | Should -Not -BeNullOrEmpty
+        $script:SecondPrev.Id | Should -Not -Be $script:FirstPrev.Id
+    }
+
+    It 'and the second one really puts a window on screen' {
+        $script:SecondPrevWin | Should -Not -BeNullOrEmpty
+    }
+
+    It 'with no script error in it' {
+        $script:SecondPrevKids | Should -Not -Contain 'Script Error'
+    }
+
+    It 'closes the preview it is replacing' {
+        # Otherwise they pile up: one window per nudge of the artwork, all
+        # showing something slightly out of date.
+        $script:FirstPrev.Refresh()
+        $script:FirstPrev.HasExited | Should -BeTrue
+    }
+
+    It 'leaves exactly one preview standing' {
+        $script:PrevStillUp | Should -Be 1
+    }
+}
 Describe 'Driving the menu of a disc with two games' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     # The block above opens the menu and stops: a window, no script error, the
