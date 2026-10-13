@@ -10752,7 +10752,7 @@ Describe 'Installing a game off five discs, with the discs really changing' -Tag
         $script:SwapRestore = Join-Path $script:SwapWork 'restore'
         $menu = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
         $lifted = 'setRows', 'setDiscIn', 'setNow', 'setNeedsDisc', 'setPath', 'setDefaultDir',
-                  'setJoins', 'setJoinDone', 'setStartJob', 'setWaitJob', 'setJobCode', 'setClock',
+                  'setJoins', 'setJoinDone', 'setStartJob', 'setWaitJob', 'setDone', 'setJobCode', 'setClock',
                   'setJoinAll', 'setJoinStep',
                   'setQuote', 'setScan', 'setMine', 'setMineBytes', 'setSetBytes',
                   'setCopyCmd', 'setMakeDir', 'setRoomFor', 'setRoomForAll', 'setRoomNeeding',
@@ -10958,12 +10958,14 @@ Describe 'Running a command without a window and without a pipe to fill' -Tag 'U
                 'var SETJOBN = 0, SETSTARTED = 0;'
                 (Get-JsFn9 $script:JobSrc 'setQuote')
                 (Get-JsFn9 $script:JobSrc 'setStartJob')
+                (Get-JsFn9 $script:JobSrc 'setDone')
                 (Get-JsFn9 $script:JobSrc 'setWaitJob')
                 (Get-JsFn9 $script:JobSrc 'setJobCode')
                 'var t0 = new Date();'
                 ('var job = setStartJob(' + (ConvertTo-Json $command) + ');')
                 'WScript.Echo("flag=" + job.flag);'
-                'setWaitJob(job, function(){'
+                'setWaitJob(job, function(c){'
+                '  WScript.Echo("code=" + c);'
                 '  WScript.Echo("seconds=" + Math.round((new Date() - t0) / 1000));'
                 '  WScript.Echo("flagleft=" + (fso.FileExists(job.flag) ? "yes" : "no"));'
                 '});'
@@ -11002,6 +11004,62 @@ Describe 'Running a command without a window and without a pipe to fill' -Tag 'U
             [int]$r['seconds'] | Should -BeLessThan 170
         }
 
+        It 'does not believe a flag that has nothing in it yet' {
+            # Not the fault that bit us, and worth having anyway. Held open
+            # by cmd the flag was not empty, it was size 4 and refused the
+            # read; the rename is what fixes that. What this covers is the one
+            # case a rename cannot speak for, a flag that turns up genuinely
+            # empty, which the old code would have taken as a finished job.
+            $js = @(
+                'var fso = new ActiveXObject("Scripting.FileSystemObject");'
+                (Get-JsFn9 $script:JobSrc 'setDone')
+                ('var dir = ' + (ConvertTo-Json $script:JobDir) + ';')
+                'var absent = fso.BuildPath(dir, "nothing.done");'
+                'var blank  = fso.BuildPath(dir, "blank.done");'
+                'var full   = fso.BuildPath(dir, "full.done");'
+                'fso.CreateTextFile(blank, true).Close();'
+                'var w = fso.CreateTextFile(full, true); w.Write("0"); w.Close();'
+                'WScript.Echo("absent=" + setDone({flag:absent}));'
+                'WScript.Echo("blank=" + setDone({flag:blank}));'
+                'WScript.Echo("full=" + setDone({flag:full}));'
+            )
+            $f = Join-Path $script:JobDir 'done.js'
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            $out = (@(& $script:CsJob //Nologo //E:JScript $f 2>&1) -join ' ')
+            $out | Should -Match 'absent=false'
+            $out | Should -Match 'blank=false' -Because 'an empty flag is a job that has not finished'
+            $out | Should -Match 'full=true'
+        }
+
+        It 'writes the flag under another name and renames it into place' {
+            # Which is what makes the question above answerable at all: a flag
+            # that only ever appears complete. A rename inside one directory is
+            # a single directory operation, so there is no half-written flag to
+            # read and no handle still held on it.
+            $fn = Get-JsFn9 $script:JobSrc 'setStartJob'
+            $fn | Should -Match ([regex]::Escape('setQuote(flag+".part")'))
+            $fn | Should -Match ([regex]::Escape('move /y'))
+            # And the redirection must not still be pointed at the flag itself.
+            $fn | Should -Not -Match ([regex]::Escape('errorlevel%> "+setQuote(flag)'))
+        }
+
+        It 'leaves no temporary flag behind either' {
+            $r = Invoke-JobJs 'echo hello'
+            $r['flagleft'] | Should -Be 'no'
+            Test-Path -LiteralPath ($r['flag'] + '.part') | Should -BeFalse -Because 'the rename consumes it'
+        }
+
+        It 'reads the exit code the command really gave, after the rename' {
+            # The rename must not swallow the code on its way through. 3 rather
+            # than 1, so a stray "something failed" cannot pass for it.
+            # 'cmd /c exit 3' rather than 'exit /b 3': exit /b ends the whole
+            # command line, so the rename after it never runs, the flag never
+            # appears, and the job waits out the timeout. Found by writing it
+            # the other way first.
+            $r = Invoke-JobJs 'cmd /c exit 3'
+            $r['code'] | Should -Be '3'
+        }
+
         It 'tidies up the file it waited on' {
             $r = Invoke-JobJs 'echo hello'
             $r['flagleft'] | Should -Be 'no'
@@ -11025,7 +11083,11 @@ Describe 'Running a command without a window and without a pipe to fill' -Tag 'U
         It 'runs hidden, and does not wait on the call' {
             # 0 is hidden. false is "do not block", because blocking here is
             # what put "Stop running this script?" on screen in the first place.
-            $script:JobSrc | Should -Match ([regex]::Escape('sh.Run("cmd /c ("+cmd+") & call echo %^errorlevel%> "+setQuote(flag),0,false)'))
+            # Two pieces now: the code goes to a temporary name and is renamed
+            # onto the flag, so the call spans a line break in the source.
+            $fn = Get-JsFn9 $script:JobSrc 'setStartJob'
+            $fn | Should -Match ([regex]::Escape('sh.Run("cmd /c ("+cmd+") & call echo %^errorlevel%> "+setQuote(flag+".part")'))
+            $fn | Should -Match ([regex]::Escape('setQuote(flag),0,false)'))
         }
 
         It 'quotes the flag file, and keeps the ampersand outside the quotes' {
@@ -11184,7 +11246,11 @@ Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
         # Exec was the first answer and it carried two bugs: a console window
         # on top of the menu, and a pipe nobody reads. What the second one did
         # to a real install is a Describe of its own further down.
-        $script:AllSrc | Should -Match ([regex]::Escape('sh.Run("cmd /c ("+cmd+") & call echo %^errorlevel%> "+setQuote(flag),0,false)'))
+        # Checked in two pieces, because the exit code goes to a temporary name
+        # and is renamed onto the flag, so the call spans a line break now.
+        $script:AllSrc | Should -Match ([regex]::Escape('sh.Run("cmd /c ("+cmd+") & call echo %^errorlevel%> "+setQuote(flag+".part")'))
+        $script:AllSrc | Should -Match ([regex]::Escape('setQuote(flag),0,false)'))
+        $script:AllSrc | Should -Not -Match 'Run\([^)]*,0,true\)'
         $script:AllSrc | Should -Not -Match ([regex]::Escape('.Exec(setCopyCmd'))
     }
 
@@ -11195,7 +11261,14 @@ Describe 'Joining a big file without the window seizing up' -Tag 'Unit' {
     It 'still waits where there is no window, so the suite can run it' {
         # cscript has no window and no timer. Without this the tests would
         # exercise a path the disc never takes, or not run at all.
-        $script:AllSrc | Should -Match ([regex]::Escape('while(!fso.FileExists(job.flag)){ WScript.Sleep(50); }'))
+        #
+        # Both branches ask setDone rather than fso.FileExists: a flag that is
+        # present and not finished is what the old code believed, and asking
+        # the easier question in two separate places is how one of them would
+        # have been left behind.
+        $script:AllSrc | Should -Match ([regex]::Escape('while(!setDone(job)){ WScript.Sleep(50); }'))
+        $script:AllSrc | Should -Match ([regex]::Escape('if(setDone(job)){ after(setJobCode(job)); return; }'))
+        $script:AllSrc | Should -Not -Match ([regex]::Escape('fso.FileExists(job.flag)){ WScript.Sleep'))
     }
 
     It 'deletes the pieces only after the finished file checks out' {
@@ -11314,7 +11387,7 @@ Describe 'Checking a disc against its own checksum list' -Tag 'Unit' {
                 'function show(){}'
                 'function setSay(m, good){ WScript.Echo((good ? "GOOD:" : "BAD:") + m); }'
             )
-            foreach ($fn in 'setQuote', 'setStartJob', 'setWaitJob', 'setJobCode', 'setClock',
+            foreach ($fn in 'setQuote', 'setStartJob', 'setWaitJob', 'setDone', 'setJobCode', 'setClock',
                              'discSums', 'setCheckRun', 'discCheck') { $js += (Get-SumJs $fn) }
             $js += 'discCheck();'
             $f = Join-Path $script:Sandbox ('dc_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
@@ -12404,6 +12477,7 @@ Describe 'The disc menu copying without holding the script engine shut' {
                 (Get-JsFn3 $script:MenuSrc 'setCopyCmd')
                 (Get-JsFn3 $script:MenuSrc 'setStartJob')
                 (Get-JsFn3 $script:MenuSrc 'setWaitJob')
+                (Get-JsFn3 $script:MenuSrc 'setDone')
                 (Get-JsFn3 $script:MenuSrc 'setJobCode')
                 (Get-JsFn3 $script:MenuSrc 'setClock')
                 (Get-JsFn3 $script:MenuSrc 'setCopyStep')

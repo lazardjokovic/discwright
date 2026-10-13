@@ -3031,21 +3031,63 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
                            "dwjob"+(++SETJOBN)+"_"+(new Date()).getTime()+
                            "_"+Math.floor(Math.random()*1000000)+".done");
     try{ if(fso.FileExists(flag)) fso.DeleteFile(flag); }catch(ex){}
+    try{ if(fso.FileExists(flag+".part")) fso.DeleteFile(flag+".part"); }catch(ex1){}
     if(!SETSTARTED){ SETSTARTED=new Date(); }
     if(typeof setTick=="function"){ setTick(); }
-    sh.Run("cmd /c ("+cmd+") & call echo %^errorlevel%> "+setQuote(flag),0,false);
+    // Written under another name and renamed into place, because a redirection
+    // creates its file the instant it OPENS it. The old line redirected
+    // straight onto the flag, so the flag existed, and was held open by cmd,
+    // before the exit code was in it. Measured by holding that window open on
+    // purpose, with the redirection wrapped around a group that takes two
+    // seconds:
+    //
+    //   while it runs       exists=True  size=4  read=refused
+    //   after it finishes   exists=True  size=4  text='3'
+    //
+    // So a poll landing in that window does not read an empty file. It is
+    // refused the read altogether, setJobCode's catch returns its default of
+    // 8, and setCopyStep reads 8 as a failure. The delete is refused too,
+    // which leaves the flag behind in TEMP.
+    //
+    // Which is to say a copy that worked was reported as
+    //
+    //     1 of 2 files would not copy from this disc.
+    //
+    // Measured in the suite, which runs several of these at once: roughly one
+    // run in three. Rare enough on one disc to read as a fluke, and a fluke
+    // that tells somebody their disc is scratched when it is not.
+    //
+    // A rename inside one directory is a single directory operation, so the
+    // flag never exists half written, and nothing holds a handle to it by the
+    // time it has the name the waiter is looking for.
+    sh.Run("cmd /c ("+cmd+") & call echo %^errorlevel%> "+setQuote(flag+".part")+
+           " & move /y "+setQuote(flag+".part")+" "+setQuote(flag),0,false);
     return {flag:flag};
   }
   // Waited for the same way everything else here is waited for: on a timer
   // where there is a window to keep alive, and in place where there is not.
   // cscript has no timer, so the suite runs the second branch and a disc runs
   // the first.
+  // Finished, rather than merely present.
+  //
+  // The rename is what does the work. A size check alone would not have caught
+  // the old fault at all: while cmd held the file open the size was already 4,
+  // and the read was refused rather than empty. What the size adds is the one
+  // case the rename cannot speak for, a flag that arrives genuinely empty, and
+  // it costs nothing to ask.
+  //
+  // Asked through a function because both branches of setWaitJob need the same
+  // answer, and the old code asked the easier question in two separate places.
+  function setDone(job){
+    try{ return fso.FileExists(job.flag) && fso.GetFile(job.flag).Size>0; }
+    catch(ex){ return false; }
+  }
   function setWaitJob(job,after){
-    if(fso.FileExists(job.flag)){ after(setJobCode(job)); return; }
+    if(setDone(job)){ after(setJobCode(job)); return; }
     if(typeof window!="undefined"&&window.setTimeout){
       window.setTimeout(function(){ setWaitJob(job,after); },400);
     } else {
-      while(!fso.FileExists(job.flag)){ WScript.Sleep(50); }
+      while(!setDone(job)){ WScript.Sleep(50); }
       after(setJobCode(job));
     }
   }
@@ -3061,6 +3103,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       if(!isNaN(n)) code=n;
     }catch(ex){ code=8; }
     try{ fso.DeleteFile(job.flag); }catch(ex2){}
+    // Consumed by the rename in the normal case. Left behind only if the
+    // command never ran at all, and TEMP is not a place to leave litter.
+    try{ if(fso.FileExists(job.flag+".part")) fso.DeleteFile(job.flag+".part"); }catch(ex3){}
     return code;
   }
   // How long whatever is running has been running. Said out loud because the
