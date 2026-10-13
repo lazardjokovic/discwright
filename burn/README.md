@@ -28,8 +28,25 @@ Write-IsoToDisc -IsoPath path\to.iso -Drive D -WhatIf
 ```
 
 It refuses, by name, when there is no disc, when the disc is not blank, when the
-media cannot be written, and when the ISO is larger than the free space. This
-never erases rewritable media and never appends to a disc.
+media cannot be written, and when the ISO is larger than the free space. It
+never appends to a disc.
+
+It will erase a rewritable disc, and only when asked:
+
+```powershell
+$t = (Get-EraseOffer (Get-BurnerInfo)).Target
+Clear-DiscMedia -Target $t          # quick erase, well under a minute
+```
+
+Nothing erases on its own initiative. `Get-EraseOffer` answers whether there is
+one disc here that an erase would make usable, refusing to choose when two
+could be; the caller asks the person holding it; `Clear-DiscMedia` does it. A
+quick erase blanks the table of contents and the drive writes the whole disc
+afterwards. `-Full` rewrites the surface and takes twenty minutes on a CD-RW,
+which is for a disc being given away rather than for reusing a test disc.
+
+`Test-DiscErasable` is the decision on its own, with no drive involved, which is
+why there are tests for it.
 
 ## Afterwards
 
@@ -110,6 +127,15 @@ A third CD-R, 2026-10-01, the non-GOG disc burned through the app's button:
 
 Still open:
 
+- [ ] **A rewritable disc erased and then written, from the app.** The one half
+      of the erase no test can reach: `Test-DiscErasable` and `Get-EraseOffer`
+      are driven by invented drives, and `Clear-DiscMedia` needs a drive and a
+      disc that is meant to be spent. What to check, with a CD-RW that has
+      something on it: Burn to disc offers the erase by name rather than
+      refusing; the window counts seconds while it runs; the burn that follows
+      sees the full capacity rather than what was free before; and the same
+      offer appears mid-set, with the walk carrying on to the next disc after it
+      rather than stopping.
 - [ ] A disc burned here read in a different machine.
 - [ ] A multi-disc set, which 700 MB CD-Rs make cheap to test: a few GB spans
       several discs and each burns in minutes rather than most of an hour.
