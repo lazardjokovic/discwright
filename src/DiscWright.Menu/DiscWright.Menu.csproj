@@ -10,4 +10,13 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+
+  <ItemGroup>
+    <!-- Carried inside the assembly so the writer cannot be handed a stale copy
+         from beside the exe, and so the file the cscript tests run is the file
+         that ends up on the disc. A test asserts the two are identical. -->
+    <EmbeddedResource Include="menu.js" />
+    <EmbeddedResource Include="menu.hta.template" />
+  </ItemGroup>
+
 </Project>

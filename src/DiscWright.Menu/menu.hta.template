@@ -1,0 +1,90 @@
+<html>
+<head>
+<title>%%TITLE%%</title>
+<hta:application
+    id="discwright"
+    applicationname="%%APPNAME%%"
+    singleinstance="%%SINGLE%%"
+    border="thin"
+    borderstyle="normal"
+    caption="yes"
+    maximizebutton="no"
+    minimizebutton="yes"
+    scroll="no"
+    showintaskbar="yes"
+    innerborder="no"
+    contextmenu="no"
+    selection="no" />
+
+<script language="JScript" src="menu.js"></script>
+
+<script language="JScript">
+// Everything that differs from one disc to the next. menu.js is identical on
+// every disc and nothing is substituted into it; this block is the only
+// generated script on the disc.
+var DISC = %%DATA%%;
+
+// Sized HERE, in the head, before the body exists.
+//
+// Done from body onload instead, mshta shows its own default window first and
+// only then resizes: measured on a real CD-RW at 4793 ms showing 1440x753, then
+// 7402 ms before the menu appeared at 760x480. Two and a half seconds of a
+// wrong-sized empty window, every time a disc went in.
+window.resizeTo(760, 480);
+window.moveTo(
+    Math.max(0, Math.floor((screen.availWidth - 760) / 2)),
+    Math.max(0, Math.floor((screen.availHeight - 480) / 2)));
+
+function start() {
+    document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);
+    document.getElementById("gameName").innerText = DISC.game;
+
+    var wanted = whatIsStillWanted(DISC.discsCopied, DISC.discsInSet);
+    document.getElementById("stillWanted").innerText = wanted;
+    document.getElementById("stillWanted").style.display = wanted === "" ? "none" : "block";
+}
+
+function doExit() {
+    window.close();
+}
+</script>
+
+<style>
+/* Tahoma because it is on every Windows this disc can reach, back to 95. The
+   faces that read better either arrived with Windows 10 or came with Office,
+   and a disc that has to work in ten years cannot ask. */
+body {
+    margin: 0;
+    font-family: Tahoma, sans-serif;
+    background: #0C1316;
+    color: #DFE9EE;
+    overflow: hidden;
+    cursor: default;
+}
+#stage { position: absolute; left: 0; top: 0; width: 760px; height: 480px; }
+#panel { position: absolute; right: 0; top: 0; width: 240px; height: 480px;
+         background: #060E11; padding: 28px 22px; }
+h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5px;
+     text-transform: uppercase; line-height: 20px; }
+.btn { display: block; height: 38px; line-height: 38px; margin-bottom: 9px;
+       padding-left: 14px; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;
+       text-transform: uppercase; color: #CBD6DB; background: #0C1519;
+       border: 1px solid #27353B; text-decoration: none; }
+/* One accent, on one button: whichever is the thing to do next. Everything else
+   is two greys, so the game's own picture is the only colour in the window. */
+.btn.next { background: #103A3E; border-color: #00BEC8; border-left-width: 3px; color: #FFFFFF; }
+#stillWanted { margin-top: 18px; font-size: 11px; line-height: 16px; color: #8FA3AA; }
+</style>
+</head>
+
+<body onload="start()">
+<div id="stage">
+    <div id="panel">
+        <h1 id="gameName"></h1>
+        <a class="btn next" href="#" onclick="doExit(); return false;">%%PRIMARY%%</a>
+        <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
+        <div id="stillWanted"></div>
+    </div>
+</div>
+</body>
+</html>
