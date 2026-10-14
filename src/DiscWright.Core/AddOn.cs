@@ -48,6 +48,38 @@ public sealed partial record AddOn(int BelongsTo, string Path, string Name, long
     /// will not clip it.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The words GOG puts in the name of a thing that is not the game: a
+    /// soundtrack, an artbook, wallpapers.
+    /// </summary>
+    /// <remarks>
+    /// A vocabulary rather than a rule, because there is no marker in the file
+    /// itself. It is used only to ask a question, never to refuse one, so a
+    /// game genuinely called "Artbook Simulator" costs somebody one dialog and
+    /// nothing else.
+    /// </remarks>
+    private static readonly string[] NotTheGame =
+    [
+        "soundtrack", "artbook", "art_book", "wallpaper", "avatars", "avatar",
+        "manual", "bonus", "goodies", "artworks", "ringtones", "soundtracks"
+    ];
+
+    /// <summary>
+    /// Whether a file name looks like something that installs ONTO a game
+    /// rather than a game.
+    /// </summary>
+    /// <remarks>
+    /// A patch is certain, because <c>patch_x_to_y</c> says so outright. The
+    /// rest is a guess from what GOG calls its extras.
+    /// </remarks>
+    public static bool LooksLikeOne(string fileName)
+    {
+        string bare = System.IO.Path.GetFileNameWithoutExtension(fileName);
+
+        return PatchToVersion().IsMatch(bare)
+            || NotTheGame.Any(word => bare.Contains(word, StringComparison.OrdinalIgnoreCase));
+    }
+
     public static string NameFor(string fileName)
     {
         string raw = System.IO.Path.GetFileNameWithoutExtension(fileName);

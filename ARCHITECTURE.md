@@ -669,13 +669,27 @@ Two things make the rule safe:
 
 It takes the desktop for a few minutes and the two sparse folders are asked about rather than built, because copying 10 GB would take the run from minutes to most of an hour and what the window *says* about them is the interesting part.
 
-### What it still shows
+## Two questions the window asks on the way in
 
-**Nine games in one folder come through as one game.** Folder D holds nine GOG downloads under `GAMES/GOG1..9`. Pointing at the parent gives a single game whose files happen to be arranged that way, so the menu offers one button rather than nine. The disc is correct and the menu is thin.
+Both came out of the sweep, and **v1 had already settled both**. Neither is a refusal, because in both cases refusing would be worse than being wrong.
 
-**An add-on with no game is accepted as a game.** Folder R holds only a soundtrack installer, and it becomes a disc with one game on it called after the folder. Nothing is lost, but nothing says it is an add-on either.
+### A folder that holds games rather than being one
 
-Both are recogniser questions rather than builder ones, and neither loses a file.
+Pointing at the folder that *holds* the downloads is the likeliest way to arrive here by mistake. Taking it whole puts every game somebody owns onto one disc entry named after the folder.
+
+`GamesInside.Of` finds the folders beneath it that hold an installer of their own, three deep at most, so that pointing at a drive does not walk the drive. A folder that holds an installer **itself** is a download, not a folder of them, whatever is further down.
+
+**Nothing refuses it**, which is v1's rule and the right one: a real game folder can have an installer buried somewhere too, and turning that away would be worse than taking it whole. The window asks, and says what each answer costs.
+
+Anything sitting **loose** in that folder belongs to none of the games inside it, so it belongs to the disc, and goes on as a loose extra either way. Taking a folder apart must not cost somebody a file: the first version of this silently dropped the `READ ME.txt` from two of the kit's folders.
+
+### Something that installs onto a game, with no game
+
+v1 says it plainly, about the orphan left behind when a game is removed: *a promoted patch shows in the menu as a top-level game, and installing it runs a patch against a game that is not there.* The same is true of one added on its own.
+
+A patch is certain, because `patch_x_to_y` says so outright. The rest is a guess from the words GOG puts in the name of a thing that is not the game, and **it is used only to ask, never to refuse**, so a game genuinely called "Artbook Simulator" costs somebody one dialog and nothing else.
+
+It still goes on if somebody wants it to. It just must not go on in silence.
 
 ## The order to build it in
 

@@ -241,6 +241,30 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void Carries_things_that_belong_to_the_disc_rather_than_to_a_game()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 1000));
+
+        window.AlsoOnTheDisc([@"C:\downloads\READ ME.txt"]);
+
+        // A README sitting loose in a folder of games belongs to none of them,
+        // so it belongs to the disc, and taking the folder apart must not cost
+        // somebody a file.
+        DiscExtras extras = Assert.IsType<DiscExtras>(window.AsAProject().Extras);
+        Assert.Equal([@"C:\downloads\READ ME.txt"], extras.Loose);
+    }
+
+    [Fact]
+    public void Has_no_extras_at_all_when_nothing_was_put_there()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 1000));
+
+        Assert.Null(window.AsAProject().Extras);
+    }
+
+    [Fact]
     public void Will_not_build_with_somewhere_to_put_it_and_nothing_to_put_there()
     {
         MakeADisc window = New();

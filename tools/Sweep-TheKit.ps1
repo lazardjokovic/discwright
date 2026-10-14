@@ -126,18 +126,37 @@ foreach ($folder in $folders) {
             continue
         }
 
-        # Anything the folder held beyond the game.
-        $asked = ChildWindow $window 'WhatElseIsInThere' 4
-        if ($null -ne $asked) {
-            $headline = ById $asked 'Headline' 3
-            $row.AlsoHad = (TextOf $headline) -replace '^There (is|are) ', '' -replace ' in that folder$', ''
+        # Every question it asks on the way in, until it stops asking. A
+        # folder of games becomes nine games, and each of those can have its
+        # own files left behind, so there is no fixed number of these.
+        $asked = @()
 
-            $boxes = $asked.FindAll($Deep, (New-Object System.Windows.Automation.PropertyCondition(
-                $UIA::ControlTypeProperty, [System.Windows.Automation.ControlType]::CheckBox)))
-            $row.AddOns = $boxes.Count
+        foreach ($round in 1..30) {
+            $settle = ChildWindow $window 'WorthAsking' 2
+            if ($null -ne $settle) {
+                $asked += (TextOf (ById $settle 'Headline' 3))
+                # The likely answer, which is the one on the button.
+                Press (ById $settle 'TheLikelyOne' 3)
+                Start-Sleep -Milliseconds 700
+                continue
+            }
 
-            Press (ById $asked 'TakeThem' 3)
-            Start-Sleep -Milliseconds 700
+            $else = ChildWindow $window 'WhatElseIsInThere' 2
+            if ($null -ne $else) {
+                $headline = ById $else 'Headline' 3
+                $asked += (TextOf $headline)
+                Press (ById $else 'TakeThem' 3)
+                Start-Sleep -Milliseconds 700
+                continue
+            }
+
+            break
+        }
+
+        if ($asked.Count -gt 0) {
+            $row.AlsoHad = ($asked | ForEach-Object {
+                $_ -replace '^There (is|are) ', '' -replace ' in that folder$', ''
+            }) -join '; '
         }
 
         # Anything it refused outright shows up here instead.
@@ -212,6 +231,13 @@ foreach ($folder in $folders) {
         $landed = Get-ChildItem $where -Recurse -File
         $row.OnTheDisc = $landed.Count
         $row.AddOns = ($landed | Where-Object { $_.FullName -match '\\Add-ons\\' }).Count
+
+        # One per game, in the menu the disc actually carries, because a WPF
+        # list only builds the rows it can show and nine games on it answer seven.
+        $menu = $landed | Where-Object { $_.Name -eq 'menu.hta' } | Select-Object -First 1
+        if ($null -ne $menu) {
+            $row.Games = ([regex]::Matches((Get-Content $menu.FullName -Raw), ", folder: ")).Count
+        }
         Write-Host "    $($row.Says), $($row.OnTheDisc) files on the disc"
     }
 

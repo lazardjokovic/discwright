@@ -1,0 +1,58 @@
+<!--
+    A question with two answers, where neither is a refusal.
+
+    Both the questions it asks are ones v1 settled: a folder that holds games
+    is never refused, because a real game can have an installer buried in it
+    too, and an add-on with no game is not refused either, only questioned.
+
+    A window of our own rather than MessageBox, because every control here can
+    be found by a test, and a MessageBox button is a Pane with no patterns on
+    it.
+-->
+<Window x:Class="DiscWright.App.WorthAsking"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="DiscWright"
+        SizeToContent="Height"
+        Width="560"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource Page}"
+        FontFamily="{StaticResource Face}"
+        AutomationProperties.AutomationId="WorthAsking">
+
+    <StackPanel Margin="24,20,24,18">
+        <TextBlock Style="{StaticResource Title}"
+                   FontSize="17"
+                   Text="{Binding Headline}"
+                   TextWrapping="Wrap"
+                   AutomationProperties.AutomationId="Headline" />
+
+        <TextBlock Margin="0,8,0,0"
+                   Text="{Binding Because}"
+                   AutomationProperties.AutomationId="Because" />
+
+        <Grid Margin="0,22,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="1"
+                    Content="{Binding TheOtherWay}"
+                    Style="{StaticResource Ordinary}"
+                    Margin="0,0,8,0"
+                    Click="TakeTheOtherWay"
+                    AutomationProperties.AutomationId="TheOtherWay" />
+
+            <Button Grid.Column="2"
+                    Content="{Binding TheLikelyOne}"
+                    Style="{StaticResource TheButton}"
+                    Click="TakeTheLikelyOne"
+                    IsDefault="True"
+                    AutomationProperties.AutomationId="TheLikelyOne" />
+        </Grid>
+    </StackPanel>
+</Window>

@@ -35,6 +35,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private readonly Lock _oneAtATime = new();
     private readonly ObservableCollection<GameFolder> _games = [];
     private readonly List<AddOn> _addOns = [];
+    private readonly List<string> _loose = [];
 
     private string _label = string.Empty;
     private string _outputFolder = string.Empty;
@@ -359,8 +360,27 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Reconsider();
     }
 
+    /// <summary>
+    /// Things that go on the disc without belonging to any game.
+    /// </summary>
+    /// <remarks>
+    /// A README sitting loose in the folder somebody pointed at belongs to the
+    /// disc rather than to one of the games inside it, and would otherwise be
+    /// left behind when that folder is taken apart.
+    /// </remarks>
+    public void AlsoOnTheDisc(IEnumerable<string> paths)
+    {
+        _loose.AddRange(paths);
+        Reconsider();
+    }
+
     /// <summary>The project as it stands, for whoever builds it.</summary>
-    public DiscProject AsAProject() => new(Label, _games, Options, AddOns: _addOns);
+    public DiscProject AsAProject() =>
+        new(Label,
+            _games,
+            Options,
+            Extras: _loose.Count == 0 ? null : new DiscExtras(LooseItems: _loose),
+            AddOns: _addOns);
 
     /// <summary>
     /// Works out everything the window says back, after anything changes.
