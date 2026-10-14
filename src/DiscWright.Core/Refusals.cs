@@ -59,6 +59,26 @@ public static class Refusals
             ],
             new Remedy("Use a larger disc", RemedyKind.ChangeMedium));
 
+    /// <summary>Nothing was chosen at all.</summary>
+    public static Refusal NoFolderWasChosen() =>
+        new("No folder was chosen", "Pick the folder the game was downloaded into.",
+            [],
+            new Remedy("Choose a folder", RemedyKind.PickFolder));
+
+    /// <summary>
+    /// There is no folder at that path.
+    /// </summary>
+    /// <remarks>
+    /// Separate from "that folder is empty" on purpose: a USB stick that has
+    /// been pulled out and a folder somebody emptied are different mistakes,
+    /// and only one of them is worth going to look for the folder again.
+    /// </remarks>
+    public static Refusal ThatFolderIsNotThere(string path) =>
+        new("That folder is not there",
+            $"Nothing was found at {path}. It may have been moved, renamed, or be on a drive that is no longer attached.",
+            [],
+            new Remedy("Choose another folder", RemedyKind.PickFolder));
+
     /// <summary>
     /// The folder holds no setup_*.exe, but there is one inside a "disc"
     /// subfolder, which means this is a disc we built rather than a download.

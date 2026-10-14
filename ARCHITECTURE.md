@@ -318,6 +318,21 @@ The build still succeeded, and the immediate cause is gone: the window reference
 
 So, before 2.0 ships: **run the published exe on this machine, with Smart App Control left on**, because that is what a careful stranger's machine does. If it is refused, the answer is a code signing certificate, which is a cost and a lead time rather than a line of code. It is the same question the disc already faces if a helper binary ever ships on it.
 
+### Later the same day, it blocked the tests as well
+
+The first test that actually *used* `DiscWright.Platform` made the runtime load that assembly, and Code Integrity refused it outright:
+
+```
+System.IO.FileLoadException : Could not load file or assembly 'DiscWright.Platform.dll'.
+An Application Control policy has blocked this file. (0x800711C7)
+```
+
+Nine tests, repeatably, on every run. The other 72 pass, because they stay inside `Core`, and why `Core` is allowed to load while `Platform` is refused is not understood. Both are equally unsigned and built seconds apart.
+
+**So the suite runs on the test VM**, where Smart App Control is in *Evaluation*: it audits and does not block. The same commit passes everything there. Running it here is still worth doing, because the 72 that need no machine are the ones worth running constantly, and they are unaffected.
+
+That split is not a workaround to be embarrassed about. It leaves this machine as the honest answer to the only question that matters at release: **what does a careful stranger's Windows do with an unsigned build of DiscWright?** Today the answer is "refuses to load part of it", and that will not change by itself.
+
 **Do not turn Smart App Control off to make development quieter.** It cannot be turned back on without reinstalling Windows, and a machine that is strict about unsigned code is the most useful test environment this project has.
 
 ## The two machines, as they stand
@@ -330,6 +345,8 @@ Both prepared 2026-10-14.
 | WindowsDesktop runtime | 8.0.31 and 10.0.12 | 10.0.13 |
 | Visual Studio | 18.10.3 | none, and needs none |
 | git | 2.53.0 | 2.55.0 |
+| Smart App Control | **ON, enforcing** | Evaluation, audits only |
+| Runs the whole suite | no, 72 of 81 | **yes** |
 
 Two things came out of preparing them, both worth knowing before the first commit.
 
