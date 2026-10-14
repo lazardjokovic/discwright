@@ -33,4 +33,16 @@ public interface IStageWriter
     /// line of anything that is not expecting one.
     /// </summary>
     void WriteText(string path, string text);
+
+    /// <summary>
+    /// Writes text that AutoRun will read, which is a different thing: the
+    /// system ANSI codepage, and no byte order mark, because AutoRun does not
+    /// understand one.
+    /// </summary>
+    /// <remarks>
+    /// Named for what it is for rather than for its encoding, so nothing in
+    /// Core has to know what a codepage is. What it means on this machine is
+    /// the port's business, and it is not what .NET calls the default.
+    /// </remarks>
+    void WriteAutorunText(string path, string text);
 }

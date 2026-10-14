@@ -20,6 +20,13 @@ public sealed class RecordingWriter : IStageWriter
 
     public List<Written> Texts { get; } = [];
 
+    /// <summary>
+    /// Kept apart from <see cref="Texts"/> on purpose. The two are written in
+    /// different encodings, and a test that could not tell them apart would not
+    /// notice autorun.inf being written the way everything else is.
+    /// </summary>
+    public List<Written> AutorunTexts { get; } = [];
+
     /// <summary>Everything it was asked to create, in the order asked.</summary>
     public IEnumerable<string> Everything =>
         Copies.Select(copy => copy.To).Concat(Texts.Select(text => text.Path));
@@ -32,6 +39,8 @@ public sealed class RecordingWriter : IStageWriter
         Copies.Add(new Copied(source, destination, offset, bytes));
 
     public void WriteText(string path, string text) => Texts.Add(new Written(path, text));
+
+    public void WriteAutorunText(string path, string text) => AutorunTexts.Add(new Written(path, text));
 
     /// <param name="Bytes">Null for a whole file, set for one piece of one.</param>
     public sealed record Copied(string From, string To, long Offset, long? Bytes);

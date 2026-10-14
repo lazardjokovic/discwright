@@ -59,6 +59,33 @@ public static class Refusals
             ],
             new Remedy("Use a larger disc", RemedyKind.ChangeMedium));
 
+    /// <summary>A disc with no name at all.</summary>
+    public static Refusal ADiscNeedsAName() =>
+        new("The disc needs a name",
+            "It is what This PC shows when the disc goes in, and what somebody reads off the printed cover.",
+            [],
+            new Remedy("Name the disc", RemedyKind.FocusField));
+
+    /// <summary>
+    /// The label holds characters the system codepage cannot carry, so AutoRun
+    /// will show something else.
+    /// </summary>
+    /// <remarks>
+    /// Shown as a warning rather than a wall. A disc called "??????? ????"
+    /// still works and still installs, and somebody may genuinely not mind;
+    /// what they must not do is find out afterwards. The surviving text is in
+    /// the figures, because seeing it is what makes the decision obvious.
+    /// </remarks>
+    public static Refusal ThatNameWillNotSurviveOnTheDisc(string label, string surviving) =>
+        new("Windows cannot show that name on a disc",
+            "AutoRun reads a disc's name in this machine's codepage and has no Unicode at all, so this is what "
+                + "This PC will show. The menu, the cover and the files are unaffected: it is only the name on the disc.",
+            [
+                new Figure("you typed", label),
+                new Figure("the disc will say", surviving)
+            ],
+            new Remedy("Rename the disc", RemedyKind.FocusField));
+
     /// <summary>Nothing was chosen at all.</summary>
     public static Refusal NoFolderWasChosen() =>
         new("No folder was chosen", "Pick the folder the game was downloaded into.",
