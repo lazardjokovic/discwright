@@ -25,6 +25,32 @@ public interface IBurnDiscs
         CancellationToken ct);
 }
 
+/// <summary>
+/// Whatever can blank a rewritable disc.
+/// </summary>
+/// <remarks>
+/// Apart from burning, because it is a different act with a different cost:
+/// writing uses up a blank somebody meant to use, and erasing takes away
+/// whatever is already on a disc. <strong>Nothing calls this on its own
+/// initiative.</strong>
+/// </remarks>
+public interface IEraseDiscs
+{
+    Task<Outcome<string>> BlankIt(Recorder disc, IProgress<string>? progress, CancellationToken ct);
+}
+
+/// <summary>Opening and shutting the tray.</summary>
+/// <remarks>
+/// A disc is ejected after writing on purpose, so that whatever reads it next
+/// sees a freshly mounted volume rather than what Windows remembered about the
+/// blank. Shutting it again is how that reading happens without somebody having
+/// to be in the room.
+/// </remarks>
+public interface IWorkTheTray
+{
+    bool ShutIt(Recorder drive);
+}
+
 /// <summary>One drive, and whatever is in it at the moment of asking.</summary>
 /// <param name="Id">What IMAPI calls it, which is not something to show anybody.</param>
 /// <param name="Drive">The letter, with its colon, or empty if it has none.</param>
@@ -68,7 +94,27 @@ public sealed record Recorder(
 /// How many times the drive said anything while it worked, which is worth
 /// keeping even when it worked.
 /// </param>
-public sealed record BurnedDisc(string Drive, int Seconds, int Reports);
+/// <param name="Watched">
+/// Whether the drive took the listener at all.
+/// </param>
+/// <remarks>
+/// <strong>Two different silences, named apart.</strong> A drive that would not
+/// take a listener and a drive that took one and then said nothing both leave a
+/// bar that never moves, and they are different faults. v1 reported neither for
+/// a while, and there was afterwards no way to tell a quiet drive from a
+/// listener that never worked.
+/// </remarks>
+public sealed record BurnedDisc(string Drive, int Seconds, int Reports, bool Watched)
+{
+    /// <summary>What to say about the reporting, which is said every time.</summary>
+    public string AboutTheReporting => (Watched, Reports) switch
+    {
+        (false, _) => "The drive would not take a listener, so nothing could show how far along it was.",
+        (true, 0) => "The drive took the listener and then reported nothing, so the bar could not move.",
+        (true, 1) => "The drive reported once while it wrote.",
+        _ => $"The drive reported {Reports} times while it wrote."
+    };
+}
 
 /// <summary>How far through writing a disc.</summary>
 /// <param name="Doing">What the drive says it is doing.</param>

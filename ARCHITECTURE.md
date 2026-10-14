@@ -756,11 +756,35 @@ For a set, the drive is settled once before the first disc. A set that wanders b
 
 A machine with no burner, or a drive with an empty tray, must not take the program down on its way to telling somebody their disc is ready. Every drive comes back either with what is in it or with why it could not say, never both and never neither. The machine this was written on has two drives, one holding a CD-RW and one empty, and the test suite prints what it found so that a run which quietly found nothing cannot be mistaken for a run that checked something.
 
-### What is not written yet
+### The write
 
-**The write itself.** It needs a COM event sink for progress, which v1 needed compiled C# for as well, and a blank disc to prove on. The shape is settled: the write happens on a thread of its own, the disc is closed so it reads everywhere, and **the drive ejects at the end** so that the check afterwards reads a freshly mounted volume rather than whatever Windows remembered about the blank.
+Done, and proved on a real CD-RW in a real drive: erased, written at 10x in 47 seconds, ejected, and **every file read back off the disc and compared with what was built**. Written is not the same as readable, which is the entire point.
 
-And the check afterwards is the point of all of it. *Written is not the same as readable.*
+The disc is closed, so it reads everywhere rather than only on the machine that wrote it. It is ejected at the end so that whatever reads it next sees a freshly mounted volume rather than what Windows remembered about the blank.
+
+`BurningARealDisc` is the test that does it, and **it spends a disc, so it does nothing unless it is told to**: set `DISCWRIGHT_SPEND_A_DISC` to a drive letter. Left unset, which is every ordinary run and every run on the VM, it says what it would have done and stops. It is a test rather than a script because something nobody can run is something nobody runs.
+
+### Four ways to get a silent progress bar, all of them met
+
+The drive took the listener and reported nothing, three separate times, each for a different reason. Every one of them writes the disc perfectly and leaves a bar that never moves, which is why v1's rule about naming the two silences apart matters so much.
+
+**The number was wrong.** A dispatch interface is called by number, and 0x100 is not it. Both of Windows' burning event interfaces deliver under **0x200**, which is now read out of the type library by a test and checked against the constant the code uses.
+
+**The interface was imported rather than declared.** `ComImport` says *a COM object implements this and we call it*, and here it is the other way about. Marked as imported, the wrapper around our sink does not offer the interface under its own identifier, the drive takes the listener anyway, and nothing is ever called.
+
+**The report was counted after it was read.** A report that arrived and could not be read counted as no report at all, so the burn reported silence while the drive had been talking the whole time. The call is counted first now, and every figure in it is asked for on its own.
+
+**The figures were cast rather than converted.** They come back as thirty-two bit numbers, and casting a boxed one to a wider type through `dynamic` throws rather than widening. Every sector figure came back as nothing, so the bar had phases and no percentage. And `RemainingTime` is its name: there is no `EstimatedRemainingTime` on it, and asking for one throws where nobody is looking.
+
+### Erasing
+
+A quick erase, which blanks the table of contents in well under a minute, rather than a full one, which rewrites the whole surface and takes twenty minutes on a CD-RW. The disc is usable either way.
+
+**Nothing erases on its own initiative**, and it is behind an interface of its own rather than on the burner, because it is a different act with a different cost: writing uses up a blank somebody meant to use, and erasing takes away what is already on a disc.
+
+### Shutting the tray
+
+The drive is asked to shut its own tray so that the check afterwards can happen without somebody being in the room. **A slim drive, and most of the ones in a laptop, cannot**: it has to be pushed. That is an answer and not a fault, and it is said out loud so that a run which is waiting for hands says so.
 
 ## The order to build it in
 
