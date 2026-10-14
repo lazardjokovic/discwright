@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DiscWright.App/DiscWright.App.csproj" />
+    <Project Path="src/DiscWright.Burning/DiscWright.Burning.csproj" />
+    <Project Path="src/DiscWright.Core/DiscWright.Core.csproj" />
+    <Project Path="src/DiscWright.Imaging/DiscWright.Imaging.csproj" />
+    <Project Path="src/DiscWright.Menu/DiscWright.Menu.csproj" />
+    <Project Path="src/DiscWright.Platform/DiscWright.Platform.csproj" />
+    <Project Path="src/DiscWright.Printing/DiscWright.Printing.csproj" />
+    <Project Path="src/DiscWright.Staging/DiscWright.Staging.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DiscWright.Tests/DiscWright.Tests.csproj" />
+  </Folder>
+</Solution>

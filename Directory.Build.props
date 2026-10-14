@@ -1,0 +1,26 @@
+<Project>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      A warning nobody fixes is a warning everybody learns to scroll past, so
+      there are none: a warning stops the build. EnforceCodeStyleInBuild makes
+      the naming rules in .editorconfig part of that, which is what turns the
+      conventions from a document into something the compiler checks.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+
+    <!--
+      InvariantGlobalization is deliberately NOT set. This app carries file
+      names in Cyrillic and Japanese, and warns about a disc label AutoRun will
+      read in the system codepage, so culture data is something it needs rather
+      than something it can trade away for a smaller publish.
+    -->
+  </PropertyGroup>
+
+</Project>

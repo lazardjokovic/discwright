@@ -1,0 +1,25 @@
+# Line endings are declared rather than left to a per-machine git setting. The
+# v1 repository runs core.autocrlf=true, which stores LF and checks out CRLF, so
+# comparing a committed file against one on disk never matched and cost an
+# afternoon. Here the repository and the working tree agree.
+
+* text=auto eol=crlf
+
+*.cs      text eol=crlf
+*.xaml    text eol=crlf
+*.csproj  text eol=crlf
+*.props   text eol=crlf
+*.targets text eol=crlf
+*.sln     text eol=crlf
+*.json    text eol=crlf
+*.md      text eol=crlf
+
+# Tooling that only accepts LF
+*.sh text eol=lf
+
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.pdf  binary
+*.iso  binary
+*.ttf  binary

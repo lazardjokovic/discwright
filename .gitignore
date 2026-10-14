@@ -1,0 +1,43 @@
+# Build output
+bin/
+obj/
+artifacts/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.dll
+*.exe
+*.pdb
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userprefs
+*.sln.docstates
+
+# Tests
+TestResults/
+*.trx
+*.coverage
+coverage*.json
+coverage*.xml
+*.received.*
+
+# Rider, VS Code
+.idea/
+.vscode/
+
+# NuGet
+*.nupkg
+packages/
+
+# Anything local to one machine. Credentials belong HERE or in an environment
+# variable, never in a tracked file: this repository is private now and will be
+# made public, and going public publishes the whole history, so a secret
+# committed today cannot be taken back by deleting it tomorrow.
+*.local.json
+local.settings.json
+.env
+secrets/
