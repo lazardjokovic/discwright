@@ -447,6 +447,40 @@ The second, because `Staging` is the one place that assembles a whole disc and a
 
 What it is not: a general loosening. `Core` still references nothing, nothing references the window, and every other edge is unchanged.
 
+## What a disc holds, and where
+
+Settled as the extras were written, because every one of these is a place something could have gone and did not.
+
+| What | Where on the disc | Which disc of a set |
+|---|---|---|
+| A GOG download | the root | spread across them, cut only if one file is too big for any |
+| A folder of game files | the root, keeping its own shape | the same |
+| Several games | `01 - name`, `02 - name` | they share one disc, or get one each |
+| The menu | `AUTORUN/menu.hta` and `menu.js` | every disc |
+| The background | `AUTORUN/background.png` | every disc |
+| Music | `AUTORUN/music.<ext>` | **every disc**, and so it is overhead |
+| The icon | `disc.ico` at the root | every disc |
+| The name | `autorun.inf` at the root | every disc, numbered |
+| The printable artwork | `ARTWORK/` | every disc |
+| The checksum list | `checksums.sha256` at the root | every disc, covering that disc |
+| A manual | `Extras/` under its own name | **one disc**, the one with the slack |
+| An extras folder | its *contents* into `Extras/` | one disc |
+| Loose files and folders | the root, exactly as they are | one disc |
+
+Three of those are decisions rather than placements.
+
+**Music rides every disc and is therefore overhead.** It belongs to the menu, and every disc of a set has a menu of its own to play it. Everything else in `Extras` rides one disc, because copying a three gigabyte texture pack onto five discs costs five times the room, and the planner already knows which disc has the slack.
+
+**An extras folder contributes its contents, not itself.** Somebody picking a folder called "stuff for the disc" did not mean to put a folder called "stuff for the disc" on the disc. A *loose* folder is different and keeps its name, because it was added as itself rather than as a container.
+
+**The menu only offers what the disc can honour.** A Manual button on a disc with no manual is worse than no button: it is a promise the disc cannot keep, found by somebody who has already burned it. On a set, only the disc carrying the extras offers them.
+
+### Names a disc keeps for itself
+
+`autorun.inf`, `.xdg-volume-info`, `disc.ico`, `disc.png`, `checksums.sha256`, `AUTORUN`, `ARTWORK`, `Extras`, `Games`, `Add-ons`, `Start Here.hta`, `discproject.json`, and anything beginning `setup_`.
+
+A loose extra with one of those names is **refused by name**, not renamed around. Quietly putting their file somewhere else is worse: they would burn a disc believing it holds a file it does not hold, under a name they could find it by. The `setup_` rule is there because a loose file called that at the root would be read back as a game the next time the disc was opened.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

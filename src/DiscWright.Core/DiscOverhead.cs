@@ -32,6 +32,14 @@ public static class DiscOverhead
     {
         long bytes = TheMenuAndRoomToBeWrongIn;
 
+        // Music is overhead rather than payload: it belongs to the menu, and
+        // every disc of a set has a menu of its own to play it, so every disc
+        // carries a copy.
+        if (project.Extras?.MusicPath is not null && project.Options.Menu)
+        {
+            bytes += sizeOf(project.Extras.MusicPath);
+        }
+
         DiscArtwork? artwork = project.Artwork;
 
         if (artwork is null)

@@ -42,6 +42,39 @@ public sealed class WriteTheMenuStep : IBuildStep
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// The buttons this disc should have, which is only ever the ones it can
+    /// honour.
+    /// </summary>
+    /// <remarks>
+    /// A Manual button on a disc with no manual is worse than no button: it is
+    /// a promise the disc cannot keep, discovered by somebody who has already
+    /// burned it. So the buttons are worked out from what is actually going on
+    /// the disc, and the one disc of a set that carries the extras is the only
+    /// one that offers them.
+    /// </remarks>
+    private static List<string> ButtonsFor(BuildContext context, GameFolder? game)
+    {
+        List<string> buttons = [game?.Kind == GameKind.FilesOnly ? "Open folder" : "Install"];
+
+        DiscExtras? extras = context.Project.Extras;
+        bool thisDiscCarriesThem = context.Disc.Number == context.Layout.DiscCarryingTheExtras;
+
+        if (extras?.ManualPath is not null && thisDiscCarriesThem)
+        {
+            buttons.Add("Manual");
+        }
+
+        if ((extras?.ExtrasFolderPath is not null || extras?.Loose.Count > 0) && thisDiscCarriesThem)
+        {
+            buttons.Add("Extras");
+        }
+
+        buttons.Add("Exit");
+
+        return buttons;
+    }
+
     private static MenuFacts FactsFor(BuildContext context)
     {
         GameFolder? game = context.Project.Games.Count > 0 ? context.Project.Games[0] : null;
@@ -67,7 +100,7 @@ public sealed class WriteTheMenuStep : IBuildStep
 
             // One accent, on one button: whichever is the thing to do next.
             game?.Kind == GameKind.FilesOnly ? "Open folder" : "Install",
-            game?.Kind == GameKind.FilesOnly ? ["Open folder", "Exit"] : ["Install", "Exit"],
+            ButtonsFor(context, game),
 
             // A disc, not a preview. A preview sets this false, or previewing a
             // second disc refocuses the first one's stale window.

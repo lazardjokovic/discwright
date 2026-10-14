@@ -33,6 +33,8 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
     private IReadOnlyList<IBuildStep> Steps =>
     [
         new CopyTheFilesStep(),
+        new CopyTheExtrasStep(files),
+        new CopyTheMusicStep(),
         new WriteTheAutorunStep(),
         new CopyTheArtworkStep(images),
         new WriteTheMenuStep(),
@@ -64,6 +66,20 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
         }
 
         long overhead = DiscOverhead.For(project, SizeOf);
+
+        // A loose extra whose name belongs to the disc would replace part of
+        // what makes the disc work, so it is refused before anything is
+        // planned rather than noticed afterwards.
+        foreach (string item in project.Extras?.Loose ?? [])
+        {
+            string name = System.IO.Path.GetFileName(item.TrimEnd(
+                System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
+
+            if (ReservedDiscNames.Claims(name))
+            {
+                return Refusals.ThatNameBelongsToTheDisc(name);
+            }
+        }
 
         // Everything together first, because several games on one disc is the
         // ordinary answer and the only one that needs no explaining.
@@ -161,7 +177,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
         return new BuiltDiscs(made);
     }
 
-    private static PlanRequest RequestFor(
+    private PlanRequest RequestFor(
         DiscProject project,
         IReadOnlyList<GameFolder> games,
         Medium medium,
@@ -174,7 +190,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
                     file.Bytes)))],
             medium,
             overhead,
-            0,
+            ExtrasBytes(project),
             project.Options.CutFiles);
 
     /// <summary>
@@ -205,6 +221,45 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
             System.IO.Path.GetInvalidFileNameChars().Contains(character) ? ' ' : character)]);
 
         return tidied.Trim().Length == 0 ? "game" : tidied.Trim();
+    }
+
+    /// <summary>
+    /// What the manual, the extras folder and the loose files come to.
+    /// </summary>
+    /// <remarks>
+    /// Weighed apart from the game because they land on ONE disc of a set
+    /// rather than on all of them, which is what lets the planner put them
+    /// where the slack already is instead of pushing a file onto a disc that
+    /// did not need to exist. Music is not here: it rides every disc, so it is
+    /// in the overhead.
+    /// </remarks>
+    private long ExtrasBytes(DiscProject project)
+    {
+        DiscExtras? extras = project.Extras;
+
+        if (extras is null)
+        {
+            return 0;
+        }
+
+        long bytes = 0;
+
+        if (extras.ManualPath is not null)
+        {
+            bytes += SizeOf(extras.ManualPath);
+        }
+
+        if (extras.ExtrasFolderPath is not null)
+        {
+            bytes += SizeOf(extras.ExtrasFolderPath);
+        }
+
+        foreach (string item in extras.Loose)
+        {
+            bytes += SizeOf(item);
+        }
+
+        return bytes;
     }
 
     private long SizeOf(string path)

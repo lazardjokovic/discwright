@@ -25,7 +25,8 @@ public sealed record DiscProject(
     string Label,
     IReadOnlyList<GameFolder> Games,
     DiscOptions Options,
-    DiscArtwork? Artwork = null);
+    DiscArtwork? Artwork = null,
+    DiscExtras? Extras = null);
 
 /// <summary>
 /// The things somebody can change but mostly does not.

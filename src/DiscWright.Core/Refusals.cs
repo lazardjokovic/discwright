@@ -59,6 +59,21 @@ public static class Refusals
             ],
             new Remedy("Use a larger disc", RemedyKind.ChangeMedium));
 
+    /// <summary>
+    /// A loose extra whose name is one the disc keeps for itself.
+    /// </summary>
+    /// <remarks>
+    /// Refused by name rather than renamed around. Quietly putting their file
+    /// somewhere else is worse: they would burn a disc believing it holds a
+    /// file it does not hold, under a name they could find it by.
+    /// </remarks>
+    public static Refusal ThatNameBelongsToTheDisc(string name) =>
+        new("The disc already uses that name",
+            $"\"{name}\" is one of the names a disc keeps for itself, and a file of that name at the root would "
+                + "replace part of what makes the disc work. Rename it and add it again.",
+            [],
+            new Remedy("Choose something else", RemedyKind.PickFolder));
+
     /// <summary>A disc with no name at all.</summary>
     public static Refusal ADiscNeedsAName() =>
         new("The disc needs a name",
