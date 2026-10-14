@@ -192,3 +192,52 @@ function whatToDoWith(game) {
     }
     return "Copy and play";
 }
+
+// Whether an add-on can be pressed yet.
+//
+// THE GAP THIS FIXES. On the menu as it was, an add-on was just another button:
+// press the soundtrack installer before the game and it runs, and a patch run
+// before its base is worse than that, because it half-applies to nothing and
+// leaves no sign that it did.
+//
+// So an add-on is dead until its game is on the machine, and says so in the one
+// line it has.
+function canRunAddOnYet(gameIsInstalled) {
+    return gameIsInstalled === true;
+}
+
+// What an add-on's line says underneath it.
+//
+// Empty when it can be pressed, because a button that works needs no
+// explanation and a line of text under every button is a menu nobody reads.
+function whatAnAddOnSays(gameIsInstalled) {
+    if (canRunAddOnYet(gameIsInstalled)) {
+        return "";
+    }
+    return "Install the game first, then this.";
+}
+
+// How the add-ons of one game are ordered.
+//
+// Patches before everything else, and among patches the earliest version first,
+// because a patch applies to the version before it and running 1.3 before 1.2
+// is how somebody ends up with a game that will not start. Everything else
+// keeps the order it was added in, which is the order somebody chose.
+function addOnsInOrder(addOns) {
+    var patches = [], others = [], i;
+
+    for (i = 0; i < addOns.length; i++) {
+        if (addOns[i].name.indexOf("Update ") === 0) {
+            patches.push(addOns[i]);
+        } else {
+            others.push(addOns[i]);
+        }
+    }
+
+    patches.sort(function (a, b) {
+        if (a.name === b.name) { return 0; }
+        return a.name < b.name ? -1 : 1;
+    });
+
+    return patches.concat(others);
+}

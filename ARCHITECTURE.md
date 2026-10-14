@@ -385,7 +385,11 @@ Two rules it has to keep. It must parse and run under **both** hosts, so nothing
 
 One unexpected benefit: those tests run on the development machine as well as the VM. They load no assembly of ours, so Smart App Control never gets involved.
 
-**The add-on and patch recognisers are not written.** The chain has two links: a GOG download and a folder of game files. A patch (`patch_x_to_y.exe`) and an add-on (a soundtrack installer beside its game) are each one more class and one more line in `GameFolderReader.InTheUsualOrder`, which is the arrangement earning its keep. They are left until the thing that holds a game's add-ons exists, because an add-on with no parent to attach to is a half-built idea. Source folders I, J and R in the testing kit are waiting for them.
+**Add-ons and patches. DONE 2026-10-14, and not as recognisers.**
+
+They were going to be two more links in the recogniser chain, and that was the wrong shape. An add-on is **picked as a file, not a folder**: a patch or a DLC usually sits in the same folder as the game it belongs to, so pointing at the folder would just find the game again. The chain answers "what is this folder"; an add-on is not an answer to that question.
+
+So an add-on is a **role**, given to an executable when somebody attaches it to a game, and `AddOn` carries which game it belongs to. **Any executable is accepted.** The `setup_` rule exists to identify a GOG game folder, and an add-on's identity comes from the game it was attached to rather than from its file name, which is what lets a mod or an overhaul go on a disc at all.
 
 **`BuildContext`. SETTLED 2026-10-14.** Five fields: the project, the layout, the disc being made now, the folder that becomes it, and the writer. What keeps it from becoming a god object is what was left out: **progress and logging are not in it.** They belong to the pipeline, which is the only thing that knows how many steps there are and which one is running. A step that could report its own progress would have to know its own number, and then every step would need telling where it sits in a list it is not part of.
 
@@ -524,6 +528,34 @@ The price is that `Disc set.txt` is the second file `checksums.sha256` does not 
 ### A disc on its own gets none
 
 Telling somebody that one disc of one is all there is would be noise on every disc that never needed it.
+
+## Add-ons, and the gap they close
+
+### An add-on is dead until its game is installed
+
+**This was the first of the three gaps found in the shipped app.** On the menu as it was, an add-on is just another button: press the soundtrack installer before the game and it runs, and a patch run before its base is worse than that, because it half-applies to nothing and leaves no sign that it did.
+
+So an add-on is dead until the game is on the machine, and says so in the one line it has: *"Install the game first, then this."* The button looks like one that cannot be pressed rather than one that does nothing when pressed.
+
+**Whether the game is installed is not answerable yet.** It needs the registry lookup that the Play button will also want, and neither exists. Until then the menu answers "not installed", so every add-on stays dead and says why. That is wrong in one direction only, and it is the harmless one.
+
+### Patches first, and in version order
+
+A patch applies to the version before it, so running 1.3 before 1.2 is how somebody ends up with a game that will not start. Everything else keeps the order it was added in, which is the order somebody chose.
+
+### A patch is named after the version it moves to
+
+`patch_hollow_knight_1.5.12620_to_1.5.12700.exe` becomes **Update 1.5.12700**.
+
+The version it moves *to* is what tells two patches apart, and it goes at the front where a button will not clip it.
+
+**Never from the product name inside the file.** Every GOG patch reports the product name of the *game* it patches, so all four Hollow Knight patches call themselves "Hollow Knight", and a disc built from them would offer four identical buttons.
+
+### Where they go
+
+Beside their game, in an `Add-ons` folder inside the game's own folder. A disc holding four games keeps each one's patches with it, rather than in one pile at the root where nobody can tell which belongs to what.
+
+They are planned **with** their game, so they are never cut away onto a disc the game is not on: a soundtrack on disc 3 of a game that finishes on disc 2 is a button somebody can press and nothing else.
 
 ## The order to build it in
 

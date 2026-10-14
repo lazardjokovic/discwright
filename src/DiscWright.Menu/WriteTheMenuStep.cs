@@ -98,7 +98,14 @@ public sealed class WriteTheMenuStep : IBuildStep
                 ? string.Empty
                 : Join(folder, game.Installer.RelativePath);
 
-            onTheMenu.Add(new MenuGame(game.Name, runs, folder));
+            List<MenuAddOn> addOns =
+            [
+                .. context.Project.AddOnsFor(at).Select(addOn => new MenuAddOn(
+                    addOn.Name,
+                    Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(addOn.Path))))
+            ];
+
+            onTheMenu.Add(new MenuGame(game.Name, runs, folder, addOns));
         }
 
         return onTheMenu;

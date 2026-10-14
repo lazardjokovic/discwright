@@ -87,8 +87,50 @@ function showGame(index) {
     document.getElementById("gameName").innerText = game.name;
     document.getElementById("doIt").innerText = whatToDoWith(game);
 
+    showAddOnsOf(game);
+
     // Only offered when there is somewhere to go back to.
     document.getElementById("back").style.display = DISC.games.length > 1 ? "block" : "none";
+}
+
+// The add-ons of one game, under it, and DEAD until the game is installed.
+//
+// Whether it is installed is a question for the machine the disc is in, and the
+// menu has no way to ask it yet, so for now it is never installed and every
+// add-on says so. That is the honest state: a button that cannot work saying it
+// cannot work, rather than a button that half-applies a patch to nothing.
+function showAddOnsOf(game) {
+    var list = document.getElementById("addOns");
+    var ordered = addOnsInOrder(game.addOns || []);
+    var installed = isInstalled(game);
+    var html = "", i;
+
+    for (i = 0; i < ordered.length; i++) {
+        html += '<a class="btn' + (canRunAddOnYet(installed) ? '' : ' dead') + '" href="#" onclick="return false;">'
+             + '<span id="addOn' + i + '"></span></a>';
+    }
+
+    list.innerHTML = html;
+
+    // Set as text afterwards, for the same reason the chooser does: the name
+    // came from somebody else's file.
+    for (i = 0; i < ordered.length; i++) {
+        document.getElementById("addOn" + i).innerText = ordered[i].name;
+    }
+
+    var line = ordered.length > 0 ? whatAnAddOnSays(installed) : "";
+    document.getElementById("addOnNote").innerText = line;
+    document.getElementById("addOnNote").style.display = line === "" ? "none" : "block";
+}
+
+// Is this game on the machine already?
+//
+// Not answerable yet. It needs a look in the registry for what GOG registered,
+// which is the same lookup the Play button will want, and neither exists. False
+// is the safe answer: an add-on stays dead and says why, which is wrong in only
+// one direction and the harmless one.
+function isInstalled(game) {
+    return false;
 }
 
 function doExit() {
@@ -123,6 +165,10 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 .btn.next { background: #103A3E; border-color: #00BEC8; border-left-width: 3px; color: #FFFFFF; }
 #stillWanted { margin-top: 18px; font-size: 11px; line-height: 16px; color: #8FA3AA; }
 .hint { margin: 0 0 14px 0; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #5E727A; }
+/* A button that cannot be pressed yet looks like one, rather than looking like
+   a button that does nothing when you press it. */
+.btn.dead { color: #5E727A; border-color: #1A2429; background: #0A1114; cursor: default; }
+#addOnNote { margin: -4px 0 12px 0; font-size: 10px; line-height: 14px; color: #8FA3AA; }
 </style>
 </head>
 
@@ -139,6 +185,8 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
         <div id="gameScreen" style="display: none">
             <h1 id="gameName"></h1>
             <a class="btn next" href="#" onclick="doExit(); return false;"><span id="doIt"></span></a>
+            <div id="addOns"></div>
+            <div id="addOnNote"></div>
             <a class="btn" id="back" href="#" onclick="showChooser(); return false;">Back</a>
             <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
         </div>

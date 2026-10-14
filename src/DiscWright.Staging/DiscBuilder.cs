@@ -247,11 +247,20 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
         Medium medium,
         long overhead) =>
         new(
-            [.. games.SelectMany(game => game.Files.Select(file =>
-                new PlanFile(
-                    WhereItGoes(games, game, file),
-                    System.IO.Path.Combine(game.Path, file.RelativePath),
-                    file.Bytes)))],
+            [
+                .. games.SelectMany(game => game.Files.Select(file =>
+                    new PlanFile(
+                        WhereItGoes(games, game, file),
+                        System.IO.Path.Combine(game.Path, file.RelativePath),
+                        file.Bytes))),
+
+                // Add-ons travel with their game and are planned beside it, so
+                // they are never cut away onto a disc the game is not on. A
+                // soundtrack on disc 3 of a game that finishes on disc 2 is a
+                // button somebody can press and nothing else.
+                .. AddOnsOf(project, games).Select(each =>
+                    new PlanFile(each.RelativePath, each.Source, each.Bytes))
+            ],
             medium,
             overhead,
             ExtrasBytes(project),
@@ -318,6 +327,32 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
     /// </summary>
     private static string WithBackslashes(string path) =>
         path.Replace('/', '\\');
+
+    /// <summary>
+    /// Every add-on of the games being planned, with where it lands on the disc.
+    /// </summary>
+    /// <remarks>
+    /// Beside its game in an <c>Add-ons</c> folder, so a disc holding four
+    /// games keeps each one's patches with it rather than in one pile at the
+    /// root where nobody can tell which belongs to what.
+    /// </remarks>
+    private static IEnumerable<(string RelativePath, string Source, long Bytes)> AddOnsOf(
+        DiscProject project, IReadOnlyList<GameFolder> games)
+    {
+        for (int at = 0; at < games.Count; at++)
+        {
+            string folder = OnTheDisc.FolderFor(at + 1, games[at].Name, games.Count);
+            int which = project.Games.ToList().IndexOf(games[at]);
+
+            foreach (AddOn addOn in project.AddOnsFor(which))
+            {
+                string landing = System.IO.Path.Combine(
+                    folder, AddOn.Folder, System.IO.Path.GetFileName(addOn.Path));
+
+                yield return (landing, addOn.Path, addOn.Bytes);
+            }
+        }
+    }
 
     private long SizeOf(string path)
     {

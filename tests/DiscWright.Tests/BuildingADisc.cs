@@ -279,6 +279,65 @@ public sealed class BuildingADisc : IDisposable
     }
 
     [Fact]
+    public async Task Puts_an_add_on_beside_the_game_it_belongs_to()
+    {
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+        string patch = APatch("patch_hollow_knight_1.5.12620_to_1.5.12700.exe", 200);
+
+        DiscProject project = Project(game) with
+        {
+            AddOns = [new AddOn(0, patch, AddOn.NameFor(patch), 200)]
+        };
+
+        BuiltDisc disc = Assert.Single((await Build(project)).Discs);
+
+        Assert.True(File.Exists(On(disc, @"Add-ons\patch_hollow_knight_1.5.12620_to_1.5.12700.exe")));
+    }
+
+    [Fact]
+    public async Task Keeps_each_game_s_add_ons_with_that_game()
+    {
+        GameFolder one = AGogDownload("One", 400);
+        GameFolder two = AGogDownload("Two", 400);
+        string forOne = APatch("patch_one_1_to_2.exe", 100);
+        string forTwo = APatch("setup_two_soundtrack.exe", 100);
+
+        DiscProject project = Project(one, two) with
+        {
+            AddOns = [new AddOn(0, forOne, AddOn.NameFor(forOne), 100), new AddOn(1, forTwo, AddOn.NameFor(forTwo), 100)]
+        };
+
+        BuiltDisc disc = Assert.Single((await Build(project)).Discs);
+
+        // A disc holding four games keeps each one's patches with it, rather
+        // than in one pile at the root where nobody can tell which belongs to
+        // what.
+        Assert.True(File.Exists(On(disc, @"01 - One\Add-ons\patch_one_1_to_2.exe")));
+        Assert.True(File.Exists(On(disc, @"02 - Two\Add-ons\setup_two_soundtrack.exe")));
+    }
+
+    [Fact]
+    public async Task Offers_an_add_on_under_its_game_and_dead_until_the_game_is_there()
+    {
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+        string patch = APatch("patch_hollow_knight_1.5.12620_to_1.5.12700.exe", 200);
+
+        DiscProject project = Project(game) with
+        {
+            AddOns = [new AddOn(0, patch, AddOn.NameFor(patch), 200)]
+        };
+
+        BuiltDisc disc = Assert.Single((await Build(project)).Discs);
+        string menu = File.ReadAllText(On(disc, @"AUTORUN\menu.hta"));
+
+        // Named after the version it moves to, pointed at where it landed, and
+        // the menu knows it cannot be pressed until the game is installed.
+        Assert.Contains("name: \"Update 1.5.12700\"", menu, StringComparison.Ordinal);
+        Assert.Contains("Add-ons/patch_hollow_knight", menu, StringComparison.Ordinal);
+        Assert.Contains("canRunAddOnYet", menu, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Keeps_the_whole_shape_of_a_folder_of_game_files()
     {
         GameFolder game = AFolderOfGameFiles("Gothic");
@@ -461,6 +520,18 @@ public sealed class BuildingADisc : IDisposable
         ListedFile[] listed = [new($"{name}.exe", 300), new(@"Data\anims.vdf", 200)];
 
         return new GameFolder(folder, GameKind.FilesWithLauncher, name, name, null, listed, [listed[0]], null);
+    }
+
+    private string APatch(string name, int bytes)
+    {
+        string path = Path.Combine(_root, "addons", name);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        byte[] contents = new byte[bytes];
+        Random.Shared.NextBytes(contents);
+        File.WriteAllBytes(path, contents);
+
+        return path;
     }
 
     private static void Make(string folder, string relative, int bytes)

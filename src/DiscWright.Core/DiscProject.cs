@@ -26,7 +26,15 @@ public sealed record DiscProject(
     IReadOnlyList<GameFolder> Games,
     DiscOptions Options,
     DiscArtwork? Artwork = null,
-    DiscExtras? Extras = null);
+    DiscExtras? Extras = null,
+    IReadOnlyList<AddOn>? AddOns = null)
+{
+    /// <summary>The add-ons, or none.</summary>
+    public IReadOnlyList<AddOn> AddOnsOrNone => AddOns ?? [];
+
+    /// <summary>The add-ons belonging to one game, in the order they were added.</summary>
+    public IEnumerable<AddOn> AddOnsFor(int game) => AddOnsOrNone.Where(addOn => addOn.BelongsTo == game);
+}
 
 /// <summary>
 /// The things somebody can change but mostly does not.

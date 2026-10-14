@@ -50,7 +50,10 @@ public static class MenuWriter
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),
                 ("runs", JScript.Literal(game.Runs)),
-                ("folder", JScript.Literal(game.Folder)))))).Append('\n');
+                ("folder", JScript.Literal(game.Folder)),
+                ("addOns", JScript.ArrayOf(game.AddOns.Select(addOn => JScript.Fields(
+                    ("name", JScript.Literal(addOn.Name)),
+                    ("runs", JScript.Literal(addOn.Runs)))))))))).Append('\n');
         data.Append('}');
 
         return Template
@@ -140,4 +143,17 @@ public sealed record MenuFacts(
 /// Where the game's files sit on the disc, or empty when the game has the disc
 /// to itself and its files are at the root.
 /// </param>
-public sealed record MenuGame(string Name, string Runs, string Folder);
+/// <param name="Given">
+/// What goes under this game, in the order it should be offered. Dead on the
+/// menu until the game itself is installed.
+/// </param>
+public sealed record MenuGame(string Name, string Runs, string Folder, IReadOnlyList<MenuAddOn>? Given = null)
+{
+    /// <summary>Its add-ons, or none.</summary>
+    public IReadOnlyList<MenuAddOn> AddOns => Given ?? [];
+}
+
+/// <summary>One add-on, as the menu sees it.</summary>
+/// <param name="Name">What the button says.</param>
+/// <param name="Runs">What it runs, relative to the root of the disc.</param>
+public sealed record MenuAddOn(string Name, string Runs);

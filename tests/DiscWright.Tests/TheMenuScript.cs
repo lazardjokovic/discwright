@@ -191,6 +191,55 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Will_not_let_an_add_on_run_before_its_game()
+    {
+        // THE GAP THIS CLOSES. On the menu as it was, an add-on was just
+        // another button: press the soundtrack installer before the game and it
+        // runs, and a patch run before its base is worse, because it
+        // half-applies to nothing and leaves no sign that it did.
+        // Asked in words, because JScript's Echo prints a boolean as 0 or -1
+        // and a test that asserts "0" says nothing to whoever reads it next.
+        Assert.Equal("no", Ask("canRunAddOnYet(false) ? 'yes' : 'no'"));
+        Assert.Equal("yes", Ask("canRunAddOnYet(true) ? 'yes' : 'no'"));
+
+        // Anything that is not the game being there counts as not there.
+        Assert.Equal("no", Ask("canRunAddOnYet(undefined) ? 'yes' : 'no'"));
+        Assert.Equal("no", Ask("canRunAddOnYet(null) ? 'yes' : 'no'"));
+    }
+
+    [Fact]
+    public void Says_why_an_add_on_cannot_be_pressed_yet()
+    {
+        Assert.Equal("Install the game first, then this.", Ask("whatAnAddOnSays(false)"));
+    }
+
+    [Fact]
+    public void Says_nothing_under_an_add_on_that_works()
+    {
+        // A button that works needs no explanation, and a line of text under
+        // every button is a menu nobody reads.
+        Assert.Equal("", Ask("whatAnAddOnSays(true)"));
+    }
+
+    [Fact]
+    public void Offers_patches_first_and_keeps_the_order_somebody_chose_for_the_rest()
+    {
+        // A patch applies to the version before it, so running 1.3 before 1.2
+        // is how somebody ends up with a game that will not start. Everything
+        // else keeps the order it was added in, which is the order somebody
+        // chose.
+        string names = Ask(
+            "(function () { var o = addOnsInOrder(["
+            + "{name: 'The soundtrack'},"
+            + "{name: 'Update 1.3'},"
+            + "{name: 'Update 1.2'},"
+            + "{name: 'Hidden Dreams'}]);"
+            + "var s = []; for (var i = 0; i < o.length; i++) { s.push(o[i].name); } return s.join(' | '); })()");
+
+        Assert.Equal("Update 1.2 | Update 1.3 | The soundtrack | Hidden Dreams", names);
+    }
+
+    [Fact]
     public void Is_reported_with_a_line_and_a_column_when_it_will_not_parse()
     {
         // The reason for a .wsf with a real src rather than pasting the file
