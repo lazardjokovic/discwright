@@ -6328,6 +6328,82 @@ Describe 'Pressing Preview after changing the background' -Tag 'Unit' {
         }
     }
 }
+
+Describe 'The buttons for a disc that is already built' -Tag 'Unit' {
+
+    # Reported from the middle of a real burn, with disc 2 refused and disc 1
+    # already written: "there is no burn button anywhere so I can try again".
+    #
+    # It was there. Print artwork, Burn to disc and Burn with were laid out at
+    # y=1100 in a window whose client area is 953 pixels tall, so they were
+    # present, enabled, correct, and 189 pixels past the bottom edge. The window
+    # suite could not see it either, because it reaches controls through
+    # Set-CtlInView, which scrolls the form first: the one thing nobody checked
+    # was whether they needed scrolling to.
+    #
+    # The window suite now measures where they really land. This is the cheap
+    # half, it runs on every push, and it reads the layout out of the source.
+
+    BeforeAll {
+        $script:FoldSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $script:FormWanted = [int][regex]::Match($script:FoldSrc, '\$formWanted = (\d+)').Groups[1].Value
+        # The caption and two borders. Measured rather than guessed: a form
+        # asking for 992 reports a client area of 953.
+        $script:Chrome = 39
+        $script:BtnY = @{}
+        foreach ($mm in [regex]::Matches($script:FoldSrc, "AddBtn '([^']+)' (\d+) (\d+) (\d+)")) {
+            if ($mm.Groups[1].Value -eq 'Browse...') { continue }
+            $script:BtnY[$mm.Groups[1].Value] = [int]$mm.Groups[3].Value
+        }
+    }
+
+    It 'asks the screen for a window tall enough to lay out in' {
+        $script:FormWanted | Should -BeGreaterOrEqual 1024
+        # And no taller than a 1080p desktop allows, or every window opens
+        # clipped and the min() against the working area does all the work.
+        $script:FormWanted | Should -BeLessOrEqual 1032
+    }
+
+    It 'puts <_> where it can be seen without scrolling' -ForEach @(
+        'Print artwork', 'Burn to disc...', 'Burn with...'
+    ) {
+        $y = $script:BtnY[$_]
+        $y | Should -Not -BeNullOrEmpty -Because "$_ has to be laid out by AddBtn to be found at all"
+        $floor = $script:FormWanted - $script:Chrome
+        $why = "$_ runs to $($y + 24) and the client area ends at $floor"
+        ($y + 24) | Should -BeLessOrEqual $floor -Because $why
+    }
+
+    It 'leaves them above step 7 rather than after it' {
+        # The other half of the same point. Step 7 is a box to fill in; these
+        # three are what you do once the disc is built, so they belong beside
+        # BUILD ISO and not past the last text box on the form.
+        $seven = [int][regex]::Match($script:FoldSrc,
+            "AddLabel '7\)  Printed artwork \(optional\):' \d+ (\d+)").Groups[1].Value
+        $seven | Should -BeGreaterThan 0
+        $script:BtnY['Burn to disc...'] | Should -BeLessThan $seven
+    }
+
+    It 'does not let the artwork note run back over them' {
+        # lblArtNote is 68 pixels tall and was at y=1074, which put it straight
+        # through the buttons at 1100 and in front of them in z-order. Nobody
+        # ever saw it: the whole band was off screen, and the overlap test
+        # could not see it either, because UI Automation reports no rectangle
+        # for a control that is scrolled out of view, so it skipped both and
+        # found the layout clean.
+        $noteY = [int][regex]::Match($script:FoldSrc, "\`$lblArtNote = AddLabel '' \d+ (\d+) \d+").Groups[1].Value
+        $noteH = [int][regex]::Match($script:FoldSrc,
+            "\`$lblArtNote\.Size = New-Object System\.Drawing\.Size\(\d+, (\d+)\)").Groups[1].Value
+        $noteY | Should -BeGreaterThan 0
+        $noteH | Should -BeGreaterThan 0
+        foreach ($n in 'Print artwork', 'Burn to disc...', 'Burn with...') {
+            $top = $script:BtnY[$n]
+            $why = "$n is at $top..$($top + 24) and the note covers $noteY..$($noteY + $noteH)"
+            ($noteY -ge ($top + 24) -or ($noteY + $noteH) -le $top) | Should -BeTrue -Because $why
+        }
+    }
+}
+
 Describe 'Hiding the game name above the menu buttons' -Tag 'Unit' {
 
     # Asked for after the long-name fix, by the same reporter, once he worked

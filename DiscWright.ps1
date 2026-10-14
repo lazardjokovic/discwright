@@ -5208,12 +5208,24 @@ $icoSelf = Join-Path $PSScriptRoot 'DiscWright.ico'
 if (Test-Path -LiteralPath $icoSelf) {
     try { $form.Icon = New-Object System.Drawing.Icon($icoSelf) } catch { }
 }
-# 1054 is what the controls need. Opening at that height regardless is how a
-# window ends up with its Build button under the taskbar: 1080p leaves 1032
-# usable, and a 768px laptop far less. Open at whatever fits and let AutoScroll
-# cover the difference - the alternative is a window that cannot be used at all
-# on the screen it opened on.
-$formWanted = 992
+# What the controls need, and what the screen allows, are two different
+# numbers. Opening at the first regardless is how a window ends up with its
+# Build button under the taskbar: 1080p leaves 1032 usable, and a 768px laptop
+# far less. Open at whatever fits and let AutoScroll cover the difference - the
+# alternative is a window that cannot be used at all on the screen it opened on.
+#
+# 1024 rather than 992, which is what makes room for the row of disc buttons
+# below the log. The client area is this less the caption and the borders, 39
+# pixels, so 985 is what there is to lay out in before something needs
+# scrolling to. Keep Print artwork, Burn to disc and Burn with inside it: a
+# button below that line is a button nobody can see, and that is how this was
+# reported, from the middle of a real burn. "There is no burn button anywhere
+# so I can try again."
+#
+# 1032 would also fit a 1080p screen and leaves nothing spare, so a row added
+# later has to be thought about rather than discovered. The window test that
+# measures where these three land is what says so.
+$formWanted = 1024
 $formUsable = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea.Height
 $form.Size=New-Object System.Drawing.Size(700,([Math]::Min($formWanted,$formUsable)))
 $form.MinimumSize=New-Object System.Drawing.Size(700,420)
@@ -5511,23 +5523,31 @@ $txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLo
 # directly beneath at the same left edge. That is not only for the look. The
 # window tests find a step's box by that geometry, and a label beside its box
 # is invisible to them.
-AddLabel '7)  Printed artwork (optional):' 15 952 540 | Out-Null
-$lblCoverPic = AddLabel 'Cover picture: the finished front of the case, 130 x 183 mm' 15 976 420
-$txtCover = AddText 15 998 525
-$btnCover = AddBtn 'Browse...' 545 998 110
-AddLabel 'Disc face picture: the finished face of the disc, 118 mm across' 15 1024 420 | Out-Null
-$txtDiscArt = AddText 15 1046 525
-$btnDiscArt = AddBtn 'Browse...' 545 1046 110
-$lblArtNote = AddLabel '' 15 1074 645
+AddLabel '7)  Printed artwork (optional):' 15 976 540 | Out-Null
+$lblCoverPic = AddLabel 'Cover picture: the finished front of the case, 130 x 183 mm' 15 1000 420
+$txtCover = AddText 15 1022 525
+$btnCover = AddBtn 'Browse...' 545 1022 110
+AddLabel 'Disc face picture: the finished face of the disc, 118 mm across' 15 1048 420 | Out-Null
+$txtDiscArt = AddText 15 1070 525
+$btnDiscArt = AddBtn 'Browse...' 545 1070 110
+$lblArtNote = AddLabel '' 15 1098 645
 # Two lines, because there are two pictures and either can be the wrong
 # shape. On one line the second note ran off the end of the label and was
 # simply not there - reported from outside, where it reads as the warning
 # being cut off mid-sentence.
 $lblArtNote.Size = New-Object System.Drawing.Size(645, 68)
 $lblArtNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
-$btnArtwork = AddBtn 'Print artwork' 15 1100 150
-$btnBurn    = AddBtn 'Burn to disc...' 180 1100 150
-$btnHandoff = AddBtn 'Burn with...' 345 1100 150
+# Directly under the log, where they are visible without scrolling, and above
+# step 7 rather than below it. They were at y=1100 in a window whose client area
+# was 953 pixels tall: present, enabled, correct, and 189 pixels past the bottom
+# edge, which from outside is no button at all.
+#
+# These are also the right way round now. Step 7 is something you fill in; these
+# three are things you do once the disc is built, so they belong beside BUILD
+# ISO and not past the last text box on the form.
+$btnArtwork = AddBtn 'Print artwork' 15 938 150
+$btnBurn    = AddBtn 'Burn to disc...' 180 938 150
+$btnHandoff = AddBtn 'Burn with...' 345 938 150
 
 $pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,894); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
 $lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)

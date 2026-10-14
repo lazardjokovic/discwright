@@ -318,6 +318,47 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
     It 'leaves Add game... available, since it is the only way to start' {
         Test-CtlEnabled $script:Win 'Add game*' | Should -BeTrue
     }
+
+    It 'shows <_> without the window being scrolled' -ForEach @(
+        'Print artwork', 'Burn to disc...', 'Burn with...'
+    ) {
+        # The one that was reported. These three were laid out at y=1100 in a
+        # window 953 pixels tall: enabled, correct, and 189 pixels below the
+        # bottom edge, which from the outside is no button at all.
+        #
+        # 'fits on the screen it opened on' above does not cover this. The
+        # window fitted; what was in it did not. And everything else in this
+        # suite reaches a control through Set-CtlInView, which scrolls the form
+        # first and so can never notice.
+        $c = Find-Ctl $script:Win $_
+        $c | Should -Not -BeNullOrEmpty
+        $w = $script:Win.Current.BoundingRectangle
+        $r = $c.Current.BoundingRectangle
+        $why = "'$_' is at $($r.Top)..$($r.Bottom) and the window is $($w.Top)..$($w.Bottom)"
+        $r.Height | Should -BeGreaterThan 0 -Because 'no rectangle at all is what off-screen looks like'
+        $r.Bottom | Should -BeLessOrEqual $w.Bottom -Because $why
+        $r.Top | Should -BeGreaterOrEqual $w.Top -Because $why
+    }
+
+    It 'does not stack the three of them on top of each other' {
+        # The window-wide overlap test cannot answer this one. A control laid
+        # out exactly on top of another is not reported as a clash, because UI
+        # Automation hands back the one in front and the covered one simply is
+        # not there.
+        $rs = @()
+        foreach ($n in 'Print artwork', 'Burn to disc...', 'Burn with...') {
+            $rs += [pscustomobject]@{ Name = $n; R = (Find-Ctl $script:Win $n).Current.BoundingRectangle }
+        }
+        for ($i = 0; $i -lt $rs.Count; $i++) {
+            for ($j = $i + 1; $j -lt $rs.Count; $j++) {
+                $a = $rs[$i].R; $b = $rs[$j].R
+                $w = [Math]::Min($a.Right, $b.Right) - [Math]::Max($a.Left, $b.Left)
+                $h = [Math]::Min($a.Bottom, $b.Bottom) - [Math]::Max($a.Top, $b.Top)
+                $why = "'$($rs[$i].Name)' and '$($rs[$j].Name)' share ${w}x${h}px"
+                ($w -le 2 -or $h -le 2) | Should -BeTrue -Because $why
+            }
+        }
+    }
 }
 
 Describe 'Walking the folder dialog with the keyboard' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
