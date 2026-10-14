@@ -45,23 +45,47 @@ public sealed record Figure(string Label, string Value);
 public sealed record Remedy(string Label, RemedyKind Kind);
 
 /// <summary>
-/// The kinds of fix the app can actually offer. The window uses this to decide
-/// what pressing the remedy does; the wording stays in <see cref="Remedy.Label"/>.
+/// What the window can <em>do</em> about a refusal.
 /// </summary>
+/// <remarks>
+/// <para>
+/// These are deliberately the window's capabilities and not the reasons a
+/// refusal happened. The first version of this enum listed reasons
+/// (ChooseBiggerMedium, SplitAcrossDiscs, DropAnOption, NotOurs) and it was
+/// already short of three: it could not express "rename the disc" for a label
+/// AutoRun cannot write, "rename that folder" for a game called AUTORUN, or
+/// "choose somewhere else" for an output folder with no room. Framed as reasons
+/// it grows a case per refusal for ever. Framed as capabilities it is closed,
+/// because it is a list of what one window can be asked to do.
+/// </para>
+/// <para>
+/// The wording always stays in <see cref="Remedy.Label"/>. This only decides
+/// what pressing it does.
+/// </para>
+/// </remarks>
 public enum RemedyKind
 {
-    /// <summary>Aim at a bigger disc. "Use a double layer DVD, 8.5 GB".</summary>
-    ChooseBiggerMedium,
+    /// <summary>Change the target disc. "Use a double layer DVD, 8.5 GB".</summary>
+    ChangeMedium,
 
-    /// <summary>Let it span discs. "Make it a set of 3".</summary>
-    SplitAcrossDiscs,
+    /// <summary>Turn the disc set option on. "Make it a set of 3".</summary>
+    EnableSet,
 
     /// <summary>Turn an option off. "Leave out Windows XP support".</summary>
-    DropAnOption,
+    DisableOption,
 
     /// <summary>
-    /// Nothing the app can do from here; the person has to change something
-    /// outside it. Still worth saying, so the refusal does not look like a bug.
+    /// Put the cursor in the field that has to change, and select what is in
+    /// it. "Rename the disc", "Rename that folder".
     /// </summary>
-    NotOurs
+    FocusField,
+
+    /// <summary>Reopen a folder chooser. "Choose another folder".</summary>
+    PickFolder,
+
+    /// <summary>
+    /// There is nothing the window can do; the person has to change something
+    /// outside it. Still worth saying, so the refusal does not read as a bug.
+    /// </summary>
+    Nothing
 }

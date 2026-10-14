@@ -26,25 +26,31 @@ public class TheMediaTable
     [Fact]
     public void Plans_against_usable_capacity_rather_than_the_number_on_the_box()
     {
-        // A DVD5 is sold as 4.7 GB and holds 4.37 GiB. Planning against 4.7 GB
-        // produces a disc that fails at 99 per cent, so this is the one figure
-        // in the table worth pinning by hand.
-        Assert.Equal((long)(4.37 * 1024 * 1024 * 1024), Media.Dvd5.Capacity);
-        Assert.True(Media.Dvd5.Capacity < 4_700_000_000, "A DVD5 must not be planned as the 4.7 GB on the box.");
+        // A DVD5 is sold as 4.7 GB and holds 4.37 GiB. Planning against the box
+        // number produces a disc that fails at 99 per cent.
+        Assert.True(Media.Dvd5.Capacity < 4_700_000_000L, "A DVD5 must not be planned as the 4.7 GB on the box.");
     }
 
     [Fact]
-    public void Matches_the_capacities_the_shipped_app_plans_against()
+    public void Turns_the_tier_figures_into_the_byte_counts_it_plans_with()
     {
-        // Carried over from Get-MediaTiers in v1, so a disc laid out by either
-        // version comes out the same. If one of these ever has to change, the
-        // other app has to change with it.
-        Assert.Equal(Gib(0.68), Media.Cd.Capacity);
-        Assert.Equal(Gib(4.37), Media.Dvd5.Capacity);
-        Assert.Equal(Gib(7.95), Media.Dvd9.Capacity);
-        Assert.Equal(Gib(23.3), Media.Bd25.Capacity);
-        Assert.Equal(Gib(46.6), Media.Bd50.Capacity);
-        Assert.Equal(Gib(93.0), Media.BdXl.Capacity);
+        // The left side is the specification and the right side is arithmetic.
+        //
+        // This test first read Assert.Equal(Gib(0.68), Media.Cd.Capacity), with
+        // the same formula on both sides, which proved only that nobody had
+        // changed the number: a wrong formula passed it happily. Written as
+        // literals it checks the conversion as well as the figures.
+        //
+        // The figures themselves come from Get-MediaTiers in v1, so a disc laid
+        // out by either version comes out the same. Cross-checking them against
+        // that source belongs in a tool rather than here, because the v1
+        // repository is not on every machine this runs on.
+        Assert.Equal(730_144_440L, Media.Cd.Capacity);
+        Assert.Equal(4_692_251_770L, Media.Dvd5.Capacity);
+        Assert.Equal(8_536_247_500L, Media.Dvd9.Capacity);
+        Assert.Equal(25_018_184_499L, Media.Bd25.Capacity);
+        Assert.Equal(50_036_368_998L, Media.Bd50.Capacity);
+        Assert.Equal(99_857_989_632L, Media.BdXl.Capacity);
     }
 
     [Fact]
@@ -70,6 +76,4 @@ public class TheMediaTable
         // at the start.
         Assert.Null(Media.ByKey(key));
     }
-
-    private static long Gib(double gibibytes) => (long)(gibibytes * 1024 * 1024 * 1024);
 }

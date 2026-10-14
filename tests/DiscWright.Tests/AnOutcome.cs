@@ -48,13 +48,13 @@ public class AnOutcome
             "That file will not fit on one disc",
             "setup_the_witcher_3_wild_hunt_goty-1.bin is bigger than any DVD",
             [new Figure("the file", "6.1 GB"), new Figure("a DVD holds", "4.37 GiB")],
-            new Remedy("Use a double layer DVD, 8.5 GB", RemedyKind.ChooseBiggerMedium));
+            new Remedy("Use a double layer DVD, 8.5 GB", RemedyKind.ChangeMedium));
 
         // This is the shape every refusal in the design promises: it names the
         // thing, gives both numbers, and offers the fix.
         Assert.Contains("-1.bin", refusal.Because);
         Assert.Equal(2, refusal.Figures.Count);
-        Assert.Equal(RemedyKind.ChooseBiggerMedium, refusal.Remedy?.Kind);
+        Assert.Equal(RemedyKind.ChangeMedium, refusal.Remedy?.Kind);
     }
 
     [Fact]

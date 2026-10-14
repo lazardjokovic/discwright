@@ -68,7 +68,15 @@ public sealed record DiscProject(
     string OutputFolder);
 
 // A medium is data, not a branch. Adding BD-XL is one line, below.
-public sealed record Medium(string Key, string Shown, long Capacity, bool Rewritable, long LargestFile);
+//
+// It carries no Rewritable flag and no file size ceiling, and both omissions
+// were corrections. The tiers are TARGET SIZES, so whether the disc in the tray
+// is blank or rewritable is read off the drive at burn time and belongs to that
+// reading. And a file size ceiling belongs to the filesystem, never to the
+// medium: a 6 GB file is impossible on ISO9660 and fine on UDF, on the same
+// disc, in the same drive. That lives in FileSystems, and it is the reason the
+// "readable on Windows XP" option can be dead while everything else works.
+public sealed record Medium(string Key, string Name, long Capacity);
 
 // The answer to "how does this go on discs". Pure arithmetic over sizes.
 public sealed record DiscLayout(IReadOnlyList<PlannedDisc> Discs, long Spare);
@@ -88,6 +96,18 @@ public sealed record Refusal(string Headline, string Because, IReadOnlyList<Figu
 public sealed record Figure(string Label, string Value);     // "needs", "2.4 GB"
 public sealed record Remedy(string Label, RemedyKind Kind);  // "Use a double layer DVD"
 
+// Both halves of a Figure are strings because the unit is part of the answer: a
+// person wants "4.37 GB", not 4692251770. Every one of them comes from
+// ByteSize.Describe, so a size reads the same everywhere, in binary units
+// labelled the way Explorer labels them, in the machine's own culture.
+//
+// RemedyKind lists what the WINDOW CAN DO, not why a refusal happened:
+// ChangeMedium, EnableSet, DisableOption, FocusField, PickFolder, Nothing.
+// Framed as reasons it was already three short, with no way to say "rename the
+// disc", "rename that folder" or "choose somewhere else", and it would have
+// grown a case per refusal for ever. Framed as capabilities it is closed,
+// because it is a list of what one window can be asked to do.
+
 public abstract record Outcome<T>
 {
     public sealed record Ok(T Value) : Outcome<T>;
@@ -97,13 +117,17 @@ public abstract record Outcome<T>
 
 So `DiscPlanner.Plan(...)` returns `Outcome<DiscLayout>`, and the window cannot forget to handle the refusal because it cannot get at the layout without looking. No exceptions for things that are not errors. A file too big for a disc is an answer, not a failure, and the old app learned that the hard way when a refusal arrived in front of the words "The build failed:".
 
+Use it where the refusal is something **a person has to read**. Not for a programming error, where an exception is right and a refusal would be a lie. Not where the only possible answer is "there is no such thing", where a nullable return says it more plainly: that is why `Media.ByKey` hands back a `Medium?` rather than one of these. Reached for everywhere, it stops carrying meaning and becomes ceremony. Read one with a switch over the two cases rather than a `Match` method, because positional patterns on records already say it in a line each and add nothing to learn.
+
 ## The ports, and burning worked through
 
 ```csharp
 public interface IDiscRecorder
 {
     IReadOnlyList<RecorderDevice> Devices();
-    MediaInDrive Look(RecorderDevice device);
+    // Async because reading a disc means waiting for it to spin up, which is
+    // seconds. Synchronous, this one line would freeze the window.
+    Task<MediaInDrive> Look(RecorderDevice device, CancellationToken ct);
     Task Write(RecorderDevice device, Stream image, IProgress<BurnProgress> progress, CancellationToken ct);
     Task Erase(RecorderDevice device, IProgress<ErasePhase> progress, CancellationToken ct);
 }
@@ -124,8 +148,15 @@ No single pattern suits an application. They are a vocabulary for parts, and the
 ```csharp
 public interface IGameFolderRecogniser
 {
-    string Describes { get; }                      // "a GOG download"
-    GameFolder? Recognise(FolderListing folder);   // null means "not mine"
+    string Describes { get; }   // "a GOG download"
+
+    // Three answers, not two. null means "not mine, ask the next one", Ok means
+    // "mine, and here it is", and No means "MINE, AND BROKEN", which must never
+    // fall through to be reported as "nothing recognised here". A folder holding
+    // setup_x.exe with setup_x-1.bin missing is unmistakably a GOG download, and
+    // v1 already names that exact fault. Only the recogniser that claims a
+    // folder knows what is wrong with it.
+    Outcome<GameFolder>? Recognise(FolderListing folder);
 }
 
 public sealed class GameFolderReader(IReadOnlyList<IGameFolderRecogniser> recognisers)
@@ -293,6 +324,22 @@ Two things came out of preparing them, both worth knowing before the first commi
 **Neither machine could reach nuget.org.** This one had only Visual Studio's offline package folder, the VM had no source at all, so a plain build worked while anything needing a package died with NU1101. That is what made the first self contained publish fail. Both now have nuget.org registered.
 
 **The two SDKs differ in the patch**, 10.0.401 here against 10.0.402 there. So the repository gets a `global.json` pinning the SDK with `rollForward: latestFeature`, or the same solution quietly builds differently in two places and the difference surfaces as something else entirely.
+
+## What this plan does not cover yet
+
+Written down because a gap nobody has named is a gap somebody fills badly in a hurry.
+
+**Opening an existing project or disc.** The journey above runs folder to disc and has no Open path, which is not a small omission: v1's `Import-Project` carries schema versions 1 to 12, and `Import-DiscFolder` rebuilds a project from a disc that has no project file at all, by scraping `autorun.inf` and `menu.hta`. It wants to be pure and in `Core`, taking the text of a project file and handing back a `DiscProject`, which also makes it cheap to test, because the manual testing kit already holds eleven project files including a deliberately preserved schema 11. A round trip, write then read then compare, is the most valuable single test in that area.
+
+**The disc's menu is a second program, in another language, that xUnit cannot reach.** Describing `DiscWright.Menu` as something that returns text understates it badly. The menu scans a set, copies with progress, launches an installer, orders add-ons, verifies checksums and offers a chooser, in JScript, on a machine that may be Windows XP, and it is invisible to UI Automation. What C# can test is only the generation: the substitution table, no placeholder left unresolved, the right buttons, the right constants, and the escaping of an ampersand, a trademark sign, quotes and brackets. Its behaviour has no test strategy in either version. One idea worth measuring: put the logic in a `.js` file that the HTA includes, so it can be run and tested under `cscript.exe` against stubbed inputs.
+
+**`BuildContext` is undefined**, and it is the thing that decides whether Command pays off or quietly becomes a god object handed to everything. It has to carry the staging folder, the layout, the disc number, the project, the filesystem, the log and the progress, which is already a lot for one object. Worth designing deliberately rather than growing.
+
+**Per disc against per set.** The steps are not all the same shape. Copying files happens three times for a three disc set; writing the set manifest happens once. Their order matters too, since checksums hash what the copy step wrote, and nothing tests that it holds.
+
+**Tests that want the manual testing kit cannot reach it.** The kit lives outside this repository and at a different path on each machine: `DiscWright-Lab\manual-testing` here, `C:\dw\testkit` on the VM. The answer is small fixtures committed here for the everyday cases and an environment variable for the big ones, with those tests skipping cleanly when it is absent. Note that a clean skip needs xUnit v3 and this is on 2.9.3, so a skip has to be deliberate rather than a test that quietly passes having checked nothing.
+
+**The installer placement may not be reachable at all.** The design board is marked CHOSEN and says to find the game installer's window by process id and move it with `SetWindowPos`. That window is the disc's own menu rather than this app, and **an HTA cannot call `SetWindowPos`**: there is no WSH or HTA API for moving another process's window. So on a disc the design lands straight on its own stated fallback, the installer appearing wherever Windows put it, unless a helper binary ships on the disc, which costs the ten year no dependency promise and invites SmartScreen. The board already calls that fallback acceptable, which is lucky. It needs deciding before anything is built around it.
 
 ## The order to build it in
 

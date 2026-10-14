@@ -27,11 +27,13 @@ public static class FileSystems
     /// The largest single file FAT32 can describe, one byte under 4 GiB.
     /// </summary>
     /// <remarks>
-    /// Twice the ISO9660 ceiling, and the reason GOG splits its installers at
-    /// 4,294,967,294 bytes: one byte under this. So every part of a multi-part
-    /// GOG download clears FAT32 and none of them clears ISO9660, which means
-    /// no multi-part GOG download can carry the older filesystems at all. The
-    /// option is for discs whose biggest single file is 2 GiB or less.
+    /// FAT32 keeps a file's size in 32 bits, so the largest it can describe is
+    /// 2^32 - 1. That is one byte short of twice the ISO9660 ceiling, and it is
+    /// the reason GOG splits its installers at 4,294,967,294 bytes: one byte
+    /// under this. So every part of a multi-part GOG download clears FAT32 and
+    /// none of them clears ISO9660, which means no multi-part GOG download can
+    /// carry the older filesystems at all. The option is for discs whose
+    /// biggest single file is 2 GiB or less.
     /// </remarks>
     public const long Fat32MaxFile = 4_294_967_295;
 

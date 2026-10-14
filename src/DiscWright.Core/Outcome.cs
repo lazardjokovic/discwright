@@ -16,6 +16,27 @@ namespace DiscWright.Core;
 /// Nothing elsewhere can add a third, which is what makes a <c>switch</c> over
 /// an outcome something the compiler can check.
 /// </para>
+/// <para>
+/// <strong>When to use it.</strong> Where the refusal is something a person has
+/// to read, with its numbers and its remedy, on their way to getting what they
+/// asked for. Not for a programming error, where an exception is right and a
+/// refusal would be a lie. Not where the only possible answer is "there is no
+/// such thing", where a nullable return says it more plainly: that is why
+/// <see cref="Media.ByKey"/> returns a <c>Medium?</c> and not one of these.
+/// Reached for everywhere, it stops carrying meaning and becomes ceremony.
+/// </para>
+/// <para>
+/// <strong>How to read one.</strong> With a switch over the two cases, rather
+/// than a Match method, because positional patterns on records already say it
+/// in a line each and add nothing to learn:
+/// </para>
+/// <code>
+/// switch (planner.Plan(project, medium))
+/// {
+///     case Outcome&lt;DiscLayout&gt;.Ok(var layout): Build(layout); break;
+///     case Outcome&lt;DiscLayout&gt;.No(var refusal): Show(refusal); break;
+/// }
+/// </code>
 /// </remarks>
 public abstract record Outcome<T>
 {
