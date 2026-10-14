@@ -16,10 +16,16 @@ namespace DiscWright.Core;
 /// </param>
 /// <param name="Games">In the order they were added, which is the order they appear.</param>
 /// <param name="Options">Everything that has an answer already.</param>
+/// <param name="Artwork">
+/// The pictures, or null for a disc that carries none. Last and optional so
+/// that adding it did not have to touch every place a project is made, which is
+/// the first time that has mattered and will not be the last.
+/// </param>
 public sealed record DiscProject(
     string Label,
     IReadOnlyList<GameFolder> Games,
-    DiscOptions Options);
+    DiscOptions Options,
+    DiscArtwork? Artwork = null);
 
 /// <summary>
 /// The things somebody can change but mostly does not.

@@ -12,4 +12,12 @@
 
 
 
+
+  <ItemGroup>
+    <!-- Not in the framework since .NET 6 and Windows only, which this project
+         already is. Needed to decode a picture at all and to lay out the frames
+         of an icon. -->
+    <PackageReference Include="System.Drawing.Common" Version="9.0.0" />
+  </ItemGroup>
+
 </Project>
