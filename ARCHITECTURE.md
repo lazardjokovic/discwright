@@ -691,6 +691,39 @@ A patch is certain, because `patch_x_to_y` says so outright. The rest is a guess
 
 It still goes on if somebody wants it to. It just must not go on in silence.
 
+## The image
+
+Every disc that gets built gets an image too, every time. The folder is what somebody checks and the image is what they burn, and having to ask for the second one is a step nobody wants.
+
+### Everything decidable was decided before any COM ran
+
+`ImagePlan` is four numbers and a worry, in Core, with no Windows anywhere near it. All four were wrong in v1 at least once.
+
+**How big to say the medium is.** v1 used a fixed 12,500,000 blocks, about 25 GB, which silently capped every build at a quarter of a BD-R XL. It is sized to the payload now, with a twentieth on top for the file system, and that old fixed figure kept only as a floor.
+
+**What the older file systems can hold: 2 GiB, not 4.** The format allows four and the writer stops at two. v1 carried a comment claiming the opposite and *a real build died on it after copying 7.79 GB*. When one file is over it the image is still made, without them, with a worry saying so: a disc that reads everywhere except on a twenty-five year old machine is worth far more than no disc.
+
+**The volume name**, which is not the disc's label: sixteen characters, letters, digits and underscores. `Disc 1` and `Disc-1` arrive at the same volume name, and that is fine, because nothing identifies a disc by it. The set manifest does that.
+
+**How often to say anything**, which works out at about two hundred times over the whole write whatever its size. A fixed interval fires a handful of times on a CD and tens of thousands of times on a BD-R XL.
+
+### Two things carried over from v1 that cost it dearly
+
+**Every COM object is released by hand.** `AddTree` opens a handle on each staged file and the result image holds them until it is released, so leaving it to the collector means DiscWright is still locking its own disc folder when the build returns. In v1 that showed up as a rebuild failing with *something is still using it*, blaming Explorer or a mounted image for a lock DiscWright was holding itself. There is a test that deletes the staged folder immediately afterwards.
+
+**There is no unsafe code in the copy loop, deliberately.** v1's first version took the address of a local with a pointer, which meant compiling with `/unsafe`. Four unmanaged bytes do the same job, and the difference matters: **Smart App Control refuses an assembly that combines unsafe pointers with a delegate invoked inside a copy loop**, because that is the shape of a shellcode loader. Measured on this machine, the pointer version was refused every time and this one accepted every time. The rule for `Copy.cs` is therefore: no pointers, whatever it costs in neatness.
+
+### Proved by mounting it
+
+The window built a disc from a real GOG download, made the image, and then the image was mounted and read back:
+
+```
+volume name: HOLLOW_KNIGHT   file system: UDF
+every file on the mounted disc matches what the list says
+```
+
+That is the whole chain in one run: a folder somebody downloaded, through the recognisers, the planner, the staging steps and the checksum list, into one file, mounted by Windows as a disc, and every byte on it checked against the list the disc carries.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

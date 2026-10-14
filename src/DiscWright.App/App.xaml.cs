@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Data;
 
 using DiscWright.Core;
+using DiscWright.Imaging;
 using DiscWright.Platform;
 using DiscWright.Staging;
 using DiscWright.ViewModels;
@@ -46,7 +47,7 @@ public partial class App : Application
 
         DiscBuilder builder = new(disk, new WindowsStageWriter(), new WindowsImages(), new Sha256Hasher());
 
-        MakeADisc screen = new(new WindowsAutorunEncoding(), HowBigIs(disk), builder);
+        MakeADisc screen = new(new WindowsAutorunEncoding(), HowBigIs(disk), builder, new WindowsImageMaker(disk));
 
         MainWindow window = new(screen, reader, disk);
         window.Show();

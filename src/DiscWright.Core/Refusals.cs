@@ -164,4 +164,22 @@ public static class Refusals
     /// </summary>
     public static Refusal ThereIsNothingToPutOnADisc() =>
         new("There is nothing to put on a disc", "No files were chosen.");
+
+    /// <summary>
+    /// The image from last time will not move out of the way.
+    /// </summary>
+    /// <remarks>
+    /// Nearly always because somebody mounted it to look inside, which leaves
+    /// Windows holding it open. Saying so is the whole value of this refusal:
+    /// the message Windows gives on its own names a file and no reason.
+    /// </remarks>
+    public static Refusal TheOldImageWillNotMoveAside(string path, string windowsSaid) =>
+        new("The image from last time cannot be replaced",
+            $"Something is still using {path}. If it was mounted to look inside, eject it first: "
+                + "right-click the drive in This PC and choose Eject, then build again."
+                + Environment.NewLine + Environment.NewLine + "Windows said: " + windowsSaid);
+
+    /// <summary>Windows refused to make the image, in its own words.</summary>
+    public static Refusal WindowsCouldNotMakeTheImage(string windowsSaid) =>
+        new("Windows could not make the image", "Windows said: " + windowsSaid);
 }

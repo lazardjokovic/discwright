@@ -349,6 +349,47 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task Makes_an_image_of_every_disc_it_builds()
+    {
+        ImagesThatWork images = new();
+        MakeADisc window = Ready(new BuilderThatWorks(), images);
+
+        await window.MakeIt();
+
+        // The folder is the disc and the image is the same disc as one file.
+        // Both, every time: the folder is what somebody checks and the image is
+        // what they burn.
+        Assert.Equal(1, images.Made);
+        Assert.Null(window.ItWentWrong);
+    }
+
+    [Fact]
+    public async Task Says_why_the_image_stopped_even_though_the_disc_was_built()
+    {
+        MakeADisc window = Ready(new BuilderThatWorks(), new ImagesThatRefuse());
+
+        await window.MakeIt();
+
+        // The staged folder is real and usable; what failed is the one file
+        // version of it, and saying so beats saying the build failed.
+        Assert.NotNull(window.ItWentWrong);
+        Assert.NotNull(window.Made);
+    }
+
+    [Fact]
+    public async Task Keeps_what_the_image_had_to_say_about_itself()
+    {
+        MakeADisc window = Ready(
+            new BuilderThatWorks(),
+            new ImagesThatWork { Worry = "The older file systems were left off" });
+
+        await window.MakeIt();
+
+        // True of the disc somebody now holds, and it will not be said again.
+        Assert.Equal("The older file systems were left off", window.AboutTheImage);
+    }
+
+    [Fact]
     public async Task Keeps_what_the_build_made()
     {
         MakeADisc window = Ready(new BuilderThatWorks());
@@ -409,17 +450,17 @@ public class TheMainWindowWithoutAWindow
     // ------------------------------------------------------------------ helpers
 
     /// <summary>A window with everything filled in, ready to press.</summary>
-    private static MakeADisc Ready(IBuildDiscs builder)
+    private static MakeADisc Ready(IBuildDiscs builder, IMakeImages? images = null)
     {
-        MakeADisc window = New(builder);
+        MakeADisc window = New(builder, images);
         window.OutputFolder = @"C:\out";
         window.Add(AGame("Hollow Knight", 1000));
 
         return window;
     }
 
-    private static MakeADisc New(IBuildDiscs? builder = null) =>
-        new(new Codepage1252(), _ => 0, builder ?? new BuilderThatWorks());
+    private static MakeADisc New(IBuildDiscs? builder = null, IMakeImages? images = null) =>
+        new(new Codepage1252(), _ => 0, builder ?? new BuilderThatWorks(), images ?? new ImagesThatWork());
 
     private static LeftBehind APatch(string name) =>
         new(new ListedFile(name, 200), LeftBehindKind.LooksLikeAnAddOn);
@@ -519,5 +560,31 @@ public class TheMainWindowWithoutAWindow
 
             return new BuiltDiscs([new BuiltDisc(project.Label, 1, 1, outputFolder, 1000)]);
         }
+    }
+
+    private sealed class ImagesThatWork : IMakeImages
+    {
+        internal string? Worry { get; init; }
+
+        internal int Made { get; private set; }
+
+        public Task<Outcome<MadeImage>> Make(
+            string stagedFolder, string imagePath, string label, bool wantsLegacyFileSystems,
+            IProgress<ImageProgress>? progress, CancellationToken ct)
+        {
+            Made++;
+            progress?.Report(new ImageProgress(1, 2));
+
+            return Task.FromResult<Outcome<MadeImage>>(new MadeImage(imagePath, 1024, Worry));
+        }
+    }
+
+    private sealed class ImagesThatRefuse : IMakeImages
+    {
+        public Task<Outcome<MadeImage>> Make(
+            string stagedFolder, string imagePath, string label, bool wantsLegacyFileSystems,
+            IProgress<ImageProgress>? progress, CancellationToken ct) =>
+            Task.FromResult<Outcome<MadeImage>>(
+                Refusals.TheOldImageWillNotMoveAside(imagePath, "it is mounted"));
     }
 }

@@ -30,6 +30,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private readonly IAutorunEncoding _encoding;
     private readonly Func<string, long> _howBigIs;
     private readonly IBuildDiscs _builder;
+    private readonly IMakeImages _images;
 
     /// <summary>Held while a build starts or stops, and while a report lands.</summary>
     private readonly Lock _oneAtATime = new();
@@ -52,11 +53,17 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// disk that often.
     /// </param>
     /// <param name="builder">What turns the project into discs on a disk.</param>
-    public MakeADisc(IAutorunEncoding encoding, Func<string, long> howBigIs, IBuildDiscs builder)
+    /// <param name="images">What turns each staged disc into one file.</param>
+    public MakeADisc(
+        IAutorunEncoding encoding,
+        Func<string, long> howBigIs,
+        IBuildDiscs builder,
+        IMakeImages images)
     {
         _encoding = encoding;
         _howBigIs = howBigIs;
         _builder = builder;
+        _images = images;
         Reconsider();
     }
 
@@ -203,6 +210,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// <summary>What the last build produced, or null when none has.</summary>
     public BuiltDiscs? Made { get; private set; }
 
+    /// <summary>
+    /// Something the image had to say that did not stop it, or null.
+    /// </summary>
+    public string? AboutTheImage { get; private set; }
+
     /// <summary>Why the last build stopped, or null when it did not.</summary>
     public Refusal? ItWentWrong { get; private set; }
 
@@ -234,6 +246,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         IsWorking = true;
         Made = null;
         ItWentWrong = null;
+        AboutTheImage = null;
         HowFar = 0;
         Doing = "Starting";
         Started();
@@ -273,6 +286,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
             switch (await _builder.Build(AsAProject(), Medium, OutputFolder, saying, ct))
             {
                 case Outcome<BuiltDiscs>.Ok(BuiltDiscs made):
+                    // The folder is the disc and the image is the same disc as
+                    // one file. Both, every time, because the folder is what
+                    // somebody checks and the image is what they burn, and
+                    // having to ask for the second one is a step nobody wants.
+                    ItWentWrong = await Images(made, ct);
                     Made = made;
                     break;
 
@@ -448,6 +466,63 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // Splitting a file changes what would be made, so the line saying so
         // has to be worked out again.
         Reconsider();
+    }
+
+    /// <summary>
+    /// Makes an image of each disc that was built, and says what went wrong if
+    /// anything did.
+    /// </summary>
+    /// <remarks>
+    /// A worry from the image is kept, because the thing it has to say, that
+    /// the older file systems were left off, is true of the disc somebody now
+    /// holds and will not be said again.
+    /// </remarks>
+    private async Task<Refusal?> Images(BuiltDiscs made, CancellationToken ct)
+    {
+        foreach (BuiltDisc disc in made.Discs)
+        {
+            Progress<ImageProgress> saying = new(step =>
+            {
+                bool worth;
+
+                lock (_oneAtATime)
+                {
+                    worth = IsWorking;
+
+                    if (worth)
+                    {
+                        Doing = $"{disc.Label}: {step}";
+                        HowFar = step.HowFar;
+                    }
+                }
+
+                if (worth)
+                {
+                    Tell(nameof(Doing));
+                    Tell(nameof(HowFar));
+                }
+            });
+
+            string image = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(disc.Folder) ?? disc.Folder,
+                OnTheDisc.Tidied(disc.Label) + ".iso");
+
+            Outcome<MadeImage> one = await _images.Make(
+                disc.Folder, image, disc.Label, Options.LegacyFileSystems, saying, ct);
+
+            if (one is Outcome<MadeImage>.No stopped)
+            {
+                return stopped.Refusal;
+            }
+
+            if (((Outcome<MadeImage>.Ok)one).Value.Worry is string worry)
+            {
+                AboutTheImage = worry;
+                Tell(nameof(AboutTheImage));
+            }
+        }
+
+        return null;
     }
 
     private void Started()

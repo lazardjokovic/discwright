@@ -41,6 +41,11 @@ public class TheArchitecture
         // no machine and so the choice of window framework stays cheap to
         // change.
         ["DiscWright.ViewModels"] = ["DiscWright.Staging"]
+
+        // The window reaches Imaging and Platform as well, which is the whole
+        // of its job: it is the one place that knows the real answers are
+        // Windows ones. It is not in this list because nothing may reference
+        // IT, and that has a test of its own below.
     };
 
     [Fact]
