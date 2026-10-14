@@ -39,7 +39,8 @@ The reason this is worth the layering: most of what this program gets wrong is a
 | `DiscWright.Burning` | Core | the image builder, the filesystem beyond reading a stream |
 | `DiscWright.Printing` | Core | everything else |
 | `DiscWright.Menu` | Core | the filesystem. it returns text |
-| `DiscWright.App` | all of the above | arithmetic, judgement, any refusal wording |
+| `DiscWright.ViewModels` | Core, Staging | **WPF, Windows, Platform.** Everything the window knows, with no window in it |
+| `DiscWright.App` | ViewModels | arithmetic, judgement, any refusal wording |
 | `DiscWright.Tests` | all of the above | a real drive, by default |
 
 `Imaging` and `Burning` are split on purpose even though both are IMAPI. Making an ISO and writing a disc fail differently, are wanted separately, and one of them already needs to run when there is no drive at all.
@@ -556,6 +557,30 @@ The version it moves *to* is what tells two patches apart, and it goes at the fr
 Beside their game, in an `Add-ons` folder inside the game's own folder. A disc holding four games keeps each one's patches with it, rather than in one pile at the root where nobody can tell which belongs to what.
 
 They are planned **with** their game, so they are never cut away onto a disc the game is not on: a soundtrack on disc 3 of a game that finishes on disc 2 is a button somebody can press and nothing else.
+
+## The window, decided
+
+**WPF, MVVM, and an `AutomationId` on everything the tests touch.**
+
+The reason is narrower than it looks, and it comes from v1. That app is **WinForms**, and its window suite fought UI Automation the whole way: `AccessibleName` and `Name` on a Panel do not reach UIA, only a GroupBox's `Text` does, and the disc menu is invisible to it entirely. That is a **WinForms** limitation, not a UIA one: WinForms reaches UIA through a legacy accessibility bridge where plain containers have no peer at all.
+
+WPF has no bridge. `AutomationProperties.AutomationId` is a first-class attached property on every element, surfaced by WPF's own automation peers. Choosing WinForms again would be choosing the same fight.
+
+WinUI 3 would give the Windows 11 look for free and charge for it in packaging, churn and a weaker automation story. The canvas already fixes every colour, the font and the exact 920 by 620, so the free look was going to be overridden anyway.
+
+### What makes it cheap to change
+
+**There is no WPF in `DiscWright.ViewModels` at all.** It is `net10.0`, not `net10.0-windows`, so the compiler enforces it the same way it enforces Core's purity.
+
+That is what turns "what happens when you pick a folder with no game in it" into a test that runs in milliseconds with no window, no desktop and no machine, and leaves an automated window test with only the clicking to do. v1 cannot do that: its logic and its controls are the same eight thousand lines, which is why its suite needs a VM and a workaround for the foreground lock.
+
+It is also the insurance. If WPF turns out to be the wrong answer, what gets thrown away is the markup. None of the view models move.
+
+### Two rules the window itself will keep
+
+**Everything the tests touch gets an `AutomationId`**, set deliberately and never left to the framework.
+
+**A refusal is worked out as things are chosen, not when the button is pressed.** A refusal that arrives after a click is one somebody has already committed to; the same words beforehand are just a sentence.
 
 ## The order to build it in
 

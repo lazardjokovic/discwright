@@ -32,7 +32,15 @@ public class TheArchitecture
         ["DiscWright.Platform"] = ["DiscWright.Core"],
         ["DiscWright.Imaging"] = ["DiscWright.Core"],
         ["DiscWright.Burning"] = ["DiscWright.Core"],
-        ["DiscWright.Printing"] = ["DiscWright.Core"]
+        ["DiscWright.Printing"] = ["DiscWright.Core"],
+
+        // The view models are everything the window knows and can do, with no
+        // window in them. They reach Staging because that is what they ask
+        // "what would this make", and nothing further: there is deliberately
+        // no WPF, no Windows and no Platform here, so they can be tested with
+        // no machine and so the choice of window framework stays cheap to
+        // change.
+        ["DiscWright.ViewModels"] = ["DiscWright.Staging"]
     };
 
     [Fact]

@@ -60,83 +60,43 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
         IProgress<BuildProgress>? progress,
         CancellationToken ct)
     {
-        if (project.Games.Count == 0)
+        // What to make is not decided here. The window has to answer the same
+        // question before anybody presses anything, so it is answered in one
+        // place and this builds whatever that says.
+        Outcome<PlannedBuild> planned = WhatWouldBeMade.For(project, medium, SizeOf);
+
+        if (planned is Outcome<PlannedBuild>.No refused)
         {
-            return Refusals.ThereIsNothingToPutOnADisc();
+            return refused.Refusal;
         }
 
-        long overhead = DiscOverhead.For(project, SizeOf);
-
-        // A loose extra whose name belongs to the disc would replace part of
-        // what makes the disc work, so it is refused before anything is
-        // planned rather than noticed afterwards.
-        foreach (string item in project.Extras?.Loose ?? [])
-        {
-            string name = System.IO.Path.GetFileName(item.TrimEnd(
-                System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
-
-            if (ReservedDiscNames.Claims(name))
-            {
-                return Refusals.ThatNameBelongsToTheDisc(name);
-            }
-        }
-
-        // Everything together first, because several games on one disc is the
-        // ordinary answer and the only one that needs no explaining.
-        Outcome<DiscLayout> together = DiscPlanner.Plan(RequestFor(project, project.Games, medium, overhead));
-
-        if (together is Outcome<DiscLayout>.Ok(DiscLayout layout) && layout.Discs.Count == 1)
-        {
-            return await Make(project, project.Games, layout, project.Label, medium, outputFolder, progress, ct);
-        }
-
-        // One game, and it needs more than one disc: that is a real set, and
-        // the discs really do continue one another.
-        if (project.Games.Count == 1)
-        {
-            return together switch
-            {
-                Outcome<DiscLayout>.No refused => refused.Refusal,
-                Outcome<DiscLayout>.Ok(DiscLayout set) =>
-                    await Make(project, project.Games, set, project.Label, medium, outputFolder, progress, ct),
-                _ => Refusals.ThereIsNothingToPutOnADisc()
-            };
-        }
-
-        // Several games that will not share a disc. A disc each, each named
-        // after its own game, and none of them numbered, because none of them
-        // continues another.
+        PlannedBuild build = ((Outcome<PlannedBuild>.Ok)planned).Value;
         List<BuiltDisc> made = [];
 
-        foreach (GameFolder game in project.Games)
+        foreach (PlannedOutput output in build.Outputs)
         {
             ct.ThrowIfCancellationRequested();
 
-            Outcome<DiscLayout> alone = DiscPlanner.Plan(RequestFor(project, [game], medium, overhead));
+            string where = output.InItsOwnFolder
+                ? System.IO.Path.Combine(outputFolder, OnTheDisc.Tidied(output.Label))
+                : outputFolder;
 
-            if (alone is Outcome<DiscLayout>.No refused)
-            {
-                return refused.Refusal;
-            }
-
-            DiscLayout its = ((Outcome<DiscLayout>.Ok)alone).Value;
-
-            Outcome<BuiltDiscs> built = await Make(
-                project with { Games = [game] },
-                [game],
-                its,
-                game.Name,
+            Outcome<BuiltDiscs> one = await Make(
+                project with { Label = output.Label, Games = output.Games },
+                output.Games,
+                output.Layout,
+                output.Label,
                 medium,
-                System.IO.Path.Combine(outputFolder, OnTheDisc.Tidied(game.Name)),
+                where,
                 progress,
                 ct);
 
-            if (built is Outcome<BuiltDiscs>.No stopped)
+            if (one is Outcome<BuiltDiscs>.No stopped)
             {
                 return stopped.Refusal;
             }
 
-            made.AddRange(((Outcome<BuiltDiscs>.Ok)built).Value.Discs);
+            made.AddRange(((Outcome<BuiltDiscs>.Ok)one).Value.Discs);
         }
 
         return new BuiltDiscs(made);
@@ -240,33 +200,6 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
                 SetManifest.For(project.Label, entries, disc.Number, made.Count, medium.Name, DateTimeOffset.Now));
         }
     }
-
-    private PlanRequest RequestFor(
-        DiscProject project,
-        IReadOnlyList<GameFolder> games,
-        Medium medium,
-        long overhead) =>
-        new(
-            [
-                .. games.SelectMany(game => game.Files.Select(file =>
-                    new PlanFile(
-                        WhereItGoes(games, game, file),
-                        System.IO.Path.Combine(game.Path, file.RelativePath),
-                        file.Bytes))),
-
-                // Add-ons travel with their game and are planned beside it, so
-                // they are never cut away onto a disc the game is not on. A
-                // soundtrack on disc 3 of a game that finishes on disc 2 is a
-                // button somebody can press and nothing else.
-                .. AddOnsOf(project, games).Select(each =>
-                    new PlanFile(each.RelativePath, each.Source, each.Bytes))
-            ],
-            medium,
-            overhead,
-            ExtrasBytes(project),
-            project.Options.CutFiles);
-
-    /// <summary>
     /// Where one game's file sits on a disc.
     /// </summary>
     /// <remarks>
@@ -281,8 +214,6 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
 
         return folder.Length == 0 ? file.RelativePath : System.IO.Path.Combine(folder, file.RelativePath);
     }
-
-    /// <summary>
     /// What the manual, the extras folder and the loose files come to.
     /// </summary>
     /// <remarks>
@@ -327,8 +258,6 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
     /// </summary>
     private static string WithBackslashes(string path) =>
         path.Replace('/', '\\');
-
-    /// <summary>
     /// Every add-on of the games being planned, with where it lands on the disc.
     /// </summary>
     /// <remarks>

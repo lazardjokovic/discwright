@@ -8,6 +8,7 @@
     <Project Path="src/DiscWright.Platform/DiscWright.Platform.csproj" />
     <Project Path="src/DiscWright.Printing/DiscWright.Printing.csproj" />
     <Project Path="src/DiscWright.Staging/DiscWright.Staging.csproj" />
+    <Project Path="src/DiscWright.ViewModels/DiscWright.ViewModels.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DiscWright.Tests/DiscWright.Tests.csproj" />
