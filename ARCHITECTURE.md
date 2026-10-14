@@ -308,6 +308,16 @@ Compressed and self contained is the answer. The promise this program makes is t
 
 Which is exactly why the test VM is worth keeping free of the runtime, and why there is a checkpoint called `testkit in place, no dotnet`, taken before the SDK went on it. Reverting to that gives a Windows which has never had .NET installed, and running the published app there is the only honest test that the publish settings are right.
 
+## A thing that will bite the autorun step
+
+Not a gap so much as a trap already seen, written down before anybody walks into it.
+
+v1 writes `autorun.inf` with PowerShell's `Encoding Default`, which on PowerShell 5.1 means **the system ANSI codepage**. That is deliberate and its comment says why: ASCII turned every accented character into a literal question mark, so "Uber Alles" reached Explorer as "?ber Alles", while ANSI carries the Latin-1 accents and typographic dashes GOG titles are full of. UTF-8 is wrong for a different reason: PowerShell writes a byte order mark and AutoRun does not understand one.
+
+**In .NET, `Encoding.Default` is UTF-8.** A direct port of that line would compile, run, look right in a text editor, and quietly produce an `autorun.inf` that AutoRun reads wrongly. Reaching the real ANSI codepage needs the `System.Text.Encoding.CodePages` package and `CodePagesEncodingProvider` registered first.
+
+So the encoding is the port's business, not `Core`'s: a step hands over text and asks for it to be written the way AutoRun reads it, and `Platform` owns what that means on this machine. The same port has to answer the other half of it, which is what a label will *look* like once it has been through that codepage, so a disc can be refused for being called `???` before it is burned rather than after.
+
 ## Smart App Control, and why 2.0 may need signing
 
 **This machine has Smart App Control ON and enforcing**, which is the default on a clean Windows 11. It refuses code it cannot attribute to a known publisher, and on 2026-10-14 it refused *ours*: Visual Studio's MSBuild was blocked loading our own freshly built class libraries during WPF markup compilation, logged as CodeIntegrity events 3033 and 3077, naming each referenced project in turn.
@@ -364,9 +374,9 @@ Written down because a gap nobody has named is a gap somebody fills badly in a h
 
 **The add-on and patch recognisers are not written.** The chain has two links: a GOG download and a folder of game files. A patch (`patch_x_to_y.exe`) and an add-on (a soundtrack installer beside its game) are each one more class and one more line in `GameFolderReader.InTheUsualOrder`, which is the arrangement earning its keep. They are left until the thing that holds a game's add-ons exists, because an add-on with no parent to attach to is a half-built idea. Source folders I, J and R in the testing kit are waiting for them.
 
-**`BuildContext` is undefined**, and it is the thing that decides whether Command pays off or quietly becomes a god object handed to everything. It has to carry the staging folder, the layout, the disc number, the project, the filesystem, the log and the progress, which is already a lot for one object. Worth designing deliberately rather than growing.
+**`BuildContext`. SETTLED 2026-10-14.** Five fields: the project, the layout, the disc being made now, the folder that becomes it, and the writer. What keeps it from becoming a god object is what was left out: **progress and logging are not in it.** They belong to the pipeline, which is the only thing that knows how many steps there are and which one is running. A step that could report its own progress would have to know its own number, and then every step would need telling where it sits in a list it is not part of.
 
-**Per disc against per set.** The steps are not all the same shape. Copying files happens three times for a three disc set; writing the set manifest happens once. Their order matters too, since checksums hash what the copy step wrote, and nothing tests that it holds.
+**Per disc against per set. SETTLED the same way:** a `BuildContext` describes **one disc**. A set runs the pipeline once per disc with a different disc and staging folder each time, which is what stops "copy the files" and "write the set manifest" from having to be the same shape. The step order is data and the pipeline runs it in order, because the checksum step hashes what the copy step wrote; a test pins that the order is kept.
 
 **Tests that want the manual testing kit. SETTLED 2026-10-14: they do not need it.** A recogniser only ever looks at names and sizes, so a case is a list rather than a folder. `TheRecogniser` writes the kit's source folders out as listings, which run in microseconds and work the same on a machine that has never seen the kit. The question comes back only when something has to read the inside of a file, and the one such thing so far, an installer's product name, is behind `IFileFacts` with a fake in the tests.
 
@@ -419,7 +429,7 @@ Each step ends with something that runs and something that is tested. No step is
 2. `DiscPlanner`. **Done.** Pure arithmetic, and the single richest source of cases: fits, does not fit, fills exactly, one file bigger than a whole disc, a cut and its pieces, where the extras land. 22 tests, no files at all. Three mutations were made to it on purpose to watch the tests catch them.
 3. `GameFolderReader` and its recognisers. **Done** for the three base kinds: a GOG download, game files with something to run, and game files with nothing to run. 18 tests, and no `InMemoryFileSystem` was needed after all, because a recogniser only looks at names and sizes, so a case is a written listing rather than a folder.
 4. `Platform`, the real `IFileSystem`, and then the same reader tested against the kit on disk.
-5. `Staging` and `Menu`, up to a disc folder on disk with a menu in it. Openable by hand, with no imaging and no burning yet.
+5. `Staging` and `Menu`, up to a disc folder on disk with a menu in it. Openable by hand, with no imaging and no burning yet. **The pipeline and the copy step are done**, with `BuildContext` settled and progress reported as "step 4 of 7" because the pipeline counts the steps that apply before running any of them. Autorun, artwork, the checksum list and the menu are still to come.
 6. `Imaging`, so there is an ISO.
 7. The window, over the view models that already exist and are already tested.
 8. `Burning`, last, behind its interface, with `FakeRecorder` carrying every failure before a real disc is ever touched.
