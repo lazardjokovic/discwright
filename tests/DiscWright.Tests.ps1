@@ -3748,6 +3748,9 @@ Describe "The menu's JavaScript is valid JavaScript" {
             '%%BTNS%%'     = '["Play","Install","Exit"]'
             '%%MANUAL%%'   = 'manual.pdf'; '%%MUSIC%%' = 'music.mp3'; '%%PREVIEW%%' = 'false'
             '%%SHOWCAP%%'  = 'true'
+            # The disc's own menu. The preview's is "no", which is what the
+            # Describe about pressing Preview twice is about.
+            '%%SINGLE%%'   = 'yes'
             # A disc that is not part of a set, which is what the template
             # produces for every disc built before sets existed.
             '%%SET%%'      = 'null'; '%%SETFILE%%' = 'Disc set.txt'
@@ -6193,6 +6196,138 @@ WScript.Echo(CAPTURED);
     }
 }
 
+Describe 'Pressing Preview after changing the background' -Tag 'Unit' {
+
+    # Reported on 13 October: "changing background multiple times does not update
+    # the background in the preview menu".
+    #
+    # Nothing was stale and nothing was cached. The second Preview was never a
+    # launch at all. The menu carries singleinstance="yes" keyed on
+    # applicationname, every preview of one disc was handed the same name, and so
+    # Windows brought the window already on screen to the front instead of opening
+    # the new one. That window was still drawn with the first background.
+    #
+    # Measured before the fix, two launches four seconds apart with a different
+    # bg.png behind each:
+    #
+    #   singleinstance=yes   first loaded bg of 2596 bytes, and that was all
+    #   singleinstance=no    first loaded bg of 2596 bytes
+    #                        second loaded bg of 373547 bytes
+    #
+    # mshta was never the problem. The same probe launched three times over one
+    # path reported the file that was there each time, 2596, 373547, 2596.
+
+    BeforeAll {
+        $script:SingleDir = Join-Path $script:Sandbox 'previewsingle'
+        New-Item -ItemType Directory -Force -Path $script:SingleDir | Out-Null
+        $cfg = @{ GameName='Single Test'; Games=@(); Buttons=@('Exit')
+                  MusicFile=''; ManualFile=''; PanelSide='Right'; IconName='x.ico'
+                  WindowBorder=$false; ButtonStyle='Minimal' }
+        $disc = Join-Path $script:SingleDir 'disc.hta'
+        New-MenuHta $cfg $disc
+        $script:DiscMenuHta = Get-Content -Raw $disc
+        $prev = Join-Path $script:SingleDir 'prev.hta'
+        New-MenuHta ($cfg + @{ Preview=$true }) $prev
+        $script:PrevMenuHta = Get-Content -Raw $prev
+
+        # Stands in for a Process. Close-PreviewWindow asks it four things and
+        # nothing else, and a real mshta here would mean a window on the desktop
+        # in the middle of the logic suite.
+        function New-FakePreview([bool]$exited, [bool]$closes) {
+            $o = [PSCustomObject]@{ HasExited = $exited; Closes = $closes; Calls = @() }
+            $o | Add-Member -MemberType ScriptMethod -Name CloseMainWindow -Value {
+                $this.Calls += 'close'; return $true }
+            $o | Add-Member -MemberType ScriptMethod -Name WaitForExit -Value {
+                param($ms) $this.Calls += ('wait' + $ms); return $this.Closes }
+            $o | Add-Member -MemberType ScriptMethod -Name Kill -Value {
+                $this.Calls += 'kill' }
+            return $o
+        }
+    }
+
+    It 'keeps the disc menu single instance' {
+        # Which is what the attribute is there for: double-clicking Start Here
+        # twice brings the one menu forward instead of stacking two of them.
+        $script:DiscMenuHta | Should -Match ([regex]::Escape('singleinstance="yes"'))
+    }
+
+    It 'lets a preview open while the last preview is still on screen' {
+        $script:PrevMenuHta | Should -Match ([regex]::Escape('singleinstance="no"'))
+    }
+
+    It 'still gives the preview a name of its own' {
+        # A separate matter, and still needed. The disc's menu IS single
+        # instance, so a preview sharing its name would be refocused in its
+        # place and stand in for the real thing.
+        [regex]::Match($script:DiscMenuHta, 'applicationname="([^"]+)"').Groups[1].Value |
+            Should -Be 'DiscMenu_SingleTest'
+        [regex]::Match($script:PrevMenuHta, 'applicationname="([^"]+)"').Groups[1].Value |
+            Should -Be 'DiscMenu_SingleTest_Preview'
+    }
+
+    It 'keeps the handle of the preview it starts' {
+        # Without it the only way back to that window is to go hunting through
+        # every mshta on the machine, and one of those may be a disc menu
+        # somebody is using.
+        $src = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $click = [regex]::Match($src, '(?s)\$btnPreview\.Add_Click\(\{(.*?)\r?\n\}\)').Groups[1].Value
+        $click | Should -Not -BeNullOrEmpty -Because 'the Preview click handler must be findable'
+        $click | Should -Match ([regex]::Escape('$state.PreviewProc = Start-Process mshta.exe'))
+        $click | Should -Match ([regex]::Escape('-PassThru'))
+    }
+
+    Context 'shutting the preview that is already open' {
+
+        BeforeEach {
+            $script:state = @{ PreviewProc = $null }
+        }
+
+        It 'asks the window to close, and waits for it' {
+            $p = New-FakePreview $false $true
+            $script:state.PreviewProc = $p
+            Close-PreviewWindow
+            ($p.Calls -join ',') | Should -Be 'close,wait2000'
+        }
+
+        It 'kills one that will not close' {
+            # A script error dialog sitting on the preview is enough to do it,
+            # and the folder the preview is reading cannot be wiped while it
+            # still holds it.
+            $p = New-FakePreview $false $false
+            $script:state.PreviewProc = $p
+            Close-PreviewWindow
+            ($p.Calls -join ',') | Should -Be 'close,wait2000,kill'
+        }
+
+        It 'leaves a window the user already closed alone' {
+            $p = New-FakePreview $true $true
+            $script:state.PreviewProc = $p
+            Close-PreviewWindow
+            $p.Calls | Should -BeNullOrEmpty
+        }
+
+        It 'forgets the handle either way' {
+            # Including when closing throws. The window is gone, or it is not
+            # ours any more, and holding the handle a second time would make the
+            # NEXT Preview throw instead of opening.
+            $p = New-FakePreview $false $true
+            $script:state.PreviewProc = $p
+            Close-PreviewWindow
+            $script:state.PreviewProc | Should -BeNullOrEmpty
+
+            $bad = [PSCustomObject]@{ HasExited = $false }
+            $bad | Add-Member -MemberType ScriptMethod -Name CloseMainWindow -Value {
+                throw 'no such process' }
+            $script:state.PreviewProc = $bad
+            { Close-PreviewWindow } | Should -Not -Throw
+            $script:state.PreviewProc | Should -BeNullOrEmpty
+        }
+
+        It 'does nothing at all before a preview has ever been opened' {
+            { Close-PreviewWindow } | Should -Not -Throw
+        }
+    }
+}
 Describe 'Hiding the game name above the menu buttons' -Tag 'Unit' {
 
     # Asked for after the long-name fix, by the same reporter, once he worked
