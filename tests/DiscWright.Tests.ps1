@@ -6588,6 +6588,208 @@ Describe 'What the menu looks like the moment it opens' -Tag 'Unit' {
     }
 }
 
+Describe 'A bar that moves while the disc reads' -Tag 'Unit' {
+
+    # Asked for after a real install: "timer seems to work but no progress bar,
+    # do we need all that info or just the progress bar?"
+    #
+    # The position within the file being copied cannot be measured. Four ways
+    # were tried and all four are closed:
+    #
+    #   robocopy's percentage, redirected to a file   7 of 8 reads refused
+    #     while the copy ran, and the file never grew past its final size
+    #   watching the destination file grow            pre-sized to full length
+    #     before a byte is written, by robocopy and by copy alike
+    #   copying in chunks from the menu's own script  no script host on a disc
+    #     can read part of a binary file
+    #   asking Windows for bytes read off the drive   there is no performance
+    #     counter for an optical drive at all
+    #
+    # So the bar is an estimate, and these are the rules it is held to: it is
+    # exact about files that are finished, it never finishes the file it is on,
+    # and it never reaches 100.
+
+    BeforeDiscovery {
+        $script:HaveCsBar = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:CsBar = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:BarSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $script:BarDir = Join-Path $script:Sandbox 'bar'
+        New-Item -ItemType Directory -Force -Path $script:BarDir | Out-Null
+
+        function Get-BarJs([string]$name) {
+            $start = $script:BarSrc.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $script:BarSrc.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $script:BarSrc.Length; $j++) {
+                if ($script:BarSrc[$j] -eq '{') { $depth++ }
+                elseif ($script:BarSrc[$j] -eq '}') {
+                    $depth--
+                    if ($depth -eq 0) { return $script:BarSrc.Substring($start, $j - $start + 1) }
+                }
+            }
+            throw "unbalanced braces in $name"
+        }
+
+        # The real functions, with the state set to whatever the case under
+        # test needs. SETFILET0 is given as "this many seconds ago", because a
+        # test that wrote a timestamp would be testing the clock.
+        function Invoke-Bar {
+            param([double]$Total, [double]$Done, [double]$FileBytes,
+                  [double]$SecsAgo, [double]$Rate, [string]$Copying = '1 of 2')
+            $js = @(
+                ('var SETBYTESTOTAL = ' + $Total + ', SETBYTESDONE = ' + $Done + ';')
+                ('var SETFILEBYTES = ' + $FileBytes + ';')
+                ('var SETFILET0 = ' + $(if ($SecsAgo -gt 0) { '(new Date()).getTime() - ' + ($SecsAgo * 1000) } else { '0' }) + ';')
+                ('var SETRATE = ' + $Rate + ', SETMEASBYTES = 0, SETMEASSECS = 0;')
+                ('var SETCOPYING = ' + (ConvertTo-Json $Copying) + ';')
+                (Get-BarJs 'setFileSecs')
+                (Get-BarJs 'setBarPct')
+                (Get-BarJs 'setLeftText')
+                (Get-BarJs 'setBarHtml')
+                'WScript.Echo("pct=" + setBarPct());'
+                'WScript.Echo("left=" + setLeftText());'
+                'WScript.Echo("html=" + setBarHtml());'
+            )
+            $f = Join-Path $script:BarDir ('b_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+            Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+            $out = @{}
+            foreach ($line in @(& $script:CsBar //Nologo //E:JScript $f 2>&1)) {
+                if ($line -match '^([a-z]+)=(.*)$') { $out[$Matches[1]] = $Matches[2] }
+            }
+            return $out
+        }
+    }
+
+    Context 'where the bar says it is' -Skip:(-not $script:HaveCsBar) {
+
+        It 'is exact about the files that are finished' {
+            # Half the bytes are on the hard disk and nothing is in flight.
+            # This part of the bar is not an estimate at all.
+            $r = Invoke-Bar -Total 100 -Done 50 -FileBytes 0 -SecsAgo 0 -Rate 1000 -Copying ''
+            $r['pct'] | Should -Be '50'
+        }
+
+        It 'adds the file in flight at the rate it believes' {
+            # 10 MB done of 100 MB, a 50 MB file 10 seconds in, 1 MB a second.
+            $r = Invoke-Bar -Total 100000000 -Done 10000000 -FileBytes 50000000 -SecsAgo 10 -Rate 1000000
+            $r['pct'] | Should -Be '20'
+        }
+
+        It 'never finishes the file it is on, however long it has been' {
+            # An hour into a 50 MB file at 1 MB a second. The estimate is way
+            # past the end, and is held at 99 per cent of that one file: 10 MB
+            # done plus 49.5 MB of 100 MB is 59.
+            $r = Invoke-Bar -Total 100000000 -Done 10000000 -FileBytes 50000000 -SecsAgo 3600 -Rate 1000000
+            $r['pct'] | Should -Be '59'
+        }
+
+        It 'never reaches 100' {
+            # Everything accounted for and the copy still has not said so.
+            # Only the copy finishing may say the copy finished.
+            $r = Invoke-Bar -Total 100 -Done 100 -FileBytes 0 -SecsAgo 0 -Rate 1000 -Copying ''
+            $r['pct'] | Should -Be '99'
+        }
+
+        It 'draws no bar at all when there is nothing to go on' {
+            $r = Invoke-Bar -Total 0 -Done 0 -FileBytes 0 -SecsAgo 0 -Rate 1000 -Copying ''
+            $r['pct'] | Should -Be '-1'
+            $r['html'] | Should -Be ''
+        }
+
+        It 'draws no bar when nothing is being copied' {
+            # The join and the hash check have no measurable position either,
+            # and a bar left on screen from the copy would be claiming one.
+            $r = Invoke-Bar -Total 100 -Done 50 -FileBytes 0 -SecsAgo 0 -Rate 1000 -Copying ''
+            $r['html'] | Should -Be ''
+        }
+
+        It 'builds a bar IE7 can draw' {
+            # The menu runs in IE7 mode: no flexbox, no border-radius, no
+            # transitions. Two nested divs and a width in per cent.
+            $r = Invoke-Bar -Total 100000000 -Done 50000000 -FileBytes 10000000 -SecsAgo 1 -Rate 1000000
+            $r['html'] | Should -Match ([regex]::Escape('<div class="setbar"><div class="setbarin" style="width:'))
+            $r['html'] | Should -Match '%"></div></div>'
+            $r['html'] | Should -Match ([regex]::Escape('class="setbarpc"'))
+        }
+    }
+
+    Context 'how long it says is left' -Skip:(-not $script:HaveCsBar) {
+
+        It 'says nearly there under half a minute' {
+            $r = Invoke-Bar -Total 100000000 -Done 99000000 -FileBytes 0 -SecsAgo 0 -Rate 1000000 -Copying ''
+            $r['left'] | Should -Be ', nearly there'
+        }
+
+        It 'says about a minute between thirty seconds and ninety' {
+            $r = Invoke-Bar -Total 100000000 -Done 40000000 -FileBytes 0 -SecsAgo 0 -Rate 1000000 -Copying ''
+            $r['left'] | Should -Be ', about a minute left'
+        }
+
+        It 'counts in minutes after that' {
+            # 600 MB left at 1 MB a second.
+            $r = Invoke-Bar -Total 700000000 -Done 100000000 -FileBytes 0 -SecsAgo 0 -Rate 1000000 -Copying ''
+            $r['left'] | Should -Be ', about 10 min left'
+        }
+
+        It 'says nothing rather than guessing when the sums are empty' {
+            $r = Invoke-Bar -Total 0 -Done 0 -FileBytes 0 -SecsAgo 0 -Rate 1000000 -Copying ''
+            $r['left'] | Should -Be ''
+        }
+    }
+
+    Context 'the rate it believes' {
+
+        It 'is seeded at the speed these discs actually are' {
+            # 1,228,800 bytes a second is 8x CD. Being wrong low makes the bar
+            # lag and then catch up; being wrong high pins it at its limit and
+            # looks broken, so the seed is deliberately the slow end.
+            $script:BarSrc | Should -Match ([regex]::Escape('var SETRATE=1228800'))
+        }
+
+        It 'will not learn from a file that came back too fast to time' {
+            # A file already on the drive returns in milliseconds. Folded into
+            # the average it would claim the drive reads at gigabytes a second,
+            # and the bar would jump to its limit on the next file and sit
+            # there. Only a file that took more than a second teaches it.
+            $fn = Get-BarJs 'setCopyStep'
+            $fn | Should -Match ([regex]::Escape('fsecs>1'))
+            $fn | Should -Match ([regex]::Escape('SETRATE=SETMEASBYTES/SETMEASSECS'))
+        }
+
+        It 'only counts a file that really copied' {
+            $fn = Get-BarJs 'setCopyStep'
+            $fn | Should -Match ([regex]::Escape('if(ok&&SETFILEBYTES>0&&fsecs>1)'))
+        }
+
+        It 'totals the whole disc once, not once per tick' {
+            # setTick redraws every second. Adding up the set's file sizes in
+            # there would be arithmetic over every row of the table, every
+            # second, while the drive is already busy.
+            $fn = Get-BarJs 'setCopy'
+            $fn | Should -Match ([regex]::Escape('SETBYTESTOTAL+=bb'))
+            $tick = Get-BarJs 'setTick'
+            $tick | Should -Not -Match ([regex]::Escape('SETBYTESTOTAL+='))
+        }
+
+        It 'puts the bar above the sentence rather than instead of it' {
+            # The bar says how far and the sentence says which file and how
+            # long. During one 690 MB part off a CD the sentence is the only
+            # part of that which is measured.
+            $fn = Get-BarJs 'setInfoHtml'
+            $fn | Should -Match ([regex]::Escape('setBarHtml()+setSentence(s)'))
+        }
+    }
+}
+
 Describe 'Hiding the game name above the menu buttons' -Tag 'Unit' {
 
     # Asked for after the long-name fix, by the same reporter, once he worked
@@ -11102,6 +11304,7 @@ Describe 'Installing a game off five discs, with the discs really changing' -Tag
         $menu = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
         $lifted = 'setRows', 'setDiscIn', 'setNow', 'setNeedsDisc', 'setPath', 'setDefaultDir',
                   'setJoins', 'setJoinDone', 'setStartJob', 'setWaitJob', 'setDone', 'setJobCode', 'setClock',
+                  'setFileSecs',
                   'setJoinAll', 'setJoinStep',
                   'setQuote', 'setScan', 'setMine', 'setMineBytes', 'setSetBytes',
                   'setCopyCmd', 'setMakeDir', 'setRoomFor', 'setRoomForAll', 'setRoomNeeding',
@@ -11119,6 +11322,9 @@ Describe 'Installing a game off five discs, with the discs really changing' -Tag
             'var SETJOBN=0, SETSTARTED=0;'
             ('var SETDIR = ' + (ConvertTo-Json $script:SwapRestore) + ';')
             'var SETARM=false, SETJOINING="", SETCHECKING="", SETCOPYING="";'
+            # The copy bar's figures, because setCopyStep keeps them up to date.
+            'var SETBYTESTOTAL=0, SETBYTESDONE=0, SETFILEBYTES=0, SETFILET0=0;'
+            'var SETRATE=1228800, SETMEASBYTES=0, SETMEASSECS=0;'
             'var GAMES=[{n:"Swap Game", m:"swap game", s:"setup_game.exe", files:false}], cur=0;'
             '// The document, the dialogs and the registry. Everything else is real.'
             'var SHOWN=0; function show(){ SHOWN++; }'
@@ -12814,6 +13020,11 @@ Describe 'The disc menu copying without holding the script engine shut' {
                 'var root = ' + (ConvertTo-Json $src) + ';'
                 'var SETCOPYING = "";'
                 'var SETJOBN = 0, SETSTARTED = 0;'
+                # The bar's figures. setCopyStep keeps them up to date and
+                # setFileSecs is how it times a file, so both travel with it.
+                'var SETBYTESTOTAL = 0, SETBYTESDONE = 0, SETFILEBYTES = 0, SETFILET0 = 0;'
+                'var SETRATE = 1228800, SETMEASBYTES = 0, SETMEASSECS = 0;'
+                (Get-JsFn3 $script:MenuSrc 'setFileSecs')
                 'var SAID = []; function setSay(m, good){ SAID[SAID.length] = m; }'
                 'var SHOWN = 0; function show(){ SHOWN++; }'
                 'var JOINED = 0; function setJoinAll(dir, after){ JOINED++; if (after) after(0); }'
@@ -12831,6 +13042,10 @@ Describe 'The disc menu copying without holding the script engine shut' {
                 (Get-JsFn3 $script:MenuSrc 'setClock')
                 (Get-JsFn3 $script:MenuSrc 'setCopyStep')
                 'setCopyStep({dir:' + (ConvertTo-Json $dst) + ',mine:[' + $list + '],at:0,bad:0});'
+                # Before the line below, not after it: a test anchors on the end
+                # of that one with said=$, and an extra line after it broke an
+                # assertion that was right all along.
+                'WScript.Echo("rate=" + Math.round(SETRATE) + " done=" + SETBYTESDONE);'
                 'WScript.Echo("joined=" + JOINED + " shown=" + SHOWN + " said=" + SAID.join("|"));'
             )
             $f = Join-Path $script:CpDir ('c_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')

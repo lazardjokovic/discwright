@@ -2524,6 +2524,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   /* Deliberately not a button. Everything the install does for itself lives
      behind this word, and somebody who only wants to install a game should be
      able to read straight past it. */
+  /* The copy bar. Two nested divs and a width in per cent, because the menu
+     runs in IE7 mode: no flexbox, no border-radius, no transitions. */
+  .setbar{width:248px;height:10px;background:#07171c;border:1px solid #16545a;margin:0 0 5px 0;}
+  .setbarin{height:10px;background:#00bec8;font-size:0;line-height:0;}
+  .setbarpc{width:250px;font-family:'Segoe UI',Arial;font-size:11px;color:#9fb8c2;margin:0 0 2px 0;}
   .setopts{width:250px;margin:10px 0 6px 0;font-family:'Segoe UI',Arial;font-size:11px;
     letter-spacing:1px;text-transform:uppercase;color:#6f8a94;cursor:pointer;}
   .setopts:hover{color:#9fb8c2;}
@@ -3475,6 +3480,83 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var SETARM=false;   // the delete button's second press
   var SETJOINING="";  // the cut file being put back together right now
   var SETCHECKING=""; // which file the hash check is on, out of how many
+
+  // What the copy bar is drawn from.
+  //
+  // SETBYTESDONE is literally true: those files are on the hard disk and were
+  // checked against the size the set file gives. The position WITHIN the file
+  // being copied is the one estimate in this menu, and it exists because
+  // nothing can measure it. Four ways were tried and all four are closed:
+  //
+  //   robocopy's own percentage, redirected to a file   7 of 8 reads refused
+  //     while the copy ran, and the file never grew past the size it ended at
+  //   watching the destination file grow                pre-sized to its full
+  //     length before a byte is written, by robocopy and by copy alike
+  //   copying in chunks from this script                no script host on a
+  //     disc can read part of a binary file: ADODB.Stream only loads whole
+  //     ones, and reading binary as text corrupts it
+  //   asking Windows how much it read off the drive     there is no
+  //     performance counter for an optical drive at all
+  //
+  // So the bar moves on elapsed time against a rate, and the rate corrects
+  // itself from every file that finishes. It is seeded at 8x CD, 1.2 MB/s,
+  // which is what these discs are. On a DVD the first file's bar lags and then
+  // catches up, which is the right way round to be wrong: a bar that runs
+  // ahead and sits at its limit looks broken, and a bar that lags looks slow.
+  //
+  // It is clamped at 99 per cent. Only the copy finishing may say the copy
+  // finished.
+  var SETBYTESTOTAL=0, SETBYTESDONE=0, SETFILEBYTES=0, SETFILET0=0;
+  var SETRATE=1228800, SETMEASBYTES=0, SETMEASSECS=0;
+
+  // Seconds the file being copied has been going, or 0 when none is.
+  function setFileSecs(){
+    if(!SETFILET0) return 0;
+    var s=((new Date()).getTime()-SETFILET0)/1000;
+    return s>0 ? s : 0;
+  }
+
+  // Where the bar should be, 0 to 99, or -1 for "do not draw one".
+  function setBarPct(){
+    if(SETBYTESTOTAL<=0) return -1;
+    var done=SETBYTESDONE;
+    if(SETCOPYING.length&&SETFILEBYTES>0){
+      var guess=setFileSecs()*SETRATE;
+      // Never past the file it is on. The only thing allowed to say a file is
+      // finished is the file being finished.
+      var cap=SETFILEBYTES*0.99;
+      if(guess>cap) guess=cap;
+      done+=guess;
+    }
+    var p=Math.floor(100*done/SETBYTESTOTAL);
+    if(p<0) p=0;
+    if(p>99) p=99;
+    return p;
+  }
+
+  // "about 6 min left", from the same rate. Left out entirely rather than
+  // guessed at when there is nothing to go on.
+  function setLeftText(){
+    if(SETBYTESTOTAL<=0||SETRATE<=0) return "";
+    var done=SETBYTESDONE;
+    if(SETCOPYING.length&&SETFILEBYTES>0){
+      var g=setFileSecs()*SETRATE, cap=SETFILEBYTES*0.99;
+      done+=(g>cap?cap:g);
+    }
+    var left=SETBYTESTOTAL-done;
+    if(left<=0) return "";
+    var secs=Math.round(left/SETRATE);
+    if(secs<30) return ", nearly there";
+    if(secs<90) return ", about a minute left";
+    return ", about "+Math.round(secs/60)+" min left";
+  }
+
+  function setBarHtml(){
+    var p=setBarPct();
+    if(p<0||!SETCOPYING.length) return "";
+    return '<div class="setbar"><div class="setbarin" style="width:'+p+'%"></div></div>'+
+           '<div class="setbarpc">'+p+'%'+setLeftText()+'</div>';
+  }
   var SETCOPYING="";  // which file is being copied off this disc, out of how many
   function setDir(){ if(!SETDIR.length) SETDIR=setDefaultDir(); return SETDIR; }
   function setChoose(){
@@ -3500,6 +3582,14 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     var mine=setMine();
     if(!mine.length){ setSay("Nothing on this disc is still missing from that folder.",true); show(); return; }
     SETARM=false;
+    // Totalled once, here, rather than per tick. The rate carries over from an
+    // earlier disc of the same set if there was one, because the drive has not
+    // changed and a measured rate beats the seed.
+    SETBYTESTOTAL=0; SETBYTESDONE=0; SETFILEBYTES=0; SETFILET0=0;
+    for(var bi=0;bi<mine.length;bi++){
+      var bb=parseFloat(mine[bi].b);
+      if(!isNaN(bb)&&bb>0) SETBYTESTOTAL+=bb;
+    }
     setCopyStep({dir:dir,mine:mine,at:0,bad:0});
   }
 
@@ -3545,8 +3635,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       return;
     }
     SETCOPYING=(st.at+1)+" of "+st.mine.length;
-    try{ show(); }catch(ex){}
     var row=st.mine[st.at];
+    SETFILEBYTES=parseFloat(row.b); if(isNaN(SETFILEBYTES)||SETFILEBYTES<0) SETFILEBYTES=0;
+    SETFILET0=(new Date()).getTime();
+    try{ show(); }catch(ex){}
     setWaitJob(setStartJob(setCopyCmd(root,st.dir,row.f)),function(code){
       // Both questions, because neither answer is enough on its own.
       //
@@ -3559,6 +3651,17 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       try{ ok=fso.FileExists(full)&&fso.GetFile(full).Size==parseFloat(row.b); }
       catch(ex2){ ok=false; }
       if(code>=8||!ok){ st.bad++; }
+      // The rate corrects itself from work that really happened. Only a file
+      // that copied, and took long enough to time, is allowed to teach it
+      // anything: a file already on the drive returns in milliseconds and
+      // would otherwise claim the drive reads at gigabytes a second.
+      var fsecs=setFileSecs();
+      if(ok&&SETFILEBYTES>0&&fsecs>1){
+        SETMEASBYTES+=SETFILEBYTES; SETMEASSECS+=fsecs;
+        if(SETMEASSECS>0) SETRATE=SETMEASBYTES/SETMEASSECS;
+      }
+      if(SETFILEBYTES>0) SETBYTESDONE+=SETFILEBYTES;
+      SETFILEBYTES=0; SETFILET0=0;
       st.at++;
       setCopyStep(st);
     });
@@ -3834,10 +3937,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   var SETLASTSCAN=null;
   function setInfoHtml(s){
     var dir=setDir();
+    // The bar goes above the sentence, not instead of it. The bar says how far
+    // and the sentence says which file and how long, and during one 690 MB
+    // part off a CD the sentence is the only part of that which is measured.
     return "Disc "+setNow()+" of "+SET.of+". No disc in a set installs on its own."+
            "<br><br>Copy every disc into one folder, then install from there."+
            (dir.length ? "<br><br>"+dir : "")+
-           "<br><br>"+setSentence(s);
+           "<br><br>"+setBarHtml()+setSentence(s);
   }
   // Tick while something is running, and stop when nothing is. Nothing else
   // on the page moves, so a still window is how somebody decides it has hung.
