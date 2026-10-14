@@ -2533,6 +2533,33 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     color:#9fb3ba;font-size:12px;line-height:17px;}
 </style>
 <script language="JScript">
+  // Sized here, at the top of the head script, and refined in init(). Both are
+  // needed, and this one is the one that matters.
+  //
+  // init() runs from body onload, and onload waits for images. bg.png is around
+  // 578 KB and comes off an optical disc. Measured on a real CD-RW, watching
+  // every window mshta put on screen:
+  //
+  //   +4793 ms   1440x753 at 156,156   'E:\AUTORUN\menu.hta'
+  //   +7402 ms   760x480  at 156,156   'Hollow Knight D2'
+  //
+  // So mshta's own default window sat there for 2.6 seconds with nothing in it
+  // but the X, because the background had not arrived and there was no caption
+  // to explain it either. Reported from a real install: "strange bigger window
+  // opens with only x at the top in middle, than regular window appears".
+  //
+  // Nothing in hta:application can fix that: it has no width or height, an HTA
+  // is sized by script. What it needs is to be sized before the images rather
+  // than after them, and a head script runs as the document is parsed.
+  //
+  // The numbers are the nominal ones, with no allowance for window chrome,
+  // because document.body does not exist yet to measure it. init() does that
+  // afterwards and the correction is a few pixels, which nobody sees.
+  try{
+    window.resizeTo(760,480);
+    window.moveTo(Math.max(0,(screen.availWidth-760)/2),Math.max(0,(screen.availHeight-480)/2));
+  }catch(e){}
+
   var fso=new ActiveXObject("Scripting.FileSystemObject");
   var shell=new ActiveXObject("Shell.Application");
 
@@ -2614,6 +2641,32 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if (leaf && leaf.toUpperCase()=="AUTORUN") return fso.GetParentFolderName(dir);
     return dir;
   }
+  // Which of the three corner buttons this disc actually has, laid out from
+  // the right edge inwards.
+  //
+  // They were positioned in CSS at fixed offsets: X at 8px, the mute at 44px,
+  // the checksum tick at 80px. A disc with no music hides the mute button and
+  // leaves its 36 pixels empty, so the tick floated away from the X with a hole
+  // between them. Reported from a real disc: "checksum looks a bit away from x
+  // button in top right corner".
+  //
+  // CSS cannot know which buttons a disc has, so this is the one thing here
+  // that has to be done in script.
+  function cornerShown(el){
+    try{
+      var d=(el.currentStyle?el.currentStyle.display:el.style.display);
+      return d!="none";
+    }catch(e){ return true; }
+  }
+  function layoutCorner(){
+    var ids=["x","mute","sums"], right=8, i, el;
+    for(i=0;i<ids.length;i++){
+      el=document.getElementById(ids[i]);
+      if(!el||!cornerShown(el)) continue;
+      el.style.right=right+"px";
+      right+=36;   // 28 wide, a 1px border each side, and 6 of gap
+    }
+  }
   function init(){
     try{ window.resizeTo(760,480);
       var dw=760-document.body.clientWidth, dh=480-document.body.clientHeight;
@@ -2625,6 +2678,8 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     show();   // renders the panel, which calls setupHover and refreshButtons itself
     initMusic();
     initSums();
+    // After both, because it lays out whichever of them decided to show.
+    layoutCorner();
   }
   // Shown only when the disc carries a list to check against. A tick that
   // answers "there is nothing to check" would be a button that lies about
