@@ -37,11 +37,58 @@ window.moveTo(
 
 function start() {
     document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);
-    document.getElementById("gameName").innerText = DISC.game;
 
     var wanted = whatIsStillWanted(DISC.discsCopied, DISC.discsInSet);
     document.getElementById("stillWanted").innerText = wanted;
-    document.getElementById("stillWanted").style.display = wanted === "" ? "none" : "block";
+    document.getElementById("stillWanted").style.display = wanted === "" ? "block" : "block";
+
+    if (whichScreenToOpenOn(DISC.games) === "chooser") {
+        showChooser();
+    } else {
+        showGame(0);
+    }
+}
+
+// The list of games, when there is more than one on the disc.
+function showChooser() {
+    document.getElementById("gameScreen").style.display = "none";
+    document.getElementById("chooserScreen").style.display = "block";
+    document.getElementById("discName").innerText = DISC.game;
+
+    var rows = "";
+
+    for (var i = 0; i < DISC.games.length; i++) {
+        // The index is written into the attribute rather than the name,
+        // because a name is the one thing on this screen somebody else wrote.
+        rows += '<a class="btn" href="#" onclick="showGame(' + i + '); return false;"><span id="gameRow' + i + '"></span></a>';
+    }
+
+    document.getElementById("gameList").innerHTML = rows;
+
+    // Set as TEXT afterwards, never built into the markup above. A game called
+    // "Command & Conquer" would otherwise arrive as "Command  Conquer", and one
+    // with a bracket in it would arrive as something worse.
+    for (var j = 0; j < DISC.games.length; j++) {
+        document.getElementById("gameRow" + j).innerText = DISC.games[j].name;
+    }
+}
+
+// One game's own screen.
+function showGame(index) {
+    var game = gameAt(DISC.games, index);
+
+    if (!game) {
+        showChooser();
+        return;
+    }
+
+    document.getElementById("chooserScreen").style.display = "none";
+    document.getElementById("gameScreen").style.display = "block";
+    document.getElementById("gameName").innerText = game.name;
+    document.getElementById("doIt").innerText = whatToDoWith(game);
+
+    // Only offered when there is somewhere to go back to.
+    document.getElementById("back").style.display = DISC.games.length > 1 ? "block" : "none";
 }
 
 function doExit() {
@@ -69,20 +116,33 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 .btn { display: block; height: 38px; line-height: 38px; margin-bottom: 9px;
        padding-left: 14px; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;
        text-transform: uppercase; color: #CBD6DB; background: #0C1519;
-       border: 1px solid #27353B; text-decoration: none; }
+       border: 1px solid #27353B; text-decoration: none; overflow: hidden;
+       white-space: nowrap; text-overflow: ellipsis; }
 /* One accent, on one button: whichever is the thing to do next. Everything else
    is two greys, so the game's own picture is the only colour in the window. */
 .btn.next { background: #103A3E; border-color: #00BEC8; border-left-width: 3px; color: #FFFFFF; }
 #stillWanted { margin-top: 18px; font-size: 11px; line-height: 16px; color: #8FA3AA; }
+.hint { margin: 0 0 14px 0; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #5E727A; }
 </style>
 </head>
 
 <body onload="start()">
 <div id="stage">
     <div id="panel">
-        <h1 id="gameName"></h1>
-        <a class="btn next" href="#" onclick="doExit(); return false;">%%PRIMARY%%</a>
-        <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
+
+        <div id="chooserScreen" style="display: none">
+            <h1 id="discName"></h1>
+            <p class="hint">Pick a game</p>
+            <div id="gameList"></div>
+        </div>
+
+        <div id="gameScreen" style="display: none">
+            <h1 id="gameName"></h1>
+            <a class="btn next" href="#" onclick="doExit(); return false;"><span id="doIt"></span></a>
+            <a class="btn" id="back" href="#" onclick="showChooser(); return false;">Back</a>
+            <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
+        </div>
+
         <div id="stillWanted"></div>
     </div>
 </div>

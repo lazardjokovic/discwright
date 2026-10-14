@@ -89,6 +89,21 @@ public static class JScript
     /// <inheritdoc cref="Number(int)"/>
     public static string Number(long value) => value.ToString(CultureInfo.InvariantCulture);
 
+    /// <summary>
+    /// A list of name and value pairs, written as a JScript object.
+    /// </summary>
+    /// <remarks>
+    /// The values are written exactly as given, so whatever builds them has
+    /// already decided how each one is escaped. Passing a raw string in here
+    /// would be the one place a game's name could reach the menu unescaped,
+    /// which is why this takes what is already safe rather than strings.
+    /// </remarks>
+    public static string Fields(params (string Name, string Value)[] fields) =>
+        "{" + string.Join(", ", fields.Select(field => field.Name + ": " + field.Value)) + "}";
+
+    /// <summary>A list of already-written values, as a JScript array.</summary>
+    public static string ArrayOf(IEnumerable<string> written) => "[" + string.Join(", ", written) + "]";
+
     /// <summary>A list of strings, as a JScript array.</summary>
     public static string ListOf(IEnumerable<string> values) =>
         "[" + string.Join(", ", values.Select(Literal)) + "]";

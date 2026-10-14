@@ -104,6 +104,59 @@ public class TheMenuWriter
     }
 
     [Fact]
+    public void Describes_each_game_well_enough_for_the_chooser_to_act_on_it()
+    {
+        string page = MenuWriter.MenuPage(Facts() with
+        {
+            Games =
+            [
+                new MenuGame("Grim Fandango", "01 - Grim Fandango/setup_grim.exe", "01 - Grim Fandango"),
+                new MenuGame("Loom", string.Empty, "02 - Loom")
+            ]
+        });
+
+        // A name alone is not enough: the chooser has to know what to run and
+        // where the game's files are, or its only button does nothing.
+        Assert.Contains("name: \"Grim Fandango\"", page, StringComparison.Ordinal);
+        Assert.Contains("runs: \"01 - Grim Fandango/setup_grim.exe\"", page, StringComparison.Ordinal);
+        Assert.Contains("folder: \"02 - Loom\"", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Gives_a_single_game_disc_one_game_rather_than_none()
+    {
+        string page = MenuWriter.MenuPage(Facts(name: "Hollow Knight"));
+
+        // The chooser never appears for it, but the game screen reads the same
+        // list, so a disc with one game still has one entry in it.
+        Assert.Contains("name: \"Hollow Knight\"", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Carries_both_screens_so_a_disc_can_be_either_kind()
+    {
+        string page = MenuWriter.MenuPage(Facts());
+
+        // Every disc gets the same menu, and which screen it opens on is
+        // decided when it runs rather than when it is built. One menu, tested
+        // once, and no second template to keep in step with the first.
+        Assert.Contains("id=\"chooserScreen\"", page, StringComparison.Ordinal);
+        Assert.Contains("id=\"gameScreen\"", page, StringComparison.Ordinal);
+        Assert.Contains("whichScreenToOpenOn", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Puts_a_game_s_name_on_the_chooser_as_text_and_never_as_markup()
+    {
+        string page = MenuWriter.MenuPage(Facts());
+
+        // Built into the row's markup, a game called "Command & Conquer" would
+        // arrive as "Command  Conquer" and one with a bracket in it as
+        // something worse. The row is built empty and filled with innerText.
+        Assert.Contains("innerText = DISC.games[j].name", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Does_not_let_a_name_close_the_script_block()
     {
         string page = MenuWriter.MenuPage(Facts(name: "Nasty </script><h1>take over"));

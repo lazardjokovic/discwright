@@ -46,7 +46,11 @@ public static class MenuWriter
         data.Append("    discsInSet: ").Append(JScript.Number(facts.DiscsInSet)).Append(",\n");
         data.Append("    discsCopied: ").Append('[').Append(JScript.Number(facts.DiscNumber)).Append("],\n");
         data.Append("    buttons: ").Append(JScript.ListOf(facts.Buttons)).Append(",\n");
-        data.Append("    games: ").Append(JScript.ListOf(facts.GamesOrTheOne)).Append('\n');
+        data.Append("    games: ").Append(
+            JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
+                ("name", JScript.Literal(game.Name)),
+                ("runs", JScript.Literal(game.Runs)),
+                ("folder", JScript.Literal(game.Folder)))))).Append('\n');
         data.Append('}');
 
         return Template
@@ -118,8 +122,22 @@ public sealed record MenuFacts(
     string PrimaryButton,
     IReadOnlyList<string> Buttons,
     bool OnlyOneAtATime,
-    IReadOnlyList<string>? Games = null)
+    IReadOnlyList<MenuGame>? Games = null)
 {
-    /// <summary>The games, or the one name when none were given.</summary>
-    public IReadOnlyList<string> GamesOrTheOne => Games ?? [GameName];
+    /// <summary>The games, or one standing for the disc when none were given.</summary>
+    public IReadOnlyList<MenuGame> GamesOrTheOne => Games ?? [new MenuGame(GameName, string.Empty, string.Empty)];
 }
+
+/// <summary>One game, as its own disc's menu sees it.</summary>
+/// <param name="Name">What the chooser shows, and what the game's screen is titled.</param>
+/// <param name="Runs">
+/// What the Install button runs, relative to the root of the disc, or empty for
+/// a game with nothing to install. Empty is not a failure: the menu offers to
+/// copy the folder and play it from there instead, because a game run off a
+/// read only disc cannot save.
+/// </param>
+/// <param name="Folder">
+/// Where the game's files sit on the disc, or empty when the game has the disc
+/// to itself and its files are at the root.
+/// </param>
+public sealed record MenuGame(string Name, string Runs, string Folder);

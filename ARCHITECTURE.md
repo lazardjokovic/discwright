@@ -481,6 +481,28 @@ Three of those are decisions rather than placements.
 
 A loose extra with one of those names is **refused by name**, not renamed around. Quietly putting their file somewhere else is worse: they would burn a disc believing it holds a file it does not hold, under a name they could find it by. The `setup_` rule is there because a loose file called that at the root would be read back as a game the next time the disc was opened.
 
+## One menu, two screens
+
+A disc with several games opens on a chooser; a disc with one opens on that game. **Both screens are in every menu**, and which one it opens on is decided when it runs rather than when it is built.
+
+That is one template, tested once, instead of two that have to be kept in step. `whichScreenToOpenOn` lives in `menu.js` with the rest of the logic, so the decision is tested under `cscript` like everything else there.
+
+Three things on that screen are decisions:
+
+**A game's name is set as text, never built into the markup.** The rows are written empty and filled with `innerText` afterwards. Built in, a game called "Command & Conquer" would arrive as "Command  Conquer", and one with a bracket in it as something worse. The name is the one thing on that screen somebody else wrote.
+
+**`gameAt` is bounds checked**, because the index comes from whatever the menu was told. An index past the end in JScript is not an error: it is `undefined`, the next line asks `undefined` for its name, and the whole menu stops with nothing on screen to say why.
+
+**A game with nothing to install says "Copy and play" rather than "Play".** A game run off a disc cannot save: the disc is read only, and the first time it tries to write a save it either fails or silently writes nowhere.
+
+### Where a game's folder is decided
+
+In `OnTheDisc`, and in one place only. The builder asks it where to copy a game's files, and the menu asks it what to call the folder it has to run something out of. Worked out twice they would agree until somebody changed one of them, and then the menu's only button would point at a folder that is not there.
+
+### Still missing from a game's screen
+
+The chosen launcher. A folder of game files has several executables and the recogniser deliberately picks none of them: which one starts a game is a question for the person, and the window is where it gets asked. Until then such a game offers to copy its folder, which is a true and useful answer, just not the whole one.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

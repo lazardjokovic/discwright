@@ -219,7 +219,12 @@ public sealed class BuildingADisc : IDisposable
         // Somebody looking at a compilation called "One" would reasonably
         // conclude the other game was not on it.
         Assert.Contains("HOLLOW KNIGHT", menu, StringComparison.Ordinal);
-        Assert.Contains("\"One\", \"Two\"", menu, StringComparison.Ordinal);
+
+        // Each game is an object now, not just a name, because the chooser has
+        // to know what to run as well as what to call it.
+        Assert.Contains("name: \"One\"", menu, StringComparison.Ordinal);
+        Assert.Contains("name: \"Two\"", menu, StringComparison.Ordinal);
+        Assert.Contains("01 - One/setup_one.exe", menu, StringComparison.Ordinal);
     }
 
     [Fact]

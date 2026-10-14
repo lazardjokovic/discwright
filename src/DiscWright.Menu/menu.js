@@ -152,3 +152,43 @@ function whatIsStillWanted(discsCopied, discsInSet) {
 
     return "Still needs discs " + all + " and " + wanted[wanted.length - 1] + ".";
 }
+
+// Which screen the menu opens on.
+//
+// One game and it opens on that game, because a chooser offering one choice is
+// a door with one door behind it. Several and it opens on the chooser, because
+// picking is the first thing somebody has to do.
+function whichScreenToOpenOn(games) {
+    if (!games || games.length <= 1) {
+        return "game";
+    }
+    return "chooser";
+}
+
+// One game out of the list, or nothing.
+//
+// Bounds checked, because the index comes from whatever the menu was told, and
+// an index past the end in JScript is not an error: it is undefined, and the
+// next line asks undefined for its name and the whole menu stops.
+function gameAt(games, index) {
+    if (!games || index < 0 || index >= games.length) {
+        return null;
+    }
+    return games[index];
+}
+
+// What the one coloured button on a game's screen says.
+//
+// A game with an installer is installed. A game with nothing to install is
+// copied and played from wherever it was copied to, because a game run off a
+// disc cannot save: the disc is read only, and the first time it tries to write
+// a save it either fails or silently writes nowhere.
+function whatToDoWith(game) {
+    if (!game) {
+        return "";
+    }
+    if (game.runs && game.runs.length > 0) {
+        return "Install";
+    }
+    return "Copy and play";
+}

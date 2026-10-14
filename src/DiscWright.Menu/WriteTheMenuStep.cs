@@ -75,6 +75,47 @@ public sealed class WriteTheMenuStep : IBuildStep
         return buttons;
     }
 
+    /// <summary>
+    /// Each game, with where it landed on this disc and what starts it.
+    /// </summary>
+    /// <remarks>
+    /// The folder comes from <see cref="OnTheDisc"/>, which is the same place
+    /// the builder asked when it copied the files there. Worked out twice they
+    /// would agree until somebody changed one of them, and then the menu's only
+    /// button would point at a folder that is not there.
+    /// </remarks>
+    private static List<MenuGame> GamesOn(BuildContext context)
+    {
+        IReadOnlyList<GameFolder> games = context.Project.Games;
+        List<MenuGame> onTheMenu = [];
+
+        for (int at = 0; at < games.Count; at++)
+        {
+            GameFolder game = games[at];
+            string folder = OnTheDisc.FolderFor(at + 1, game.Name, games.Count);
+
+            string runs = game.Installer is null
+                ? string.Empty
+                : Join(folder, game.Installer.RelativePath);
+
+            onTheMenu.Add(new MenuGame(game.Name, runs, folder));
+        }
+
+        return onTheMenu;
+    }
+
+    /// <summary>
+    /// A path on the disc, with forward slashes, because it goes into the
+    /// menu's script rather than into a Windows API and the menu builds its own
+    /// paths from it.
+    /// </summary>
+    private static string Join(string folder, string file) =>
+        folder.Length == 0
+            ? WithForwardSlashes(file)
+            : WithForwardSlashes(folder) + "/" + WithForwardSlashes(file);
+
+    private static string WithForwardSlashes(string path) => path.Replace('\\', '/');
+
     private static MenuFacts FactsFor(BuildContext context)
     {
         GameFolder? game = context.Project.Games.Count > 0 ? context.Project.Games[0] : null;
@@ -106,6 +147,6 @@ public sealed class WriteTheMenuStep : IBuildStep
             // second disc refocuses the first one's stale window.
             true,
 
-            [.. context.Project.Games.Select(each => each.Name)]);
+            GamesOn(context));
     }
 }

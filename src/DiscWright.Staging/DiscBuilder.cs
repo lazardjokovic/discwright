@@ -126,7 +126,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
                 [game],
                 its,
                 game.Name,
-                System.IO.Path.Combine(outputFolder, Tidied(game.Name)),
+                System.IO.Path.Combine(outputFolder, OnTheDisc.Tidied(game.Name)),
                 progress,
                 ct);
 
@@ -204,23 +204,9 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
     /// </remarks>
     private static string WhereItGoes(IReadOnlyList<GameFolder> games, GameFolder game, ListedFile file)
     {
-        if (games.Count == 1)
-        {
-            return file.RelativePath;
-        }
+        string folder = OnTheDisc.FolderFor(games.ToList().IndexOf(game) + 1, game.Name, games.Count);
 
-        int number = games.ToList().IndexOf(game) + 1;
-
-        return System.IO.Path.Combine($"{number:00} - {Tidied(game.Name)}", file.RelativePath);
-    }
-
-    /// <summary>A name that is safe as a folder on a disc.</summary>
-    private static string Tidied(string name)
-    {
-        string tidied = new([.. name.Select(character =>
-            System.IO.Path.GetInvalidFileNameChars().Contains(character) ? ' ' : character)]);
-
-        return tidied.Trim().Length == 0 ? "game" : tidied.Trim();
+        return folder.Length == 0 ? file.RelativePath : System.IO.Path.Combine(folder, file.RelativePath);
     }
 
     /// <summary>

@@ -141,6 +141,56 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Opens_on_the_game_when_there_is_only_one()
+    {
+        // A chooser offering one choice is a door with one door behind it.
+        Assert.Equal("game", Ask("whichScreenToOpenOn([{name: 'Hollow Knight'}])"));
+        Assert.Equal("game", Ask("whichScreenToOpenOn([])"));
+        Assert.Equal("game", Ask("whichScreenToOpenOn(null)"));
+    }
+
+    [Fact]
+    public void Opens_on_the_chooser_when_there_is_something_to_choose()
+    {
+        Assert.Equal("chooser", Ask("whichScreenToOpenOn([{name: 'One'}, {name: 'Two'}])"));
+    }
+
+    [Fact]
+    public void Hands_back_the_game_that_was_asked_for()
+    {
+        Assert.Equal("Two", Ask("gameAt([{name: 'One'}, {name: 'Two'}], 1).name"));
+    }
+
+    [Theory]
+    [InlineData("gameAt([{name: 'One'}], 5)")]
+    [InlineData("gameAt([{name: 'One'}], -1)")]
+    [InlineData("gameAt([], 0)")]
+    [InlineData("gameAt(null, 0)")]
+    public void Hands_back_nothing_rather_than_falling_over(string call)
+    {
+        // An index past the end in JScript is not an error, it is undefined,
+        // and the next line asks undefined for its name and the whole menu
+        // stops with nothing on screen to say why.
+        Assert.Equal("null", Ask(call));
+    }
+
+    [Fact]
+    public void Says_install_for_a_game_that_has_an_installer()
+    {
+        Assert.Equal("Install", Ask("whatToDoWith({name: 'x', runs: 'setup_x.exe'})"));
+    }
+
+    [Fact]
+    public void Says_copy_and_play_for_a_game_that_has_nothing_to_install()
+    {
+        // A game run off a disc cannot save: the disc is read only, and the
+        // first time it tries to write a save it either fails or silently
+        // writes nowhere.
+        Assert.Equal("Copy and play", Ask("whatToDoWith({name: 'x', runs: ''})"));
+        Assert.Equal("Copy and play", Ask("whatToDoWith({name: 'x'})"));
+    }
+
+    [Fact]
     public void Is_reported_with_a_line_and_a_column_when_it_will_not_parse()
     {
         // The reason for a .wsf with a real src rather than pasting the file
