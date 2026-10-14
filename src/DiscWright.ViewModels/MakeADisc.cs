@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 using DiscWright.Core;
@@ -111,6 +112,53 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// <summary>Whether there is anything to press the button for.</summary>
     public bool CanMakeIt => WhyNot is null && OutputFolder.Length > 0;
 
+    /// <summary>Every size of disc that can be aimed at.</summary>
+    /// <remarks>
+    /// An instance property although it reads nothing of the instance, because
+    /// a WPF binding cannot reach a static one. Static would mean every list in
+    /// the window having to know the class it comes from, which is the window
+    /// knowing more about this than it should.
+    /// </remarks>
+    [SuppressMessage("Performance", "CA1822", Justification = "A binding cannot reach a static property.")]
+    public IReadOnlyList<Medium> DiscSizes => Media.All;
+
+    /// <summary>Whether the disc gets a menu that opens when it goes in.</summary>
+    public bool Menu
+    {
+        get => Options.Menu;
+        set => Switch(Options with { Menu = value });
+    }
+
+    /// <summary>Whether the disc carries a list of what every file should be.</summary>
+    public bool Checksums
+    {
+        get => Options.Checksums;
+        set => Switch(Options with { Checksums = value });
+    }
+
+    /// <summary>Whether the cover art goes on the disc as well as on paper.</summary>
+    public bool ArtworkOnDisc
+    {
+        get => Options.ArtworkOnDisc;
+        set => Switch(Options with { ArtworkOnDisc = value });
+    }
+
+    /// <summary>Whether to add the file systems an older Windows can read.</summary>
+    public bool LegacyFileSystems
+    {
+        get => Options.LegacyFileSystems;
+        set => Switch(Options with { LegacyFileSystems = value });
+    }
+
+    /// <summary>
+    /// Whether a file too big for the room left may be split across two discs.
+    /// </summary>
+    public bool CutFiles
+    {
+        get => Options.CutFiles;
+        set => Switch(Options with { CutFiles = value });
+    }
+
     /// <summary>Adds a game, and keeps the order they were added in.</summary>
     public void Add(GameFolder game)
     {
@@ -185,6 +233,27 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         Told();
+    }
+
+    /// <summary>
+    /// Takes a changed option, and says both which one changed and that the
+    /// whole set did, because the window binds to each one by name and to the
+    /// set as a whole.
+    /// </summary>
+    private void Switch(DiscOptions to, [CallerMemberName] string? name = null)
+    {
+        if (_options == to)
+        {
+            return;
+        }
+
+        _options = to;
+        Tell(name);
+        Tell(nameof(Options));
+
+        // Splitting a file changes what would be made, so the line saying so
+        // has to be worked out again.
+        Reconsider();
     }
 
     private void Told()

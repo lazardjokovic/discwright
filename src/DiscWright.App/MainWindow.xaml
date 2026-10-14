@@ -1,12 +1,203 @@
-﻿<Window x:Class="DiscWright.App.MainWindow"
+<!--
+    The main window.
+
+    It holds no decisions. Every question it asks is answered by MakeADisc,
+    which has no WPF in it, so what is here is only arrangement: where things
+    sit, what they are called, and which of them is bound to what.
+
+    Everything an automated test touches carries an AutomationId, set here and
+    never left to the framework to invent. v1 is WinForms and its window suite
+    fought UI Automation the whole way, which is the single largest reason this
+    is WPF.
+-->
+<Window x:Class="DiscWright.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:DiscWright.App"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        Title="DiscWright"
+        Height="620" Width="920"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Page}"
+        FontFamily="{StaticResource Face}"
+        AutomationProperties.AutomationId="TheWindow">
 
+    <Grid Margin="28,22,28,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ================================================== the top line -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,18">
+            <TextBlock Text="DiscWright" Style="{StaticResource Title}" />
+            <TextBlock Style="{StaticResource Aside}"
+                       Margin="0,2,0,0"
+                       Text="Put a game on a disc that still works in ten years." />
+        </StackPanel>
+
+        <!-- ===================================================== the middle -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="28" />
+                <ColumnDefinition Width="340" />
+            </Grid.ColumnDefinitions>
+
+            <!-- What goes on it -->
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Step}" Text="WHAT GOES ON IT" />
+
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button Content="Add a game..."
+                            Style="{StaticResource Ordinary}"
+                            Click="AddAGame"
+                            AutomationProperties.AutomationId="AddAGame" />
+                    <Button Content="Take it off"
+                            Style="{StaticResource Ordinary}"
+                            Margin="8,0,0,0"
+                            Click="TakeItOff"
+                            AutomationProperties.AutomationId="TakeItOff" />
+                </StackPanel>
+
+                <Border Background="{StaticResource Panel}"
+                        BorderBrush="{StaticResource Edge}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                    <Grid>
+                        <!-- Said once, on an empty list, and gone the moment
+                             there is anything to show. -->
+                        <TextBlock Style="{StaticResource Aside}"
+                                   Margin="16"
+                                   VerticalAlignment="Top"
+                                   Visibility="{Binding Games.Count, Converter={StaticResource WhenNone}}"
+                                   AutomationProperties.AutomationId="NothingYet"
+                                   Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in." />
+
+                        <ListBox x:Name="Games"
+                                 ItemsSource="{Binding Games}"
+                                 BorderThickness="0"
+                                 Background="Transparent"
+                                 Padding="4"
+                                 AutomationProperties.AutomationId="Games">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="6,7">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                                        <TextBlock Style="{StaticResource Aside}" Text="{Binding Path}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+            </DockPanel>
+
+            <!-- What it is called, and where it goes -->
+            <StackPanel Grid.Column="2">
+                <TextBlock Style="{StaticResource Step}" Text="WHAT IT IS CALLED" />
+                <TextBox Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
+                         CharacterCasing="Upper"
+                         MaxLength="32"
+                         AutomationProperties.AutomationId="Label" />
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,5,0,0"
+                           Text="What This PC shows when the disc goes in." />
+
+                <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHAT SIZE OF DISC" />
+                <ComboBox ItemsSource="{Binding DiscSizes}"
+                          SelectedItem="{Binding Medium}"
+                          DisplayMemberPath="Name"
+                          AutomationProperties.AutomationId="DiscSize" />
+
+                <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHERE IT GOES" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0"
+                             Text="{Binding OutputFolder, UpdateSourceTrigger=PropertyChanged}"
+                             AutomationProperties.AutomationId="OutputFolder" />
+                    <Button Grid.Column="1"
+                            Content="Browse..."
+                            Style="{StaticResource Ordinary}"
+                            Margin="8,0,0,0"
+                            Click="ChooseWhereItGoes"
+                            AutomationProperties.AutomationId="ChooseWhereItGoes" />
+                </Grid>
+
+                <Expander Margin="0,16,0,0"
+                          Foreground="{StaticResource Quiet}"
+                          FontSize="12"
+                          Header="More options"
+                          AutomationProperties.AutomationId="MoreOptions">
+                    <StackPanel Margin="4,10,0,0">
+                        <CheckBox Content="A menu that opens when the disc goes in"
+                                  IsChecked="{Binding Menu}"
+                                  AutomationProperties.AutomationId="Menu" />
+                        <CheckBox Content="A list of what every file should be"
+                                  IsChecked="{Binding Checksums}"
+                                  AutomationProperties.AutomationId="Checksums" />
+                        <CheckBox Content="The cover art on the disc as well"
+                                  IsChecked="{Binding ArtworkOnDisc}"
+                                  AutomationProperties.AutomationId="ArtworkOnDisc" />
+                        <CheckBox Content="Readable by Windows 98 and Mac OS 9"
+                                  IsChecked="{Binding LegacyFileSystems}"
+                                  AutomationProperties.AutomationId="LegacyFileSystems" />
+                        <CheckBox Content="Split a file across two discs if it will not fit"
+                                  IsChecked="{Binding CutFiles}"
+                                  AutomationProperties.AutomationId="CutFiles" />
+                    </StackPanel>
+                </Expander>
+            </StackPanel>
+        </Grid>
+
+        <!-- ================================================ the bottom line
+
+             What it will make, anything worth saying about it, and the one
+             button. The refusal lives here rather than in a dialog, because a
+             refusal somebody reads before pressing anything is a sentence, and
+             the same refusal after a click is a wasted decision.
+        -->
+        <Border Grid.Row="2"
+                Margin="0,18,0,0"
+                Padding="18,14"
+                Background="{StaticResource Panel}"
+                BorderBrush="{StaticResource Edge}"
+                BorderThickness="1"
+                CornerRadius="4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,18,0">
+                    <TextBlock FontSize="14"
+                               FontWeight="SemiBold"
+                               Text="{Binding WhatItWillMake}"
+                               AutomationProperties.AutomationId="WhatItWillMake" />
+
+                    <TextBlock Foreground="{StaticResource RefusalInk}"
+                               Margin="0,3,0,0"
+                               Text="{Binding WhyNot.Headline}"
+                               AutomationProperties.AutomationId="WhyNot" />
+
+                    <TextBlock Foreground="{StaticResource WorryInk}"
+                               FontSize="12"
+                               Margin="0,3,0,0"
+                               Text="{Binding Worry.Headline}"
+                               AutomationProperties.AutomationId="Worry" />
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        Content="Make the disc"
+                        Style="{StaticResource TheButton}"
+                        IsEnabled="{Binding CanMakeIt}"
+                        Click="MakeTheDisc"
+                        AutomationProperties.AutomationId="MakeTheDisc" />
+            </Grid>
+        </Border>
     </Grid>
 </Window>

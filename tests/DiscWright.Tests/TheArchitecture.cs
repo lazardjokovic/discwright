@@ -106,7 +106,7 @@ public class TheArchitecture
     [Fact]
     public void Every_project_in_the_tree_is_in_the_solution()
     {
-        string? solutionFile = SolutionFile(RepositoryRoot());
+        string? solutionFile = Repository.SolutionFile(Repository.Root());
         Assert.NotNull(solutionFile);
 
         string solution = File.ReadAllText(solutionFile);
@@ -114,7 +114,7 @@ public class TheArchitecture
         string[] missing =
         [
             .. Directory
-                .EnumerateFiles(RepositoryRoot(), "DiscWright.*.csproj", SearchOption.AllDirectories)
+                .EnumerateFiles(Repository.Root(), "DiscWright.*.csproj", SearchOption.AllDirectories)
                 .Select(Path.GetFileName)
                 .Where(name => name is not null && !solution.Contains(name, StringComparison.OrdinalIgnoreCase))
                 .Select(name => name!)
@@ -130,7 +130,7 @@ public class TheArchitecture
 
     private static IEnumerable<(string Project, string[] References)> ProjectsUnderSource()
     {
-        string source = Path.Combine(RepositoryRoot(), "src");
+        string source = Path.Combine(Repository.Root(), "src");
 
         foreach (string file in Directory.EnumerateFiles(source, "*.csproj", SearchOption.AllDirectories))
         {
@@ -139,7 +139,7 @@ public class TheArchitecture
     }
 
     private static string ProjectFile(string project) =>
-        Path.Combine(RepositoryRoot(), "src", project, project + ".csproj");
+        Path.Combine(Repository.Root(), "src", project, project + ".csproj");
 
     private static string[] ReferencesOf(string projectFile) =>
     [
@@ -154,46 +154,4 @@ public class TheArchitecture
 
     private static string? TargetFrameworkOf(string projectFile) =>
         XDocument.Load(projectFile).Descendants("TargetFramework").FirstOrDefault()?.Value;
-
-    /// <summary>
-    /// Walks up from the test assembly until it finds the solution. The tests
-    /// run out of bin, which is four folders deep and moves whenever the
-    /// configuration or framework changes, so the path cannot be counted.
-    /// </summary>
-    private static string RepositoryRoot()
-    {
-        DirectoryInfo? directory = new(AppContext.BaseDirectory);
-
-        while (directory is not null && SolutionFile(directory.FullName) is null)
-        {
-            directory = directory.Parent;
-        }
-
-        return directory?.FullName
-            ?? throw new InvalidOperationException("Found no DiscWright solution above " + AppContext.BaseDirectory);
-    }
-
-    /// <summary>
-    /// The solution in this folder, whichever format it is in, or null.
-    /// </summary>
-    /// <remarks>
-    /// .NET 10's <c>dotnet new sln</c> writes the newer XML format,
-    /// DiscWright.slnx, and this test was first written looking for the classic
-    /// DiscWright.sln and failed on all five counts. Accepting either means a
-    /// change of format is not a day of confusing failures later.
-    /// </remarks>
-    private static string? SolutionFile(string folder)
-    {
-        foreach (string name in (string[])["DiscWright.slnx", "DiscWright.sln"])
-        {
-            string candidate = Path.Combine(folder, name);
-
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        return null;
-    }
 }

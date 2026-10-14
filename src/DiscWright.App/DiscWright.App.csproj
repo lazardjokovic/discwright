@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DiscWright.ViewModels\DiscWright.ViewModels.csproj" />
+    <ProjectReference Include="..\DiscWright.Platform\DiscWright.Platform.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -40,7 +40,7 @@ The reason this is worth the layering: most of what this program gets wrong is a
 | `DiscWright.Printing` | Core | everything else |
 | `DiscWright.Menu` | Core | the filesystem. it returns text |
 | `DiscWright.ViewModels` | Core, Staging | **WPF, Windows, Platform.** Everything the window knows, with no window in it |
-| `DiscWright.App` | ViewModels | arithmetic, judgement, any refusal wording |
+| `DiscWright.App` | ViewModels, Platform | arithmetic, judgement, any refusal wording |
 | `DiscWright.Tests` | all of the above | a real drive, by default |
 
 `Imaging` and `Burning` are split on purpose even though both are IMAPI. Making an ISO and writing a disc fail differently, are wanted separately, and one of them already needs to run when there is no drive at all.
@@ -576,11 +576,27 @@ That is what turns "what happens when you pick a folder with no game in it" into
 
 It is also the insurance. If WPF turns out to be the wrong answer, what gets thrown away is the markup. None of the view models move.
 
-### Two rules the window itself will keep
+### Two rules the window itself keeps
 
 **Everything the tests touch gets an `AutomationId`**, set deliberately and never left to the framework.
 
 **A refusal is worked out as things are chosen, not when the button is pressed.** A refusal that arrives after a click is one somebody has already committed to; the same words beforehand are just a sentence.
+
+### The markup is a tested thing
+
+`TheWindowsMarkup` reads `MainWindow.xaml` **as XML from the source tree**, rather than loading the built window. Nothing may reference the window project, including the tests; and Smart App Control on this machine refuses to load our own unsigned assemblies into a test host, so a test that instantiated a window would pass on the VM and fail here.
+
+It guards six things: every interactive control carries an id, no two ids are the same, the window is still the size the design was drawn at, exactly one button wears the accent colour, no colour is written out in figures instead of named, and the button that makes the disc is **dead rather than hidden** when it cannot be pressed.
+
+**This is the test that stops v1 happening again.** In v1 somebody added a control, UI Automation could not reach it, and nothing failed; the only sign was a test that had to be written a different way. Here it fails the build.
+
+### What the markup test cannot prove
+
+That the ids **arrive**. `tools/See-TheWindow.ps1` opens the real window, asks UI Automation for all eighteen by id, types a disc name in through the automation pattern and reads it back, photographs the window and closes it.
+
+A collapsed `Expander` hides its contents from the automation tree, which is correct: they are not on screen to be clicked either. The script opens it and asks again, which is what a window test will have to do.
+
+**It also showed something about Smart App Control.** The app itself runs here, although the test host cannot load the same assemblies. That is almost certainly because a locally built exe carries no Mark of the Web, so it says nothing either way about a downloaded release, which will carry one. **The signing problem is unchanged.**
 
 ## The order to build it in
 
