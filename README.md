@@ -28,12 +28,25 @@ Nothing is finished. The solution is laid out, the dependency rule is guarded by
 
 `TheArchitecture` in the test project reads the project files and fails if any of that stops being true. It reads the **declared** references rather than the compiled assemblies, because the compiler drops a reference nothing uses, and a dependency that exists on paper is already a dependency.
 
-## Building it
+## Building it, and running the tests
 
 ```
 dotnet build
-dotnet test
+dotnet test                              # 72 of 81 here, see below
+tools\Invoke-TestsOnTheVM.ps1            # all 81, on the test VM
 ```
+
+**Nine tests cannot run on the development machine.** Smart App Control is on and enforcing there, and it refuses to load our own freshly built, unsigned `DiscWright.Platform.dll`: `An Application Control policy has blocked this file (0x800711C7)`. Everything that stays inside `Core` is unaffected, which is most of the suite and all of the fast part.
+
+So the whole suite runs on the VM, where Smart App Control is in Evaluation and audits without blocking. The runner sends the **working tree**, not the last commit, because the point of a test loop is to run what is on disk this second. It takes a `-Filter` that goes straight through to `dotnet test`, and it needs the VM password once per terminal:
+
+```
+$env:DISCWRIGHT_VM_PASSWORD = '...'
+```
+
+Every run is stamped with the local commit and the time it was sent, and the VM echoes that stamp back. If the two disagree the run is refused rather than reported, because a result from a run that never fired reads exactly like a pass.
+
+That machine is deliberately left strict. It is the honest answer to the question that matters at release: what a careful stranger's Windows does with an unsigned build of this.
 
 The SDK is pinned in `global.json` to the 10.0.4xx band, because this machine has 10.0.401 and the test VM has 10.0.402 and the same solution should not quietly build differently in two places.
 

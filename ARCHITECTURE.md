@@ -329,7 +329,7 @@ An Application Control policy has blocked this file. (0x800711C7)
 
 Nine tests, repeatably, on every run. The other 72 pass, because they stay inside `Core`, and why `Core` is allowed to load while `Platform` is refused is not understood. Both are equally unsigned and built seconds apart.
 
-**So the suite runs on the test VM**, where Smart App Control is in *Evaluation*: it audits and does not block. The same commit passes everything there. Running it here is still worth doing, because the 72 that need no machine are the ones worth running constantly, and they are unaffected.
+**So the suite runs on the test VM** through `tools/Invoke-TestsOnTheVM.ps1`, where Smart App Control is in *Evaluation*: it audits and does not block. That script sends the working tree rather than the last commit, and stamps each run with the local commit and the time, which the VM echoes back and the script checks, because a result from a run that never fired reads exactly like a pass. The window suite in v1 learned that when `job.done` survived a run that never started. The same commit passes everything there. Running it here is still worth doing, because the 72 that need no machine are the ones worth running constantly, and they are unaffected.
 
 That split is not a workaround to be embarrassed about. It leaves this machine as the honest answer to the only question that matters at release: **what does a careful stranger's Windows do with an unsigned build of DiscWright?** Today the answer is "refuses to load part of it", and that will not change by itself.
 
