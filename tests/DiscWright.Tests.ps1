@@ -6404,6 +6404,190 @@ Describe 'The buttons for a disc that is already built' -Tag 'Unit' {
     }
 }
 
+Describe 'What the menu looks like the moment it opens' -Tag 'Unit' {
+
+    # Both of these came back from a real install off real discs, and both are
+    # about the first two seconds, which is the part no test had ever looked at.
+
+    # Skip is decided at discovery, so the answer has to exist by then. Written
+    # as BeforeAll first, where $script:HaveCsOpen was still $null and every
+    # test in the Context below skipped without saying so.
+    BeforeDiscovery {
+        $script:HaveCsOpen = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+
+    BeforeAll {
+        $script:OpenSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $mt = [regex]::Match($script:OpenSrc, "(?s)\`$tpl = @'\r?\n(.*?)\r?\n'@")
+        if (-not $mt.Success) { throw 'the menu template is no longer a $tpl here-string' }
+        $script:OpenTpl = $mt.Groups[1].Value
+        $sc = [regex]::Match($script:OpenTpl, '(?s)<script language="JScript">(.*?)</script>')
+        if (-not $sc.Success) { throw 'no script block in the menu template' }
+        # Everything before the first function declaration is what runs as the
+        # document is parsed, which is the whole point here.
+        $script:OpenImmediate = ($sc.Groups[1].Value -split '(?m)^\s*function ', 2)[0]
+
+        $script:CsOpen = @(
+            "$env:SystemRoot\System32\cscript.exe"
+            (Get-Command cscript.exe -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+        $script:OpenDir = Join-Path $script:Sandbox 'menuopen'
+        New-Item -ItemType Directory -Force -Path $script:OpenDir | Out-Null
+
+        function Get-OpenJs([string]$name) {
+            $start = $script:OpenSrc.IndexOf("function $name(")
+            if ($start -lt 0) { throw "DiscWright.ps1 has no JScript function called $name" }
+            $i = $script:OpenSrc.IndexOf('{', $start); $depth = 0
+            for ($j = $i; $j -lt $script:OpenSrc.Length; $j++) {
+                if ($script:OpenSrc[$j] -eq '{') { $depth++ }
+                elseif ($script:OpenSrc[$j] -eq '}') {
+                    $depth--
+                    if ($depth -eq 0) { return $script:OpenSrc.Substring($start, $j - $start + 1) }
+                }
+            }
+            throw "unbalanced braces in $name"
+        }
+    }
+
+    Context 'the window is its own size before the pictures arrive' {
+
+        # Measured on a real CD-RW, recording every window mshta put on screen:
+        #
+        #   +4793 ms   1440x753 at 156,156   'E:\AUTORUN\menu.hta'
+        #   +7402 ms   760x480  at 156,156   'Hollow Knight D2'
+        #
+        # mshta's own default window, 2.6 seconds, no caption, and nothing in it
+        # but the X because the background had not arrived. Reported as "strange
+        # bigger window opens with only x at the top in middle, than regular
+        # window appears".
+        #
+        # init() runs from body onload and onload waits for images. Nothing in
+        # hta:application can help: it has no width or height, an HTA is sized
+        # by script.
+
+        It 'resizes itself as the document is parsed, not on load' {
+            $script:OpenImmediate | Should -Match ([regex]::Escape('window.resizeTo(760,480)'))
+            $script:OpenImmediate | Should -Match ([regex]::Escape('window.moveTo('))
+        }
+
+        It 'centres itself there too, so it does not jump afterwards' {
+            $script:OpenImmediate | Should -Match 'screen\.availWidth'
+            $script:OpenImmediate | Should -Match 'screen\.availHeight'
+        }
+
+        It 'survives a host that will not let it resize' {
+            # An HTA that threw here would lose everything after it in the same
+            # script block, which is every function the menu has.
+            $script:OpenImmediate | Should -Match ([regex]::Escape('try{'))
+            $script:OpenImmediate | Should -Match ([regex]::Escape('}catch(e){}'))
+        }
+
+        It 'still corrects for the window chrome once the body can be measured' {
+            # The immediate resize uses the nominal numbers because
+            # document.body does not exist yet. init() does the arithmetic that
+            # needs it, and dropping that would leave the stage clipped.
+            $init = Get-OpenJs 'init'
+            $init | Should -Match 'clientWidth'
+            $init | Should -Match 'clientHeight'
+        }
+
+        It 'is still the body onload that starts everything else' {
+            $script:OpenTpl | Should -Match ([regex]::Escape('<body onload="init()">'))
+        }
+    }
+
+    Context 'the corner buttons sit beside each other' -Skip:(-not $script:HaveCsOpen) {
+
+        # Positioned in CSS at fixed offsets: X at 8, mute at 44, tick at 80. A
+        # disc with no music hides the mute button and leaves its 36 pixels
+        # empty, so the tick floated away from the X with a hole between them.
+        # Reported as "checksum looks a bit away from x button in top right
+        # corner".
+
+        BeforeAll {
+            function Invoke-Corner([string]$xd, [string]$md, [string]$sd) {
+                $js = @(
+                    'var ELS = {};'
+                    ('function mk(d){ return { style:{right:""}, currentStyle:{display:d} }; }')
+                    ("ELS['x'] = mk(" + (ConvertTo-Json $xd) + ");")
+                    ("ELS['mute'] = mk(" + (ConvertTo-Json $md) + ");")
+                    ("ELS['sums'] = mk(" + (ConvertTo-Json $sd) + ");")
+                    'var document = { getElementById: function(id){ return ELS[id] || null; } };'
+                    (Get-OpenJs 'cornerShown')
+                    (Get-OpenJs 'layoutCorner')
+                    'layoutCorner();'
+                    'WScript.Echo("x=" + ELS["x"].style.right);'
+                    'WScript.Echo("mute=" + ELS["mute"].style.right);'
+                    'WScript.Echo("sums=" + ELS["sums"].style.right);'
+                )
+                $f = Join-Path $script:OpenDir ('c_' + [Guid]::NewGuid().ToString('N').Substring(0, 6) + '.js')
+                Set-Content -LiteralPath $f -Value ($js -join "`r`n") -Encoding Ascii
+                $out = @{}
+                foreach ($line in @(& $script:CsOpen //Nologo //E:JScript $f 2>&1)) {
+                    if ($line -match '^([a-z]+)=(.*)$') { $out[$Matches[1]] = $Matches[2].Trim() }
+                }
+                return $out
+            }
+        }
+
+        It 'packs all three together when the disc has all three' {
+            $r = Invoke-Corner 'block' 'block' 'block'
+            $r['x'] | Should -Be '8px'
+            $r['mute'] | Should -Be '44px'
+            $r['sums'] | Should -Be '80px'
+        }
+
+        It 'closes the gap when the disc has no music' {
+            # The reported case. The tick takes the slot the mute button is not
+            # using, rather than standing 36 pixels away from it.
+            $r = Invoke-Corner 'block' 'none' 'block'
+            $r['x'] | Should -Be '8px'
+            $r['sums'] | Should -Be '44px'
+            $r['mute'] | Should -Be '' -Because 'a hidden button is not laid out at all'
+        }
+
+        It 'closes the gap when the disc has no checksum list' {
+            $r = Invoke-Corner 'block' 'block' 'none'
+            $r['x'] | Should -Be '8px'
+            $r['mute'] | Should -Be '44px'
+            $r['sums'] | Should -Be ''
+        }
+
+        It 'leaves the X where it has always been when it is the only one' {
+            # Which is every disc built before either of the other two existed.
+            $r = Invoke-Corner 'block' 'none' 'none'
+            $r['x'] | Should -Be '8px'
+            $r['mute'] | Should -Be ''
+            $r['sums'] | Should -Be ''
+        }
+
+        It 'treats a button with no inline display as shown' {
+            # #x has no display in its own style and none set inline, so a
+            # layout that only believed inline styles would skip the X and put
+            # the tick where the X is.
+            $r = Invoke-Corner '' 'none' 'block'
+            $r['x'] | Should -Be '8px'
+            $r['sums'] | Should -Be '44px'
+        }
+    }
+
+    It 'lays the corner out after deciding which buttons the disc has' {
+        # initMusic and initSums are what hide or show them, so laying out
+        # before either would read the CSS defaults and learn nothing.
+        $init = Get-OpenJs 'init'
+        $iM = $init.IndexOf('initMusic()')
+        $iS = $init.IndexOf('initSums()')
+        $iL = $init.IndexOf('layoutCorner()')
+        $iM | Should -BeGreaterThan 0
+        $iS | Should -BeGreaterThan 0
+        $iL | Should -BeGreaterThan $iM
+        $iL | Should -BeGreaterThan $iS
+    }
+}
+
 Describe 'Hiding the game name above the menu buttons' -Tag 'Unit' {
 
     # Asked for after the long-name fix, by the same reporter, once he worked
