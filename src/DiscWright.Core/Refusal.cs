@@ -71,8 +71,8 @@ public enum RemedyKind
     /// <summary>Turn the disc set option on. "Make it a set of 3".</summary>
     EnableSet,
 
-    /// <summary>Turn an option off. "Leave out Windows XP support".</summary>
-    DisableOption,
+    /// <summary>Turn an option on or off. "Leave out Windows XP support", "Let it cut the file".</summary>
+    ChangeOption,
 
     /// <summary>
     /// Put the cursor in the field that has to change, and select what is in

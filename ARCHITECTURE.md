@@ -308,6 +308,18 @@ Compressed and self contained is the answer. The promise this program makes is t
 
 Which is exactly why the test VM is worth keeping free of the runtime, and why there is a checkpoint called `testkit in place, no dotnet`, taken before the SDK went on it. Reverting to that gives a Windows which has never had .NET installed, and running the published app there is the only honest test that the publish settings are right.
 
+## Smart App Control, and why 2.0 may need signing
+
+**This machine has Smart App Control ON and enforcing**, which is the default on a clean Windows 11. It refuses code it cannot attribute to a known publisher, and on 2026-10-14 it refused *ours*: Visual Studio's MSBuild was blocked loading our own freshly built class libraries during WPF markup compilation, logged as CodeIntegrity events 3033 and 3077, naming each referenced project in turn.
+
+The build still succeeded, and the immediate cause is gone: the window referenced all seven projects while using none of them, so the references were removed until it actually needs them. They go back one at a time, as it starts using them.
+
+**The lesson is about shipping, not about building.** What this project publishes is a self-contained, unsigned executable. v1 is a PowerShell script started by a `.vbs`, and it runs here today; an unsigned `.exe` is a different kind of thing to Windows, and on a machine configured like this one it may simply be refused. Nobody would discover that until somebody downloaded a release.
+
+So, before 2.0 ships: **run the published exe on this machine, with Smart App Control left on**, because that is what a careful stranger's machine does. If it is refused, the answer is a code signing certificate, which is a cost and a lead time rather than a line of code. It is the same question the disc already faces if a helper binary ever ships on it.
+
+**Do not turn Smart App Control off to make development quieter.** It cannot be turned back on without reinstalling Windows, and a machine that is strict about unsigned code is the most useful test environment this project has.
+
 ## The two machines, as they stand
 
 Both prepared 2026-10-14.
@@ -339,14 +351,53 @@ Written down because a gap nobody has named is a gap somebody fills badly in a h
 
 **Tests that want the manual testing kit cannot reach it.** The kit lives outside this repository and at a different path on each machine: `DiscWright-Lab\manual-testing` here, `C:\dw\testkit` on the VM. The answer is small fixtures committed here for the everyday cases and an environment variable for the big ones, with those tests skipping cleanly when it is absent. Note that a clean skip needs xUnit v3 and this is on 2.9.3, so a skip has to be deliberate rather than a test that quietly passes having checked nothing.
 
-**The installer placement may not be reachable at all.** The design board is marked CHOSEN and says to find the game installer's window by process id and move it with `SetWindowPos`. That window is the disc's own menu rather than this app, and **an HTA cannot call `SetWindowPos`**: there is no WSH or HTA API for moving another process's window. So on a disc the design lands straight on its own stated fallback, the installer appearing wherever Windows put it, unless a helper binary ships on the disc, which costs the ten year no dependency promise and invites SmartScreen. The board already calls that fallback acceptable, which is lucky. It needs deciding before anything is built around it.
+**The installer placement. DECIDED 2026-10-14: the menu steps aside.**
+
+The design board is marked CHOSEN and says to find the game installer's window by process id and move it with `SetWindowPos`. That window is the disc's own menu rather than this app, and **an HTA cannot call `SetWindowPos`**: there is no WSH or HTA API for moving another process's window. Reaching one would mean shipping a helper binary on the disc, which costs the ten year no dependency promise and invites SmartScreen on a stranger's machine.
+
+So it is done from the other side. **The menu cannot move the installer, but it can move itself**, which is a thing it is plainly allowed to do: it shrinks or steps aside so the installer is not covered, and says underneath what is running. If even that fails the installer simply sits where Windows put it, which the board already calls acceptable in its own words.
+
+## A numbered set holds one game. Several games get a disc each.
+
+**DECIDED 2026-10-14.** This replaces both the behaviour v1 removed and the refusal it left behind.
+
+| What was added | What comes out |
+|---|---|
+| Several games, and they fit one disc | One disc, with a chooser. Unchanged from v1. |
+| Several games, too big for one disc | **A disc each.** Standalone, each with its own name, menu and cover. |
+| One game, too big for one disc | A numbered set, D1 and D2, because the continuity is real. |
+| Several games, one of which alone needs two discs | A disc each for the others, and a numbered set for that one. |
+
+### Why this and not a packer
+
+v1 had a packer and removed it. Its own source says why:
+
+> Which games belong together on a disc is curation: a compilation is something a person assembles, and a packer working from byte counts was making that choice silently. It also produced discs labelled D1 and D2 as though one continued the other, when nothing on either disc ever depended on the other, and, because the label is seeded from the FIRST game, a two-disc build could label a disc with a game that was not on it.
+
+The removal was right and the refusal that replaced it was too timid. **A numbered set is a promise that disc 2 continues disc 1.** That promise is true for one game split across discs and a lie for four unrelated games, so the answer is not to pack them better, it is not to call them a set at all.
+
+Three things follow, and all three are improvements rather than compromises:
+
+- **The labelling bug cannot happen.** A numbered set only ever holds one game, so seeding its label from the first game is always right, because there is only ever one.
+- **Nothing is decided on anybody's behalf.** The app never groups games, so it never makes a curation choice silently. One game, one disc.
+- **A disc says what is on it.** In ten years a disc labelled `Gothic` is obvious and one labelled `Games, 2 of 3` is not, which is the whole promise of the thing.
+
+### What it costs
+
+More blanks, sometimes. Four games of 3 GB, 1 GB, 0.5 GB and 0.4 GB would fit two DVDs packed and take four this way. That is two blanks against four discs that each say what they hold, and it is the right side of that trade. If it ever is not, the answer is an option that offers to combine them, never a default that does it quietly.
+
+### What it means for the code
+
+`DiscPlanner` is unaffected and stays as it is: arithmetic over a flat list of files, told nothing about games. What this decides is the layer **above** it, which runs the planner once per game and hands back a batch of outputs, most of them a single disc and occasionally one of them a numbered set. That layer does not exist yet.
+
+The `L - a bundle, one big and three small` fixture is the test for it: four games, a target they do not all fit on, and the expected answer is four discs rather than a refusal and rather than a packed set.
 
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.
 
 1. `Core` with `Medium`, `Refusal`, `Outcome<T>`, and the architecture test. Nothing that does anything, but the shape is fixed and guarded.
-2. `DiscPlanner`. Pure arithmetic, and the single richest source of cases: fits, does not fit, one game too big, four games packed, a file over the old ceiling. All of it testable with no files at all.
+2. `DiscPlanner`. **Done.** Pure arithmetic, and the single richest source of cases: fits, does not fit, fills exactly, one file bigger than a whole disc, a cut and its pieces, where the extras land. 22 tests, no files at all. Three mutations were made to it on purpose to watch the tests catch them.
 3. `GameFolderReader` against `IFileSystem`, with `InMemoryFileSystem`. The twenty source folders in the testing kit become its cases.
 4. `Platform`, the real `IFileSystem`, and then the same reader tested against the kit on disk.
 5. `Staging` and `Menu`, up to a disc folder on disk with a menu in it. Openable by hand, with no imaging and no burning yet.
