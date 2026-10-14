@@ -182,4 +182,64 @@ public static class Refusals
     /// <summary>Windows refused to make the image, in its own words.</summary>
     public static Refusal WindowsCouldNotMakeTheImage(string windowsSaid) =>
         new("Windows could not make the image", "Windows said: " + windowsSaid);
+
+    // ---------------------------------------------------------------- burning
+
+    public static Refusal ThereIsNoDiscWriter() =>
+        new("There is no disc writer on this machine",
+            "Nothing here can write a disc. The image is still in the output folder, and any machine with a "
+                + "writer can burn it.");
+
+    public static Refusal ThatDriveIsNotHere(string drive) =>
+        new($"There is no {drive} to write to",
+            "The drive that was chosen is not on this machine any more. Choose again.");
+
+    public static Refusal ThatDriveSaidNothing(string drive, string why) =>
+        new($"{drive} would not say what is in it",
+            "Usually that means the tray is empty or the disc is still being read. Windows said: " + why);
+
+    /// <remarks>
+    /// Named, so somebody knows which tray to open. Listing them and leaving
+    /// the choice is this one's whole job: picking for them would be wrong half
+    /// the time, and the disc in the other drive is often their only blank.
+    /// </remarks>
+    public static Refusal MoreThanOneDriveIsReady(IReadOnlyList<string> drives) =>
+        new("More than one drive has a blank disc in it",
+            "Choose which one to write to: " + string.Join(", ", drives) + ".");
+
+    public static Refusal ThereIsNoBlankDisc(IReadOnlyList<string> drives) =>
+        new("There is no blank disc to write to",
+            drives.Count == 1
+                ? $"Put a blank disc in {drives[0]} and try again."
+                : "Put a blank disc in one of " + string.Join(", ", drives) + " and try again.");
+
+    /// <remarks>
+    /// The one thing worth saying when nothing is ready but something could be.
+    /// It stops here: erasing somebody's disc without asking is not a thing to
+    /// do quietly, so this says an erase would help and the person holding it
+    /// decides.
+    /// </remarks>
+    public static Refusal ThereIsADiscThatCouldBeErased(string drive, string what) =>
+        new($"The {what} in {drive} has something on it",
+            "It can be erased and used again, which takes under a minute. Nothing has been erased: that is "
+                + "yours to decide, because whatever is on it now goes.");
+
+    public static Refusal ThatDiscCannotBeWrittenTo(string drive, string what) =>
+        new($"The {what} in {drive} cannot be written to",
+            "It is either a pressed disc or one that has already been written and cannot be erased. A blank "
+                + "disc of the same kind will work.");
+
+    public static Refusal TheDiscIsTooSmallForThat(string drive, string what, long needs, long has) =>
+        new($"The {what} in {drive} is too small for this image",
+            $"The image is {ByteSize.Describe(needs)} and the disc holds {ByteSize.Describe(has)}. "
+                + "Nothing was written.",
+            [
+                new Figure("the image", ByteSize.Describe(needs)),
+                new Figure("the disc", ByteSize.Describe(has))
+            ],
+            null);
+
+    public static Refusal TheDriveCouldNotWriteIt(string drive, string windowsSaid) =>
+        new($"{drive} could not write the disc",
+            "The disc in it may now be unusable. Windows said: " + windowsSaid);
 }

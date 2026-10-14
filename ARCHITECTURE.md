@@ -724,6 +724,44 @@ every file on the mounted disc matches what the list says
 
 That is the whole chain in one run: a folder somebody downloaded, through the recognisers, the planner, the staging steps and the checksum list, into one file, mounted by Windows as a disc, and every byte on it checked against the list the disc carries.
 
+## Burning: everything asked before the laser comes on
+
+**A CD-R is written once.** Every mistake caught by asking the drive a question costs nothing, and every mistake not caught costs a disc. So everything answerable is answered first, and all of it is in Core, where it can be tested with invented drives.
+
+### What a number from the drive means
+
+IMAPI reports what is in the tray as a number. A report saying *"media type 9"* is a report nobody can act on, so there is a table: what to call it, whether it can be written at all, and whether it can be erased.
+
+**Writable and rewritable are different questions.** A CD-R can be written once and never again; a CD-RW can be written, erased and written again. v1 told everybody their disc was not rewritable, including people holding a CD-RW, which is the sort of thing that makes somebody doubt the rest of the dialog.
+
+### Speed, and the mistake that halves it
+
+**IMAPI measures speed in sectors per second, not KB/s**, and a sector per second means a different multiple depending on what is loaded: 75 for a CD, 680 for a DVD, 2195 for a Blu-ray, 4568 for an HD DVD.
+
+Getting that base wrong halves or doubles every speed in the program. v1 had it wrong once: a drive offered 750 for a High Speed CD-RW and the application called it **5x**, which is not a speed any CD-RW is made in. It is **10x**, and the real burns said so.
+
+The drive in this machine holds exactly that disc, and the enumeration reads it as 10x. There is a test with those figures in it.
+
+**The speed chosen is slower than the drive would pick**: 16x for a CD, 8x for everything else, which are v1's figures, arrived at by burning discs rather than by reading a specification. Cheap media written at full speed is the usual way to make a coaster. If the drive offers nothing that slow, the slowest it has, because refusing to write on the grounds that every speed is fast would be a strange way to protect somebody.
+
+### Which drive, and the two things it will not do
+
+**It refuses rather than guesses.** Two drives with blanks in them is a question, not a choice to make on somebody's behalf: the one it picked would be wrong half the time, and the disc in the other drive is often their only blank.
+
+**Nothing erases on its own initiative.** When nothing is ready but a rewritable disc is sitting there, that is said, and the person holding it decides. Erasing takes under a minute and takes everything on the disc with it.
+
+For a set, the drive is settled once before the first disc. A set that wanders between two writers is a set whose discs were written by two different lasers at two different speeds.
+
+### Asking costs nothing, so it never throws
+
+A machine with no burner, or a drive with an empty tray, must not take the program down on its way to telling somebody their disc is ready. Every drive comes back either with what is in it or with why it could not say, never both and never neither. The machine this was written on has two drives, one holding a CD-RW and one empty, and the test suite prints what it found so that a run which quietly found nothing cannot be mistaken for a run that checked something.
+
+### What is not written yet
+
+**The write itself.** It needs a COM event sink for progress, which v1 needed compiled C# for as well, and a blank disc to prove on. The shape is settled: the write happens on a thread of its own, the disc is closed so it reads everywhere, and **the drive ejects at the end** so that the check afterwards reads a freshly mounted volume rather than whatever Windows remembered about the blank.
+
+And the check afterwards is the point of all of it. *Written is not the same as readable.*
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.
