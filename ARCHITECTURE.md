@@ -370,7 +370,20 @@ Written down because a gap nobody has named is a gap somebody fills badly in a h
 
 **Opening an existing project or disc.** The journey above runs folder to disc and has no Open path, which is not a small omission: v1's `Import-Project` carries schema versions 1 to 12, and `Import-DiscFolder` rebuilds a project from a disc that has no project file at all, by scraping `autorun.inf` and `menu.hta`. It wants to be pure and in `Core`, taking the text of a project file and handing back a `DiscProject`, which also makes it cheap to test, because the manual testing kit already holds eleven project files including a deliberately preserved schema 11. A round trip, write then read then compare, is the most valuable single test in that area.
 
-**The disc's menu is a second program, in another language, that xUnit cannot reach.** Describing `DiscWright.Menu` as something that returns text understates it badly. The menu scans a set, copies with progress, launches an installer, orders add-ons, verifies checksums and offers a chooser, in JScript, on a machine that may be Windows XP, and it is invisible to UI Automation. What C# can test is only the generation: the substitution table, no placeholder left unresolved, the right buttons, the right constants, and the escaping of an ampersand, a trademark sign, quotes and brackets. Its behaviour has no test strategy in either version. One idea worth measuring: put the logic in a `.js` file that the HTA includes, so it can be run and tested under `cscript.exe` against stubbed inputs.
+**The disc's menu. SOLVED 2026-10-14, and it now has tests for the first time in either version.**
+
+The menu scans a set, copies with progress, launches an installer, orders add-ons, verifies checksums and offers a chooser, in JScript, on a machine that may be Windows XP, and it is **invisible to UI Automation**, so neither xUnit nor the window suite can drive it. In v1 that logic sits inside the HTA alongside the generated data, where nothing can reach it.
+
+So it is a file of its own, `AUTORUN/menu.js`, and the HTA includes it. The split is what makes it testable:
+
+- **`menu.js` is identical on every disc.** No substitution, no placeholder, nothing generated. So the tested file and the shipped file are the same file.
+- **Everything that differs from disc to disc lives in a data block in the HTA**, which is where generation and escaping belong, and where an unresolved placeholder can still be caught by its own test.
+
+Both halves were measured before anything was built on them. `mshta` loads an external script with a relative `src`, and `cscript.exe` runs the same file through a `.wsf` job with a real `src` rather than an `eval`, so a mistake in `menu.js` is reported with a line and a column instead of vanishing. Both produce identical answers from the same functions.
+
+Two rules it has to keep. It must parse and run under **both** hosts, so nothing at the top level may touch `window`, `document` or `WScript`: functions only, and arithmetic over values handed in. And it is **JScript, not modern JavaScript**, because the oldest machine it has to run on is Windows XP: no `let`, no `const`, no arrow functions, no `JSON`, no `Array.forEach`.
+
+One unexpected benefit: those tests run on the development machine as well as the VM. They load no assembly of ours, so Smart App Control never gets involved.
 
 **The add-on and patch recognisers are not written.** The chain has two links: a GOG download and a folder of game files. A patch (`patch_x_to_y.exe`) and an add-on (a soundtrack installer beside its game) are each one more class and one more line in `GameFolderReader.InTheUsualOrder`, which is the arrangement earning its keep. They are left until the thing that holds a game's add-ons exists, because an add-on with no parent to attach to is a half-built idea. Source folders I, J and R in the testing kit are waiting for them.
 
