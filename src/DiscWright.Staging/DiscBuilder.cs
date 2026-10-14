@@ -87,7 +87,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
 
         if (together is Outcome<DiscLayout>.Ok(DiscLayout layout) && layout.Discs.Count == 1)
         {
-            return await Make(project, project.Games, layout, project.Label, outputFolder, progress, ct);
+            return await Make(project, project.Games, layout, project.Label, medium, outputFolder, progress, ct);
         }
 
         // One game, and it needs more than one disc: that is a real set, and
@@ -98,7 +98,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
             {
                 Outcome<DiscLayout>.No refused => refused.Refusal,
                 Outcome<DiscLayout>.Ok(DiscLayout set) =>
-                    await Make(project, project.Games, set, project.Label, outputFolder, progress, ct),
+                    await Make(project, project.Games, set, project.Label, medium, outputFolder, progress, ct),
                 _ => Refusals.ThereIsNothingToPutOnADisc()
             };
         }
@@ -126,6 +126,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
                 [game],
                 its,
                 game.Name,
+                medium,
                 System.IO.Path.Combine(outputFolder, OnTheDisc.Tidied(game.Name)),
                 progress,
                 ct);
@@ -146,6 +147,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
         IReadOnlyList<GameFolder> games,
         DiscLayout layout,
         string label,
+        Medium medium,
         string outputFolder,
         IProgress<BuildProgress>? progress,
         CancellationToken ct)
@@ -174,7 +176,69 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
             made.Add(new BuiltDisc(label, disc.Number, layout.Discs.Count, folder, disc.Bytes));
         }
 
+        WriteTheSetFile(forThisDisc, made, medium, ct);
+
         return new BuiltDiscs(made);
+    }
+
+    /// <summary>
+    /// Writes the set file to every disc of a set, after all of them are made.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// After, and not as a step, because it describes every file on EVERY disc
+    /// and so it cannot be written until every disc has been hashed. It costs
+    /// nothing to do it this way: the hashes are read back out of the checksum
+    /// lists that were just written, so nothing is hashed twice.
+    /// </para>
+    /// <para>
+    /// The same file on every disc, so any one disc can answer every question
+    /// about the set. Somebody who finds disc 2 in a drawer gets a disc that
+    /// knows what it belongs to.
+    /// </para>
+    /// </remarks>
+    private void WriteTheSetFile(
+        DiscProject project, List<BuiltDisc> made, Medium medium, CancellationToken ct)
+    {
+        if (made.Count <= 1)
+        {
+            // A disc on its own is not a set, and telling somebody that one
+            // disc of one is all there is would be noise on every disc that
+            // never needed it.
+            return;
+        }
+
+        List<SetEntry> entries = [];
+
+        foreach (BuiltDisc disc in made)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            string listed = System.IO.Path.Combine(disc.Folder, ChecksumList.FileName);
+
+            if (!System.IO.File.Exists(listed))
+            {
+                // No checksum list means nothing to describe the set with, and
+                // a set file with no files in it is worse than none.
+                return;
+            }
+
+            foreach (ReadEntry entry in ChecksumList.Read(System.IO.File.ReadAllText(listed)))
+            {
+                entries.Add(new SetEntry(
+                    disc.Number,
+                    entry.RelativePath,
+                    entry.Sha256,
+                    SizeOf(System.IO.Path.Combine(disc.Folder, WithBackslashes(entry.RelativePath)))));
+            }
+        }
+
+        foreach (BuiltDisc disc in made)
+        {
+            writer.WriteText(
+                System.IO.Path.Combine(disc.Folder, SetManifest.FileName),
+                SetManifest.For(project.Label, entries, disc.Number, made.Count, medium.Name, DateTimeOffset.Now));
+        }
     }
 
     private PlanRequest RequestFor(
@@ -247,6 +311,13 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
 
         return bytes;
     }
+
+    /// <summary>
+    /// A path from the checksum list, which writes forward slashes, back as
+    /// Windows wants it in order to open the file again.
+    /// </summary>
+    private static string WithBackslashes(string path) =>
+        path.Replace('/', '\\');
 
     private long SizeOf(string path)
     {

@@ -34,7 +34,14 @@ public sealed class WriteTheChecksumsStep(IFileSystem files, IHasher hasher) : I
 
             // The list itself is not in its own list. It cannot be: its hash
             // would have to be written into it.
-            if (string.Equals(file.RelativePath, ChecksumList.FileName, StringComparison.OrdinalIgnoreCase))
+            //
+            // Nor is the set file, for a related reason: it describes every
+            // file on every disc of the set, so it cannot be written until all
+            // of them have been hashed, which is after this. Both are the
+            // disc's own bookkeeping about the disc, and the set file carries
+            // its own identity in the set id inside it.
+            if (string.Equals(file.RelativePath, ChecksumList.FileName, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(file.RelativePath, SetManifest.FileName, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }

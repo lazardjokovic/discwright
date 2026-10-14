@@ -503,6 +503,28 @@ In `OnTheDisc`, and in one place only. The builder asks it where to copy a game'
 
 The chosen launcher. A folder of game files has several executables and the recogniser deliberately picks none of them: which one starts a game is a question for the person, and the window is where it gets asked. Until then such a game offers to copy its folder, which is a true and useful answer, just not the whole one.
 
+## Any one disc of a set can speak for the whole set
+
+Every disc of a set carries `Disc set.txt`, and every copy of it describes **every file on every disc**. Somebody who finds disc 2 in a drawer gets a disc that knows what it belongs to, what is missing, and how to put the game back without this program.
+
+**Three things read that file**: the PowerShell snippet inside it, the menu on the disc, and a person. All three take a table row to be a line that *starts with a digit and holds a star*, so **every other line is indented**. That one rule is what keeps the prose out of the parsers, and it is why the file can be both an explanation and a database.
+
+### The set id
+
+Twelve hexadecimal characters over every file in the set: disc, path, size and hash. Not a security measure, a label, and it answers the one question a failed join cannot.
+
+A join that produces the wrong hash says the finished file is wrong. It does **not** say that disc 2 came from a later download than disc 1. Two discs that disagree about the set id were built from different sources, and the menu can say so when the second disc goes in rather than after four minutes of copying. That closes the gap recorded earlier as "a set's identity carries no version".
+
+### Written after the discs, not as a step
+
+It describes every file on every disc, so it cannot be written until all of them have been hashed. The builder writes it in a pass of its own once the discs are staged, and it **costs nothing**: the hashes are read back out of the checksum lists that were just written, so nothing is hashed twice.
+
+The price is that `Disc set.txt` is the second file `checksums.sha256` does not cover, after the list itself. Both are the disc's own bookkeeping, and the set file carries its own identity in the set id inside it. Worth knowing rather than worth hiding.
+
+### A disc on its own gets none
+
+Telling somebody that one disc of one is all there is would be noise on every disc that never needed it.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

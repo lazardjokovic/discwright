@@ -150,6 +150,57 @@ public sealed class BuildingADisc : IDisposable
     }
 
     [Fact]
+    public async Task Gives_every_disc_of_a_set_the_same_file_describing_the_whole_set()
+    {
+        GameFolder game = AGogDownload("Big Game", 4000, parts: 3);
+
+        BuiltDiscs built = await Build(Project(game), capacity: Overhead + 6000);
+
+        Assert.True(built.Discs.Count > 1);
+
+        string[] written =
+        [
+            .. built.Discs.Select(disc => File.ReadAllText(On(disc, "Disc set.txt")))
+        ];
+
+        // Every disc carries one, and every one of them lists every file on
+        // every disc, so any single disc can say what the whole set should be.
+        Assert.All(written, file => Assert.Contains("DiscWright disc set", file, StringComparison.Ordinal));
+        Assert.All(written, file => Assert.Contains("setup_big_game.exe", file, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Gives_every_disc_of_a_set_the_same_set_id()
+    {
+        GameFolder game = AGogDownload("Big Game", 4000, parts: 3);
+
+        BuiltDiscs built = await Build(Project(game), capacity: Overhead + 6000);
+
+        string[] ids =
+        [
+            .. built.Discs
+                .Select(disc => File.ReadAllLines(On(disc, "Disc set.txt"))
+                    .First(line => line.Contains("Set id", StringComparison.Ordinal)))
+        ];
+
+        // Two discs that disagree about it were built from different sources,
+        // which is the one thing a failed join cannot tell you.
+        Assert.Single(ids.Distinct());
+    }
+
+    [Fact]
+    public async Task Writes_no_set_file_for_a_disc_that_is_not_part_of_a_set()
+    {
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+
+        BuiltDisc disc = Assert.Single((await Build(Project(game))).Discs);
+
+        // Telling somebody that one disc of one is all there is would be noise
+        // on every disc that never needed it.
+        Assert.False(File.Exists(On(disc, "Disc set.txt")));
+    }
+
+    [Fact]
     public async Task Cuts_a_file_too_big_for_any_disc_when_it_is_allowed_to()
     {
         GameFolder game = AGogDownload("Huge", 9000);

@@ -75,6 +75,41 @@ public static class ChecksumList
     }
 
     /// <summary>
+    /// Reads a list back.
+    /// </summary>
+    /// <remarks>
+    /// Comments are skipped, which is the same thing sha256sum does with them,
+    /// and a line that is not a hash and a path is skipped rather than thrown
+    /// over: a list with one odd line in it is still worth every line that is
+    /// good, and a disc is not worth refusing over a stray blank.
+    /// </remarks>
+    public static IReadOnlyList<ReadEntry> Read(string text)
+    {
+        List<ReadEntry> found = [];
+
+        foreach (string line in text.Split(LineEnding))
+        {
+            string trimmed = line.TrimEnd('\r');
+
+            if (trimmed.Length == 0 || trimmed.StartsWith('#'))
+            {
+                continue;
+            }
+
+            int star = trimmed.IndexOf(" *", StringComparison.Ordinal);
+
+            if (star <= 0)
+            {
+                continue;
+            }
+
+            found.Add(new ReadEntry(trimmed[..star], trimmed[(star + 2)..]));
+        }
+
+        return found;
+    }
+
+    /// <summary>
     /// Newlines, never carriage returns, which is the opposite of every other
     /// file this program writes.
     /// </summary>
@@ -92,3 +127,12 @@ public static class ChecksumList
 /// <param name="Sha256">Lowercase hexadecimal, as sha256sum writes it.</param>
 /// <param name="Bytes">How big it is, for the total in the header.</param>
 public sealed record ChecksumEntry(string RelativePath, string Sha256, long Bytes);
+
+/// <summary>
+/// One line read back out of a list: a hash and the file it belongs to.
+/// </summary>
+/// <remarks>
+/// No size, because the format does not carry one. Whoever needs it has the
+/// file and can ask it.
+/// </remarks>
+public sealed record ReadEntry(string Sha256, string RelativePath);
