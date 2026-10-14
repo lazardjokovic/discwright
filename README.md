@@ -6,7 +6,10 @@ This repository is the C# rewrite of it. The shipped app, written in PowerShell,
 
 ## Where things stand
 
-Nothing is finished. The solution is laid out, the dependency rule is guarded by a test, and the first few types in `Core` exist. Read [ARCHITECTURE.md](ARCHITECTURE.md) before writing anything: it carries the one rule, the patterns, and the order to build in.
+Nothing is finished. The solution is laid out, the dependency rule is guarded by a test, and `Core` holds the planner and the types every refusal is made of.
+
+- **[READING-THE-CODE.md](READING-THE-CODE.md)** is a guided tour of what exists today, in the order that makes it make sense. Twenty minutes. Start here.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** is the plan and the reasoning: the one rule, the patterns, the decisions made and the gaps still open. Read it before writing anything.
 
 ## The one rule
 

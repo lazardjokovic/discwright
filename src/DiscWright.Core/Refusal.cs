@@ -62,6 +62,15 @@ public sealed record Remedy(string Label, RemedyKind Kind);
 /// The wording always stays in <see cref="Remedy.Label"/>. This only decides
 /// what pressing it does.
 /// </para>
+/// <para>
+/// <strong>A known overlap, left alone on purpose.</strong> <c>EnableSet</c> is
+/// a special case of <c>ChangeOption</c>, because making it a set is turning an
+/// option on. The two collapse into one the day a refusal has to say
+/// <em>which</em> option it means, and that needs a field on
+/// <see cref="Remedy"/> which does not exist yet. No refusal uses either of
+/// them today, so adding that field now would be guessing at a shape before
+/// anything needs it.
+/// </para>
 /// </remarks>
 public enum RemedyKind
 {
