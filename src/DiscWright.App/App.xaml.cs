@@ -5,6 +5,7 @@ using System.Windows.Data;
 
 using DiscWright.Core;
 using DiscWright.Platform;
+using DiscWright.Staging;
 using DiscWright.ViewModels;
 
 namespace DiscWright.App;
@@ -26,12 +27,36 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // A fault inside a click would otherwise close the program with no
+        // word about why, which is the one thing worse than a crash.
+        DispatcherUnhandledException += (_, wrong) =>
+        {
+            MessageBox.Show(
+                MainWindow,
+                wrong.Exception.ToString(),
+                "DiscWright stopped",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+
+            wrong.Handled = true;
+        };
+
         WindowsFileSystem disk = new();
         GameFolderReader reader = GameFolderReader.InTheUsualOrder(new FileVersionFacts());
 
-        MakeADisc screen = new(new WindowsAutorunEncoding(), HowBigIs(disk));
+        DiscBuilder builder = new(disk, new WindowsStageWriter(), new WindowsImages(), new Sha256Hasher());
 
-        new MainWindow(screen, reader, disk).Show();
+        MakeADisc screen = new(new WindowsAutorunEncoding(), HowBigIs(disk), builder);
+
+        MainWindow window = new(screen, reader, disk);
+        window.Show();
+
+        // After it is on screen, because anything this asks about needs a
+        // window to sit in front of.
+        // Queued rather than called, because this is still OnStartup: the
+        // message loop has not begun, and anything that wants to put a window
+        // in front of somebody has nowhere to put it yet.
+        window.Dispatcher.BeginInvoke(() => window.AddWhatWeWereOpenedWith(e.Args));
     }
 
     /// <summary>
@@ -77,6 +102,26 @@ public partial class App : Application
             return bytes;
         };
     }
+}
+
+/// <summary>Visible when something is true, collapsed otherwise.</summary>
+public sealed class WhenSo : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is true ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("Nothing becomes true by being shown.");
+}
+
+/// <summary>Visible when something is false, collapsed otherwise.</summary>
+public sealed class WhenNot : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is false ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("Nothing becomes false by being hidden.");
 }
 
 /// <summary>

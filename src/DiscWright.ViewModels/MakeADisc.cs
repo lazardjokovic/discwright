@@ -1,8 +1,10 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 using DiscWright.Core;
+using DiscWright.Core.Staging;
 using DiscWright.Staging;
 
 namespace DiscWright.ViewModels;
@@ -27,12 +29,18 @@ public sealed class MakeADisc : INotifyPropertyChanged
 {
     private readonly IAutorunEncoding _encoding;
     private readonly Func<string, long> _howBigIs;
-    private readonly List<GameFolder> _games = [];
+    private readonly IBuildDiscs _builder;
+
+    /// <summary>Held while a build starts or stops, and while a report lands.</summary>
+    private readonly Lock _oneAtATime = new();
+    private readonly ObservableCollection<GameFolder> _games = [];
+    private readonly List<AddOn> _addOns = [];
 
     private string _label = string.Empty;
     private string _outputFolder = string.Empty;
     private Medium _medium = Media.Dvd5;
     private DiscOptions _options = new();
+    private ReadOnlyObservableCollection<GameFolder>? _view;
 
     /// <param name="encoding">
     /// What AutoRun can carry, for the warning about a name it cannot show.
@@ -42,17 +50,27 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// this is asked again on every keystroke and the window must not touch a
     /// disk that often.
     /// </param>
-    public MakeADisc(IAutorunEncoding encoding, Func<string, long> howBigIs)
+    /// <param name="builder">What turns the project into discs on a disk.</param>
+    public MakeADisc(IAutorunEncoding encoding, Func<string, long> howBigIs, IBuildDiscs builder)
     {
         _encoding = encoding;
         _howBigIs = howBigIs;
+        _builder = builder;
         Reconsider();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>The games, in the order they were added.</summary>
-    public IReadOnlyList<GameFolder> Games => _games;
+    /// <remarks>
+    /// A collection that says when it changes, rather than a list that does
+    /// not. Saying the whole property changed is not enough: the answer is the
+    /// same object every time, so a list bound to it has no way to tell that
+    /// what is inside it is different, and shows what it showed before. The
+    /// window built the right disc while showing an empty list until this was
+    /// found by driving a real one.
+    /// </remarks>
+    public ReadOnlyObservableCollection<GameFolder> Games => _view ??= new(_games);
 
     /// <summary>What This PC will show when the disc goes in.</summary>
     public string Label
@@ -110,7 +128,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public Refusal? Worry { get; private set; }
 
     /// <summary>Whether there is anything to press the button for.</summary>
-    public bool CanMakeIt => WhyNot is null && OutputFolder.Length > 0;
+    /// <remarks>
+    /// An empty window says nothing, because somebody who has not added a game
+    /// yet has done nothing wrong. The button still has to be dead: saying
+    /// nothing is not the same as being ready, and this told them it was ready
+    /// until a real window was driven with nothing on the list.
+    /// </remarks>
+    public bool CanMakeIt => WhyNot is null && Games.Count > 0 && OutputFolder.Length > 0 && !IsWorking;
 
     /// <summary>Every size of disc that can be aimed at.</summary>
     /// <remarks>
@@ -159,10 +183,139 @@ public sealed class MakeADisc : INotifyPropertyChanged
         set => Switch(Options with { CutFiles = value });
     }
 
+    /// <summary>Whether a build is running right now.</summary>
+    public bool IsWorking { get; private set; }
+
+    /// <summary>
+    /// What the build is doing, in the words the build itself used.
+    /// </summary>
+    /// <remarks>
+    /// Passed straight through rather than reworded here. The step knows what
+    /// it is doing and this does not, and a window that invents its own account
+    /// of somebody else's work is a window that will one day be wrong about it.
+    /// </remarks>
+    public string Doing { get; private set; } = string.Empty;
+
+    /// <summary>How far along, from nothing to one.</summary>
+    public double HowFar { get; private set; }
+
+    /// <summary>What the last build produced, or null when none has.</summary>
+    public BuiltDiscs? Made { get; private set; }
+
+    /// <summary>Why the last build stopped, or null when it did not.</summary>
+    public Refusal? ItWentWrong { get; private set; }
+
+    /// <summary>
+    /// Makes the discs.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Everything that can be known beforehand already is: by the time this
+    /// runs, <see cref="CanMakeIt"/> has been true for as long as somebody has
+    /// been looking at the window. So this is not where refusals are found, it
+    /// is where the work happens and where the things that can only go wrong
+    /// during the work are caught.
+    /// </para>
+    /// <para>
+    /// A build that is cancelled is not a failure and says nothing. Somebody
+    /// who pressed stop knows why it stopped.
+    /// </para>
+    /// </remarks>
+    public async Task MakeIt(CancellationToken ct = default)
+    {
+        // CanMakeIt is already false while a build is running, so this is the
+        // whole of the guard. Saying it twice was two things to keep in step.
+        if (!CanMakeIt)
+        {
+            return;
+        }
+
+        IsWorking = true;
+        Made = null;
+        ItWentWrong = null;
+        HowFar = 0;
+        Doing = "Starting";
+        Started();
+
+        Progress<BuildProgress> saying = new(step =>
+        {
+            // A report can be in flight on another thread while the build
+            // finishes. Looking at whether it is still running and then writing
+            // afterwards is two steps, and the end can happen between them,
+            // which leaves a finished build showing a bar stuck halfway. So the
+            // looking and the writing happen together.
+            bool worth;
+
+            lock (_oneAtATime)
+            {
+                worth = IsWorking;
+
+                if (worth)
+                {
+                    Doing = step.ToString();
+                    HowFar = step.OfSteps == 0 ? 0 : (double)step.Step / step.OfSteps;
+                }
+            }
+
+            // Outside the lock: whoever is listening is not this class's
+            // business, and a window that took a while to redraw would hold up
+            // the build.
+            if (worth)
+            {
+                Tell(nameof(Doing));
+                Tell(nameof(HowFar));
+            }
+        });
+
+        try
+        {
+            switch (await _builder.Build(AsAProject(), Medium, OutputFolder, saying, ct))
+            {
+                case Outcome<BuiltDiscs>.Ok(BuiltDiscs made):
+                    Made = made;
+                    break;
+
+                case Outcome<BuiltDiscs>.No stopped:
+                    ItWentWrong = stopped.Refusal;
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Not a failure, and not worth a word. Somebody who pressed stop
+            // knows why it stopped.
+        }
+        finally
+        {
+            lock (_oneAtATime)
+            {
+                IsWorking = false;
+                Doing = string.Empty;
+                HowFar = 0;
+            }
+
+            Started();
+        }
+    }
+
     /// <summary>Adds a game, and keeps the order they were added in.</summary>
-    public void Add(GameFolder game)
+    /// <param name="asAddOns">
+    /// Files from the same folder to attach to it: a patch, a DLC, a mod. They
+    /// land in the game's Add-ons folder and stay dead until the game is
+    /// installed.
+    /// </param>
+    public void Add(GameFolder game, IEnumerable<LeftBehind>? asAddOns = null)
     {
         _games.Add(game);
+
+        foreach (LeftBehind each in asAddOns ?? [])
+        {
+            _addOns.Add(new AddOn(
+                _games.Count - 1,
+                System.IO.Path.Combine(game.Path, each.File.RelativePath),
+                each.AsAnAddOn,
+                each.Bytes));
+        }
 
         // The first game names the disc, because that is nearly always what
         // somebody would have typed. Only the first: renaming it afterwards is
@@ -174,19 +327,40 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         Reconsider();
-        Tell(nameof(Games));
     }
 
-    /// <summary>Takes a game back off the list.</summary>
+    /// <summary>Takes a game back off the list, and its add-ons with it.</summary>
+    /// <remarks>
+    /// An add-on remembers which game it belongs to by where that game sits in
+    /// the list, so taking one out moves every game after it. Without this, a
+    /// patch for the game that was removed would quietly become a patch for
+    /// the next one along.
+    /// </remarks>
     public void Remove(GameFolder game)
     {
-        _games.Remove(game);
+        int which = _games.IndexOf(game);
+
+        if (which < 0)
+        {
+            return;
+        }
+
+        _games.RemoveAt(which);
+        _addOns.RemoveAll(addOn => addOn.BelongsTo == which);
+
+        for (int at = 0; at < _addOns.Count; at++)
+        {
+            if (_addOns[at].BelongsTo > which)
+            {
+                _addOns[at] = _addOns[at] with { BelongsTo = _addOns[at].BelongsTo - 1 };
+            }
+        }
+
         Reconsider();
-        Tell(nameof(Games));
     }
 
     /// <summary>The project as it stands, for whoever builds it.</summary>
-    public DiscProject AsAProject() => new(Label, _games, Options);
+    public DiscProject AsAProject() => new(Label, _games, Options, AddOns: _addOns);
 
     /// <summary>
     /// Works out everything the window says back, after anything changes.
@@ -254,6 +428,16 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // Splitting a file changes what would be made, so the line saying so
         // has to be worked out again.
         Reconsider();
+    }
+
+    private void Started()
+    {
+        Tell(nameof(IsWorking));
+        Tell(nameof(Doing));
+        Tell(nameof(HowFar));
+        Tell(nameof(Made));
+        Tell(nameof(ItWentWrong));
+        Tell(nameof(CanMakeIt));
     }
 
     private void Told()

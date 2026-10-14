@@ -1,0 +1,112 @@
+<!--
+    Shown when the folder somebody picked held more than the game.
+
+    It exists because the alternative was silence: the recogniser takes the
+    installer and its parts, and a patch and a README sitting beside them were
+    dropped with no sign that anything had gone. Losing a file quietly is the
+    worst way to lose it.
+-->
+<Window x:Class="DiscWright.App.WhatElseIsInThere"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="There is more in that folder"
+        Height="460" Width="620"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Background="{StaticResource Page}"
+        FontFamily="{StaticResource Face}"
+        AutomationProperties.AutomationId="WhatElseIsInThere">
+
+    <Grid Margin="24,20,24,18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Style="{StaticResource Title}"
+                       FontSize="17"
+                       Text="{Binding Headline}"
+                       AutomationProperties.AutomationId="Headline" />
+            <TextBlock Style="{StaticResource Aside}"
+                       Margin="0,4,0,0"
+                       Text="The game itself is already going on. These were beside it. Anything left unticked stays off the disc." />
+        </StackPanel>
+
+        <Border Grid.Row="1"
+                Background="{StaticResource Panel}"
+                BorderBrush="{StaticResource Edge}"
+                BorderThickness="1"
+                CornerRadius="4">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="6,8">
+                <ItemsControl ItemsSource="{Binding Files}" AutomationProperties.AutomationId="Files">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="8,7">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <CheckBox Grid.Column="0"
+                                          Margin="0"
+                                          IsChecked="{Binding Wanted}"
+                                          AutomationProperties.AutomationId="{Binding Name}">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Name}" />
+                                        <TextBlock Style="{StaticResource Aside}"
+                                                   Text="{Binding Explains}" />
+                                    </StackPanel>
+                                </CheckBox>
+
+                                <TextBlock Grid.Column="1"
+                                           Style="{StaticResource Aside}"
+                                           VerticalAlignment="Center"
+                                           Margin="12,0,14,0"
+                                           Text="{Binding Size}" />
+
+                                <!-- The guess is a starting point, not a
+                                     ruling: an .exe beside a game is usually
+                                     something that installs onto it, but a
+                                     standalone tool is not. -->
+                                <ComboBox Grid.Column="2"
+                                          Width="150"
+                                          VerticalAlignment="Center"
+                                          SelectedIndex="{Binding Treatment}"
+                                          IsEnabled="{Binding Wanted}"
+                                          AutomationProperties.AutomationId="{Binding WhatToDoWithIt}">
+                                    <ComboBoxItem Content="Copy it onto the disc" />
+                                    <ComboBoxItem Content="Attach as an add-on" />
+                                </ComboBox>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Button Grid.Column="0"
+                    Content="None of them"
+                    Style="{StaticResource Ordinary}"
+                    Click="NoneOfThem"
+                    AutomationProperties.AutomationId="NoneOfThem" />
+
+            <Button Grid.Column="2"
+                    Content="Put these on too"
+                    Style="{StaticResource TheButton}"
+                    Click="TakeThem"
+                    IsDefault="True"
+                    AutomationProperties.AutomationId="TakeThem" />
+        </Grid>
+    </Grid>
+</Window>

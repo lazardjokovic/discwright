@@ -177,7 +177,23 @@
                     <TextBlock FontSize="14"
                                FontWeight="SemiBold"
                                Text="{Binding WhatItWillMake}"
+                               Visibility="{Binding IsWorking, Converter={StaticResource WhenNot}}"
                                AutomationProperties.AutomationId="WhatItWillMake" />
+
+                    <!-- While it runs, the same line says what it is doing,
+                         because that is the only thing anybody wants from it
+                         then. -->
+                    <TextBlock FontSize="14"
+                               FontWeight="SemiBold"
+                               Text="{Binding Doing}"
+                               Visibility="{Binding IsWorking, Converter={StaticResource WhenSo}}"
+                               AutomationProperties.AutomationId="Doing" />
+
+                    <ProgressBar Margin="0,8,0,0"
+                                 Maximum="1"
+                                 Value="{Binding HowFar, Mode=OneWay}"
+                                 Visibility="{Binding IsWorking, Converter={StaticResource WhenSo}}"
+                                 AutomationProperties.AutomationId="HowFar" />
 
                     <TextBlock Foreground="{StaticResource RefusalInk}"
                                Margin="0,3,0,0"

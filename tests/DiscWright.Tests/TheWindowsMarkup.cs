@@ -32,12 +32,13 @@ public class TheWindowsMarkup
     private static readonly string[] Interactive =
         ["Button", "TextBox", "CheckBox", "ComboBox", "ListBox", "RadioButton", "Expander", "Slider", "PasswordBox"];
 
-    [Fact]
-    public void Every_control_somebody_uses_can_be_found_by_a_test()
+    [Theory]
+    [MemberData(nameof(EveryWindow))]
+    public void Every_control_somebody_uses_can_be_found_by_a_test(string window)
     {
         string[] unreachable =
         [
-            .. Window()
+            .. Markup(window)
                 .Descendants()
                 .Where(element => Interactive.Contains(element.Name.LocalName))
                 .Where(element => IdOf(element) is null)
@@ -47,15 +48,16 @@ public class TheWindowsMarkup
         Assert.True(
             unreachable.Length == 0,
             "Every control somebody uses needs an AutomationId, or no window test can reach it. "
-                + "Missing on: " + string.Join(", ", unreachable));
+                + $"Missing in {window} on: " + string.Join(", ", unreachable));
     }
 
-    [Fact]
-    public void No_two_controls_answer_to_the_same_name()
+    [Theory]
+    [MemberData(nameof(EveryWindow))]
+    public void No_two_controls_answer_to_the_same_name(string window)
     {
         string[] twice =
         [
-            .. Window()
+            .. Markup(window)
                 .Descendants()
                 .Select(IdOf)
                 .Where(id => id is not null)
@@ -66,7 +68,47 @@ public class TheWindowsMarkup
 
         // Two controls with one id is worse than a missing id, because a test
         // finds the first one, passes, and says nothing about the other.
-        Assert.True(twice.Length == 0, "Used more than once: " + string.Join(", ", twice));
+        Assert.True(twice.Length == 0, $"Used more than once in {window}: " + string.Join(", ", twice));
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryWindow))]
+    public void Says_every_colour_by_name_rather_than_in_figures(string window)
+    {
+        string[] literal =
+        [
+            .. Markup(window)
+                .Descendants()
+                .SelectMany(element => element.Attributes())
+                .Where(attribute => ((string?)attribute.Value)?.StartsWith('#') == true)
+                .Select(attribute => Describe(attribute.Parent!) + "." + attribute.Name.LocalName)
+        ];
+
+        // A colour typed into a window is a colour that will not change when
+        // the palette does, and the palette is the whole design.
+        Assert.True(literal.Length == 0, $"Colour written out in full in {window} on: " + string.Join(", ", literal));
+    }
+
+    /// <summary>
+    /// Every window in the program. Found rather than listed, so a new one is
+    /// guarded the day it is written rather than the day somebody remembers.
+    /// </summary>
+    public static TheoryData<string> EveryWindow()
+    {
+        TheoryData<string> windows = [];
+
+        foreach (string file in Directory.GetFiles(
+            Repository.File("src", "DiscWright.App"), "*.xaml"))
+        {
+            // App.xaml is the program itself and Look.xaml is the palette.
+            // Neither has a control on it.
+            if (XDocument.Load(file).Root?.Name.LocalName == "Window")
+            {
+                windows.Add(Path.GetFileName(file));
+            }
+        }
+
+        return windows;
     }
 
     [Fact]
@@ -91,23 +133,6 @@ public class TheWindowsMarkup
         // The accent is how somebody finds the thing they came to do. Two of
         // them is two first choices, which is none.
         Assert.Equal(1, accented);
-    }
-
-    [Fact]
-    public void Says_every_colour_by_name_rather_than_in_figures()
-    {
-        string[] literal =
-        [
-            .. Window()
-                .Descendants()
-                .SelectMany(element => element.Attributes())
-                .Where(attribute => ((string?)attribute.Value)?.StartsWith('#') == true)
-                .Select(attribute => Describe(attribute.Parent!) + "." + attribute.Name.LocalName)
-        ];
-
-        // A colour typed into the window is a colour that will not change when
-        // the palette does, and the palette is the whole design.
-        Assert.True(literal.Length == 0, "Colour written out in full on: " + string.Join(", ", literal));
     }
 
     [Fact]
@@ -142,8 +167,10 @@ public class TheWindowsMarkup
 
     // ------------------------------------------------------------------ helpers
 
-    private static XElement Window() =>
-        XDocument.Load(Repository.File("src", "DiscWright.App", "MainWindow.xaml")).Root!;
+    private static XElement Window() => Markup("MainWindow.xaml");
+
+    private static XElement Markup(string window) =>
+        XDocument.Load(Repository.File("src", "DiscWright.App", window)).Root!;
 
     private static string? IdOf(XElement element) =>
         (string?)element.Attribute("AutomationProperties.AutomationId");

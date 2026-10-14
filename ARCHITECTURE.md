@@ -598,6 +598,55 @@ A collapsed `Expander` hides its contents from the automation tree, which is cor
 
 **It also showed something about Smart App Control.** The app itself runs here, although the test host cannot load the same assemblies. That is almost certainly because a locally built exe carries no Mark of the Web, so it says nothing either way about a downloaded release, which will carry one. **The signing problem is unchanged.**
 
+## What driving a real window found
+
+Everything had been tested against folders a test invented. `tools/Drive-TheWindow.ps1` drives the real window through UI Automation against the real testing kit: it presses **Add a game**, types a path into Windows' own folder dialog, reads back what the window says it will make, presses the button, catches it mid-build, answers the dialog at the end and lists what landed on the disc.
+
+It found three things no test had.
+
+### The button was alive with nothing on the list
+
+An empty window says nothing, because somebody who has not added a game yet has done nothing wrong. **Saying nothing is not the same as being ready**, and the button believed it was. Pressing it built nothing and showed a refusal that should have been impossible by then.
+
+### The list showed nothing while building the right disc
+
+`Games` returned the same `List` object every time, so saying *the property changed* told a bound list nothing: it looked, saw the same object, and showed what it showed before. The disc came out correct while the window looked empty.
+
+It is a `ReadOnlyObservableCollection` now, which says what changed rather than that something did.
+
+### A finished build could show a bar stuck halfway
+
+A progress report can be in flight on another thread while the build finishes. Checking whether it is still running and then writing are two steps, and the end can happen between them. The check and the write now happen together under a lock, and the notification goes out after it, because what a listener does with it is not this class's business.
+
+**That one failed on the test VM and passed here**, which is the whole reason the VM is the default.
+
+### Windows' own dialogs have the v1 problem
+
+The folder dialog exposes every control as a `Pane` with no patterns on it: the box is id `1152`, Select Folder is id `1`, Cancel is id `2`, and not one of them can be invoked or set. That is the same legacy accessibility bridge that made v1 hard to test, in Microsoft's own dialog. They are driven with the keyboard instead. The first Enter walks **into** a folder and the second accepts it.
+
+### What was left behind, and the question that closes it
+
+A GOG download folder that also held a patch and a `READ ME.txt` put **only the game** on the disc. Nothing said so. Losing a file quietly is the worst way to lose it.
+
+So when a folder holds more than the game, the window asks, listing everything with its size and what it would be:
+
+- Something that installs onto the game, a patch or a DLC or a mod, offered as an **add-on**: it lands in the game's `Add-ons` folder and stays dead until the game is installed.
+- Anything else, a README or a manual or cover art, offered as something to **copy onto the disc**: it becomes part of the game's own files, so it lands in the game's folder, gets planned with it, gets cut with it and appears in the checksum list like everything else.
+
+**The kind is a guess and only a guess.** An executable beside a game is nearly always something that installs onto it, but a standalone tool is not, so the guess decides what the window suggests and never what happens. Every row can be changed or unticked.
+
+**Everything starts ticked**, because the surprise worth avoiding is losing a file rather than gaining one.
+
+**Nothing is asked when nothing was left behind**, which is every folder of game files and many downloads. A dialog that appears to say "there is nothing to tell you" is worse than silence.
+
+This is also the first way into the add-on work: until now nothing on the window could attach one.
+
+### Opening DiscWright with a game
+
+`DiscWright.exe "C:\path\to\a game"` adds that folder on the way up, asking about anything left behind exactly as the button does. It is the obvious thing for a right-click on a folder, and it is how the driven window test gets a game in without Windows' own folder picker, which is the one part of this that would not hold still.
+
+It is queued on the dispatcher rather than called from `OnStartup`, because at that point the message loop has not begun and anything that wants to put a window in front of somebody has nowhere to put it yet.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

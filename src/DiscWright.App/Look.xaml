@@ -25,6 +25,13 @@
 
     <FontFamily x:Key="Face">Segoe UI Variable Text, Segoe UI</FontFamily>
 
+    <Style TargetType="ProgressBar">
+        <Setter Property="Height" Value="4" />
+        <Setter Property="Foreground" Value="{StaticResource Accent}" />
+        <Setter Property="Background" Value="{StaticResource Page}" />
+        <Setter Property="BorderThickness" Value="0" />
+    </Style>
+
     <Style TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />

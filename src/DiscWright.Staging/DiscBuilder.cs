@@ -20,6 +20,7 @@ namespace DiscWright.Staging;
 /// </para>
 /// </remarks>
 public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages images, IHasher hasher)
+    : IBuildDiscs
 {
     /// <summary>
     /// The steps, in the order they have to run.
