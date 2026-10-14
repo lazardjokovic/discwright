@@ -647,6 +647,36 @@ This is also the first way into the add-on work: until now nothing on the window
 
 It is queued on the dispatcher rather than called from `OnStartup`, because at that point the message loop has not begun and anything that wants to put a window in front of somebody has nowhere to put it yet.
 
+## Where a game sits on the disc
+
+One game **is** the disc, so its files sit at the root of it, which is what somebody expects when they put the disc in. Several games each get `NN - name`.
+
+**Unless the lone game carries a name the disc writes itself.** A game that brings its own `autorun.inf`, or its own `AUTORUN` folder, would have it quietly replaced by the disc's: the disc builds, it burns, and it is missing something somebody chose to put on it. Such a game gets a folder of its own and keeps everything.
+
+This was found by putting the whole testing kit through the real window. Folder F exists to test exactly it, and the file was **ticked, copied, and then overwritten**, inside the feature written to stop files being lost quietly. Folder P was worse in a quieter way: the game's own `AUTORUN`, `ARTWORK`, `Extras` and `Games` folders were merged in beside the disc's.
+
+Two things make the rule safe:
+
+**It minds only the root of the disc.** A file called `autorun.inf` inside a folder of the game's own collides with nothing, and a game should not be moved for it.
+
+**It does not use `ReservedDiscNames.Claims`.** That one also refuses anything beginning `setup_`, which is right for a loose extra somebody dropped on the disc and catastrophic here: every GOG installer ever made begins `setup_`, so every game on earth would be given a folder it does not need.
+
+`OnTheDisc.FolderFor` is still the single home for the answer, and it now takes the game's files, because the question cannot be answered without them. The builder and the menu both ask it, and a disc where they disagreed would be a menu pointing at nothing.
+
+## The kit, swept
+
+`tools/Sweep-TheKit.ps1` puts all twenty source folders through the real window, one at a time, and writes down what each produced. It is the regression run this rewrite did not have: everything before it was either a unit test against folders a test invented, or one folder driven by hand.
+
+It takes the desktop for a few minutes and the two sparse folders are asked about rather than built, because copying 10 GB would take the run from minutes to most of an hour and what the window *says* about them is the interesting part.
+
+### What it still shows
+
+**Nine games in one folder come through as one game.** Folder D holds nine GOG downloads under `GAMES/GOG1..9`. Pointing at the parent gives a single game whose files happen to be arranged that way, so the menu offers one button rather than nine. The disc is correct and the menu is thin.
+
+**An add-on with no game is accepted as a game.** Folder R holds only a soundtrack installer, and it becomes a disc with one game on it called after the folder. Nothing is lost, but nothing says it is an add-on either.
+
+Both are recogniser questions rather than builder ones, and neither loses a file.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

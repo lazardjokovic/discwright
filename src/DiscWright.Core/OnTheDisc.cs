@@ -23,8 +23,28 @@ public static class OnTheDisc
     /// Numbered rather than just named, so the order somebody added them in is
     /// the order they appear in a file listing.
     /// </remarks>
-    public static string FolderFor(int number, string name, int howManyGames) =>
-        howManyGames <= 1 ? string.Empty : $"{number:00} - {Tidied(name)}";
+    /// <param name="itsFiles">
+    /// The game's files, as they would sit on the disc. Needed because a lone
+    /// game only earns the root if nothing it carries would be written over
+    /// there.
+    /// </param>
+    public static string FolderFor(int number, string name, int howManyGames, IEnumerable<string> itsFiles)
+    {
+        if (howManyGames > 1)
+        {
+            return $"{number:00} - {Tidied(name)}";
+        }
+
+        // One game is the disc, so its files sit at the root of it, which is
+        // what somebody expects when they put the disc in.
+        //
+        // Unless it carries a name the disc writes itself. A game that brings
+        // its own autorun.inf, or its own AUTORUN folder, would have that file
+        // quietly replaced by ours and nobody would be told: the disc would
+        // build, burn, and be missing something somebody chose to put on it.
+        // It gets a folder of its own instead, and keeps everything.
+        return ReservedDiscNames.WouldBeWrittenOver(itsFiles) ? Tidied(name) : string.Empty;
+    }
 
     /// <summary>A name that is safe to use as a folder on a disc.</summary>
     /// <remarks>

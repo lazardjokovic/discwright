@@ -92,7 +92,7 @@ public sealed class WriteTheMenuStep : IBuildStep
         for (int at = 0; at < games.Count; at++)
         {
             GameFolder game = games[at];
-            string folder = OnTheDisc.FolderFor(at + 1, game.Name, games.Count);
+            string folder = OnTheDisc.FolderFor(at + 1, game.Name, games.Count, game.Files.Select(file => file.RelativePath));
 
             string runs = game.Installer is null
                 ? string.Empty

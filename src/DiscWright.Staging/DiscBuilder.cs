@@ -211,7 +211,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
     /// </remarks>
     private static string WhereItGoes(IReadOnlyList<GameFolder> games, GameFolder game, ListedFile file)
     {
-        string folder = OnTheDisc.FolderFor(games.ToList().IndexOf(game) + 1, game.Name, games.Count);
+        string folder = OnTheDisc.FolderFor(games.ToList().IndexOf(game) + 1, game.Name, games.Count, game.Files.Select(file => file.RelativePath));
 
         return folder.Length == 0 ? file.RelativePath : System.IO.Path.Combine(folder, file.RelativePath);
     }
@@ -271,7 +271,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
     {
         for (int at = 0; at < games.Count; at++)
         {
-            string folder = OnTheDisc.FolderFor(at + 1, games[at].Name, games.Count);
+            string folder = OnTheDisc.FolderFor(at + 1, games[at].Name, games.Count, games[at].Files.Select(file => file.RelativePath));
             int which = project.Games.ToList().IndexOf(games[at]);
 
             foreach (AddOn addOn in project.AddOnsFor(which))
