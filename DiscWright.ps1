@@ -7262,6 +7262,64 @@ function Write-CheckReport($w, [int]$done, [int]$total, [string]$rel, [long]$byt
     Update-BurnWindow $w $pct 'checking every file against what was built' $detail (Format-BurnProgressLine ([int]$elapsed) $left)
 }
 
+<#
+    Offer to erase one disc, and erase it if told to.
+
+    Always one disc. Get-EraseOffer refuses to choose between two that could be
+    erased, which is the same rule Get-BurnTarget follows for two drives
+    holding blanks: ask where there is something to ask, and refuse rather than
+    guess. A wrong guess here is somebody's disc.
+
+    Returns @{ Erased; Declined; Why }. Declined is a decision rather than a
+    failure, and a caller stops on it without adding anything: the person just
+    said no to the only question that mattered.
+
+    Reported from a real burn on 14 October. Disc 1 of a set went down fine,
+    disc 2 went in unerased, and the walk said the disc was not blank and
+    stopped. Clearing a CD-RW in another program and starting the whole set
+    again is not a thing this should ask anybody to do.
+#>
+function Invoke-DiscEraseOffer($target, [scriptblock]$log) {
+    if (-not $target) { return @{ Erased = $false } }
+    $msg = @(
+        "The $($target.MediaName) in $($target.Drive) is not blank."
+        ''
+        'Erase it now, and then write this disc to it?'
+        ''
+        'Everything on the disc goes, and it cannot be got back.'
+        ''
+        'This is a quick erase: it blanks the table of contents, takes well'
+        'under a minute, and the drive writes the whole disc afterwards.'
+    ) -join "`r`n"
+    if (-not (Show-Confirm $msg 'Erase this disc?')) {
+        & $log 'The disc was not erased, so nothing was written.'
+        return @{ Erased = $false; Declined = $true }
+    }
+
+    & $log "Erasing the $($target.MediaName) in $($target.Drive)..."
+    $win = Show-BurnWindow 'Erasing the disc' (
+               'Blanking the {0} in {1}, so this disc can be written to it' -f
+                   $target.MediaName, $target.Drive)
+    $r = $null
+    try {
+        # Seconds, not a percentage. IDiscFormat2Erase reports through an event
+        # interface of its own and the sink here is built for the data writer,
+        # so rather than draw a bar that would be invented, the window counts.
+        $r = Clear-DiscMedia -Target $target -OnProgress {
+                 param($secs)
+                 Update-BurnWindow $script:BurnWin -1 'erasing the disc' '' ('{0} s so far' -f $secs) }
+    } finally { Close-BurnWindow $win }
+
+    if (-not $r.Ok) {
+        & $log "The disc could not be erased: $($r.Why)"
+        Show-Warn ("The disc in $($target.Drive) could not be erased:" + [Environment]::NewLine +
+                   [Environment]::NewLine + $r.Why)
+        return @{ Erased = $false; Why = $r.Why }
+    }
+    & $log "Erased in $($r.Seconds) seconds."
+    return @{ Erased = $true; Why = $r.Why }
+}
+
 # One disc, written here and then read back, for the set walk.
 #
 # The Burn to disc button has done this for a single disc since burning
@@ -7297,7 +7355,14 @@ function Invoke-DiscBurnAndCheck([string]$isoPath, [string]$stageDir, [scriptblo
     # rather than finding it again per disc is what stops a set wandering
     # between two writers, and what stops the question being asked three times.
     $pick = Get-BurnTarget $burners $drive
-    if ($pick.Why) { return @{ Ok = $false; Why = $pick.Why } }
+    if ($pick.Why) {
+        # Reported, not acted on. Nothing in here can put a question on screen,
+        # and erasing somebody's disc without asking is not a thing to do
+        # quietly, so the fact that an erase would help travels back out and the
+        # walk does the asking.
+        $offer = Get-EraseOffer $burners
+        return @{ Ok = $false; Why = $pick.Why; EraseTarget = $offer.Target }
+    }
     if ($pick.Ask) {
         # Nothing here can put a question on screen, and guessing between two
         # drives is how a disc ends up in the wrong one.
@@ -7492,13 +7557,40 @@ function Invoke-SetBurnWalk([string[]]$isos, [scriptblock]$log, $parent, $picks 
                 # One ready drive, or none yet: nothing to choose between, and
                 # Invoke-DiscBurnAndCheck says so properly if there is none.
             }
-            $res = Invoke-DiscBurnAndCheck $isos[$i] $stage $log "disc $d of $n" $onDrive
-            if (-not $res.Ok) {
+            # One disc, with as many goes as somebody wants to give it.
+            #
+            # This used to write the disc once and return on any failure, which
+            # is right for a disc that came out wrong and wrong for the
+            # commonest reason of all: a rewritable disc nobody had erased. That
+            # cost the whole walk, and the only way back into it was a button at
+            # the bottom of a window nobody could see.
+            $res = $null
+            while ($true) {
+                $res = Invoke-DiscBurnAndCheck $isos[$i] $stage $log "disc $d of $n" $onDrive
+                if ($res.Ok) { break }
                 & $log "ERROR: disc $d of $n did not come out right: $($res.Why)"
-                Show-Warn ("Disc $d of $n did not come out right:" + [Environment]::NewLine + [Environment]::NewLine +
-                           $res.Why + [Environment]::NewLine + [Environment]::NewLine +
-                           'Do not rely on this disc. The remaining ISOs are written and can be burned once this one has.')
-                return
+
+                # The one failure with an obvious answer gets offered that answer
+                # first, by name, instead of a bare "try again" about a disc the
+                # person would have to go and clear somewhere else.
+                if ($res.EraseTarget) {
+                    $er = Invoke-DiscEraseOffer $res.EraseTarget $log
+                    if ($er.Erased) { continue }
+                    if ($er.Declined) { return }
+                    # An erase that was attempted and failed falls through to the
+                    # plain question: another disc may still work.
+                }
+
+                $again = "Disc $d of $n did not come out right:" + [Environment]::NewLine +
+                         [Environment]::NewLine + $res.Why + [Environment]::NewLine +
+                         [Environment]::NewLine +
+                         'Do not rely on this disc.' + [Environment]::NewLine +
+                         [Environment]::NewLine +
+                         "Put another disc in and try disc $d again?" + [Environment]::NewLine +
+                         [Environment]::NewLine +
+                         'No leaves the rest of the set unwritten. The ISOs are all built and' +
+                         ' can be burned later from Burn to disc.'
+                if (-not (Show-Confirm $again "Disc $d of $n")) { return }
             }
             & $log "Disc $d of $n written and checked: $($res.Why)."
             continue
@@ -7771,8 +7863,25 @@ $btnBurn.Add_Click({
     }
     $pick = Get-BurnTarget $burners
     if ($pick.Why) {
-        Show-Warn ($pick.Why + "`r`n`r`nPut a blank disc in and try again.")
-        return
+        # Perhaps only because the disc has something on it. That is one dialog
+        # away from being ready, and walking out to another program to clear a
+        # CD-RW is not a thing this button should make anybody do.
+        $er = Invoke-DiscEraseOffer (Get-EraseOffer $burners).Target $log
+        if ($er.Declined) { return }
+        if ($er.Erased) {
+            # Asked again, because everything the burn needs after this point
+            # comes out of this report: how much room there is, and what speeds
+            # the drive will take for the disc as it is now.
+            try { $burners = Get-BurnerInfo } catch {
+                Show-Warn "The burning service could not be asked anything:`r`n`r`n$($_.Exception.Message)"
+                return
+            }
+            $pick = Get-BurnTarget $burners
+        }
+        if ($pick.Why) {
+            Show-Warn ($pick.Why + "`r`n`r`nPut a blank disc in and try again.")
+            return
+        }
     }
     $d = $pick.Target
     if ($pick.Ask) {

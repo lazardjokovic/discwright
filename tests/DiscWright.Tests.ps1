@@ -8648,12 +8648,24 @@ Describe 'Burning a set here, rather than handing it to somebody else' -Tag 'Uni
             return $r
         }
 
+        # The offer is a dialog and a COM call on a drive, neither of which
+        # exists here. What the walk owes is asking at the right moment and
+        # doing the right thing with each of the three answers.
+        function Invoke-DiscEraseOffer($target, [scriptblock]$log) {
+            $script:EraseOffers += , [string]$target.Drive
+            if ($script:EraseAnswers.Count -eq 0) { return @{ Erased = $false } }
+            $a = $script:EraseAnswers[0]
+            $script:EraseAnswers = @($script:EraseAnswers | Select-Object -Skip 1)
+            return $a
+        }
+
         function WalkOwn([int]$discs, [bool[]]$answers, $results = @(), $drives = @(),
-                         [int]$pick = 0, [bool]$cancelDrive = $false) {
+                         [int]$pick = 0, [bool]$cancelDrive = $false, $eraseAnswers = @()) {
             $script:WalkDrives = @($drives); $script:DriveAsks = 0
             $script:DriveCancel = $cancelDrive; $script:DrivePick = $pick
             $script:Asked = @(); $script:Handed = @(); $script:Warned = @()
             $script:Burned = @(); $script:Stages = @(); $script:Lines = @(); $script:Named = @(); $script:OnDrive = @()
+            $script:EraseOffers = @(); $script:EraseAnswers = @($eraseAnswers)
             $script:Answers = @($answers); $script:Results = @($results)
             $isos = @(1..$discs | ForEach-Object { "D:\out\GAME D$_.iso" })
             Invoke-SetBurnWalk $isos { param($m) $script:Lines += , $m } $null `
@@ -8726,19 +8738,76 @@ Describe 'Burning a set here, rather than handing it to somebody else' -Tag 'Uni
         ($script:Asked -join '|') | Should -Match 'press Yes to write it'
     }
 
-    It 'stops the moment a disc comes back wrong' {
-        # The one that matters. Disc 2 of a cut game is half of nothing if disc
-        # 1 is bad, so carrying on would spend a blank to make it.
-        WalkOwn 3 @($true, $true, $true, $true) @(@{ Ok = $false; Why = 'could not be read off the disc: setup.exe.dwpart01' })
+    It 'goes no further on a bad disc than it is told to' {
+        # The one that matters, and it has changed shape. Disc 2 of a cut game
+        # is half of nothing if disc 1 is bad, so this never carries on by
+        # itself. It used to stop outright; now it asks, and No stops it. The
+        # answers below are: burn the set, write disc 1, and no, do not try
+        # disc 1 again.
+        WalkOwn 3 @($true, $true, $false) @(@{ Ok = $false; Why = 'could not be read off the disc: setup.exe.dwpart01' })
         @($script:Burned).Count | Should -Be 1
         ($script:Lines -join '|') | Should -Match 'ERROR: disc 1 of 3 did not come out right'
         ($script:Lines -join '|') | Should -Match 'dwpart01'
     }
 
-    It 'warns on the screen too, not only in the log' {
-        WalkOwn 2 @($true, $true) @(@{ Ok = $false; Why = 'wrong contents: menu.hta' })
-        ($script:Warned -join '|') | Should -Match 'Disc 1 of 2 did not come out right'
-        ($script:Warned -join '|') | Should -Match 'Do not rely on this disc'
+    It 'puts the bad disc on the screen too, not only in the log' {
+        # It was a warning and is now the question, because a dialog that says
+        # what went wrong and offers nothing to do about it is how an evening
+        # ends with a half-burned set. The words that matter are still there.
+        WalkOwn 2 @($true, $true, $false) @(@{ Ok = $false; Why = 'wrong contents: menu.hta' })
+        ($script:Asked -join '|') | Should -Match 'Disc 1 of 2 did not come out right'
+        ($script:Asked -join '|') | Should -Match 'Do not rely on this disc'
+        ($script:Asked -join '|') | Should -Match 'wrong contents: menu.hta'
+    }
+
+    It 'writes the same disc again when told to, and finishes the set' {
+        # Reported on 14 October: disc 1 written, disc 2 in unerased, the walk
+        # stopped, and the only way back in was a button at the bottom of the
+        # window nobody could see. Answers: burn the set, write disc 1, yes try
+        # disc 1 again, write disc 2.
+        WalkOwn 2 @($true, $true, $true, $true) @(@{ Ok = $false; Why = 'the disc is not blank' })
+        $script:Burned | Should -Be @('D:\out\GAME D1.iso', 'D:\out\GAME D1.iso', 'D:\out\GAME D2.iso')
+        ($script:Lines -join '|') | Should -Match 'All 2 discs written and checked'
+    }
+
+    It 'offers to erase the disc that is in the way, then writes it' {
+        # The commonest reason of all for a disc to be refused, and the one
+        # with an obvious answer. Offered by name instead of a bare "try
+        # again" about a disc the person would have to go and clear elsewhere.
+        WalkOwn 2 @($true, $true, $true) @(
+            @{ Ok = $false; Why = 'the disc is not blank, and it is rewritable, so it can be erased first'
+               EraseTarget = @{ Drive = 'E:\'; MediaName = 'CD-RW' } }
+        ) @() 0 $false @(@{ Erased = $true })
+        $script:EraseOffers | Should -Be @('E:\')
+        $script:Burned | Should -Be @('D:\out\GAME D1.iso', 'D:\out\GAME D1.iso', 'D:\out\GAME D2.iso')
+        # And no "try disc 1 again" question, because the erase answered it.
+        ($script:Asked -join '|') | Should -Not -Match 'try disc 1 again'
+        ($script:Lines -join '|') | Should -Match 'All 2 discs written and checked'
+    }
+
+    It 'stops where it stands when the erase is declined' {
+        # Declined is a decision, not a failure to work around, and asking
+        # again straight afterwards is how a dialog becomes something people
+        # click through without reading.
+        WalkOwn 2 @($true, $true) @(
+            @{ Ok = $false; Why = 'the disc is not blank, and it is rewritable, so it can be erased first'
+               EraseTarget = @{ Drive = 'E:\'; MediaName = 'CD-RW' } }
+        ) @() 0 $false @(@{ Erased = $false; Declined = $true })
+        $script:EraseOffers | Should -Be @('E:\')
+        @($script:Burned).Count | Should -Be 1
+        ($script:Asked -join '|') | Should -Not -Match 'try disc 1 again'
+    }
+
+    It 'falls back to the plain question when the erase itself fails' {
+        # A drive that refuses to erase is not a reason to give up on the set:
+        # another disc may work. Answers: burn the set, write disc 1, no.
+        WalkOwn 2 @($true, $true, $false) @(
+            @{ Ok = $false; Why = 'the disc is not blank, and it is rewritable, so it can be erased first'
+               EraseTarget = @{ Drive = 'E:\'; MediaName = 'CD-RW' } }
+        ) @() 0 $false @(@{ Erased = $false; Why = 'the drive would not erase it' })
+        $script:EraseOffers | Should -Be @('E:\')
+        ($script:Asked -join '|') | Should -Match 'try disc 1 again'
+        @($script:Burned).Count | Should -Be 1
     }
 
     It 'says the discs were checked, not merely handed over' {
@@ -8800,13 +8869,28 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         $bast = [System.Management.Automation.Language.Parser]::ParseFile(
                     (Join-Path (Split-Path $PSScriptRoot -Parent) ('burn' + [char]92 + 'DiscWright.Burn.ps1')),
                     [ref]$null, [ref]$null)
-        foreach ($nm in 'Get-BurnTarget', 'Format-BurnTargetRow') {
+        # Get-EraseOffer and Test-DiscErasable are here because
+        # Invoke-DiscBurnAndCheck asks them on its way out of a drive that is
+        # not ready, and a fake of either would be a test of the fake.
+        # Test-DiscErasable reads the media table through the two Test-Media
+        # functions, so those come across as well.
+        foreach ($nm in 'Get-BurnTarget', 'Format-BurnTargetRow', 'Get-EraseOffer',
+                        'Test-DiscErasable', 'Test-MediaWritable', 'Test-MediaRewritable') {
             $bfn = ($bast.FindAll({ param($n)
                 $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
                 $n.Name -eq $nm }, $false) | Select-Object -First 1)
             if (-not $bfn) { throw "the burn file has no $nm" }
             . ([scriptblock]::Create($bfn.Extent.Text))
         }
+        # And the table itself, which is a script-level assignment rather than a
+        # function, so the AST walk above cannot bring it. Without it the two
+        # Test-Media functions call a method on $null and the failure is about
+        # PowerShell rather than about discs.
+        $bsrc = Get-Content -Raw -LiteralPath (
+            Join-Path (Split-Path $PSScriptRoot -Parent) ('burn' + [char]92 + 'DiscWright.Burn.ps1'))
+        $tbl = [regex]::Match($bsrc, '(?s)\$script:MediaTypes = @\{.*?\r?\n\}')
+        if (-not $tbl.Success) { throw 'the burn file no longer declares $script:MediaTypes as one block' }
+        . ([scriptblock]::Create($tbl.Value))
 
         # The window itself is real WinForms and belongs to the window suite.
         # What belongs here is which windows are opened, what they are called,
@@ -8831,7 +8915,11 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         $script:Windows = @(); $script:Closed = 0; $script:Wrote = 0; $script:Reported = 0
         $script:WriteThrows = $false
         $script:WriteResult = @{ Seconds = 11; Watched = $true; Updates = 240 }
+        # Blank is here because Get-BurnerInfo always sets it and Get-EraseOffer
+        # reads it. A CD-R is not erasable whatever it says, which is the point:
+        # these tests are about the refusals, and no erase should be offered.
         $script:Drives = @(@{ Drive = $script:Root; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
+                              Blank = $false
                               FreeSectors = 359853; FreeBytes = 736978944; Vendor = 'ASUS'; Product = 'DRW'
                               Speeds = @([pscustomobject]@{ Sectors = 3600; Multiple = 48 }, [pscustomobject]@{ Sectors = 1200; Multiple = 16 }) })
         $script:Verdict = @{ Ok = $true; FilesOnDisc = 9; Unreadable = @(); Missing = @(); Unexpected = @(); WrongSize = @(); WrongContent = @() }
@@ -8937,6 +9025,7 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         # A set settles on one drive and then passes it in for every disc.
         # Without that, disc 2 of a pair can land in the other writer.
         $other = @{ Drive = 'Z:'; Ready = $true; Why = 'ready'; MediaType = 2; MediaName = 'CD-R'
+                    Blank = $false
                     FreeSectors = 359853; FreeBytes = 736978944; Vendor = 'OTHER'; Product = 'DRIVE'
                     Speeds = @([pscustomobject]@{ Sectors = 1200; Multiple = 16 }) }
         $script:Drives = @($other, $script:Drives[0])
@@ -8983,7 +9072,7 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
     }
 
     It 'names the drive and the reason when none is ready' {
-        $script:Drives = @(@{ Drive = 'D:\'; Ready = $false; Why = 'no disc' })
+        $script:Drives = @(@{ Drive = 'D:\'; Ready = $false; Why = 'no disc'; MediaType = 0; Blank = $false })
         $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
         $r.Ok | Should -BeFalse
         $r.Why | Should -Match 'D:\\ no disc'

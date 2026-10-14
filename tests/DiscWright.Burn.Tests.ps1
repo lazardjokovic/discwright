@@ -618,6 +618,267 @@ Describe 'Telling the truth about the disc in the drive' -Tag 'Unit' {
     }
 }
 
+Describe 'Erasing a disc somebody forgot to erase' -Tag 'Unit' {
+
+    # Reported from a real burn on 14 October. Disc 1 of a set went down and
+    # verified; disc 2 went in with last week's test on it; the walk said "the
+    # disc is not blank, and this never erases or appends" and stopped. Going
+    # out to another program to clear a CD-RW and then starting the whole set
+    # again is not a thing this should ask anybody to do.
+    #
+    # The erase itself needs a drive and a disc that is meant to be spent, so
+    # it is on the hand-check list in burn\README.md. The DECISION needs
+    # neither, and it is the half that can be quietly wrong: offering to erase
+    # a CD-R, or offering to erase one of two discs without saying which.
+
+    BeforeAll {
+        # Raw facts only, the way a drive reports them. Nothing here carries a
+        # precomputed answer, so a test cannot agree with the code by accident.
+        function New-Loaded([string]$drive, [int]$type, [bool]$blank, [string]$media) {
+            return @{ Drive = $drive; MediaType = $type; Blank = $blank
+                      MediaName = $media; Id = "id$drive" }
+        }
+    }
+
+    Context 'whether erasing this disc would help' {
+
+        It 'erases a <Name> with something on it' -ForEach @(
+            @{ Code = 3;  Name = 'CD-RW' }
+            @{ Code = 5;  Name = 'DVD-RAM' }
+            @{ Code = 7;  Name = 'DVD+RW' }
+            @{ Code = 10; Name = 'DVD-RW' }
+            @{ Code = 13; Name = 'DVD+RW DL' }
+            @{ Code = 19; Name = 'BD-RE' }
+        ) {
+            Test-DiscErasable $Code $false | Should -BeTrue
+        }
+
+        It 'will not erase a <Name>, however much somebody would like to' -ForEach @(
+            @{ Code = 2;  Name = 'CD-R' }
+            @{ Code = 6;  Name = 'DVD+R' }
+            @{ Code = 9;  Name = 'DVD-R' }
+            @{ Code = 11; Name = 'DVD-R DL' }
+            @{ Code = 18; Name = 'BD-R' }
+        ) {
+            Test-DiscErasable $Code $false | Should -BeFalse
+        }
+
+        It 'does not offer to erase a disc that is already blank' {
+            # A minute spent to achieve nothing, and a dialog standing in front
+            # of the burn that was actually asked for.
+            Test-DiscErasable 3 $true | Should -BeFalse
+        }
+
+        It 'does not offer to erase an empty drive or a pressed disc' {
+            Test-DiscErasable 0  $false | Should -BeFalse
+            Test-DiscErasable 1  $false | Should -BeFalse
+            Test-DiscErasable 4  $false | Should -BeFalse
+            Test-DiscErasable 17 $false | Should -BeFalse
+        }
+
+        It 'reads the media table rather than keeping a list of its own' {
+            # So that a medium added to the table gets the right answer here
+            # without this test being touched, which is the whole reason the
+            # table exists. Rewritable and not blank, and nothing else, is
+            # erasable.
+            $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'burn\DiscWright.Burn.ps1') -Raw
+            $rows = [regex]::Matches($src, "^\s*(\d+)\s*=\s*@\{ Name = '([^']+)';\s*Writable = \`$(true|false);\s*Rewritable = \`$(true|false)",
+                                     [System.Text.RegularExpressions.RegexOptions]::Multiline)
+            $rows.Count | Should -BeGreaterThan 15 -Because 'every row of the media table should be read'
+            foreach ($m in $rows) {
+                $code = [int]$m.Groups[1].Value
+                $want = ($m.Groups[3].Value -eq 'true' -and $m.Groups[4].Value -eq 'true')
+                Test-DiscErasable $code $false | Should -Be $want -Because "$($m.Groups[2].Value) is code $code"
+                Test-DiscErasable $code $true | Should -BeFalse -Because "a blank $($m.Groups[2].Value) has nothing to erase"
+            }
+        }
+    }
+
+    Context 'which disc to offer, when there is a choice' {
+
+        It 'says so when the machine has no recorder at all' {
+            (Get-EraseOffer @()).Why | Should -Match 'No disc recorder'
+        }
+
+        It 'says the same when handed nothing rather than an empty list' {
+            # Get-BurnerInfo returns its list wrapped so one recorder still
+            # comes back as a list, and piping $null yields one $null rather
+            # than nothing. Get-BurnTarget has the same test for the same trap.
+            (Get-EraseOffer $null).Why | Should -Match 'No disc recorder'
+        }
+
+        It 'takes the one disc worth erasing, without asking anything' {
+            $r = Get-EraseOffer @((New-Loaded 'E:\' 3 $false 'CD-RW'))
+            $r.Target.Drive | Should -Be 'E:\'
+            $r.Why | Should -BeNullOrEmpty
+        }
+
+        It 'picks the rewritable one out of a machine holding both kinds' {
+            $r = Get-EraseOffer @((New-Loaded 'D:\' 2 $false 'CD-R'),
+                                  (New-Loaded 'E:\' 3 $false 'CD-RW'))
+            $r.Target.Drive | Should -Be 'E:\'
+        }
+
+        It 'names what it found when nothing can be erased' {
+            # "Nothing to erase" is unhelpful when the reason is a CD-R in one
+            # drive and an empty tray in the other, which is a thing somebody
+            # can act on.
+            $r = Get-EraseOffer @((New-Loaded 'D:\' 2 $false 'CD-R'),
+                                  (New-Loaded 'E:\' 0 $false 'no disc'))
+            $r.Target | Should -BeNullOrEmpty
+            $r.Why | Should -Match 'D:'
+            $r.Why | Should -Match 'CD-R'
+            $r.Why | Should -Match 'E:'
+        }
+
+        It 'refuses to choose between two discs it could erase' {
+            # "Erase one of these two discs" is not a question anybody can
+            # answer safely, and a wrong guess is somebody's disc. Same rule
+            # Get-BurnTarget follows for two drives holding blanks.
+            $r = Get-EraseOffer @((New-Loaded 'D:\' 3 $false 'CD-RW'),
+                                  (New-Loaded 'E:\' 19 $false 'BD-RE'))
+            $r.Target | Should -BeNullOrEmpty
+            $r.Why | Should -Match 'More than one'
+            $r.Why | Should -Match 'D:'
+            $r.Why | Should -Match 'E:'
+        }
+
+        It 'offers nothing when the only rewritable disc is already blank' {
+            $r = Get-EraseOffer @((New-Loaded 'E:\' 3 $true 'CD-RW'))
+            $r.Target | Should -BeNullOrEmpty
+            $r.Why | Should -Match 'No disc here can be erased'
+        }
+
+        It 'takes the list however it is handed over' {
+            $one = @((New-Loaded 'E:\' 3 $false 'CD-RW'))
+            $r = Get-EraseOffer @(, $one)
+            $r.Target.Drive | Should -Be 'E:\'
+            @($r.Target.Drive).Count | Should -Be 1 -Because 'two drives in one target fails later and worse'
+        }
+    }
+
+    Context 'what the module promises about itself' {
+
+        BeforeAll {
+            $script:EraseMod = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'burn\DiscWright.Burn.ps1') -Raw
+            $script:EraseRm = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'burn\README.md') -Raw
+        }
+
+        It 'no longer says it never erases rewritable media' {
+            # It did, in the module header and in README.md, and both were true
+            # until today. A promise left in writing after it stops being true
+            # is worse than never having made it.
+            $script:EraseMod | Should -Not -Match 'does not erase rewritable media'
+            $script:EraseRm | Should -Not -Match 'never erases rewritable media'
+        }
+
+        It 'stops telling people a rewritable disc can be rewritten elsewhere' {
+            # The burn confirmation said "elsewhere" because nothing here could
+            # do it. That is the sentence somebody reads immediately before
+            # spending a disc.
+            $script:EraseMod | Should -Not -Match 'erased and written again elsewhere'
+            $script:EraseMod | Should -Match 'The disc is rewritable, so it can be erased and written again\.'
+        }
+
+        It 'erases quickly by default, and says why that is the default' {
+            $script:EraseMod | Should -Match ([regex]::Escape('$e.FullErase = $Full'))
+            $script:EraseMod | Should -Match 'twenty minutes'
+        }
+
+        It 'does not eject after erasing' {
+            # The write path ejects so the check afterwards reads a freshly
+            # mounted volume. Nothing reads this disc through the filesystem
+            # before it is written, so ejecting here would only mean the tray
+            # is open when the burn wants it shut.
+            $erase = [regex]::Match($script:EraseMod,
+                '(?s)\$script:BurnEraseScript = \{.*?\r?\n\}').Value
+            $erase | Should -Not -BeNullOrEmpty -Because 'the erase script has to be findable'
+            $erase | Should -Match 'EraseMedia'
+            $erase | Should -Not -Match 'EjectMedia'
+        }
+
+        It 'keeps the erase on the hand-check list, because no test can reach it' {
+            $script:EraseRm | Should -Match 'A rewritable disc erased and then written, from the app'
+        }
+    }
+
+    Context 'the two places that offer it' {
+
+        BeforeAll {
+            $appPath = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
+            $script:EraseApp = Get-Content -Raw -LiteralPath $appPath
+            # By AST rather than by regex. A regex for "the function up to the
+            # next closing brace on its own line" is a regex that quietly reads
+            # too much, which is how three of these tests first passed while
+            # looking at the wrong text.
+            $east = [System.Management.Automation.Language.Parser]::ParseFile($appPath, [ref]$null, [ref]$null)
+            $script:EraseFns = @{}
+            foreach ($nm in 'Invoke-DiscEraseOffer', 'Invoke-DiscBurnAndCheck', 'Invoke-SetBurnWalk') {
+                $f = ($east.FindAll({ param($n)
+                    $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
+                    $n.Name -eq $nm }, $false) | Select-Object -First 1)
+                if (-not $f) { throw "DiscWright.ps1 has no $nm" }
+                $script:EraseFns[$nm] = [string]$f.Extent.Text
+            }
+        }
+
+        It 'asks before erasing anything, every time' {
+            # Nothing erases on its own initiative. There is one function that
+            # erases and it asks first.
+            $fn = $script:EraseFns['Invoke-DiscEraseOffer']
+            $fn | Should -Not -BeNullOrEmpty
+            $fn | Should -Match 'Show-Confirm'
+            $fn | Should -Match 'Everything on the disc goes'
+            $fn | Should -Match ([regex]::Escape('Clear-DiscMedia'))
+            # And the only call to Clear-DiscMedia in the whole app is that one.
+            @([regex]::Matches($script:EraseApp, 'Clear-DiscMedia')).Count |
+                Should -Be 1 -Because 'a second caller is a second place that could erase without asking'
+        }
+
+        It 'offers the erase from Burn to disc before giving up on the drive' {
+            $handler = [regex]::Match($script:EraseApp, '(?s)\$btnBurn\.Add_Click\(\{.*?\n\}\)').Value
+            $handler | Should -Not -BeNullOrEmpty -Because 'the Burn to disc handler has to be findable'
+            $handler | Should -Match ([regex]::Escape('Invoke-DiscEraseOffer (Get-EraseOffer $burners).Target'))
+            # And asks the drive again afterwards, because the free space and
+            # the speeds the burn uses all come out of that report.
+            $handler | Should -Match ([regex]::Escape('$burners = Get-BurnerInfo'))
+        }
+
+        It 'lets the set walk try the same disc again instead of stopping' {
+            # It used to write one disc and return on any failure, which is
+            # right for a disc that came out wrong and wrong for the commonest
+            # reason of all.
+            $walk = $script:EraseFns['Invoke-SetBurnWalk']
+            $walk | Should -Not -BeNullOrEmpty
+            $walk | Should -Match ([regex]::Escape('while ($true) {'))
+            $walk | Should -Match ([regex]::Escape('Invoke-DiscEraseOffer $res.EraseTarget'))
+            $walk | Should -Match 'try disc \$d again'
+        }
+
+        It 'stops when somebody says no to the erase' {
+            # Declined is a decision, not a failure to work around.
+            $walk = $script:EraseFns['Invoke-SetBurnWalk']
+            $walk | Should -Match ([regex]::Escape('if ($er.Declined) { return }'))
+        }
+
+        It 'carries the erasable disc out of the burn rather than offering it there' {
+            # Written first as "nothing in there can ask", which is false: it
+            # already asks you to close the tray after the write, and the
+            # comment it came from was about choosing between two drives, not
+            # about dialogs in general. What is true, and what matters, is that
+            # the erase is not offered from in there. The walk owns that
+            # question because the walk is what has to act on the answer.
+            $fn = $script:EraseFns['Invoke-DiscBurnAndCheck']
+            $fn | Should -Match ([regex]::Escape('EraseTarget = $offer.Target'))
+            $fn | Should -Not -Match 'Invoke-DiscEraseOffer'
+            $fn | Should -Not -Match 'Clear-DiscMedia'
+            # And it still says nothing on screen about a disc it refused: the
+            # caller does that, with the reason it was handed.
+            $fn | Should -Not -Match 'Show-Warn'
+        }
+    }
+}
+
 Describe 'Which program writes the discs of a set' -Tag 'Unit' {
 
     # Ticking "disc set" used to offer the three programs Windows knows about

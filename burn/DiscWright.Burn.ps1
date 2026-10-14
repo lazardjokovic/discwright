@@ -16,8 +16,20 @@
 
   WHAT IT DOES NOT DO
 
-  It does not erase rewritable media, and it does not close or append to a
-  multi-session disc. One ISO, one disc, written once.
+  It does not close or append to a multi-session disc. One ISO, one disc,
+  written once.
+
+  It will erase a rewritable disc, and only when asked. Nothing here erases on
+  its own initiative: Get-EraseOffer answers whether there is a disc an erase
+  would make usable, the caller asks the person holding it, and Clear-DiscMedia
+  does it. A quick erase, which blanks the table of contents in well under a
+  minute, not a full one, which rewrites the whole surface and takes twenty
+  minutes on a CD-RW.
+
+  That split is deliberate and it is the same split as everything else here:
+  the decision is a pure function the tests can drive with invented drives, and
+  the act needs a drive and a disc that is meant to be spent, so it is on the
+  hand-check list in README.md instead.
 #>
 
 # IMAPI_MEDIA_PHYSICAL_TYPE. The numbers come back from the drive and mean
@@ -209,6 +221,64 @@ function Test-MediaRewritable([int]$code) {
     return $false
 }
 
+<#
+    Would erasing this disc make it usable?
+
+    Three things have to be true and they are three different questions. The
+    drive has to be able to write this kind of disc at all; the disc has to be
+    the rewritable kind, which a CD-R is not however many times somebody wishes
+    it were; and there has to be something on it, because erasing a blank is a
+    minute spent to achieve nothing.
+
+    Pure, and separate from the erase itself, because this is the half that can
+    be tested. The act needs a drive and a disc that is meant to be spent.
+#>
+function Test-DiscErasable([int]$mediaType, [bool]$blank) {
+    if (-not (Test-MediaWritable $mediaType))   { return $false }
+    if (-not (Test-MediaRewritable $mediaType)) { return $false }
+    return (-not $blank)
+}
+
+<#
+    The one disc on this machine that an erase would make usable, or why there
+    is no such offer to make.
+
+    One, never a list. "Erase one of these two discs" is not a question anybody
+    can answer safely, and this is the same rule Get-BurnTarget already follows
+    when two drives hold blanks: ask only where there is something to ask, and
+    refuse rather than guess.
+
+    Returns @{ Target } or @{ Why }, so a caller reads it exactly like
+    Get-BurnTarget.
+#>
+function Get-EraseOffer($burners) {
+    # Flattened the same way Get-BurnTarget flattens it, and for the same
+    # reason: Get-BurnerInfo returns its list wrapped so that one recorder
+    # still comes back as a list, and a bare $null piped yields one $null.
+    $all = @($burners | ForEach-Object { $_ } | Where-Object { $_ })
+    if (-not $all.Count) { return @{ Why = 'No disc recorder was found on this machine.' } }
+
+    # Asked of Test-DiscErasable rather than read off the report's own Erasable
+    # field, so that one function decides this and a caller handing in a drive
+    # report it built itself cannot answer the question differently.
+    # [bool] rather than handing .Blank straight over. Get-BurnerInfo always
+    # sets it, but a caller building a drive report of its own may not, and an
+    # absent field arrives as "" which a [bool] parameter refuses outright.
+    # Nobody wants an erase offer to fail with a cast error.
+    $can = @($all | Where-Object { Test-DiscErasable $_.MediaType ([bool]$_.Blank) })
+    if (-not $can.Count) {
+        # Said drive by drive, because "nothing to erase" is unhelpful when the
+        # reason is a CD-R in one drive and an empty tray in the other.
+        return @{ Why = ('No disc here can be erased: ' +
+                         (($all | ForEach-Object { "$($_.Drive) $($_.MediaName)" }) -join '; ')) }
+    }
+    if ($can.Count -gt 1) {
+        return @{ Why = ('More than one disc here could be erased, so none was: ' +
+                         (($can | ForEach-Object { "$($_.Drive) $($_.MediaName)" }) -join '; ')) }
+    }
+    return @{ Target = $can[0] }
+}
+
 function ConvertTo-ProfileNames([int[]]$codes) {
     return @($codes | Where-Object { $script:WriteProfiles.ContainsKey([int]$_) } |
              ForEach-Object { $script:WriteProfiles[[int]$_] } | Sort-Object -Unique)
@@ -271,6 +341,8 @@ function Get-BurnerInfo {
             MediaName     = 'no disc'
             MediaWritable = $false
             Blank         = $false
+            Rewritable    = $false
+            Erasable      = $false
             FreeSectors   = [long]0
             FreeBytes     = [long]0
             Speeds        = @()
@@ -286,6 +358,8 @@ function Get-BurnerInfo {
                 $info.MediaName     = Get-MediaTypeName $info.MediaType
                 $info.MediaWritable = Test-MediaWritable $info.MediaType
                 $info.Blank         = [bool]$fmt.MediaHeuristicallyBlank
+                $info.Rewritable    = Test-MediaRewritable $info.MediaType
+                $info.Erasable      = Test-DiscErasable $info.MediaType $info.Blank
                 $info.FreeSectors   = [long]$fmt.FreeSectorsOnMedia
                 $info.FreeBytes     = $info.FreeSectors * $script:SectorBytes
                 # Burning cheap media at the drive's top speed is a known way to
@@ -315,7 +389,15 @@ function Get-BurnerInfo {
                             else { "the disc in it is $($info.MediaName), which cannot be written" }
             }
         } elseif (-not $info.Blank) {
-            $info.Why = 'the disc is not blank, and this never erases or appends'
+            # "the disc is not blank" is the phrase callers match on, so it
+            # stays first. What follows it used to be "and this never erases or
+            # appends", which was true and is now only half true, and the half
+            # that changed is the half somebody holding a CD-RW cares about.
+            $info.Why = $(if ($info.Erasable) {
+                              'the disc is not blank, and it is rewritable, so it can be erased first'
+                          } else {
+                              'the disc is not blank, and this never appends to a disc'
+                          })
         } elseif ($info.FreeSectors -le 0) {
             $info.Why = 'the drive reports no free space'
         } else {
@@ -1013,8 +1095,9 @@ function Write-IsoToDisc {
     }
 
     $what = "$($iso.Name), $([Math]::Round($iso.Length / 1MB, 1)) MB, onto the $($target.MediaName)"
+    # "elsewhere" was true when nothing here could erase. It is not any more.
     $undo = $(if (Test-MediaRewritable $target.MediaType) {
-                  'The disc is rewritable, so it can be erased and written again elsewhere.'
+                  'The disc is rewritable, so it can be erased and written again.'
               } else { 'This cannot be undone: the disc is not rewritable.' })
     if (-not $PSCmdlet.ShouldProcess("$($target.Drive) ($($target.Vendor) $($target.Product))",
                                      "Burn $what. $undo")) {
@@ -1077,6 +1160,78 @@ function Write-IsoToDisc {
         OffThread = $sink.OffThreadCalls
         AttachWhy = $sink.AttachWhy
         SinkError = $sink.LastError
+    }
+}
+
+# What runs on the other thread. Same shape as BurnWriteScript and for the same
+# reason: EraseMedia blocks until the drive has finished, and on the UI thread
+# that is a window Windows paints over with "not responding" for most of a
+# minute.
+#
+# No eject afterwards, deliberately. The write path ejects so that the check
+# that follows reads a freshly mounted volume; nothing reads this disc through
+# the filesystem before it is written, and IMAPI asks the drive rather than
+# Windows whether the disc is blank. Ejecting here would only mean the tray is
+# open when the burn wants it shut.
+$script:BurnEraseScript = {
+    $recorder = New-Object -ComObject 'IMAPI2.MsftDiscRecorder2'
+    $recorder.InitializeDiscRecorder($RecorderId)
+    $e = New-Object -ComObject 'IMAPI2.MsftDiscFormat2Erase'
+    if (-not $e.IsRecorderSupported($recorder)) { throw 'This drive cannot erase a disc.' }
+    $e.Recorder = $recorder
+    $e.ClientName = 'DiscWright'
+    # Quick, not full. Full rewrites the whole surface and takes twenty minutes
+    # on a CD-RW; quick blanks the table of contents and the drive will happily
+    # write the whole disc afterwards. Full is for a disc being given away with
+    # something private on it, which is not what this button is for.
+    $e.FullErase = $Full
+    $e.EraseMedia()
+}
+
+<#
+    Erase a rewritable disc, having been told to.
+
+    Nothing here decides that it should happen. Get-EraseOffer answers whether
+    there is a disc worth offering to erase, the caller asks, and this does it.
+
+    Returns @{ Ok; Seconds; Why } and never throws, because every caller is in
+    the middle of a sequence of dialogs and an exception there is a sequence
+    that stops with nothing said.
+
+    $OnProgress is called with the elapsed seconds while it runs. There is no
+    percentage: IDiscFormat2Erase reports through an event interface of its own
+    and the sink here is built for the data writer, so rather than pretend to a
+    bar, the window counts the seconds. A quick erase is under a minute.
+#>
+function Clear-DiscMedia {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Target,
+        [switch]$Full,
+        [scriptblock]$OnProgress
+    )
+    if (-not $Target -or -not $Target.Id) {
+        return @{ Ok = $false; Seconds = 0; Why = 'No drive was given to erase.' }
+    }
+    $started = Get-Date
+    $job = $null
+    try {
+        $job = Start-BurnRunspace $script:BurnEraseScript @{
+            RecorderId = $Target.Id
+            Full       = [bool]$Full
+        }
+        while (-not $job.Async.IsCompleted) {
+            if ($OnProgress) { & $OnProgress ([int]((Get-Date) - $started).TotalSeconds) }
+            Start-Sleep -Milliseconds 400
+        }
+        $null = Wait-BurnRunspace $job
+        return @{ Ok = $true; Seconds = [int]((Get-Date) - $started).TotalSeconds; Why = 'erased' }
+    } catch {
+        return @{ Ok = $false
+                  Seconds = [int]((Get-Date) - $started).TotalSeconds
+                  Why = $_.Exception.Message }
+    } finally {
+        if ($job) { Close-BurnRunspace $job }
     }
 }
 
