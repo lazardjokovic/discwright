@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DiscWright.Core\DiscWright.Core.csproj" />
+    <ProjectReference Include="..\DiscWright.Menu\DiscWright.Menu.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -120,9 +120,35 @@ public class TheRecogniser
             Folder(@"C:\kit\A", ("setup_hollow_knight_1.5.12620_(64bit)_(89718).exe", 900)),
             reports: null);
 
-        // setup_ off the front, underscores to spaces, and everything from the
-        // first number onwards taken away with the version and the build.
-        Assert.Equal("hollow knight", game.Name);
+        // setup_ off the front, underscores to spaces, everything from the
+        // first number onwards taken away with the version and the build, and
+        // the result capitalised, because this is what somebody reads on the
+        // menu and on the printed cover.
+        Assert.Equal("Hollow Knight", game.Name);
+    }
+
+    [Fact]
+    public void Leaves_capitals_alone_in_a_name_it_derives()
+    {
+        GameFolder game = Read(
+            Folder(@"C:\kit\A", ("setup_warhammer_40000_dawn_of_war_II_1.0.exe", 900)),
+            reports: null);
+
+        // ToTitleCase would make that "Ii", and half the games worth putting on
+        // a disc have a numeral or an initialism in the title.
+        Assert.Equal("Warhammer", game.Name);
+    }
+
+    [Fact]
+    public void Does_not_recapitalise_a_name_the_installer_reported_itself()
+    {
+        GameFolder game = Read(
+            Folder(@"C:\kit\A", ("setup_a_game_1.0.exe", 900)),
+            reports: "STAR WARS: Empire at War");
+
+        // That name is the installer's own. Tidying it would be this program
+        // deciding it knows better than the people who made the game.
+        Assert.Equal("STAR WARS: Empire at War", game.Name);
     }
 
     [Fact]

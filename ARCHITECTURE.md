@@ -34,7 +34,7 @@ The reason this is worth the layering: most of what this program gets wrong is a
 |---|---|---|
 | `DiscWright.Core` | nothing of ours | COM, `System.IO` beyond paths as strings, WPF |
 | `DiscWright.Platform` | Core | anything about discs |
-| `DiscWright.Staging` | Core | COM, UI |
+| `DiscWright.Staging` | Core, **Menu** | COM, UI |
 | `DiscWright.Imaging` | Core | the recorder. it makes images, it does not write them |
 | `DiscWright.Burning` | Core | the image builder, the filesystem beyond reading a stream |
 | `DiscWright.Printing` | Core | everything else |
@@ -434,6 +434,19 @@ More blanks, sometimes. Four games of 3 GB, 1 GB, 0.5 GB and 0.4 GB would fit tw
 
 The `L - a bundle, one big and three small` fixture is the test for it: four games, a target they do not all fit on, and the expected answer is four discs rather than a refusal and rather than a packed set.
 
+## Staging is allowed to reach the Menu, and only Staging is
+
+Added 2026-10-14, when `DiscBuilder` was written and the architecture test refused it.
+
+The builder assembles the list of steps, and one of those steps writes the menu. `Core` holds the pipeline and the steps that need nothing but ports; `Menu` holds the menu and its step. Something has to know about both, and the choice was:
+
+- put the builder in `Core`, and have **`Core` reference `Menu`**, which is the one rule this whole arrangement exists to stop, or
+- put the builder in `Staging`, and let **`Staging` reference `Menu`**, which is a new edge in the graph and nothing else gains one.
+
+The second, because `Staging` is the one place that assembles a whole disc and a menu is one of the things on a disc. The allowed graph in `TheArchitecture` says so, with the reason beside it, since the test is where somebody will meet this.
+
+What it is not: a general loosening. `Core` still references nothing, nothing references the window, and every other edge is unchanged.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.
@@ -443,8 +456,9 @@ Each step ends with something that runs and something that is tested. No step is
 3. `GameFolderReader` and its recognisers. **Done** for the three base kinds: a GOG download, game files with something to run, and game files with nothing to run. 18 tests, and no `InMemoryFileSystem` was needed after all, because a recogniser only looks at names and sizes, so a case is a written listing rather than a folder.
 4. `Platform`, the real `IFileSystem`, and then the same reader tested against the kit on disk.
 5. `Staging` and `Menu`, up to a disc folder on disk with a menu in it. Openable by hand, with no imaging and no burning yet. **The pipeline, the copy step, the menu and autorun.inf are done**, with `BuildContext` settled and progress reported as "step 4 of 7" because the pipeline counts the steps that apply before running any of them. Autorun, artwork, the checksum list and the menu are still to come.
-6. `Imaging`, so there is an ISO.
-7. The window, over the view models that already exist and are already tested.
-8. `Burning`, last, behind its interface, with `FakeRecorder` carrying every failure before a real disc is ever touched.
+6. **A build that runs.** `DiscBuilder` turns a project into disc folders you could open: it plans, makes each staging folder, and runs the steps in the order they have to happen. **Done**, and proved by building a disc from the manual testing kit on the VM, checking its list with `Get-FileHash` alone, and running its menu under `mshta` until it reported back from inside itself.
+7. `Imaging`, so there is an ISO.
+8. The window, over the view models that already exist and are already tested.
+9. `Burning`, last, behind its interface, with `FakeRecorder` carrying every failure before a real disc is ever touched.
 
 Printing stays parked where the design left it, because there is still no printer here and every number on that board is a claim.

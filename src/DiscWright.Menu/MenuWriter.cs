@@ -45,7 +45,8 @@ public static class MenuWriter
         data.Append("    discNumber: ").Append(JScript.Number(facts.DiscNumber)).Append(",\n");
         data.Append("    discsInSet: ").Append(JScript.Number(facts.DiscsInSet)).Append(",\n");
         data.Append("    discsCopied: ").Append('[').Append(JScript.Number(facts.DiscNumber)).Append("],\n");
-        data.Append("    buttons: ").Append(JScript.ListOf(facts.Buttons)).Append('\n');
+        data.Append("    buttons: ").Append(JScript.ListOf(facts.Buttons)).Append(",\n");
+        data.Append("    games: ").Append(JScript.ListOf(facts.GamesOrTheOne)).Append('\n');
         data.Append('}');
 
         return Template
@@ -94,6 +95,12 @@ public static class MenuWriter
 /// <param name="DiscsInSet">One for a disc on its own.</param>
 /// <param name="PrimaryButton">The one thing to do next, and the only coloured button.</param>
 /// <param name="Buttons">Every button, in the order they appear.</param>
+/// <param name="Games">
+/// Every game on the disc, in order. One name for the ordinary disc and several
+/// for a compilation. The chooser that lets somebody pick between them is still
+/// to be written; the names are carried so the disc already holds what it needs
+/// when it is.
+/// </param>
 /// <param name="OnlyOneAtATime">
 /// <para>Whether a second copy of this menu refocuses the first instead of opening.</para>
 /// <para>
@@ -110,4 +117,9 @@ public sealed record MenuFacts(
     int DiscsInSet,
     string PrimaryButton,
     IReadOnlyList<string> Buttons,
-    bool OnlyOneAtATime);
+    bool OnlyOneAtATime,
+    IReadOnlyList<string>? Games = null)
+{
+    /// <summary>The games, or the one name when none were given.</summary>
+    public IReadOnlyList<string> GamesOrTheOne => Games ?? [GameName];
+}

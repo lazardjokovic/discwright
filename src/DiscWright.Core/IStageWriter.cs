@@ -13,6 +13,18 @@ public interface IStageWriter
     /// <summary>Makes a folder, and every folder above it, if they are not there.</summary>
     void MakeFolder(string path);
 
+    /// <summary>
+    /// Makes a folder, and makes sure there is nothing in it.
+    /// </summary>
+    /// <remarks>
+    /// The only destructive thing this program does to a folder, and it exists
+    /// for one reason: building the same disc twice. Left over, a file from the
+    /// first build is hashed into the second build's checksum list and burned
+    /// onto the disc, where it is now correct and permanent. Only ever called on
+    /// a staging folder this program made and named.
+    /// </remarks>
+    void EmptyTheFolder(string path);
+
     /// <summary>Copies a whole file.</summary>
     void Copy(string source, string destination);
 

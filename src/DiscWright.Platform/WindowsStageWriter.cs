@@ -24,6 +24,36 @@ public sealed class WindowsStageWriter : IStageWriter
 
     public void MakeFolder(string path) => Directory.CreateDirectory(path);
 
+    /// <summary>
+    /// The only destructive thing this program does, so it is deliberately
+    /// narrow: it refuses anything that is not a staging folder this program
+    /// named.
+    /// </summary>
+    /// <remarks>
+    /// A guard rather than trust. The path comes from inside this program
+    /// today, and the day somebody wires an output folder straight through to
+    /// it by mistake, the mistake is a thrown exception rather than somebody's
+    /// documents.
+    /// </remarks>
+    public void EmptyTheFolder(string path)
+    {
+        string name = new DirectoryInfo(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)).Name;
+
+        if (!name.StartsWith("disc", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                $"Refusing to empty {path}: only a staging folder called \"disc\" or \"disc DN\" may be emptied.",
+                nameof(path));
+        }
+
+        if (Directory.Exists(path))
+        {
+            Directory.Delete(path, recursive: true);
+        }
+
+        Directory.CreateDirectory(path);
+    }
+
     public void Copy(string source, string destination) =>
         File.Copy(source, destination, overwrite: true);
 

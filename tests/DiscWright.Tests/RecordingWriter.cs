@@ -16,6 +16,9 @@ public sealed class RecordingWriter : IStageWriter
 {
     public List<string> Folders { get; } = [];
 
+    /// <summary>Folders it was asked to clear out before anything went in.</summary>
+    public List<string> Emptied { get; } = [];
+
     public List<Copied> Copies { get; } = [];
 
     public List<Written> Texts { get; } = [];
@@ -32,6 +35,12 @@ public sealed class RecordingWriter : IStageWriter
         Copies.Select(copy => copy.To).Concat(Texts.Select(text => text.Path));
 
     public void MakeFolder(string path) => Folders.Add(path);
+
+    public void EmptyTheFolder(string path)
+    {
+        Emptied.Add(path);
+        Folders.Add(path);
+    }
 
     public void Copy(string source, string destination) => Copies.Add(new Copied(source, destination, 0, null));
 

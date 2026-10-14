@@ -46,7 +46,13 @@ public sealed class WriteTheMenuStep : IBuildStep
     {
         GameFolder? game = context.Project.Games.Count > 0 ? context.Project.Games[0] : null;
 
-        string name = game?.Name ?? context.Project.Label;
+        // A disc holding several games is named after the DISC, not after
+        // whichever game happened to be added first. Somebody looking at a
+        // compilation called "Hollow Knight" would reasonably conclude the
+        // other three were not on it.
+        string name = context.Project.Games.Count > 1
+            ? context.Project.Label
+            : game?.Name ?? context.Project.Label;
 
         return new MenuFacts(
             name,
@@ -65,6 +71,8 @@ public sealed class WriteTheMenuStep : IBuildStep
 
             // A disc, not a preview. A preview sets this false, or previewing a
             // second disc refocuses the first one's stale window.
-            true);
+            true,
+
+            [.. context.Project.Games.Select(each => each.Name)]);
     }
 }

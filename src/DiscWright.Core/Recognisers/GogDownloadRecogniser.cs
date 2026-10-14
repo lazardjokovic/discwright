@@ -106,7 +106,39 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
         tidied = tidied.Replace('_', ' ');
         tidied = FromTheFirstNumberOnwards().Replace(tidied, string.Empty);
 
-        return tidied.Trim();
+        // Capitalised, because this name is what somebody reads on the menu and
+        // on the printed cover, and a file name is all lowercase. v1 leaves it
+        // as it finds it, and a disc built from an installer with no version
+        // information in it came out saying "hollow knight". Only the fallback
+        // is touched: a name the installer reported about itself is its own and
+        // is never recapitalised, or "STAR WARS" would come back as "Star Wars".
+        return Capitalised(tidied.Trim());
+    }
+
+    /// <summary>
+    /// First letter of each word up, and nothing else touched.
+    /// </summary>
+    /// <remarks>
+    /// Not <c>ToTitleCase</c>, which also pulls down anything already in
+    /// capitals: it turns "II" into "Ii" and "HD" into "Hd", and half the games
+    /// worth putting on a disc have a numeral or an initialism in the title.
+    /// </remarks>
+    private static string Capitalised(string name)
+    {
+        char[] letters = [.. name];
+        bool startOfAWord = true;
+
+        for (int at = 0; at < letters.Length; at++)
+        {
+            if (startOfAWord && char.IsLower(letters[at]))
+            {
+                letters[at] = char.ToUpperInvariant(letters[at]);
+            }
+
+            startOfAWord = letters[at] is ' ' or '-' or '(' or ':';
+        }
+
+        return new string(letters);
     }
 
     private static string? WarningAbout(

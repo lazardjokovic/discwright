@@ -22,7 +22,12 @@ public class TheArchitecture
     private static readonly Dictionary<string, string[]> Allowed = new()
     {
         ["DiscWright.Core"] = [],
-        ["DiscWright.Staging"] = ["DiscWright.Core"],
+        // Staging may reach the Menu, and only Staging may. It is the one
+        // place that assembles a whole disc, and a menu is one of the things on
+        // a disc. The alternative was the builder living in Core and Core
+        // reaching for Menu, which is the rule this whole file exists to stop.
+        // Written down here because the test is where somebody will meet it.
+        ["DiscWright.Staging"] = ["DiscWright.Core", "DiscWright.Menu"],
         ["DiscWright.Menu"] = ["DiscWright.Core"],
         ["DiscWright.Platform"] = ["DiscWright.Core"],
         ["DiscWright.Imaging"] = ["DiscWright.Core"],
