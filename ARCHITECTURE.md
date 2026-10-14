@@ -345,11 +345,13 @@ Written down because a gap nobody has named is a gap somebody fills badly in a h
 
 **The disc's menu is a second program, in another language, that xUnit cannot reach.** Describing `DiscWright.Menu` as something that returns text understates it badly. The menu scans a set, copies with progress, launches an installer, orders add-ons, verifies checksums and offers a chooser, in JScript, on a machine that may be Windows XP, and it is invisible to UI Automation. What C# can test is only the generation: the substitution table, no placeholder left unresolved, the right buttons, the right constants, and the escaping of an ampersand, a trademark sign, quotes and brackets. Its behaviour has no test strategy in either version. One idea worth measuring: put the logic in a `.js` file that the HTA includes, so it can be run and tested under `cscript.exe` against stubbed inputs.
 
+**The add-on and patch recognisers are not written.** The chain has two links: a GOG download and a folder of game files. A patch (`patch_x_to_y.exe`) and an add-on (a soundtrack installer beside its game) are each one more class and one more line in `GameFolderReader.InTheUsualOrder`, which is the arrangement earning its keep. They are left until the thing that holds a game's add-ons exists, because an add-on with no parent to attach to is a half-built idea. Source folders I, J and R in the testing kit are waiting for them.
+
 **`BuildContext` is undefined**, and it is the thing that decides whether Command pays off or quietly becomes a god object handed to everything. It has to carry the staging folder, the layout, the disc number, the project, the filesystem, the log and the progress, which is already a lot for one object. Worth designing deliberately rather than growing.
 
 **Per disc against per set.** The steps are not all the same shape. Copying files happens three times for a three disc set; writing the set manifest happens once. Their order matters too, since checksums hash what the copy step wrote, and nothing tests that it holds.
 
-**Tests that want the manual testing kit cannot reach it.** The kit lives outside this repository and at a different path on each machine: `DiscWright-Lab\manual-testing` here, `C:\dw\testkit` on the VM. The answer is small fixtures committed here for the everyday cases and an environment variable for the big ones, with those tests skipping cleanly when it is absent. Note that a clean skip needs xUnit v3 and this is on 2.9.3, so a skip has to be deliberate rather than a test that quietly passes having checked nothing.
+**Tests that want the manual testing kit. SETTLED 2026-10-14: they do not need it.** A recogniser only ever looks at names and sizes, so a case is a list rather than a folder. `TheRecogniser` writes the kit's source folders out as listings, which run in microseconds and work the same on a machine that has never seen the kit. The question comes back only when something has to read the inside of a file, and the one such thing so far, an installer's product name, is behind `IFileFacts` with a fake in the tests.
 
 **The installer placement. DECIDED 2026-10-14: the menu steps aside.**
 
@@ -398,7 +400,7 @@ Each step ends with something that runs and something that is tested. No step is
 
 1. `Core` with `Medium`, `Refusal`, `Outcome<T>`, and the architecture test. Nothing that does anything, but the shape is fixed and guarded.
 2. `DiscPlanner`. **Done.** Pure arithmetic, and the single richest source of cases: fits, does not fit, fills exactly, one file bigger than a whole disc, a cut and its pieces, where the extras land. 22 tests, no files at all. Three mutations were made to it on purpose to watch the tests catch them.
-3. `GameFolderReader` against `IFileSystem`, with `InMemoryFileSystem`. The twenty source folders in the testing kit become its cases.
+3. `GameFolderReader` and its recognisers. **Done** for the three base kinds: a GOG download, game files with something to run, and game files with nothing to run. 18 tests, and no `InMemoryFileSystem` was needed after all, because a recogniser only looks at names and sizes, so a case is a written listing rather than a folder.
 4. `Platform`, the real `IFileSystem`, and then the same reader tested against the kit on disk.
 5. `Staging` and `Menu`, up to a disc folder on disk with a menu in it. Openable by hand, with no imaging and no burning yet.
 6. `Imaging`, so there is an ISO.

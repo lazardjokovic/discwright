@@ -60,6 +60,43 @@ public static class Refusals
             new Remedy("Use a larger disc", RemedyKind.ChangeMedium));
 
     /// <summary>
+    /// The folder holds no setup_*.exe, but there is one inside a "disc"
+    /// subfolder, which means this is a disc we built rather than a download.
+    /// </summary>
+    /// <remarks>
+    /// Named rather than passed on. The next recogniser in the chain would take
+    /// it happily as an ordinary folder of game files and put a whole disc
+    /// inside a disc, and the generic "no installer here" sends somebody
+    /// looking for a fault in their download instead of at which folder they
+    /// picked.
+    /// </remarks>
+    public static Refusal ThatIsADiscRatherThanADownload(FolderListing folder) =>
+        new("That is a disc, not a download",
+            $"{folder.Path} holds a disc DiscWright built. The folder wanted here is the one downloaded from GOG; "
+                + "this is where the disc gets written to.",
+            [],
+            new Remedy("Choose another folder", RemedyKind.PickFolder));
+
+    /// <summary>There is nothing in the folder at all.</summary>
+    public static Refusal ThatFolderIsEmpty(FolderListing folder) =>
+        new("That folder is empty", $"There is nothing in {folder.Path} to put on a disc.",
+            [],
+            new Remedy("Choose another folder", RemedyKind.PickFolder));
+
+    /// <summary>
+    /// Every recogniser passed. Reached only for a folder that exists, holds
+    /// files, and still fits nothing, which today means it cannot happen: the
+    /// last recogniser in the chain claims any folder with files in it. Kept
+    /// because the chain is meant to grow, and a reader should not have to work
+    /// out what happens when nothing claims a folder.
+    /// </summary>
+    public static Refusal NothingRecognisedIn(FolderListing folder) =>
+        new("Nothing in that folder looks like a game",
+            $"Nothing in {folder.Path} looks like an installer or a program.",
+            [],
+            new Remedy("Choose another folder", RemedyKind.PickFolder));
+
+    /// <summary>
     /// Asked to plan nothing. Worth saying rather than handing back a set of no
     /// discs, which every caller would then have to notice for itself.
     /// </summary>
