@@ -955,6 +955,26 @@ Two bugs, both found by going to write one.
 
 v1 removed sets, and the comment survived in a function that no longer needed it. The rewrite builds sets again, so the rule is recovered: the `_D2` is reserved out of the sixteen first, and the name is trimmed again **after** cutting as well as before, because a cut can land where a space was folded and leave `THE_WITCHER_ENH_`.
 
+### Coming back to a set
+
+A set half burned is a thing somebody comes back to tomorrow, so DiscWright leaves a note beside the discs saying how far it got. `Written so far.txt`, in the folder the discs were built into, listing every disc and whether it is done.
+
+**It is written as something a person can read**, because the question it answers, where did I get to, is worth answering whether or not this program is what they ask. It is also what the program parses when burn is pressed again.
+
+Three rules hold it together.
+
+**The note goes down after a disc reads back, never before.** One written on the way in would count a coaster as done, and the whole point of it is that it gets believed later.
+
+**It is believed only while it still describes the discs beside it**, by label and by every image's name and size. Build them again and it is ignored rather than trusted. That is the safe way round: ignoring a good note costs one disc that did not need writing, and trusting a stale one puts somebody else's disc 1 into the set.
+
+**It is offered and never acted on.** What it records is that a disc was written and read back clean, which is true and is still not the same as that disc being in the room: it may have been thrown away, or somebody may be making a second copy on purpose. So the window asks, and says why it is asking.
+
+A set that is finished is deliberately not part way through, so pressing burn on one again writes the whole thing. That is how a second copy gets made.
+
+`TheSetSoFar` carries what was brought forward separately from what was written, because saying every file was checked, in one breath, about discs this run never saw would be claiming more than it knows:
+
+> All 3 discs are written and checked. Disc 3 was written just now, and discs 1 to 2 earlier.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

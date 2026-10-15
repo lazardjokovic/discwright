@@ -6,7 +6,8 @@ using DiscWright.ViewModels;
 namespace DiscWright.Tests;
 
 /// <summary>
-/// Writing a whole set, one disc at a time, in order.
+/// Writing a whole set, one disc at a time, in order, and picking one up again
+/// where it was left.
 /// </summary>
 /// <remarks>
 /// A set is only a set once every disc is written, and the things most likely
@@ -20,7 +21,8 @@ public class WalkingThroughASet
         ABurnerThatRemembers burner = new();
         MakeADisc window = await ASetOf(3, burner);
 
-        await window.BurnTheSet(ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother);
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
 
         Assert.Equal([@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso", @"C:\out\A SET D3.iso"], burner.Wrote);
 
@@ -44,7 +46,8 @@ public class WalkingThroughASet
             {
                 askedFor.Add(number);
                 return Task.FromResult(true);
-            });
+            },
+            NeverAsksToCarryOn);
 
         // Disc 1 goes in the drive that was already settled; it is discs 2 and
         // 3 that need somebody to swap the written one out.
@@ -59,7 +62,8 @@ public class WalkingThroughASet
 
         await window.BurnTheSet(
             ThreeImages, OnlyOneDrive, NeverErases, Closes,
-            (number, of, drive) => Task.FromResult(number < 3));
+            (number, of, drive) => Task.FromResult(number < 3),
+            NeverAsksToCarryOn);
 
         // A decision, not a failure, and it says exactly where to carry on.
         TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
@@ -76,7 +80,8 @@ public class WalkingThroughASet
         ABurnerThatRemembers burner = new();
         MakeADisc window = await ASetOf(3, burner, checksOut: false);
 
-        await window.BurnTheSet(ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother);
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
 
         // Disc 2 is no use at all if disc 1 came out wrong, and carrying on
         // would spend the rest of somebody's blanks on a broken set.
@@ -105,7 +110,8 @@ public class WalkingThroughASet
             },
             NeverErases,
             Closes,
-            AlwaysAnother);
+            AlwaysAnother,
+            NeverAsksToCarryOn);
 
         // A set that wanders between two writers is a set whose discs were
         // written by two different lasers at two different speeds.
@@ -123,15 +129,252 @@ public class WalkingThroughASet
     {
         MakeADisc window = await ASetOf(3, new ABurnerThatRemembers());
 
-        await window.BurnTheSet([], OnlyOneDrive, NeverErases, Closes, AlwaysAnother);
+        await window.BurnTheSet(
+            [], OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
 
         Assert.Null(window.HowTheSetWent);
+    }
+
+    // ------------------------------------------------- coming back to a set
+
+    [Fact]
+    public async Task Keeps_the_place_after_every_disc_that_reads_back()
+    {
+        ANoteInMemory note = new();
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers(), note: note);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // Once per disc, not once at the end: the run that needs this is the
+        // one that never reaches the end.
+        Assert.Equal(3, note.Left);
+
+        TheNoteBesideTheDiscs kept = Assert.IsType<TheNoteBesideTheDiscs>(TheNoteBesideTheDiscs.Read(note.Note));
+        Assert.Equal(3, kept.Written);
+        Assert.Equal("A SET", kept.Label);
+    }
+
+    [Fact]
+    public async Task Keeps_nothing_for_a_disc_that_did_not_read_back()
+    {
+        ANoteInMemory note = new();
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers(), checksOut: false, note: note);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // Written is not the same as readable, and a note that counted a
+        // coaster as done would send somebody home with a broken set.
+        Assert.Equal(0, note.Left);
+        Assert.Null(note.Note);
+    }
+
+    [Fact]
+    public async Task Carries_on_from_the_disc_after_the_last_one_written()
+    {
+        ABurnerThatRemembers burner = new();
+        ANoteInMemory note = new(NoteSaying(2, 3));
+        MakeADisc window = await ASetOf(3, burner, note: note);
+
+        int askedAbout = 0;
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother,
+            (number, of) =>
+            {
+                askedAbout = number;
+                return Task.FromResult(true);
+            });
+
+        // Disc 3 and nothing else. Discs 1 and 2 are already good, and writing
+        // them again costs blanks and twenty minutes.
+        Assert.Equal([@"C:\out\A SET D3.iso"], burner.Wrote);
+        Assert.Equal(3, askedAbout);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+        Assert.True(went.Whole);
+        Assert.Equal(3, went.Written);
+        Assert.Equal(2, went.BroughtForward);
+    }
+
+    [Fact]
+    public async Task Does_not_make_anybody_choose_a_drive_before_being_asked_about_carrying_on()
+    {
+        ANoteInMemory note = new(NoteSaying(2, 3));
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers(), note: note, drives: new TwoDrives());
+
+        List<string> order = [];
+
+        await window.BurnTheSet(
+            ThreeImages,
+            ready =>
+            {
+                order.Add("drive");
+                return Task.FromResult<Recorder?>(ready[0]);
+            },
+            NeverErases,
+            Closes,
+            AlwaysAnother,
+            (number, of) =>
+            {
+                order.Add("carry on");
+                return Task.FromResult(true);
+            });
+
+        // Somebody about to carry on from disc 3 should not be answering
+        // questions about drives first.
+        Assert.Equal(["carry on", "drive"], order);
+    }
+
+    [Fact]
+    public async Task Does_not_ask_for_a_blank_before_the_first_disc_it_carries_on_with()
+    {
+        List<int> askedFor = [];
+        MakeADisc window = await ASetOf(
+            3, new ABurnerThatRemembers(), note: new ANoteInMemory(NoteSaying(2, 3)));
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes,
+            (number, of, drive) =>
+            {
+                askedFor.Add(number);
+                return Task.FromResult(true);
+            },
+            (number, of) => Task.FromResult(true));
+
+        // Disc 3 goes into the drive that was just settled, exactly as disc 1
+        // would have. Asking for a blank first would be asking somebody to
+        // swap a disc that is not in there yet.
+        Assert.Empty(askedFor);
+    }
+
+    [Fact]
+    public async Task Looks_at_the_disc_it_is_about_to_write_and_not_the_first_one()
+    {
+        ABurnerThatRemembers burner = new();
+
+        // Disc 1 is far too big for what is in the drive. Disc 3 fits. Coming
+        // back to write disc 3 must not be refused over disc 1's size.
+        long HowBig(string image) => image.Contains("D1", StringComparison.Ordinal) ? 10_000_000 : 1000;
+
+        // The note has to agree with the images beside it, sizes and all, or
+        // it would rightly be ignored and prove nothing.
+        string note = new TheNoteBesideTheDiscs(
+            "A SET",
+            [.. ThreeImages.Select(each => new NotedImage(System.IO.Path.GetFileName(each), HowBig(each)))],
+            2).AsText();
+
+        MakeADisc window = await ASetOf(
+            3,
+            burner,
+            note: new ANoteInMemory(note),
+            drives: new OneSmallDrive(),
+            howBig: HowBig);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother,
+            (number, of) => Task.FromResult(true));
+
+        Assert.Equal([@"C:\out\A SET D3.iso"], burner.Wrote);
+        Assert.True(Assert.IsType<TheSetSoFar>(window.HowTheSetWent).Whole);
+    }
+
+    [Fact]
+    public async Task Starts_again_when_that_is_what_was_asked()
+    {
+        ABurnerThatRemembers burner = new();
+        ANoteInMemory note = new(NoteSaying(2, 3));
+        MakeADisc window = await ASetOf(3, burner, note: note);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother,
+            (number, of) => Task.FromResult(false));
+
+        // The discs may have been thrown away, or somebody may want a second
+        // copy. Both are ordinary, so the answer is theirs.
+        Assert.Equal(3, burner.Wrote.Count);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+        Assert.Equal(0, went.BroughtForward);
+    }
+
+    [Fact]
+    public async Task Does_not_ask_about_carrying_on_when_there_is_no_note()
+    {
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers());
+
+        // NeverAsksToCarryOn throws if it is called at all.
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        Assert.True(Assert.IsType<TheSetSoFar>(window.HowTheSetWent).Whole);
+    }
+
+    [Fact]
+    public async Task Ignores_a_note_that_is_not_about_these_discs()
+    {
+        ABurnerThatRemembers burner = new();
+
+        // The same set, built again: same names, different sizes. The discs on
+        // the shelf are of something else now.
+        string rebuilt = new TheNoteBesideTheDiscs(
+            "A SET",
+            [.. ThreeImages.Select(each => new NotedImage(System.IO.Path.GetFileName(each), 999))],
+            2).AsText();
+
+        MakeADisc window = await ASetOf(3, burner, note: new ANoteInMemory(rebuilt));
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // Ignoring a good note costs one disc. Trusting a stale one puts
+        // somebody else's disc 1 in the set.
+        Assert.Equal(3, burner.Wrote.Count);
+    }
+
+    [Fact]
+    public async Task Does_not_offer_to_carry_on_with_a_set_that_is_finished()
+    {
+        ABurnerThatRemembers burner = new();
+        MakeADisc window = await ASetOf(3, burner, note: new ANoteInMemory(NoteSaying(3, 3)));
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // Pressing burn on a finished set is how a second copy gets made, and
+        // being asked whether to carry on from disc 4 of 3 would be nonsense.
+        Assert.Equal(3, burner.Wrote.Count);
+    }
+
+    [Fact]
+    public async Task Says_which_discs_were_written_just_now_and_which_earlier()
+    {
+        MakeADisc window = await ASetOf(
+            3, new ABurnerThatRemembers(), note: new ANoteInMemory(NoteSaying(2, 3)));
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother,
+            (number, of) => Task.FromResult(true));
+
+        // Claiming every file was checked, in one breath, about discs this run
+        // never saw would be claiming more than it knows.
+        Assert.Equal(
+            "All 3 discs are written and checked. Disc 3 was written just now, and discs 1 to 2 earlier.",
+            Assert.IsType<TheSetSoFar>(window.HowTheSetWent).InWords);
     }
 
     // ------------------------------------------------------------------ helpers
 
     private static readonly string[] ThreeImages =
         [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso", @"C:\out\A SET D3.iso"];
+
+    /// <summary>A note left beside the discs saying how many are done.</summary>
+    private static string NoteSaying(int written, int ofDiscs) =>
+        new TheNoteBesideTheDiscs(
+            "A SET",
+            [.. ThreeImages.Take(ofDiscs).Select(each => new NotedImage(System.IO.Path.GetFileName(each), 1000))],
+            written).AsText();
 
     private static Task<Recorder?> OnlyOneDrive(IReadOnlyList<Recorder> ready) =>
         throw new InvalidOperationException("It should not have had to ask which drive.");
@@ -143,11 +386,16 @@ public class WalkingThroughASet
 
     private static Task<bool> AlwaysAnother(int number, int of, Recorder drive) => Task.FromResult(true);
 
+    private static Task<bool> NeverAsksToCarryOn(int number, int of) =>
+        throw new InvalidOperationException("It should not have had to ask about carrying on.");
+
     private static async Task<MakeADisc> ASetOf(
         int discs,
         IBurnDiscs burner,
         bool checksOut = true,
-        IFindRecorders? drives = null)
+        IFindRecorders? drives = null,
+        IKeepTheSetsPlace? note = null,
+        Func<string, long>? howBig = null)
     {
         MakeADisc window = new(new TheMachine(
             new NoEncoding(),
@@ -158,10 +406,12 @@ public class WalkingThroughASet
             new AnEraserThatWorks(),
             checksOut ? new ADiskThatMatches() : new ADiskThatDoesNot(),
             new NoHashing(),
-            _ => 1000));
+            note ?? new ANoteInMemory(),
+            howBig ?? (_ => 1000)));
 
         window.OutputFolder = @"C:\out";
         window.Add(AGame("A Big Game"));
+        window.Label = "A SET";
 
         await window.MakeIt();
 
@@ -173,6 +423,24 @@ public class WalkingThroughASet
         ListedFile only = new($"setup_{name}.exe", 1000);
 
         return new GameFolder(@"C:\games\" + name, GameKind.GogInstaller, name, name, only, [only], [], null);
+    }
+
+    /// <summary>
+    /// The note, kept in memory instead of beside the discs.
+    /// </summary>
+    private sealed class ANoteInMemory(string? says = null) : IKeepTheSetsPlace
+    {
+        internal string? Note { get; private set; } = says;
+
+        internal int Left { get; private set; }
+
+        public string? WhatItSays(string folder) => Note;
+
+        public void Leave(string folder, string text)
+        {
+            Note = text;
+            Left++;
+        }
     }
 
     private sealed class ABuilderThatMakesASetOf(int discs) : IBuildDiscs
@@ -221,6 +489,13 @@ public class WalkingThroughASet
     {
         public IReadOnlyList<Recorder> All() =>
             [new("id-E", "E:", "A Drive", 2, true, 360_000, [750])];
+    }
+
+    /// <summary>A drive with a disc in it that almost nothing would fit on.</summary>
+    private sealed class OneSmallDrive : IFindRecorders
+    {
+        public IReadOnlyList<Recorder> All() =>
+            [new("id-E", "E:", "A Drive", 2, true, 10, [750])];
     }
 
     private sealed class TwoDrives : IFindRecorders

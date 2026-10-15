@@ -755,7 +755,21 @@ public class TheMainWindowWithoutAWindow
             eraser ?? new AnEraserThatWorks(),
             new ADiskWithADiscOnIt(),
             new NoHashing(),
+            new NothingIsRemembered(),
             _ => 1000));
+
+    /// <summary>
+    /// A machine with nowhere to keep a set's place, which is every test here:
+    /// none of them walks a set.
+    /// </summary>
+    private sealed class NothingIsRemembered : IKeepTheSetsPlace
+    {
+        public string? WhatItSays(string folder) => null;
+
+        public void Leave(string folder, string text)
+        {
+        }
+    }
 
     private static LeftBehind APatch(string name) =>
         new(new ListedFile(name, 200), LeftBehindKind.LooksLikeAnAddOn);

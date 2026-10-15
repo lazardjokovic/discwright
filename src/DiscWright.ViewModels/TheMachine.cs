@@ -26,6 +26,7 @@ namespace DiscWright.ViewModels;
 /// <param name="Eraser">What blanks a rewritable one, when told to.</param>
 /// <param name="Disk">For reading things back, including a burned disc.</param>
 /// <param name="Hasher">For proving what came back is what went on.</param>
+/// <param name="SetsPlace">Where a set part way through keeps its place.</param>
 /// <param name="HowBigIs">
 /// How big a file or folder is. Handed in rather than read here, because this
 /// is asked again on every keystroke and the window must not touch a disk that
@@ -40,4 +41,5 @@ public sealed record TheMachine(
     IEraseDiscs Eraser,
     IFileSystem Disk,
     IHasher Hasher,
+    IKeepTheSetsPlace SetsPlace,
     Func<string, long> HowBigIs);

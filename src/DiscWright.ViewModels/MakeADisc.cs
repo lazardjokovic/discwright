@@ -442,12 +442,19 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// in. Answering no stops the walk where it is, which is a decision and not
     /// a failure.
     /// </param>
+    /// <param name="carryOnFromDisc">
+    /// Asked once, at the start, when the note beside the discs says some of
+    /// them are already written: carry on from that disc, or start again from
+    /// the first. Never decided here, because a note saying a disc was written
+    /// and checked is not the same as that disc still being in the room.
+    /// </param>
     public async Task BurnTheSet(
         IReadOnlyList<string> images,
         Func<IReadOnlyList<Recorder>, Task<Recorder?>> chooseADrive,
         Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
         Func<Recorder, Task<bool>> shutTheTray,
         Func<int, int, Recorder, Task<bool>> theNextBlankPlease,
+        Func<int, int, Task<bool>> carryOnFromDisc,
         CancellationToken ct = default)
     {
         if (IsWorking || images.Count == 0)
@@ -462,12 +469,37 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Started();
 
         int written = 0;
+        int broughtForward = 0;
         string? stopped = null;
 
         try
         {
-            // Once, before the first disc.
-            Recorder? drive = await Settle(_machine.HowBigIs(images[0]), chooseADrive, whichToErase, ct);
+            // What is beside the discs now, which is what decides whether a
+            // note left there before is still about this set.
+            NotedImage[] now =
+            [
+                .. images.Select(each => new NotedImage(
+                    System.IO.Path.GetFileName(each), _machine.HowBigIs(each)))
+            ];
+
+            // Asked before a drive is settled. Somebody who is about to carry
+            // on from disc 3 should not have to answer questions about which
+            // drive first, and the disc that has to fit in it is disc 3's.
+            TheNoteBesideTheDiscs? note = TheNoteBesideTheDiscs.Read(
+                _machine.SetsPlace.WhatItSays(OutputFolder));
+
+            if (note is not null
+                && note.PartWayThrough
+                && note.Matches(Label, now)
+                && await carryOnFromDisc(note.CarryOnFrom, images.Count))
+            {
+                broughtForward = note.Written;
+                written = broughtForward;
+            }
+
+            // Once, before the first disc this run writes.
+            Recorder? drive = await Settle(
+                _machine.HowBigIs(images[broughtForward]), chooseADrive, whichToErase, ct);
 
             if (drive is null)
             {
@@ -475,11 +507,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 return;
             }
 
-            for (int at = 0; at < images.Count; at++)
+            for (int at = broughtForward; at < images.Count; at++)
             {
                 ct.ThrowIfCancellationRequested();
 
-                if (at > 0)
+                // The first disc this run writes goes into the drive that was
+                // just settled, whether that is disc 1 or disc 3. It is the
+                // ones after it that need somebody to swap.
+                if (at > broughtForward)
                 {
                     Say($"waiting for a blank disc for disc {at + 1} of {images.Count}", 0);
 
@@ -533,6 +568,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 }
 
                 written++;
+
+                // After the disc was read back, and never before it. A note
+                // written on the way in would count a coaster as done, and the
+                // whole point of the note is that it gets believed later.
+                KeepThePlace(now, written);
             }
         }
         catch (OperationCanceledException)
@@ -541,7 +581,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
         finally
         {
-            HowTheSetWent = new TheSetSoFar(written, images.Count, stopped);
+            HowTheSetWent = new TheSetSoFar(written, images.Count, stopped, broughtForward);
 
             lock (_oneAtATime)
             {
@@ -554,6 +594,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Started();
         }
     }
+
+    /// <summary>
+    /// Leaves the note saying how far the set has got.
+    /// </summary>
+    private void KeepThePlace(IReadOnlyList<NotedImage> images, int written) =>
+        _machine.SetsPlace.Leave(
+            OutputFolder,
+            new TheNoteBesideTheDiscs(Label, images, written).AsText());
 
     /// <summary>
     /// The one drive again, after whatever is in it has changed.

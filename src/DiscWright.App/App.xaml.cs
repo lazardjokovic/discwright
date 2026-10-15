@@ -59,6 +59,7 @@ public partial class App : Application
             burner,
             disk,
             new Sha256Hasher(),
+            new ANoteOnDisk(),
             HowBigIs(disk)));
 
         MainWindow window = new(screen, reader, disk, burner);

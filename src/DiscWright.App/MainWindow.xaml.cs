@@ -286,7 +286,8 @@ public partial class MainWindow : Window
         {
             if (set.Count > 1)
             {
-                await _screen.BurnTheSet(set, ChooseADrive, WhichToErase, ShutTheTray, TheNextBlankPlease);
+                await _screen.BurnTheSet(
+                    set, ChooseADrive, WhichToErase, ShutTheTray, TheNextBlankPlease, CarryOnFromDisc);
             }
             else
             {
@@ -360,6 +361,31 @@ public partial class MainWindow : Window
     /// been ejected. Saying which disc is next and how many there are is what
     /// stops somebody losing count halfway through a set of four.
     /// </remarks>
+    /// <summary>
+    /// Asks whether to carry on part way through a set, or start it again.
+    /// </summary>
+    /// <remarks>
+    /// Offered, never assumed. The note beside the discs says they were
+    /// written and read back clean, which is true and is still not the same as
+    /// them being in the room: they may have been thrown away, or somebody may
+    /// be making a second copy on purpose. Both are ordinary things.
+    /// </remarks>
+    private Task<bool> CarryOnFromDisc(int number, int ofDiscs)
+    {
+        string already = number == 2
+            ? "Disc 1 of this set is already written."
+            : $"Discs 1 to {number - 1} of this set are already written.";
+
+        return Task.FromResult(!WorthAsking.Ask(
+            this,
+            already,
+            $"DiscWright can carry on from disc {number} of {ofDiscs}, or start again from disc 1 and "
+                + "write the whole set. It knows about them because it checked each one as it was "
+                + "written, not because it can see them now.",
+            "Start again from disc 1",
+            $"Carry on from disc {number}"));
+    }
+
     private Task<bool> TheNextBlankPlease(int number, int ofDiscs, Recorder drive) =>
         Task.FromResult(!WorthAsking.Ask(
             this,
