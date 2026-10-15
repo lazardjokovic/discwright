@@ -699,6 +699,10 @@ A collapsed `Expander` hides its contents from the automation tree, which is cor
 
 ## Asking whether there is a newer one
 
+In the corner under the name, where a program usually keeps its version, and as quiet as the line above it. It reads `2.0.0  Check for a new version`: which version this is, shown without anybody asking, because that is a question nobody should have to press a button to answer.
+
+It is barely an action and does not look like one. A button the size of the ones that build and burn discs, for something checked once in a blue moon, was the wrong weight entirely.
+
 A button, and only a button. **Checking on every start is a network call nobody made**, from a program whose whole point is putting things on a disc so they keep working with no network at all.
 
 **It only ever says that a version exists.** Downloading and replacing a running program is a far bigger thing than reading a number, and doing it to an unsigned program that Windows already distrusts would be worse than not offering it at all. When there is something newer it offers the page; the browser does the rest.
@@ -717,6 +721,14 @@ Each failure gets its own sentence. Somebody told only that it did not work has 
 | rate limited | GitHub is asking for a rest. Try again in a few minutes. |
 | no network | There is no way out to the internet from here. |
 | timed out | It took too long to answer. |
+
+### A machine with no internet is not an edge case
+
+This is a program for putting things on a disc so they keep working with no network at all, so the machine with no network is the one it is for. **Nothing may break and nothing may throw.**
+
+Those paths are tested through the real class with a stubbed way out, rather than against a hand written stand in, because the catches being tested are in the real one. No route out, a timeout, a refusal, a page that is not there, and a hotel captive portal answering every request with its own login page and a cheerful 200, which is valid HTTP and unreadable JSON.
+
+Being cancelled on purpose is deliberately **not** swallowed with the rest, or the stop button would do nothing.
 
 ### Newer than anything released
 

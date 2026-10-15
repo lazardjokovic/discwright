@@ -49,6 +49,23 @@
                 <TextBlock Style="{StaticResource Aside}"
                            Margin="0,2,0,0"
                            Text="Put a game on a disc that still works in ten years." />
+
+                <!-- Which version this is, and the only way to ask about
+                     newer ones. In the corner under the name, where a program
+                     usually keeps it, and as quiet as the line above it: this
+                     is barely an action and should not look like one. -->
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <TextBlock Style="{StaticResource Aside}"
+                               Text="{Binding ThisBuild}"
+                               AutomationProperties.AutomationId="ThisBuild" />
+
+                    <TextBlock Style="{StaticResource Aside}" Text="  " />
+
+                    <Button Content="Check for a new version"
+                            Style="{StaticResource Quietly}"
+                            Click="CheckForANewVersion"
+                            AutomationProperties.AutomationId="CheckForANewVersion" />
+                </StackPanel>
             </StackPanel>
 
             <!-- About the whole window rather than about one more game, which
@@ -67,15 +84,6 @@
                         Click="OpenADisc"
                         AutomationProperties.AutomationId="OpenADisc" />
 
-                <!-- Only when pressed. Asking on every start is a network call
-                     nobody made, from a program whose whole point is putting
-                     things on a disc so they keep working with no network. -->
-                <Button Content="Check for a new version"
-                        Style="{StaticResource Ordinary}"
-                        HorizontalAlignment="Stretch"
-                        Margin="0,8,0,0"
-                        Click="CheckForANewVersion"
-                        AutomationProperties.AutomationId="CheckForANewVersion" />
             </StackPanel>
         </Grid>
 

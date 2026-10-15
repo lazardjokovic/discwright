@@ -89,6 +89,38 @@
          the accent colour and a heavier weight, and is otherwise the same size,
          because a button that is both bigger and brighter than its neighbour
          looks like a different kind of thing rather than a louder one. -->
+    <!--
+        For something that is barely an action: the version in the corner,
+        checked once in a blue moon. Pressable, and no heavier on the page
+        than the line of text beside it.
+    -->
+    <Style x:Key="Quietly" TargetType="Button">
+        <Setter Property="FontFamily" Value="{StaticResource Face}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{StaticResource Quiet}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <TextBlock x:Name="Words"
+                               Text="{TemplateBinding Content}"
+                               Foreground="{TemplateBinding Foreground}"
+                               FontSize="{TemplateBinding FontSize}"
+                               FontFamily="{TemplateBinding FontFamily}" />
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Words" Property="TextDecorations" Value="Underline" />
+                            <Setter TargetName="Words" Property="Foreground" Value="{StaticResource Accent}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style x:Key="Ordinary" TargetType="Button">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />

@@ -118,6 +118,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string AboutTheDiscInTheDrive { get; private set; } = string.Empty;
 
     /// <summary>
+    /// Which version this is, for the corner of the window.
+    /// </summary>
+    /// <remarks>
+    /// Shown without anybody asking, because "which one am I running" is a
+    /// question somebody should not have to press a button to answer.
+    /// </remarks>
+    public string ThisBuild => _machine.ThisBuild;
+
+    /// <summary>
     /// How this build compares with the newest released, once somebody has
     /// asked, or nothing because nobody has.
     /// </summary>
