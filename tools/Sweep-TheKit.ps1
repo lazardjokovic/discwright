@@ -10,18 +10,32 @@
 
 [CmdletBinding()]
 param(
-    [string] $Kit = 'C:\Users\lazar\DiscWright-Lab\manual-testing\1 SOURCES - add these',
+    [string] $Kit = (Join-Path $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' }) '1 SOURCES - add these'),
     [string] $Into = 'C:\Users\lazar\DiscWright-Lab\kit-sweep',
     [string] $Report = 'C:\Users\lazar\DiscWright-Lab\kit-sweep.md',
 
     # The two sparse ones are 4.3 GB and 6.2 GB. What the window SAYS about
     # them is the interesting part, and copying them would take the run from
     # minutes to most of an hour, so they are asked and not built.
-    [int] $BuildUnderMB = 100
+    [int] $BuildUnderMB = 100,
+
+    # Set on purpose, every time, and never left to the window.
+    #
+    # DiscWright now starts from the size of the disc that is actually in a
+    # drive, which is right for a person and wrong for a sweep: with a CD in
+    # the tray the 4.3 GB folder was refused, and with the drive empty it
+    # builds, so two runs stopped being comparable. This is a regression run,
+    # and a regression run has to ask the same question every time.
+    #
+    # DVD5 because that is what every sweep before this one used.
+    [string] $Size = 'DVD5'
 )
 
 $ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+# Forms is here for SendKeys, which drives Windows' own folder dialog. That
+# dialog hands out every control as a Pane with no patterns on it, so the
+# keyboard is the only way in.
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Windows.Forms
 
 $UIA = [System.Windows.Automation.AutomationElement]
 $Kids = [System.Windows.Automation.TreeScope]::Children
@@ -32,6 +46,36 @@ if (-not (Test-Path $exe)) { throw "No app at $exe" }
 
 if (Test-Path $Into) { Remove-Item $Into -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $Into | Out-Null
+
+# Picks the size of disc, and proves it took.
+#
+# Typed rather than clicked: an open dropdown is a popup in a window of its
+# own, so its rows are under neither the box nor the window, and two goes at
+# finding them there came back with nothing.
+function Set-TheSize($window, $wanted) {
+    $box = ById $window 'DiscSize' 5
+    if ($null -eq $box) { throw "No disc size box in the window." }
+
+    $box.SetFocus()
+    Start-Sleep -Milliseconds 300
+    [System.Windows.Forms.SendKeys]::SendWait($wanted.Substring(0, 1))
+    Start-Sleep -Milliseconds 500
+
+    # Read back, because a selection that did not happen must not look like one.
+    $got = ''
+    try {
+        foreach ($one in $box.GetCurrentPattern(
+            [System.Windows.Automation.SelectionPattern]::Pattern).Current.GetSelection()) {
+            $got = $one.Current.Name
+        }
+    } catch { }
+
+    if ($got -notlike "$wanted*") {
+        throw "Asked for $wanted and the window says '$got', so this sweep would not be comparable."
+    }
+
+    return $got
+}
 
 function ById($root, $id, $seconds = 10) {
     $want = New-Object System.Windows.Automation.PropertyCondition($UIA::AutomationIdProperty, $id)
@@ -159,6 +203,11 @@ foreach ($folder in $folders) {
             }) -join '; '
         }
 
+        # Before anything is read off the window, because the size decides
+        # what it says it will make and whether it refuses at all.
+        Set-TheSize $window $Size | Out-Null
+        Start-Sleep -Milliseconds 400
+
         # Anything it refused outright shows up here instead.
         $refusal = TextOf (ById $window 'WhyNot' 3)
 
@@ -253,7 +302,7 @@ $lines = @(
     "",
     "Every folder in ``1 SOURCES - add these``, opened in the real DiscWright and built, driven through UI Automation.",
     "",
-    "Run $(Get-Date -Format 'yyyy-MM-dd HH:mm'), against $((git -C 'C:\Users\lazar\Projects\discwright-csharp' rev-parse --short HEAD))",
+    "Run $(Get-Date -Format 'yyyy-MM-dd HH:mm'), against $((git -C 'C:\Users\lazar\Projects\discwright-csharp' rev-parse --short HEAD)), every folder aimed at $Size",
     "",
     "| Folder | Size | Named it | Says it will make | Games | Also had | Built | Files | Add-ons | Note |",
     "|---|---|---|---|---|---|---|---|---|---|"

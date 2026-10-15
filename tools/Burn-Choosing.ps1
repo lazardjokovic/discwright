@@ -5,7 +5,7 @@
 
 param(
     [Parameter(Mandatory)] [string] $Pick,
-    [string] $Game = 'C:\Users\lazar\DiscWright-Lab\manual-testing\1 SOURCES - add these\A - GOG download (Hollow Knight)',
+    [string] $Game = (Join-Path $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' }) '1 SOURCES - add these\A - GOG download (Hollow Knight)'),
     [string] $Into = 'C:\Users\lazar\DiscWright-Lab\burn-choosing'
 )
 

@@ -20,8 +20,20 @@ namespace DiscWright.Tests;
 /// </remarks>
 public class OpeningTheDiscsThatExist(Xunit.Abstractions.ITestOutputHelper says)
 {
-    private const string TheKit =
-        @"C:\Users\lazar\DiscWright-Lab\manual-testing\2 DISCS - open these";
+    /// <summary>
+    /// Where the kit is, looked for rather than written down.
+    /// </summary>
+    /// <remarks>
+    /// A path with somebody's name in it means this never runs anywhere but
+    /// the one machine, and a test that never runs reports as a pass. The
+    /// variable is for putting the kit somewhere else; the default is beside
+    /// whoever is logged in, which is where it lives on the test VM too.
+    /// </remarks>
+    private static readonly string TheKit = Path.Combine(
+        Environment.GetEnvironmentVariable("DISCWRIGHT_KIT")
+            ?? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "DiscWright-Kit"),
+        "2 DISCS - open these");
 
     [Fact]
     public void Opens_every_disc_in_the_kit()

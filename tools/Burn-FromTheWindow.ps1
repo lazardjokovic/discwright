@@ -4,6 +4,11 @@
 # It ejects the disc at the end, and this drive cannot shut its own tray, so it
 # beeps and waits for a push.
 
+# The kit is found rather than written down, so this works on this PC, on the
+# test VM where the user is called something else, and on anybody else's
+# machine. Set DISCWRIGHT_KIT to put it somewhere other than the default.
+$TheKit = $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' })
+
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms, UIAutomationClient, UIAutomationTypes, System.Drawing
 
@@ -12,7 +17,7 @@ $Deep = [System.Windows.Automation.TreeScope]::Descendants
 $Kids = [System.Windows.Automation.TreeScope]::Children
 
 $exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe'
-$game = 'C:\Users\lazar\DiscWright-Lab\manual-testing\1 SOURCES - add these\A - GOG download (Hollow Knight)'
+$game = (Join-Path $TheKit '1 SOURCES - add these\A - GOG download (Hollow Knight)')
 $into = 'C:\Users\lazar\DiscWright-Lab\burn-from-window'
 
 function ById($root, $id, $sec = 10) {

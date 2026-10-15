@@ -1,7 +1,7 @@
 # Opens a disc through the real window and reads back what the window now says.
 
 param(
-    [string] $Disc = 'C:\Users\lazar\DiscWright-Lab\manual-testing\2 DISCS - open these\10 everything at once'
+    [string] $Disc = (Join-Path $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' }) '2 DISCS - open these\10 everything at once')
 )
 
 $ErrorActionPreference = 'Stop'

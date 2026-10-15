@@ -675,6 +675,26 @@ A collapsed `Expander` hides its contents from the automation tree, which is cor
 
 **It also showed something about Smart App Control.** The app itself runs here, although the test host cannot load the same assemblies. That is almost certainly because a locally built exe carries no Mark of the Web, so it says nothing either way about a downloaded release, which will carry one. **The signing problem is unchanged.**
 
+## The testing kit
+
+Everything DiscWright is tested against by hand lives in one place, `%USERPROFILE%\DiscWright-Kit`: twenty source folders, eleven discs already built, the artwork, a set that needs two CDs, and the real GOG downloads linked in rather than copied.
+
+**It is found and not written down.** The tools and the tests look for `DISCWRIGHT_KIT` and fall back beside whoever is logged in, so the same run works here, on the test VM where the user is called `dw`, and on anybody else's machine. A path with a name in it means a test that only ever runs on one machine, and a test that never runs reports as a pass.
+
+**It is inputs, and nothing is ever written to it.** Everything the program produces goes to `DiscWright-Lab`, which gets wiped without warning. The kit lived inside that folder until this was noticed.
+
+It says 11 GB and occupies 130 MB, because the large files are sparse: the filesystem knows they are mostly nothing and does not store the nothing. That is enough for every piece of arithmetic and every refusal, since those happen before a byte is read, and no good at all for a real burn.
+
+### A test that passes by doing nothing
+
+`OpeningTheDiscsThatExist` reads the kit during an ordinary test run and returns early when it is not there. **Absence is indistinguishable from success**, so it had been passing on the test VM by opening nothing at all. Putting the kit on the VM made it fail at once, because a saved project records where its games were, absolutely, and those paths have a name in them that does not exist on that machine. `Send-TheKitToTheVM.ps1` repoints them as they land, byte order marks and all.
+
+### The sweep has to ask the same question every time
+
+`Sweep-TheKit.ps1` drives all twenty folders through the real window and writes down what happened to each, which is the only regression test the window has.
+
+It now **sets the disc size itself and reads it back**, and stops if it did not take. DiscWright starts from the size of the disc that is in a drive, which is right for a person and wrong for a regression run: with a CD in the tray the 4.3 GB folder was refused and with the drive empty it built, so two runs were no longer comparable. A feature that makes the program cleverer about its surroundings makes its harness less deterministic, and the harness has to pin down what it used to assume.
+
 ## What driving a real window found
 
 Everything had been tested against folders a test invented. `tools/Drive-TheWindow.ps1` drives the real window through UI Automation against the real testing kit: it presses **Add a game**, types a path into Windows' own folder dialog, reads back what the window says it will make, presses the button, catches it mid-build, answers the dialog at the end and lists what landed on the disc.
