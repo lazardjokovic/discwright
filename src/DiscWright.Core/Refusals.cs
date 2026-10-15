@@ -194,6 +194,18 @@ public static class Refusals
         new("That is not a DiscWright project",
             "The file could not be read as one. " + why);
 
+    /// <remarks>
+    /// Said instead of opening an empty window. A disc whose every game has
+    /// moved is still a disc somebody can find the games for, and an empty
+    /// window tells them nothing about which ones to look for.
+    /// </remarks>
+    public static Refusal NothingOnThatDiscIsWhereItWas(IReadOnlyList<string> gone) =>
+        new("Nothing on that disc is where it was",
+            (gone.Count == 1
+                ? "The one thing it names is not there any more:"
+                : $"None of the {gone.Count} things it names are there any more:")
+                + Environment.NewLine + string.Join(Environment.NewLine, gone.Take(10)));
+
     public static Refusal ThatProjectHasNoGamesInIt() =>
         new("That project has no games in it",
             "It was read, and there is nothing in it to put on a disc. The file may have been written by "

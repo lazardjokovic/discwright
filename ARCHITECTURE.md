@@ -858,6 +858,22 @@ The file holds paths. The games behind them are read again, which is the only wa
 
 Proved on the eleven discs in the testing kit, ten at version 14 and one deliberately at 11: all of them open, and all of their games come back off the disk.
 
+### The button, and what it carries
+
+**Open a disc you made** sits with the title rather than beside *Add a game*, because it is about the whole window and not about one more game. It asks before replacing anything, since what is on the window may be somebody's afternoon.
+
+**The window carries what it cannot show.** There is no artwork or manual on it yet, and a disc opened from a file has both. Dropping them because this cannot edit them would mean rebuilding a disc without the cover somebody picked, so they are carried untouched. A disc opened and built again comes out the same disc.
+
+**The size of disc is only taken when the file chose one.** A project saved on automatic says nothing about it, and the one already on the window is a better answer than a guess.
+
+**A disc whose games have all moved is refused rather than opened empty.** An empty window tells somebody nothing about which folders to go and find; the refusal names them.
+
+### Two things driving it found
+
+**Every row in the games list answered to its whole record.** A list item takes its name from whatever the thing in it prints as, which here was every file and every size. A screen reader would have read all of it aloud, and a window test would have seen it instead of a name. The rows are named now.
+
+**A folder path is long**, and a scrollbar along the bottom of the list to read the end of one is a poor trade for the room it takes. Trimmed, with the whole path on hover.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

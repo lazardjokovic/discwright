@@ -35,6 +35,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private readonly List<AddOn> _addOns = [];
     private readonly List<string> _loose = [];
 
+    // Carried rather than chosen. There is no artwork or manual on the window
+    // yet, and a disc opened from a file has both; dropping them because this
+    // cannot edit them would mean rebuilding a disc without the cover somebody
+    // picked, which is a worse answer than carrying something untouched.
+    private DiscArtwork? _artwork;
+    private string? _manual;
+    private string? _extrasFolder;
+
     private string _label = string.Empty;
     private string _outputFolder = string.Empty;
     private Medium _medium = Media.Dvd5;
@@ -586,8 +594,72 @@ public sealed class MakeADisc : INotifyPropertyChanged
         new(Label,
             _games,
             Options,
-            Extras: _loose.Count == 0 ? null : new DiscExtras(LooseItems: _loose),
+            Artwork: _artwork,
+            Extras: _manual is null && _extrasFolder is null && _loose.Count == 0
+                ? null
+                : new DiscExtras(_manual, _extrasFolder, _loose),
             AddOns: _addOns);
+
+    /// <summary>
+    /// Fills the window in from a disc that was made before.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Everything goes, including the things the window cannot show yet. A
+    /// disc opened and built again should come out the same disc, and
+    /// quietly leaving out the artwork because there is nowhere to display it
+    /// would make that false.
+    /// </para>
+    /// <para>
+    /// The size of disc is only taken when the file chose one. A project saved
+    /// on automatic says nothing about it, and the one already on the window is
+    /// a better answer than a guess.
+    /// </para>
+    /// </remarks>
+    public void OpenThis(Reopened back)
+    {
+        _games.Clear();
+        _addOns.Clear();
+        _loose.Clear();
+
+        DiscProject was = back.Project;
+
+        foreach (GameFolder game in was.Games)
+        {
+            _games.Add(game);
+        }
+
+        _addOns.AddRange(was.AddOnsOrNone);
+        _loose.AddRange(was.Extras?.Loose ?? []);
+        _artwork = was.Artwork;
+        _manual = was.Extras?.ManualPath;
+        _extrasFolder = was.Extras?.ExtrasFolderPath;
+
+        _label = was.Label;
+        _options = was.Options;
+
+        if (back.OutputFolder is string where)
+        {
+            _outputFolder = where;
+        }
+
+        if (back.Medium is Medium chosen)
+        {
+            _medium = chosen;
+        }
+
+        Tell(nameof(Label));
+        Tell(nameof(OutputFolder));
+        Tell(nameof(Medium));
+        Tell(nameof(Options));
+        Tell(nameof(Menu));
+        Tell(nameof(Checksums));
+        Tell(nameof(ArtworkOnDisc));
+        Tell(nameof(LegacyFileSystems));
+        Tell(nameof(CutFiles));
+
+        Reconsider();
+    }
 
     /// <summary>
     /// Works out everything the window says back, after anything changes.

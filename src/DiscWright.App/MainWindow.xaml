@@ -29,12 +29,28 @@
         </Grid.RowDefinitions>
 
         <!-- ================================================== the top line -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,18">
-            <TextBlock Text="DiscWright" Style="{StaticResource Title}" />
-            <TextBlock Style="{StaticResource Aside}"
-                       Margin="0,2,0,0"
-                       Text="Put a game on a disc that still works in ten years." />
-        </StackPanel>
+        <Grid Grid.Row="0" Margin="0,0,0,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="DiscWright" Style="{StaticResource Title}" />
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,2,0,0"
+                           Text="Put a game on a disc that still works in ten years." />
+            </StackPanel>
+
+            <!-- About the whole window rather than about one more game, which
+                 is why it sits up here and not beside Add a game. -->
+            <Button Grid.Column="1"
+                    Content="Open a disc you made..."
+                    Style="{StaticResource Ordinary}"
+                    VerticalAlignment="Center"
+                    Click="OpenADisc"
+                    AutomationProperties.AutomationId="OpenADisc" />
+        </Grid>
 
         <!-- ===================================================== the middle -->
         <Grid Grid.Row="1">
@@ -79,12 +95,35 @@
                                  BorderThickness="0"
                                  Background="Transparent"
                                  Padding="4"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                  AutomationProperties.AutomationId="Games">
+                            <!-- Without this a row answers to whatever the
+                                 thing in it prints as, which here is the whole
+                                 record: every file, every size. A reader would
+                                 say all of it aloud, and a window test would
+                                 see it instead of a name. -->
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Margin="6,7">
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                                        <TextBlock Style="{StaticResource Aside}" Text="{Binding Path}" />
+
+                                        <!-- Trimmed rather than scrolled. A
+                                             folder path is long, and a bar
+                                             along the bottom of the list to
+                                             read the end of one is a poor
+                                             trade for the room it takes. -->
+                                        <TextBlock Style="{StaticResource Aside}"
+                                                   Text="{Binding Path}"
+                                                   TextWrapping="NoWrap"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding Path}" />
                                     </StackPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>

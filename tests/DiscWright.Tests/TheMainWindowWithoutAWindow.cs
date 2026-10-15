@@ -447,6 +447,68 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(0, window.HowFar);
     }
 
+    // ----------------------------------------------------------- opening one
+
+    [Fact]
+    public void Fills_itself_in_from_a_disc_that_was_made_before()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Something Else", 500));
+
+        window.OpenThis(AReopenedDisc());
+
+        // Everything, including what it replaced.
+        Assert.Equal("AN OLD DISC", window.Label);
+        Assert.Equal(@"D:\out", window.OutputFolder);
+        Assert.Equal(Media.Dvd9, window.Medium);
+        Assert.Equal("The Witcher", Assert.Single(window.Games).Name);
+        Assert.True(window.CutFiles);
+    }
+
+    [Fact]
+    public void Carries_what_it_cannot_show_so_the_disc_comes_out_the_same()
+    {
+        MakeADisc window = New();
+
+        window.OpenThis(AReopenedDisc());
+
+        // There is no artwork or manual on the window yet. Dropping them
+        // because this cannot edit them would mean rebuilding a disc without
+        // the cover somebody picked.
+        DiscProject again = window.AsAProject();
+        Assert.Equal(@"D:rt\icon.png", again.Artwork?.IconPath);
+        Assert.Equal(@"D:\manual.pdf", again.Extras?.ManualPath);
+        Assert.Equal([@"D:\read me.txt"], again.Extras?.Loose);
+        Assert.Single(again.AddOnsOrNone);
+    }
+
+    [Fact]
+    public void Leaves_the_disc_size_alone_when_the_file_was_saved_on_automatic()
+    {
+        MakeADisc window = New();
+        window.Medium = Media.Bd25;
+
+        window.OpenThis(AReopenedDisc() with { Medium = null });
+
+        // A project saved on automatic says nothing about it, and the one
+        // already on the window is a better answer than a guess.
+        Assert.Equal(Media.Bd25, window.Medium);
+    }
+
+    [Fact]
+    public void Takes_away_what_was_on_the_window_before()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 500));
+        window.Add(AGame("Two", 500));
+        window.AlsoOnTheDisc([@"C:\something.txt"]);
+
+        window.OpenThis(AReopenedDisc());
+
+        Assert.Single(window.Games);
+        Assert.DoesNotContain(@"C:\something.txt", window.AsAProject().Extras?.Loose ?? []);
+    }
+
     // ----------------------------------------------------------------- burning
 
     [Fact]
@@ -794,6 +856,22 @@ public class TheMainWindowWithoutAWindow
         throw new InvalidOperationException("It should not have had to ask about erasing.");
 
     private static Task<bool> Closes(Recorder drive) => Task.FromResult(true);
+
+    /// <summary>A disc that was built before, read back off a file.</summary>
+    private static Reopened AReopenedDisc()
+    {
+        GameFolder game = AGame("The Witcher", 1000);
+
+        DiscProject was = new(
+            "AN OLD DISC",
+            [game],
+            new DiscOptions(CutFiles: true),
+            Artwork: new DiscArtwork(IconPath: @"D:rt\icon.png"),
+            Extras: new DiscExtras(@"D:\manual.pdf", null, [@"D:\read me.txt"]),
+            AddOns: [new AddOn(0, @"D:\patch_the_witcher_1_to_2.exe", "Update 2", 100)]);
+
+        return new Reopened(was, Media.Dvd9, @"D:\out", [], []);
+    }
 
     private static Recorder ABlankIn(string drive) =>
         new($"id-{drive}", drive, "A Drive", 2, true, 360_000, [750]);

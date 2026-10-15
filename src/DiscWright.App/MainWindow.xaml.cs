@@ -45,6 +45,91 @@ public partial class MainWindow : Window
         DataContext = screen;
     }
 
+    /// <summary>
+    /// Opens a disc that was built before, from the file it carries.
+    /// </summary>
+    /// <remarks>
+    /// The file is read as bytes and handed over as text, because every one of
+    /// them starts with a byte order mark and the reader is the thing that
+    /// knows what to do about that.
+    /// </remarks>
+    private void OpenADisc(object sender, RoutedEventArgs e)
+    {
+        OpenFileDialog asking = new()
+        {
+            Title = "Which disc?",
+            Filter = "A disc DiscWright made (discproject.json)|discproject.json|Any project file|*.json",
+            CheckFileExists = true
+        };
+
+        if (asking.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        // Asked before anything is replaced, because what is on the window may
+        // be somebody's afternoon.
+        if (_screen.Games.Count > 0 && !WorthAsking.Ask(
+            this,
+            "Replace what is on the window?",
+            "Opening a disc puts its games, its name and its settings here, and takes away what is here now. "
+                + "Nothing on disk is touched either way.",
+            "Open it",
+            "Leave this alone"))
+        {
+            return;
+        }
+
+        Outcome<OpenedProject> read = AProjectFile.Read(
+            System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(asking.FileName)));
+
+        if (read is Outcome<OpenedProject>.No refused)
+        {
+            Explain(refused.Refusal);
+            return;
+        }
+
+        Reopened back = ReopenAProject.From(
+            ((Outcome<OpenedProject>.Ok)read).Value,
+            _reader,
+            _disk,
+            path => _disk.FolderExists(path) ? _disk.List(path).Bytes : SizeOfOne(path));
+
+        if (!back.AnythingLeft)
+        {
+            Explain(Refusals.NothingOnThatDiscIsWhereItWas(back.Gone));
+            return;
+        }
+
+        _screen.OpenThis(back);
+
+        if (!back.WholeAgain)
+        {
+            // Opened anyway, and said. Refusing a whole disc over one game
+            // somebody moved would be a poor answer to the commonest thing
+            // that happens to a project a year later.
+            MessageBox.Show(
+                this,
+                back.InWords + Environment.NewLine + Environment.NewLine
+                    + string.Join(Environment.NewLine, back.Gone.Take(10)),
+                "Opened",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
+    private static long SizeOfOne(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? new FileInfo(path).Length : 0;
+        }
+        catch (IOException)
+        {
+            return 0;
+        }
+    }
+
     private void AddAGame(object sender, RoutedEventArgs e)
     {
         OpenFolderDialog asking = new()
