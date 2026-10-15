@@ -506,9 +506,11 @@ function whatPressingItDoes(game, where, discFolder) {
         };
     }
 
-    // Nothing to install. Open the folder it is in, which is the honest thing
-    // a disc can offer for a game that is just files.
-    return { act: "open", run: onTheDisc(discFolder, game.folder), from: "" };
+    // Nothing to install, so it gets copied off the disc and played from
+    // where it landed. A game run from the disc cannot save: the disc is read
+    // only, and the first time it tries to write a save it either fails or
+    // silently writes nowhere.
+    return { act: "copy", run: onTheDisc(discFolder, game.folder), from: "" };
 }
 
 // What an add-on's button runs, or nothing when it must not be pressed yet.
@@ -575,6 +577,140 @@ function openTheFolder(where) {
     } catch (wrong) {
         return "That folder would not open: " + where + " (" + wrong.message + ")";
     }
+}
+
+// Where to offer to copy a game to.
+//
+// Under the person's own profile, because a game copied somewhere they cannot
+// write to is a game that half copies and then stops, and because a game run
+// from a folder it cannot write to cannot save, which is the whole reason it
+// is being copied off the disc in the first place.
+function whereToCopyTo(home, name) {
+    var tidy = String(name || "Game").replace(/[\\/:*?"<>|]/g, " ");
+
+    // Trailing dots and spaces are legal in a string and not in a folder name.
+    while (tidy.length > 0 && (tidy.charAt(tidy.length - 1) === "." || tidy.charAt(tidy.length - 1) === " ")) {
+        tidy = tidy.substring(0, tidy.length - 1);
+    }
+
+    if (tidy.length === 0) {
+        tidy = "Game";
+    }
+
+    return onTheDisc(onTheDisc(String(home || ""), "Games"), tidy);
+}
+
+// What to run once a game has been copied, or nothing.
+//
+// Only when the disc knows exactly one thing to run. Several candidates is a
+// question nobody has answered yet, and guessing which of six executables
+// starts a game is how somebody ends up running an uninstaller.
+function whatToRunAfterCopying(game, destination) {
+    if (!game || !game.plays || String(game.plays).length === 0) {
+        return null;
+    }
+
+    return onTheDisc(destination, game.plays);
+}
+
+// Everything that has to be copied, as a flat list with sizes.
+//
+// Gathered before anything is copied, because the bar needs to know the whole
+// before it can say how far along it is, and because a folder that cannot be
+// read is better found now than half way through.
+function whatThereIsToCopy(files, from, notTheGame) {
+    var found = [];
+
+    // A game that is the only thing on a disc sits at the root, beside the
+    // menu, the autorun and the checksums. Copying it should not carry those
+    // onto somebody's hard disk.
+    function oursRatherThanTheirs(name) {
+        var at;
+
+        if (!notTheGame) {
+            return false;
+        }
+
+        for (at = 0; at < notTheGame.length; at++) {
+            if (String(name).toLowerCase() === String(notTheGame[at]).toLowerCase()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    function walk(folder, under) {
+        var subs, items;
+
+        try {
+            items = new Enumerator(folder.Files);
+        } catch (cannotRead) {
+            return;
+        }
+
+        for (; !items.atEnd(); items.moveNext()) {
+            if (under.length === 0 && oursRatherThanTheirs(items.item().Name)) {
+                continue;
+            }
+
+            found.push({
+                from: items.item().Path,
+                to: under.length > 0 ? under + BACKSLASH + items.item().Name : items.item().Name,
+                bytes: items.item().Size
+            });
+        }
+
+        subs = new Enumerator(folder.SubFolders);
+
+        for (; !subs.atEnd(); subs.moveNext()) {
+            if (under.length === 0 && oursRatherThanTheirs(subs.item().Name)) {
+                continue;
+            }
+
+            walk(subs.item(), under.length > 0 ? under + BACKSLASH + subs.item().Name : subs.item().Name);
+        }
+    }
+
+    try {
+        walk(files.GetFolder(from), "");
+    } catch (noSuchFolder) {
+        return [];
+    }
+
+    return found;
+}
+
+// The sum of a list from whatThereIsToCopy.
+function howMuchInAll(items) {
+    var total = 0;
+
+    for (var at = 0; at < items.length; at++) {
+        total += items[at].bytes;
+    }
+
+    return total;
+}
+
+// Whether a copy finished with everything the same size it started.
+//
+// Not a hash: a disc menu has no business reading several gigabytes twice, and
+// the thing this catches is the copy that stopped half way, which is what
+// happens when somebody takes the disc out.
+function everythingArrived(files, items, destination) {
+    for (var at = 0; at < items.length; at++) {
+        var landed = onTheDisc(destination, items[at].to.split(BACKSLASH).join("/"));
+
+        try {
+            if (!files.FileExists(landed) || files.GetFile(landed).Size !== items[at].bytes) {
+                return items[at].to;
+            }
+        } catch (cannotTell) {
+            return items[at].to;
+        }
+    }
+
+    return null;
 }
 
 // Whether this game is on the machine the disc is in.

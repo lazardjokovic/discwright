@@ -172,7 +172,13 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
                     Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(addOn.Path))))
             ];
 
-            onTheMenu.Add(new MenuGame(game.Name, runs, folder, addOns, game.MatchName));
+            // Only when there is exactly one. Several is a question nobody
+            // has answered yet, and the menu does not get to guess.
+            string plays = game.LauncherCandidates.Count == 1
+                ? WithForwardSlashes(game.LauncherCandidates[0].RelativePath)
+                : string.Empty;
+
+            onTheMenu.Add(new MenuGame(game.Name, runs, folder, addOns, game.MatchName, plays));
         }
 
         return onTheMenu;

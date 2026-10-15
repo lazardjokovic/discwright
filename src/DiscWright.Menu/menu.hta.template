@@ -164,13 +164,8 @@ function doTheThing() {
         return;
     }
 
-    if (doing.act === "open") {
-        wrong = openTheFolder(doing.run);
-
-        if (wrong) {
-            alert(wrong);
-        }
-
+    if (doing.act === "copy") {
+        copyItAndPlayIt(game, doing.run);
         return;
     }
 
@@ -185,6 +180,187 @@ function doTheThing() {
     // has no further part in it. It gets out of the way rather than sitting on
     // top of whatever just started.
     window.close();
+}
+
+// Copying a game off the disc, one file at a time.
+//
+// One file per tick rather than one call to CopyFolder, for two reasons: a
+// window that is not given the thread back cannot repaint, so the bar would
+// not move and Windows would call the menu unresponsive; and a copy that
+// stops half way has to be able to say which file it stopped on.
+var copying = null;
+
+function copyItAndPlayIt(game, fromFolder) {
+    var files, chosen, destination, items;
+
+    try {
+        files = new ActiveXObject("Scripting.FileSystemObject");
+    } catch (noFiles) {
+        alert("This machine will not let the menu copy anything.");
+        return;
+    }
+
+    chosen = askWhereToPutIt(game);
+
+    if (!chosen) {
+        return;
+    }
+
+    destination = chosen;
+    items = whatThereIsToCopy(files, fromFolder, DISC.oursNotTheGame);
+
+    if (items.length === 0) {
+        alert("There is nothing in that folder to copy.");
+        return;
+    }
+
+    try {
+        if (!files.FolderExists(destination)) {
+            makeTheWholePath(files, destination);
+        }
+    } catch (cannotMake) {
+        alert("That folder could not be made:" + destination);
+        return;
+    }
+
+    copying = {
+        files: files,
+        items: items,
+        at: 0,
+        done: 0,
+        all: howMuchInAll(items),
+        rate: startingRate(),
+        destination: destination,
+        game: game
+    };
+
+    sayHowFarAlong();
+    window.setTimeout(copyTheNextOne, 10);
+}
+
+// Where to put it. Offered, not decided: somebody with a small system disc and
+// a big one for games knows better than this menu does.
+function askWhereToPutIt(game) {
+    var home, suggested, picked;
+
+    try {
+        home = new ActiveXObject("WScript.Shell").ExpandEnvironmentStrings("%USERPROFILE%");
+    } catch (noShell) {
+        home = "";
+    }
+
+    suggested = whereToCopyTo(home, game ? game.name : "Game");
+
+    try {
+        picked = new ActiveXObject("Shell.Application")
+            .BrowseForFolder(0, "Where should " + (game ? game.name : "it") + " go?", 0);
+
+        if (!picked) {
+            return null;
+        }
+
+        return onTheDisc(picked.Self.Path, game ? game.name : "Game");
+    } catch (noBrowser) {
+        // No folder picker is not a reason to refuse. The suggestion is a
+        // perfectly good answer and the person is told where it went.
+        return suggested;
+    }
+}
+
+function makeTheWholePath(files, path) {
+    var parent = files.GetParentFolderName(path);
+
+    if (parent && parent.length > 0 && !files.FolderExists(parent)) {
+        makeTheWholePath(files, parent);
+    }
+
+    if (!files.FolderExists(path)) {
+        files.CreateFolder(path);
+    }
+}
+
+function copyTheNextOne() {
+    var one, landing, folder;
+
+    if (!copying) {
+        return;
+    }
+
+    if (copying.at >= copying.items.length) {
+        finishTheCopy();
+        return;
+    }
+
+    one = copying.items[copying.at];
+    landing = onTheDisc(copying.destination, one.to.split(BACKSLASH).join("/"));
+
+    try {
+        folder = copying.files.GetParentFolderName(landing);
+
+        if (folder && !copying.files.FolderExists(folder)) {
+            makeTheWholePath(copying.files, folder);
+        }
+
+        copying.files.CopyFile(one.from, landing, true);
+    } catch (wrong) {
+        stopTheCopy("That stopped at " + one.to + ": " + wrong.message);
+        return;
+    }
+
+    copying.done += one.bytes;
+    copying.at++;
+
+    sayHowFarAlong();
+    window.setTimeout(copyTheNextOne, 10);
+}
+
+function sayHowFarAlong() {
+    var line = document.getElementById("stillWanted");
+    var percent = percentDone(copying.done, 0, copying.rate, copying.all);
+
+    line.innerText = percent + "% copied";
+    line.style.display = "block";
+}
+
+function stopTheCopy(why) {
+    copying = null;
+    document.getElementById("stillWanted").style.display = "none";
+    alert(why);
+}
+
+function finishTheCopy() {
+    var missing = everythingArrived(copying.files, copying.items, copying.destination);
+    var where = copying.destination;
+    var plays = whatToRunAfterCopying(copying.game, where);
+    var wrong;
+
+    copying = null;
+    document.getElementById("stillWanted").style.display = "none";
+
+    // Checked by size rather than by hash. A menu has no business reading
+    // several gigabytes twice, and what this catches is the copy that stopped
+    // half way, which is what happens when somebody takes the disc out.
+    if (missing) {
+        alert("Some of it did not arrive, starting with " + missing + ". It is in " + where + ".");
+        return;
+    }
+
+    if (plays) {
+        wrong = startIt(plays, where);
+
+        if (!wrong) {
+            window.close();
+            return;
+        }
+    }
+
+    // Nothing to run, or it would not run. Either way they have the game and
+    // should be shown where it is rather than left guessing.
+    wrong = openTheFolder(where);
+
+    if (wrong) {
+        alert("It is copied, and it is in " + where + ".");
+    }
 }
 
 // The manual, opened with whatever reads a PDF on this machine.

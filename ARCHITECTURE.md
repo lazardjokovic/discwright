@@ -714,6 +714,20 @@ So `startIt` is tested by really starting something: a script that writes a file
 
 It also says what went wrong rather than failing in silence, and an add-on checks again that its game is installed before running, because a dead button somebody clicks anyway is still a click.
 
+#### Copying a game off the disc
+
+A game with nothing to install is **copied and played from where it lands**, not run off the disc. A disc is read only, and the first time a game tries to write a save it either fails or silently writes nowhere.
+
+**One file per tick, not one call to CopyFolder.** A window that is not given the thread back cannot repaint, so the bar would not move and Windows would call the menu unresponsive; and a copy that stops half way has to be able to say which file it stopped on.
+
+Where it goes is **offered rather than decided**: somebody with a small system disc and a big one for games knows better than this menu does. The suggestion is under their own profile, because a game copied somewhere they cannot write to half copies and stops, and because a game that cannot write cannot save.
+
+**What runs afterwards is only ever something the disc named**, and the disc names one only when the recogniser found exactly one candidate. Guessing which of six executables starts a game is how somebody ends up running an uninstaller. With nothing named, the folder is opened instead, which leaves them with the game and knowing where it is.
+
+**The disc's own files stay on the disc.** A game that is the only thing on a disc sits at the root, beside the menu, the autorun and the checksums, and copying it should not carry those onto somebody's hard disk. The list comes from `ReservedDiscNames`, written into the menu's facts, rather than a second copy of it in JScript that would drift. Only the top of the disc counts: a game with a folder of its own called `AUTORUN` inside it is the game's business.
+
+**Checked by size at the end, not by hash.** A menu has no business reading several gigabytes twice, and what this catches is the copy that stopped when somebody took the disc out.
+
 #### The manual, the extras and the icon
 
 `ButtonsFor` had worked out for a while that a disc should offer a Manual and Extras, and the page never drew them, so they were computed and unused. They are drawn now, and **only on the disc that carries them**: the one disc of a set that has the extras is the only one that offers them, because a Manual button on a disc with no manual is a promise found by somebody who has already burned it.

@@ -1,3 +1,4 @@
+using DiscWright.Core;
 using System.Reflection;
 using System.Text;
 
@@ -72,6 +73,13 @@ public static class MenuWriter
         data.Append("    buttons: ").Append(JScript.ListOf(facts.Buttons)).Append(",\n");
         data.Append("    manual: ").Append(JScript.Literal(facts.Manual ?? string.Empty)).Append(",\n");
         data.Append("    extras: ").Append(JScript.Literal(facts.Extras ?? string.Empty)).Append(",\n");
+
+        // The disc's own files, so that copying a game off the root does not
+        // carry the menu and the autorun with it. Written from the one list
+        // that decides what belongs to a disc rather than from a second copy
+        // of it here, which would drift.
+        data.Append("    oursNotTheGame: ")
+            .Append(JScript.ListOf(ReservedDiscNames.All)).Append(",\n");
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),
@@ -80,6 +88,7 @@ public static class MenuWriter
                 ("match", JScript.Literal(game.MatchName ?? game.Name)),
                 ("runs", JScript.Literal(game.Runs)),
                 ("folder", JScript.Literal(game.Folder)),
+                ("plays", JScript.Literal(game.Plays)),
                 ("addOns", JScript.ArrayOf(game.AddOns.Select(addOn => JScript.Fields(
                     ("name", JScript.Literal(addOn.Name)),
                     ("runs", JScript.Literal(addOn.Runs)))))))))).Append('\n');
@@ -212,12 +221,19 @@ public sealed record MenuFacts(
 /// typed; what GOG wrote in the registry stays as it was, and that is what the
 /// menu has to ask about.
 /// </param>
+/// <param name="Plays">
+/// What starts the game once it has been copied, relative to the game's own
+/// folder, or empty when the disc does not know. Only ever set when there was
+/// exactly one candidate: guessing which of six executables starts a game is
+/// how somebody ends up running an uninstaller.
+/// </param>
 public sealed record MenuGame(
     string Name,
     string Runs,
     string Folder,
     IReadOnlyList<MenuAddOn>? Given = null,
-    string? MatchName = null)
+    string? MatchName = null,
+    string Plays = "")
 {
     /// <summary>Its add-ons, or none.</summary>
     public IReadOnlyList<MenuAddOn> AddOns => Given ?? [];

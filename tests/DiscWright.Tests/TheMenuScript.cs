@@ -448,14 +448,172 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
-    public void Opens_the_folder_for_a_game_with_nothing_to_install()
+    public void Copies_a_game_with_nothing_to_install_off_the_disc()
     {
         const string game = "{ name: 'Arcanum', runs: '', folder: 'GAME 1' }";
 
-        // The honest thing a disc can offer for a game that is just files.
-        Assert.Equal("open", Ask("whatPressingItDoes(" + game + ", null, 'D:').act"));
+        // A game run from the disc cannot save: the disc is read only, and the
+        // first time it tries to write a save it either fails or silently
+        // writes nowhere. So it comes off the disc first.
+        Assert.Equal("copy", Ask("whatPressingItDoes(" + game + ", null, 'D:').act"));
         Assert.Equal(@"D:\GAME 1", Ask("whatPressingItDoes(" + game + ", null, 'D:').run"));
     }
+
+    // ------------------------------------------------- copying it off the disc
+
+    [Fact]
+    public void Offers_somewhere_under_the_person_s_own_profile()
+    {
+        // A game copied somewhere they cannot write to half copies and stops,
+        // and a game that cannot write cannot save, which is the whole reason
+        // it is coming off the disc.
+        Assert.Equal(
+            @"C:\Users\somebody\Games\Arcanum",
+            Ask(@"whereToCopyTo('C:\\Users\\somebody', 'Arcanum')"));
+    }
+
+    [Theory]
+    [InlineData("Half-Life: Opposing Force", "Half-Life  Opposing Force")]
+    [InlineData("What/Who?", "What Who")]
+    [InlineData("Trailing dots...", "Trailing dots")]
+    [InlineData("", "Game")]
+    public void Makes_a_folder_name_Windows_will_accept(string name, string expected)
+    {
+        // Game names carry characters a folder name cannot, and a trailing dot
+        // is legal in a string and not in a folder.
+        Assert.Equal(
+            @"C:\Users\somebody\Games" + ((char)92) + expected,
+            Ask(@"whereToCopyTo('C:\\Users\\somebody', '" + name + "')"));
+    }
+
+    [Fact]
+    public void Runs_what_the_disc_named_once_the_copy_has_landed()
+    {
+        const string game = "{ name: 'Arcanum', plays: 'Arcanum.exe' }";
+
+        Assert.Equal(
+            @"C:\Games\Arcanum\Arcanum.exe",
+            Ask(@"whatToRunAfterCopying(" + game + @", 'C:\\Games\\Arcanum')"));
+    }
+
+    [Fact]
+    public void Will_not_guess_which_of_several_executables_starts_a_game()
+    {
+        // Guessing which of six is the game is how somebody ends up running an
+        // uninstaller. The disc only names one when there was only one.
+        Assert.Equal(
+            "null",
+            Ask(@"String(whatToRunAfterCopying({ name: 'Q', plays: '' }, 'C:\\Games\\Q'))"));
+    }
+
+    [Fact]
+    public void Gathers_every_file_under_a_folder_before_copying_any()
+    {
+        string from = Path.Combine(_folder, "from");
+        Directory.CreateDirectory(Path.Combine(from, "data", "deeper"));
+        File.WriteAllText(Path.Combine(from, "game.exe"), "12345");
+        File.WriteAllText(Path.Combine(from, "data", "one.dat"), "123");
+        File.WriteAllText(Path.Combine(from, "data", "deeper", "two.dat"), "1234567");
+
+        // The bar cannot say how far along it is without knowing the whole,
+        // and a folder that cannot be read is better found now than half way.
+        Assert.Equal("3", Ask(WithFiles("whatThereIsToCopy(f, " + AsJScript(from) + ").length")));
+        Assert.Equal("15", Ask(WithFiles("howMuchInAll(whatThereIsToCopy(f, " + AsJScript(from) + "))")));
+    }
+
+    [Fact]
+    public void Leaves_the_disc_s_own_files_where_they_are()
+    {
+        // A game that is the only thing on a disc sits at the ROOT, beside the
+        // menu, the autorun and the checksums. Copying it off should not carry
+        // those onto somebody's hard disk.
+        string disc = Path.Combine(_folder, "disc");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        Directory.CreateDirectory(Path.Combine(disc, "modules"));
+
+        File.WriteAllText(Path.Combine(disc, "Arcanum.exe"), "12345");
+        File.WriteAllText(Path.Combine(disc, "modules", "Arcanum.dat"), "123");
+        File.WriteAllText(Path.Combine(disc, "autorun.inf"), "x");
+        File.WriteAllText(Path.Combine(disc, "checksums.sha256"), "x");
+        File.WriteAllText(Path.Combine(disc, "Start Here.hta"), "x");
+        File.WriteAllText(Path.Combine(disc, "AUTORUN", "menu.hta"), "x");
+
+        string ours = "['autorun.inf', 'checksums.sha256', 'Start Here.hta', 'AUTORUN']";
+
+        // The game's two files, and neither the four of ours nor the folder.
+        Assert.Equal(
+            "2",
+            Ask(WithFiles("whatThereIsToCopy(f, " + AsJScript(disc) + ", " + ours + ").length")));
+
+        Assert.Equal(
+            "8",
+            Ask(WithFiles("howMuchInAll(whatThereIsToCopy(f, " + AsJScript(disc) + ", " + ours + "))")));
+    }
+
+    [Fact]
+    public void Only_leaves_them_behind_at_the_root()
+    {
+        // A game with a folder of its own called AUTORUN inside it is the
+        // game's business. Only the top of the disc belongs to the disc.
+        string disc = Path.Combine(_folder, "deeper");
+        Directory.CreateDirectory(Path.Combine(disc, "data", "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "data", "AUTORUN", "theirs.dat"), "123");
+
+        Assert.Equal(
+            "1",
+            Ask(WithFiles("whatThereIsToCopy(f, " + AsJScript(disc) + ", ['AUTORUN']).length")));
+    }
+
+    [Fact]
+    public void Notices_when_a_file_did_not_arrive()
+    {
+        string from = Path.Combine(_folder, "source");
+        string to = Path.Combine(_folder, "landed");
+        Directory.CreateDirectory(from);
+        Directory.CreateDirectory(to);
+        File.WriteAllText(Path.Combine(from, "whole.dat"), "12345");
+        File.WriteAllText(Path.Combine(from, "cut short.dat"), "1234567890");
+
+        File.WriteAllText(Path.Combine(to, "whole.dat"), "12345");
+        File.WriteAllText(Path.Combine(to, "cut short.dat"), "12345");
+
+        // Checked by size rather than by hash: a menu has no business reading
+        // several gigabytes twice, and what this catches is the copy that
+        // stopped when somebody took the disc out.
+        Assert.Equal(
+            "cut short.dat",
+            Ask(WithFiles("String(everythingArrived(f, whatThereIsToCopy(f, " + AsJScript(from) + "), "
+                + AsJScript(to) + "))")));
+    }
+
+    [Fact]
+    public void Says_nothing_is_missing_when_it_all_arrived()
+    {
+        string from = Path.Combine(_folder, "all of it");
+        string to = Path.Combine(_folder, "all of it, copied");
+        Directory.CreateDirectory(Path.Combine(from, "sub"));
+        Directory.CreateDirectory(Path.Combine(to, "sub"));
+        File.WriteAllText(Path.Combine(from, "a.dat"), "123");
+        File.WriteAllText(Path.Combine(from, "sub", "b.dat"), "4567");
+        File.WriteAllText(Path.Combine(to, "a.dat"), "123");
+        File.WriteAllText(Path.Combine(to, "sub", "b.dat"), "4567");
+
+        Assert.Equal(
+            "null",
+            Ask(WithFiles("String(everythingArrived(f, whatThereIsToCopy(f, " + AsJScript(from) + "), "
+                + AsJScript(to) + "))")));
+    }
+
+    /// <summary>
+    /// One expression that has a FileSystemObject in scope.
+    /// </summary>
+    /// <remarks>
+    /// Ask evaluates a single expression, so a var in front of it is a syntax
+    /// error. A function called where it stands is still one expression.
+    /// </remarks>
+    private static string WithFiles(string expression) =>
+        "(function () { var f = new ActiveXObject('Scripting.FileSystemObject'); return "
+            + expression + "; })()";
 
     [Fact]
     public void Runs_an_add_on_only_once_its_game_is_there()
