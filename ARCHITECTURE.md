@@ -919,6 +919,30 @@ The disc says *The Witcher - Enhanced Edition*; the registry says *The Witcher E
 
 If WMI cannot be reached at all, the answer is the same as "not installed", because the menu has only one honest move either way: leave the add-ons alone.
 
+## Burning a whole set
+
+**A set is only a set once every disc is written**, and the two things most likely to go wrong are burning them out of order and losing count. So the burn button walks them: disc 1, then ask, disc 2, then ask. Burning one disc of three and calling it done is not offered.
+
+**The drive is settled once, before the first disc**, and the chooser is asked once. A set that wanders between two writers is a set whose discs were written by two different lasers at two different speeds, and being asked the same question three times is its own annoyance.
+
+**A disc that does not read back stops the walk.** Disc 2 is no use at all if disc 1 came out wrong, and carrying on would spend the rest of somebody's blanks on a set that is already broken.
+
+**Every way out leaves a sentence.** A set half burned is something somebody comes back to tomorrow needing to know where they stopped, so `TheSetSoFar` says which discs are done and which one to carry on from, whether it finished, was stopped, or failed.
+
+Between discs the person is asked for the next blank, and told which disc it is and how many there are, because losing count halfway through a set of four is exactly the mistake this is here to prevent.
+
+### A set's discs were all the same disc
+
+Two bugs, both found by going to write one.
+
+**Every disc of a set wrote to the same image file.** The name came from the label, and every disc of a set carries the same label, so disc 2 landed on top of disc 1 and a set of three was one file claiming to be three. The image is named `LABEL D2.iso` beside `disc D2`, and `TheImageOf.That` is the one place that decides it.
+
+**Every disc of a set answered to the same volume name**, which v1 had already paid for:
+
+> A disc in a set reserves its number BEFORE the name is cut, not after. Truncating "LONG NAME D2" at sixteen takes the number off the end and hands every disc in the set the same volume id.
+
+v1 removed sets, and the comment survived in a function that no longer needed it. The rewrite builds sets again, so the rule is recovered: the `_D2` is reserved out of the sixteen first, and the name is trimmed again **after** cutting as well as before, because a cut can land where a space was folded and leave `THE_WITCHER_ENH_`.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

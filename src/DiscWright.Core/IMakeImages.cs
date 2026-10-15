@@ -17,11 +17,18 @@ namespace DiscWright.Core;
 /// </remarks>
 public interface IMakeImages
 {
+    /// <param name="discNumber">Which disc of the set, from one.</param>
+    /// <param name="ofDiscs">
+    /// How many discs the set has, because a disc of a set is named after its
+    /// number as well as its label and one is not a set.
+    /// </param>
     Task<Outcome<MadeImage>> Make(
         string stagedFolder,
         string imagePath,
         string label,
         bool wantsLegacyFileSystems,
+        int discNumber,
+        int ofDiscs,
         IProgress<ImageProgress>? progress,
         CancellationToken ct);
 }

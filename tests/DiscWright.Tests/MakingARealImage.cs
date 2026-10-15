@@ -39,7 +39,7 @@ public class MakingARealImage : IDisposable
         string staged = Staged(("setup_a_game.exe", 40_000), (@"AUTORUN\menu.hta", 2_000));
         string image = Path.Combine(_root, "A GAME.iso");
 
-        Outcome<MadeImage> made = await New().Make(staged, image, "A GAME", false, null, default);
+        Outcome<MadeImage> made = await New().Make(staged, image, "A GAME", false, 1, 1, null, default);
 
         MadeImage iso = Assert.IsType<Outcome<MadeImage>.Ok>(made).Value;
 
@@ -60,7 +60,7 @@ public class MakingARealImage : IDisposable
         string staged = Staged(("a_distinctive_name.txt", 1_000));
         string image = Path.Combine(_root, "NAMES.iso");
 
-        await New().Make(staged, image, "NAMES", false, null, default);
+        await New().Make(staged, image, "NAMES", false, 1, 1, null, default);
 
         byte[] bytes = await File.ReadAllBytesAsync(image);
 
@@ -80,7 +80,7 @@ public class MakingARealImage : IDisposable
         string staged = Staged(("setup_a_game.exe", 1_000));
         string image = Path.Combine(_root, "LABELLED.iso");
 
-        await New().Make(staged, image, "HOLLOW KNIGHT", false, null, default);
+        await New().Make(staged, image, "HOLLOW KNIGHT", false, 1, 1, null, default);
 
         byte[] bytes = await File.ReadAllBytesAsync(image);
 
@@ -99,7 +99,7 @@ public class MakingARealImage : IDisposable
 
         List<ImageProgress> said = [];
 
-        await New().Make(staged, image, "PROGRESS", false, new Progress<ImageProgress>(said.Add), default);
+        await New().Make(staged, image, "PROGRESS", false, 1, 1, new Progress<ImageProgress>(said.Add), default);
 
         // Reported at all, and the last word is the whole of it, so nothing is
         // left sitting at 199 parts in 200.
@@ -113,7 +113,7 @@ public class MakingARealImage : IDisposable
         string staged = Path.Combine(_root, "nothing");
         Directory.CreateDirectory(staged);
 
-        Outcome<MadeImage> made = await New().Make(staged, Path.Combine(_root, "x.iso"), "X", false, null, default);
+        Outcome<MadeImage> made = await New().Make(staged, Path.Combine(_root, "x.iso"), "X", false, 1, 1, null, default);
 
         Assert.IsType<Outcome<MadeImage>.No>(made);
     }
@@ -126,7 +126,7 @@ public class MakingARealImage : IDisposable
 
         await File.WriteAllTextAsync(image, "this was here before");
 
-        Outcome<MadeImage> made = await New().Make(staged, image, "TWICE", false, null, default);
+        Outcome<MadeImage> made = await New().Make(staged, image, "TWICE", false, 1, 1, null, default);
 
         Assert.IsType<Outcome<MadeImage>.Ok>(made);
         Assert.True(new FileInfo(image).Length > 1000);
@@ -138,7 +138,7 @@ public class MakingARealImage : IDisposable
         string staged = Staged(("setup_a_game.exe", 1_000));
         string image = Path.Combine(_root, "LOCKS.iso");
 
-        await New().Make(staged, image, "LOCKS", false, null, default);
+        await New().Make(staged, image, "LOCKS", false, 1, 1, null, default);
 
         // The whole reason every COM object is released by hand. In v1 this was
         // a rebuild failing with "something is still using it", blaming
@@ -158,6 +158,8 @@ public class MakingARealImage : IDisposable
             Path.Combine(_root, "STOPPED.iso"),
             "STOPPED",
             false,
+            1,
+            1,
             new Progress<ImageProgress>(_ => stop.Cancel()),
             stop.Token);
 

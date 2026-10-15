@@ -5,6 +5,7 @@ using System.Windows;
 using System.Threading.Tasks;
 
 using DiscWright.Core;
+using DiscWright.Core.Staging;
 using DiscWright.Staging;
 using DiscWright.ViewModels;
 
@@ -276,20 +277,44 @@ public partial class MainWindow : Window
     /// </remarks>
     private async void BurnIt(object sender, RoutedEventArgs e)
     {
-        string? image = WhichImage();
-
-        if (image is null)
-        {
-            return;
-        }
+        // A set is written as a set: disc 1, then ask, disc 2, then ask.
+        // Burning one disc of three and calling it done is the thing most
+        // likely to go wrong, so it is not offered.
+        IReadOnlyList<string> set = TheWholeSet();
 
         try
         {
-            await _screen.BurnIt(image, ChooseADrive, WhichToErase, ShutTheTray);
+            if (set.Count > 1)
+            {
+                await _screen.BurnTheSet(set, ChooseADrive, WhichToErase, ShutTheTray, TheNextBlankPlease);
+            }
+            else
+            {
+                string? image = WhichImage();
+
+                if (image is null)
+                {
+                    return;
+                }
+
+                await _screen.BurnIt(image, ChooseADrive, WhichToErase, ShutTheTray);
+            }
         }
         catch (Exception wrong)
         {
             MessageBox.Show(this, wrong.Message, "DiscWright", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        if (_screen.HowTheSetWent is TheSetSoFar went)
+        {
+            MessageBox.Show(
+                this,
+                went.InWords,
+                "DiscWright",
+                MessageBoxButton.OK,
+                went.Whole ? MessageBoxImage.Information : MessageBoxImage.Warning);
+
             return;
         }
 
@@ -308,6 +333,41 @@ public partial class MainWindow : Window
                 check.Good ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
     }
+
+    /// <summary>
+    /// The images of one set, in order, or nothing when this is not a set.
+    /// </summary>
+    /// <remarks>
+    /// Taken from what was just built rather than from what is lying in the
+    /// folder, because a folder can hold the leftovers of three different
+    /// discs and only the build knows which belong together.
+    /// </remarks>
+    private IReadOnlyList<string> TheWholeSet()
+    {
+        if (_screen.Made is not { Discs.Count: > 1 } made)
+        {
+            return [];
+        }
+
+        return [.. made.Discs.OrderBy(disc => disc.Number).Select(TheImageOf.That)];
+    }
+
+    /// <summary>
+    /// Asks for the next blank, between the discs of a set.
+    /// </summary>
+    /// <remarks>
+    /// The disc just written is still in the drive, and on most drives it has
+    /// been ejected. Saying which disc is next and how many there are is what
+    /// stops somebody losing count halfway through a set of four.
+    /// </remarks>
+    private Task<bool> TheNextBlankPlease(int number, int ofDiscs, Recorder drive) =>
+        Task.FromResult(!WorthAsking.Ask(
+            this,
+            $"Disc {number - 1} is done. Put a blank in for disc {number} of {ofDiscs}.",
+            $"Take disc {number - 1} out of {drive.Drive}, label it, and put a blank disc in. The set is not "
+                + "finished until every disc is written, so stopping here leaves it half made.",
+            "Stop here",
+            "The blank is in"));
 
     /// <summary>
     /// Which image to burn, asked only when there is more than one.

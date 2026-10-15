@@ -28,6 +28,57 @@ public class ThePlanForAnImage
     }
 
     [Fact]
+    public void Gives_every_disc_of_a_set_a_name_of_its_own()
+    {
+        // Every disc of a set carries the same label, so without the number
+        // they all answer to the same thing and This PC shows three discs it
+        // cannot tell apart.
+        string first = ImagePlan.For("A SET", Gib, 1000, false, 1, 3).VolumeName;
+        string second = ImagePlan.For("A SET", Gib, 1000, false, 2, 3).VolumeName;
+
+        Assert.Equal("A_SET_D1", first);
+        Assert.Equal("A_SET_D2", second);
+    }
+
+    [Fact]
+    public void Keeps_the_disc_number_when_the_name_has_to_be_cut()
+    {
+        // THE RULE v1 PAID FOR: a disc in a set reserves its number BEFORE the
+        // name is cut, not after. Cutting "A VERY LONG NAME INDEED D2" at
+        // sixteen takes the number off the end and hands every disc in the set
+        // the same name again.
+        string second = ImagePlan.For("A VERY LONG NAME INDEED", Gib, 1000, false, 2, 3).VolumeName;
+
+        Assert.EndsWith("_D2", second, StringComparison.Ordinal);
+        Assert.True(second.Length <= 16, $"'{second}' is {second.Length} characters");
+    }
+
+    [Fact]
+    public void Does_not_leave_the_name_ending_in_the_gap_where_a_space_was()
+    {
+        // Trimmed again after cutting, not only before: the cut can land on a
+        // folded space and leave "THE_WITCHER_ENH_".
+        string name = ImagePlan.For("THE WITCHER ENH EDITION", Gib, 1000, false).VolumeName;
+
+        Assert.DoesNotContain("__", name, StringComparison.Ordinal);
+        Assert.False(name.EndsWith('_'), $"'{name}' ends in the gap where a space was");
+    }
+
+    [Fact]
+    public void Calls_it_something_when_the_name_leaves_nothing_behind()
+    {
+        // A label of nothing but punctuation folds away to an empty string,
+        // and a disc with no name at all is one Windows will not mount.
+        Assert.Equal("DISC", ImagePlan.For("---", Gib, 1000, false).VolumeName);
+    }
+
+    [Fact]
+    public void Says_nothing_about_a_disc_that_is_on_its_own()
+    {
+        Assert.Equal("A_DISC", ImagePlan.For("A DISC", Gib, 1000, false, 1, 1).VolumeName);
+    }
+
+    [Fact]
     public void Sizes_the_medium_to_what_is_going_on_it()
     {
         // v1 used a fixed twelve and a half million blocks, about 25 GB, which

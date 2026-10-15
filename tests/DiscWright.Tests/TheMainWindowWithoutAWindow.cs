@@ -364,6 +364,24 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task Gives_every_disc_of_a_set_an_image_of_its_own()
+    {
+        ImagesThatWork images = new();
+        MakeADisc window = New(builder: new ABuilderThatMakesASet(), images: images);
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("A Big Game", 1000));
+
+        await window.MakeIt();
+
+        // Every disc of a set carries the same label, so a name made from the
+        // label alone lands the second disc's image on top of the first and
+        // the set becomes one file that says it is three.
+        Assert.Equal(3, images.Made);
+        Assert.Equal(3, images.Paths.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.All(images.Paths, path => Assert.EndsWith(".iso", path, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task Says_why_the_image_stopped_even_though_the_disc_was_built()
     {
         MakeADisc window = Ready(new BuilderThatWorks(), new ImagesThatRefuse());
@@ -783,6 +801,20 @@ public class TheMainWindowWithoutAWindow
         }
     }
 
+    /// <summary>A build that comes out as three discs rather than one.</summary>
+    private sealed class ABuilderThatMakesASet : IBuildDiscs
+    {
+        public Task<Outcome<BuiltDiscs>> Build(
+            DiscProject project, Medium medium, string outputFolder,
+            IProgress<BuildProgress>? progress, CancellationToken ct) =>
+            Task.FromResult<Outcome<BuiltDiscs>>(new BuiltDiscs(
+            [
+                new BuiltDisc(project.Label, 1, 3, System.IO.Path.Combine(outputFolder, "disc D1"), 1000),
+                new BuiltDisc(project.Label, 2, 3, System.IO.Path.Combine(outputFolder, "disc D2"), 1000),
+                new BuiltDisc(project.Label, 3, 3, System.IO.Path.Combine(outputFolder, "disc D3"), 1000)
+            ]));
+    }
+
     private sealed class BuilderThatRefuses : IBuildDiscs
     {
         public Task<Outcome<BuiltDiscs>> Build(
@@ -845,11 +877,15 @@ public class TheMainWindowWithoutAWindow
 
         internal int Made { get; private set; }
 
+        /// <summary>Every image it was asked for, in order.</summary>
+        internal List<string> Paths { get; } = [];
+
         public Task<Outcome<MadeImage>> Make(
             string stagedFolder, string imagePath, string label, bool wantsLegacyFileSystems,
-            IProgress<ImageProgress>? progress, CancellationToken ct)
+            int discNumber, int ofDiscs, IProgress<ImageProgress>? progress, CancellationToken ct)
         {
             Made++;
+            Paths.Add(imagePath);
             progress?.Report(new ImageProgress(1, 2));
 
             return Task.FromResult<Outcome<MadeImage>>(new MadeImage(imagePath, 1024, Worry));
@@ -860,7 +896,7 @@ public class TheMainWindowWithoutAWindow
     {
         public Task<Outcome<MadeImage>> Make(
             string stagedFolder, string imagePath, string label, bool wantsLegacyFileSystems,
-            IProgress<ImageProgress>? progress, CancellationToken ct) =>
+            int discNumber, int ofDiscs, IProgress<ImageProgress>? progress, CancellationToken ct) =>
             Task.FromResult<Outcome<MadeImage>>(
                 Refusals.TheOldImageWillNotMoveAside(imagePath, "it is mounted"));
     }

@@ -124,7 +124,7 @@ public class BurningARealDisc(Xunit.Abstractions.ITestOutputHelper says)
             string image = Path.Combine(root, "A REAL BURN.iso");
 
             Outcome<MadeImage> made = await new WindowsImageMaker(new WindowsFileSystem())
-                .Make(staged, image, "A REAL BURN", false, null, default);
+                .Make(staged, image, "A REAL BURN", false, 1, 1, null, default);
 
             MadeImage iso = Assert.IsType<Outcome<MadeImage>.Ok>(made).Value;
             says.WriteLine($"  made {ByteSize.Describe(iso.Bytes)} of image");

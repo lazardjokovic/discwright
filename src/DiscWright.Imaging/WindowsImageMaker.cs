@@ -30,15 +30,21 @@ public sealed class WindowsImageMaker(IFileSystem files) : IMakeImages
         string imagePath,
         string label,
         bool wantsLegacyFileSystems,
+        int discNumber,
+        int ofDiscs,
         IProgress<ImageProgress>? progress,
         CancellationToken ct) =>
-        Task.Run(() => MakeIt(stagedFolder, imagePath, label, wantsLegacyFileSystems, progress, ct), ct);
+        Task.Run(
+            () => MakeIt(stagedFolder, imagePath, label, wantsLegacyFileSystems, discNumber, ofDiscs, progress, ct),
+            ct);
 
     private Outcome<MadeImage> MakeIt(
         string stagedFolder,
         string imagePath,
         string label,
         bool wantsLegacyFileSystems,
+        int discNumber,
+        int ofDiscs,
         IProgress<ImageProgress>? progress,
         CancellationToken ct)
     {
@@ -53,7 +59,9 @@ public sealed class WindowsImageMaker(IFileSystem files) : IMakeImages
             label,
             staged.Bytes,
             staged.Files.Max(file => file.Bytes),
-            wantsLegacyFileSystems);
+            wantsLegacyFileSystems,
+            discNumber,
+            ofDiscs);
 
         if (ClearTheWay(imagePath) is Refusal inTheWay)
         {

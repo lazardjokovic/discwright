@@ -42,11 +42,15 @@ public sealed record ImagePlan(
     /// Whether the older file systems were asked for, so that a Windows 98 or a
     /// Mac OS 9 can read the disc.
     /// </param>
+    /// <param name="discNumber">Which disc of the set this is, from one.</param>
+    /// <param name="ofDiscs">How many discs the set has. One is not a set.</param>
     public static ImagePlan For(
         string label,
         long payloadBytes,
         long biggestFileBytes,
-        bool wantsLegacyFileSystems)
+        bool wantsLegacyFileSystems,
+        int discNumber = 1,
+        int ofDiscs = 1)
     {
         bool legacy = wantsLegacyFileSystems;
         string? worry = null;
@@ -65,7 +69,12 @@ public sealed record ImagePlan(
                 + " they can hold. The disc still reads on anything from Windows 2000 onwards.";
         }
 
-        return new ImagePlan(NameFor(label), BlocksFor(payloadBytes), legacy, HowOftenToReport(payloadBytes), worry);
+        return new ImagePlan(
+            NameFor(label, discNumber, ofDiscs),
+            BlocksFor(payloadBytes),
+            legacy,
+            HowOftenToReport(payloadBytes),
+            worry);
     }
 
     /// <summary>
@@ -76,15 +85,37 @@ public sealed record ImagePlan(
     /// becomes an underscore, so "Disc 1" and "Disc-1" arrive at the same
     /// volume name. That is fine: this is the word a drive shows in This PC,
     /// and nothing identifies a disc by it. The set manifest does that.
+    ///
+    /// A disc of a set ends in its number, and that number is reserved out of
+    /// the sixteen before the name is cut rather than after.
     /// </remarks>
-    private static string NameFor(string label)
+    private static string NameFor(string label, int discNumber, int ofDiscs)
     {
+        // THE RULE v1 PAID FOR. A disc in a set reserves its number BEFORE the
+        // name is cut, not after. Cut "A VERY LONG NAME INDEED D2" at sixteen
+        // and the number comes off the end, so every disc of the set answers to
+        // the same name again and This PC shows three discs it cannot tell
+        // apart.
+        string ending = ofDiscs <= 1 ? string.Empty : $"_D{discNumber}";
+        int room = Math.Max(1, 16 - ending.Length);
+
         string allowed = new([
             .. label.Select(character =>
                 char.IsAsciiLetterOrDigit(character) || character == '_' ? character : '_')
         ]);
 
-        return allowed.Length <= 16 ? allowed : allowed[..16];
+        allowed = allowed.Trim('_');
+
+        if (allowed.Length > room)
+        {
+            // Trimmed again AFTER cutting, not only before. The cut can land
+            // where a space was folded and leave "THE_WITCHER_ENH_".
+            allowed = allowed[..room].TrimEnd('_');
+        }
+
+        // Nothing but punctuation folds away to nothing, and a disc with no
+        // name at all is one Windows will not mount.
+        return (allowed.Length == 0 ? "DISC" : allowed) + ending;
     }
 
     /// <summary>

@@ -414,6 +414,225 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
     }
 
+    /// <summary>How far through a set the last burn got, or null.</summary>
+    public TheSetSoFar? HowTheSetWent { get; private set; }
+
+    /// <summary>
+    /// Writes a whole set, one disc at a time, in order.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A set is only a set once every disc is written</strong>, and the
+    /// things most likely to go wrong are burning them out of order and losing
+    /// count. So this walks them: disc 1, then ask, disc 2, then ask.
+    /// </para>
+    /// <para>
+    /// <strong>The drive is settled once, before the first disc.</strong> A set
+    /// that wanders between two writers is a set whose discs were written by
+    /// two different lasers at two different speeds.
+    /// </para>
+    /// <para>
+    /// <strong>A disc that does not read back stops the walk.</strong> Disc 2
+    /// is no use at all if disc 1 came out wrong, and carrying on would spend
+    /// the rest of somebody's blanks on a set that is already broken.
+    /// </para>
+    /// </remarks>
+    /// <param name="theNextBlankPlease">
+    /// Asked between discs, to take the one just written out and put a blank
+    /// in. Answering no stops the walk where it is, which is a decision and not
+    /// a failure.
+    /// </param>
+    public async Task BurnTheSet(
+        IReadOnlyList<string> images,
+        Func<IReadOnlyList<Recorder>, Task<Recorder?>> chooseADrive,
+        Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
+        Func<Recorder, Task<bool>> shutTheTray,
+        Func<int, int, Recorder, Task<bool>> theNextBlankPlease,
+        CancellationToken ct = default)
+    {
+        if (IsWorking || images.Count == 0)
+        {
+            return;
+        }
+
+        IsWorking = true;
+        ItWentWrong = null;
+        HowTheDiscCameOut = null;
+        HowTheSetWent = null;
+        Started();
+
+        int written = 0;
+        string? stopped = null;
+
+        try
+        {
+            // Once, before the first disc.
+            Recorder? drive = await Settle(_machine.HowBigIs(images[0]), chooseADrive, whichToErase, ct);
+
+            if (drive is null)
+            {
+                stopped = ItWentWrong?.Headline ?? "no drive was chosen";
+                return;
+            }
+
+            for (int at = 0; at < images.Count; at++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                if (at > 0)
+                {
+                    Say($"waiting for a blank disc for disc {at + 1} of {images.Count}", 0);
+
+                    if (!await theNextBlankPlease(at + 1, images.Count, drive))
+                    {
+                        stopped = "nobody put the next blank in";
+                        return;
+                    }
+
+                    // Asked again, because what is in that drive has changed:
+                    // the disc just written came out and something else went
+                    // in, and it may not be blank.
+                    Recorder? again = await SettleThatOne(drive.Drive, _machine.HowBigIs(images[at]), whichToErase, ct);
+
+                    if (again is null)
+                    {
+                        stopped = ItWentWrong?.Headline ?? "the next disc could not be used";
+                        return;
+                    }
+
+                    drive = again;
+                }
+
+                Say($"disc {at + 1} of {images.Count}", 0);
+
+                Progress<BurnProgress> saying = new(step =>
+                    Say($"disc {at + 1} of {images.Count}: {step}", step.HowFar ?? 0));
+
+                switch (await _machine.Burner.Burn(images[at], drive, saying, ct))
+                {
+                    case Outcome<BurnedDisc>.No refused:
+                        ItWentWrong = refused.Refusal;
+                        stopped = refused.Refusal.Headline;
+                        return;
+                }
+
+                if (!await shutTheTray(drive))
+                {
+                    ItWentWrong = Refusals.TheDiscWasNotChecked(drive.Drive);
+                    stopped = "the disc could not be read back";
+                    return;
+                }
+
+                await CheckThatDisc(drive, at + 1, ct);
+
+                // Disc 2 is no use at all if disc 1 came out wrong.
+                if (HowTheDiscCameOut is not DiscCheck came || !came.Good)
+                {
+                    stopped = HowTheDiscCameOut?.InWords ?? "the disc did not read back";
+                    return;
+                }
+
+                written++;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            stopped = "it was stopped";
+        }
+        finally
+        {
+            HowTheSetWent = new TheSetSoFar(written, images.Count, stopped);
+
+            lock (_oneAtATime)
+            {
+                IsWorking = false;
+                Doing = string.Empty;
+                HowFar = 0;
+            }
+
+            Tell(nameof(HowTheSetWent));
+            Started();
+        }
+    }
+
+    /// <summary>
+    /// The one drive again, after whatever is in it has changed.
+    /// </summary>
+    private async Task<Recorder?> SettleThatOne(
+        string drive,
+        long bytes,
+        Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
+        CancellationToken ct)
+    {
+        IReadOnlyList<Recorder> all = _machine.Drives.All();
+
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            switch (WhichRecorder.For(all, bytes, drive))
+            {
+                case Outcome<Recorder>.Ok(Recorder ready):
+                    return ready;
+
+                case Outcome<Recorder>.No refused:
+                    Recorder[] erasable =
+                    [
+                        .. all.Where(each =>
+                            each.ErasingWouldHelp
+                            && string.Equals(each.Drive, drive, StringComparison.OrdinalIgnoreCase))
+                    ];
+
+                    if (attempt == 0 && erasable.Length > 0 && await whichToErase(erasable) is Recorder chosen)
+                    {
+                        Say($"erasing the {chosen.Holding} in {chosen.Drive}", 0);
+
+                        Outcome<string> erased = await _machine.Eraser.BlankIt(
+                            chosen, new Progress<string>(line => Say(line, 0)), ct);
+
+                        if (erased is Outcome<string>.No stopped)
+                        {
+                            ItWentWrong = stopped.Refusal;
+                            return null;
+                        }
+
+                        all = _machine.Drives.All();
+                        continue;
+                    }
+
+                    ItWentWrong = refused.Refusal;
+                    return null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Reads back one disc of a set, against the folder it was built from.</summary>
+    private async Task CheckThatDisc(Recorder onto, int number, CancellationToken ct)
+    {
+        string root = onto.Drive.TrimEnd((char)92) + (char)92;
+
+        string staged = Made is { Discs.Count: > 0 } made
+            ? (made.Discs.FirstOrDefault(disc => disc.Number == number) ?? made.Discs[0]).Folder
+            : string.Empty;
+
+        if (staged.Length == 0 || !_machine.Disk.FolderExists(staged))
+        {
+            ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
+            HowTheDiscCameOut = null;
+            return;
+        }
+
+        HowTheDiscCameOut = await TheDiscAgainstWhatWasBuilt.Check(
+            root,
+            staged,
+            _machine.Disk,
+            _machine.Hasher,
+            new Progress<CheckProgress>(step => Say($"disc {number}: {step}", step.HowFar)),
+            ct);
+
+        Tell(nameof(HowTheDiscCameOut));
+    }
+
     /// <summary>
     /// Which drive, asking only where there is something to ask.
     /// </summary>
@@ -766,12 +985,17 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 }
             });
 
-            string image = System.IO.Path.Combine(
-                System.IO.Path.GetDirectoryName(disc.Folder) ?? disc.Folder,
-                OnTheDisc.Tidied(disc.Label) + ".iso");
+            string image = TheImageOf.That(disc);
 
             Outcome<MadeImage> one = await _machine.Images.Make(
-                disc.Folder, image, disc.Label, Options.LegacyFileSystems, saying, ct);
+                disc.Folder,
+                image,
+                disc.Label,
+                Options.LegacyFileSystems,
+                disc.Number,
+                disc.OfDiscs,
+                saying,
+                ct);
 
             if (one is Outcome<MadeImage>.No stopped)
             {
