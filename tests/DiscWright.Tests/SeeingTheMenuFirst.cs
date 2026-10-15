@@ -23,7 +23,7 @@ public class SeeingTheMenuFirst
         RecordingWriter previewed = new();
         RecordingWriter burned = new();
 
-        APreviewOfTheMenu preview = new(previewed);
+        APreviewOfTheMenu preview = new(previewed, new PicturesThatRead());
         preview.Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
 
         await new WriteTheMenuStep().Run(ADiscBeingMade(burned), CancellationToken.None);
@@ -45,7 +45,7 @@ public class SeeingTheMenuFirst
     {
         RecordingWriter wrote = new();
 
-        new APreviewOfTheMenu(wrote).Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
 
         string page = wrote.Texts.Single(
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
@@ -58,9 +58,38 @@ public class SeeingTheMenuFirst
     }
 
     [Fact]
+    public void Shows_the_disc_rather_than_a_menu_drawn_on_nothing()
+    {
+        RecordingWriter wrote = new();
+        PicturesThatRead pictures = new();
+
+        DiscProject withArt = AProject() with
+        {
+            Artwork = new DiscArtwork(IconPath: @"C:\art\icon.png", BackgroundPath: @"C:\art\bg.png"),
+            Extras = new DiscExtras(MusicPath: @"C:\sound\theme.mp3")
+        };
+
+        new APreviewOfTheMenu(wrote, pictures).Write(withArt, Media.Dvd5, _ => 1000, @"C:\temp\look");
+
+        // A preview that leaves the artwork out shows a menu drawn on
+        // nothing, which is the one thing somebody choosing a background most
+        // wants to look at.
+        //
+        // The icon and the background go through the pictures port rather than
+        // the writer, because turning a photograph into an .ico is the
+        // operating system's job and not this program's.
+        Assert.Contains(pictures.Icons, path => path.EndsWith("disc.ico", StringComparison.Ordinal));
+        Assert.Contains(
+            pictures.Backgrounds, path => path.EndsWith(@"AUTORUN\background.png", StringComparison.Ordinal));
+
+        // The music is a plain copy.
+        Assert.Contains(wrote.Everything, path => path.EndsWith(@"AUTORUN\music.mp3", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Says_where_it_put_it()
     {
-        Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter())
+        Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
             .Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
 
         string where = Assert.IsType<Outcome<string>.Ok>(went).Value;
@@ -73,7 +102,7 @@ public class SeeingTheMenuFirst
     {
         RecordingWriter wrote = new();
 
-        new APreviewOfTheMenu(wrote).Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
 
         // The page is a shell around menu.js. Without it the preview opens to
         // an empty window, which is a worse lie than no preview at all.
@@ -93,7 +122,7 @@ public class SeeingTheMenuFirst
             Games = [AGame("Hollow Knight"), AGame("Grim Fandango")]
         };
 
-        new APreviewOfTheMenu(wrote).Write(big, Media.Cd, _ => 600L * 1024 * 1024, @"C:\temp\look");
+        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(big, Media.Cd, _ => 600L * 1024 * 1024, @"C:\temp\look");
 
         string page = wrote.Texts.Single(
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
@@ -107,7 +136,7 @@ public class SeeingTheMenuFirst
     [Fact]
     public void Refuses_rather_than_previewing_nothing()
     {
-        Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter())
+        Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
             .Write(new DiscProject("EMPTY", [], new DiscOptions()), Media.Dvd5, _ => 1000, @"C:\temp\look");
 
         Refusal refused = Assert.IsType<Outcome<string>.No>(went).Refusal;
@@ -128,7 +157,7 @@ public class SeeingTheMenuFirst
             Games = [new GameFolder(@"C:\games\x", GameKind.GogInstaller, "Enormous", "Enormous", huge, [huge], [], null)]
         };
 
-        Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter())
+        Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
             .Write(enormous, Media.Dvd5, _ => huge.Bytes, @"C:\temp\look");
 
         Assert.IsType<Outcome<string>.No>(went);
@@ -186,7 +215,7 @@ public class SeeingTheMenuFirst
             new NothingIsRemembered(),
             new ATrayThatShuts(),
             new NothingIsReleased(),
-            new APreviewOfTheMenu(new RecordingWriter()),
+            new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead()),
             new PicturesThatRead(),
             "2.0.0",
             _ => 1000));
@@ -272,12 +301,13 @@ public class SeeingTheMenuFirst
         public ImageFacts Read(string path) =>
             Refuse is null ? new ImageFacts(true, 512, 512, null) : new ImageFacts(false, 0, 0, Refuse);
 
-        public void WriteIcon(string source, string destination)
-        {
-        }
+        internal List<string> Icons { get; } = [];
 
-        public void WriteBackground(string source, string destination, int width, int height, bool asIs)
-        {
-        }
+        internal List<string> Backgrounds { get; } = [];
+
+        public void WriteIcon(string source, string destination) => Icons.Add(destination);
+
+        public void WriteBackground(string source, string destination, int width, int height, bool asIs) =>
+            Backgrounds.Add(destination);
     }
 }

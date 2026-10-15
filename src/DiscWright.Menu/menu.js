@@ -713,6 +713,39 @@ function everythingArrived(files, items, destination) {
     return null;
 }
 
+// A name short enough to sit on a button.
+//
+// An add-on is named after the file it came from, and a GOG installer's name
+// carries its version and its build number: "Grim Fandango Remastered
+// Soundtrack 2.0.0.9 (31045)" is fifty characters for a button that is one of
+// three. Cut, the buttons are the same size and the list reads as a list.
+//
+// Cut at a word where there is one, because a name chopped mid-word looks
+// like a fault rather than a choice.
+function shortEnoughForAButton(name, room) {
+    var text = String(name || "");
+    var most = room || 26;
+    var cut;
+
+    if (text.length <= most) {
+        return text;
+    }
+
+    cut = text.substring(0, most);
+
+    // Back to the last space, unless that throws most of it away.
+    if (cut.lastIndexOf(" ") > most / 2) {
+        cut = cut.substring(0, cut.lastIndexOf(" "));
+    }
+
+    // Trailing punctuation before an ellipsis reads as a typo.
+    while (cut.length > 0 && " .,-(".indexOf(cut.charAt(cut.length - 1)) >= 0) {
+        cut = cut.substring(0, cut.length - 1);
+    }
+
+    return cut + "...";
+}
+
 // Whether this game is on the machine the disc is in.
 //
 // Asked about the name it was REGISTERED under, which is not always the name on

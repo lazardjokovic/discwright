@@ -20,7 +20,7 @@ namespace DiscWright.Staging;
 /// the menu, to the byte, apart from the one thing that has to differ.
 /// </para>
 /// </remarks>
-public sealed class APreviewOfTheMenu(IStageWriter writer) : IShowTheMenu
+public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : IShowTheMenu
 {
     /// <summary>Where the menu sits, on a disc and here.</summary>
     private const string Folder = "AUTORUN";
@@ -58,8 +58,26 @@ public sealed class APreviewOfTheMenu(IStageWriter writer) : IShowTheMenu
 
         writer.MakeFolder(into);
 
-        // The same step, told it is not writing a disc.
-        new WriteTheMenuStep(forADisc: false).Run(context, CancellationToken.None).GetAwaiter().GetResult();
+        // The artwork and the music first, and not only the menu.
+        //
+        // A preview that leaves them out shows a menu drawn on nothing, which
+        // is the one thing somebody choosing a background most wants to look
+        // at. The point of a preview is the disc as it will be.
+        //
+        // The same steps the build runs, in the order the build runs them:
+        // the menu names a background file that has to already be there.
+        foreach (IBuildStep step in new IBuildStep[]
+        {
+            new CopyTheArtworkStep(pictures),
+            new CopyTheMusicStep(),
+            new WriteTheMenuStep(forADisc: false)
+        })
+        {
+            if (step.AppliesTo(context))
+            {
+                step.Run(context, CancellationToken.None).GetAwaiter().GetResult();
+            }
+        }
 
         return System.IO.Path.Combine(into, Folder, "menu.hta");
     }

@@ -762,6 +762,18 @@ The menu window wears the disc's own icon where one was chosen, and **DiscWright
 
 That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
 
+#### An HTA will not resolve a relative icon
+
+`icon="menu.ico"` leaves the window wearing Windows' blank default even with `menu.ico` sitting beside the page. An HTA wants an absolute path, and **a disc has no idea which letter it will be given**.
+
+So the icon is set from script as well, out of the page's own address, the same way the launcher at the top of the disc finds the menu. The attribute stays for the machines where it does work, and nothing turns on either of them: a window with the wrong icon still works.
+
+#### Names cut to fit a button
+
+An add-on is named after the file it came from, and a GOG installer's name carries its version and its build number: `Grim Fandango Remastered Soundtrack 2.0.0.9 (31045)` is fifty characters on a button that is one of three.
+
+Cut at a word, since a name chopped mid-word looks like a fault rather than a choice, and with any trailing punctuation removed, because a comma before an ellipsis reads as a typo. It cuts mid-word only when backing up to a space would throw most of the name away. **The whole name stays in the tooltip**, because somebody with two patches has to tell them apart.
+
 #### Where the disc is
 
 Worked out from the page's own address, as the launcher does, because AutoRun can start a disc file with no drive letter. The menu sits in `AUTORUN`, so the disc is one folder further up. The paths in the menu's facts are written with forward slashes and relative to the root of the disc, since a disc does not know which letter it will be given.

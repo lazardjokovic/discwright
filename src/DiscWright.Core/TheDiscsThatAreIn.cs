@@ -109,8 +109,10 @@ public static class TheDiscsThatAreIn
             ? needAPush[0] + " cannot close its own tray"
             : string.Join(" and ", needAPush) + " cannot close their own trays";
 
-        return $"{which}. Every disc has to come out to be checked after it is written, "
-            + "so this will stop and wait for you to push it back in.";
+        // Three lines of explanation for one fact took more of the window
+        // than the thing it was about. The reason is true and is not needed
+        // every time somebody looks at the screen.
+        return $"{which}, so you will have to push it in after each disc.";
     }
 
     /// <summary>

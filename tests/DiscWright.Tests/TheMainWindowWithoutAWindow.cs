@@ -1115,7 +1115,7 @@ public class TheMainWindowWithoutAWindow
         await window.LookAtTheDrives();
 
         // Told afterwards is told to an empty chair.
-        Assert.StartsWith("D: cannot close its own tray.", window.AboutTheTray, StringComparison.Ordinal);
+        Assert.StartsWith("D: cannot close its own tray,", window.AboutTheTray, StringComparison.Ordinal);
         Assert.Equal(["D:"], tray.Asked);
     }
 

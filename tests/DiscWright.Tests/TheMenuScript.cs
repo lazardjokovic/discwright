@@ -459,6 +459,47 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal(@"D:\GAME 1", Ask("whatPressingItDoes(" + game + ", null, 'D:').run"));
     }
 
+    [Theory]
+    [InlineData("Soundtrack", "Soundtrack")]
+    [InlineData("Grim Fandango Remastered Soundtrack 2.0.0.9 (31045)", "Grim Fandango Remastered...")]
+    [InlineData("Patch 1.0 to 1.1 for The Witcher Enhanced Edition", "Patch 1.0 to 1.1 for The...")]
+    public void Cuts_a_name_down_to_something_a_button_can_hold(string name, string expected)
+    {
+        // An add-on is named after the file it came from, and a GOG
+        // installer's name carries its version and its build number. Fifty
+        // characters on a button that is one of three makes the list ragged.
+        Assert.Equal(expected, Ask("shortEnoughForAButton('" + name + "')"));
+    }
+
+    [Fact]
+    public void Cuts_at_a_word_rather_than_mid_word()
+    {
+        // A name chopped mid-word looks like a fault rather than a choice.
+        Assert.Equal(
+            "The Witcher, Enhanced...",
+            Ask("shortEnoughForAButton('The Witcher, Enhanced Edition Soundtrack')"));
+    }
+
+    [Fact]
+    public void Leaves_no_punctuation_hanging_before_the_dots()
+    {
+        // A comma followed by an ellipsis reads as a typo.
+        Assert.Equal(
+            "Hollow Knight Silksong...",
+            Ask("shortEnoughForAButton('Hollow Knight Silksong, the soundtrack')"));
+    }
+
+    [Fact]
+    public void Will_not_throw_most_of_a_name_away_to_find_a_space()
+    {
+        // One long word with a space near the front. Cutting back to that
+        // space would leave two letters, so it cuts mid-word instead, which
+        // is the lesser of the two.
+        Assert.Equal(
+            "A Supercalifragilisticexpi...",
+            Ask("shortEnoughForAButton('A Supercalifragilisticexpialidocious Patch')"));
+    }
+
     // ------------------------------------------------- copying it off the disc
 
     [Fact]

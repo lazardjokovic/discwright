@@ -235,6 +235,10 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
                 ? "../" + WriteTheAutorunStep.IconFileName
                 : OurOwnIcon,
 
+            context.Project.Artwork?.IconPath is not null
+                ? WriteTheAutorunStep.IconFileName
+                : Folder + "/" + OurOwnIcon,
+
             TheManualOn(context),
             TheExtrasOn(context));
     }

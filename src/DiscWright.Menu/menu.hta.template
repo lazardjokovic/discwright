@@ -52,7 +52,23 @@ window.moveTo(
     Math.max(0, Math.floor((screen.availWidth - 760) / 2)),
     Math.max(0, Math.floor((screen.availHeight - 480) / 2)));
 
+// The icon, set from here as well as asked for in the tag above.
+//
+// An HTA does not resolve a relative icon path, and a disc has no idea which
+// letter it will be given, so the attribute alone leaves this window wearing
+// Windows' default. The absolute path comes from the page's own address, the
+// same way the launcher at the top of the disc finds the menu.
+function wearTheRightIcon() {
+    try {
+        discwright.icon = onTheDisc(theDisc(), DISC.icon);
+    } catch (cannotSetIt) {
+        // Nothing turns on it. A window with the wrong icon still works.
+    }
+}
+
 function start() {
+    wearTheRightIcon();
+
     document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);
 
     var wanted = whatIsStillWanted(DISC.discsCopied, DISC.discsInSet);
@@ -141,7 +157,8 @@ function showAddOnsOf(game) {
     // Set as text afterwards, for the same reason the chooser does: the name
     // came from somebody else's file.
     for (i = 0; i < ordered.length; i++) {
-        document.getElementById("addOn" + i).innerText = ordered[i].name;
+        document.getElementById("addOn" + i).innerText = shortEnoughForAButton(ordered[i].name);
+        document.getElementById("addOn" + i).parentNode.title = ordered[i].name;
     }
 
     var line = ordered.length > 0 ? whatAnAddOnSays(installed) : "";
@@ -427,7 +444,9 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
        padding-left: 14px; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;
        text-transform: uppercase; color: #CBD6DB; background: #0C1519;
        border: 1px solid #27353B; text-decoration: none; overflow: hidden;
-       white-space: nowrap; text-overflow: ellipsis; }
+       white-space: nowrap; text-overflow: ellipsis;
+       width: 100%; box-sizing: border-box; }
+#addOns { width: 100%; }
 /* One accent, on one button: whichever is the thing to do next. Everything else
    is two greys, so the game's own picture is the only colour in the window. */
 .btn.next { background: #103A3E; border-color: #00BEC8; border-left-width: 3px; color: #FFFFFF; }

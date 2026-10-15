@@ -73,6 +73,7 @@ public static class MenuWriter
         data.Append("    buttons: ").Append(JScript.ListOf(facts.Buttons)).Append(",\n");
         data.Append("    manual: ").Append(JScript.Literal(facts.Manual ?? string.Empty)).Append(",\n");
         data.Append("    extras: ").Append(JScript.Literal(facts.Extras ?? string.Empty)).Append(",\n");
+        data.Append("    icon: ").Append(JScript.Literal(facts.IconOnTheDisc)).Append(",\n");
 
         // The disc's own files, so that copying a game off the root does not
         // carry the menu and the autorun with it. Written from the one list
@@ -180,6 +181,12 @@ public static class MenuWriter
 /// when one was chosen, and DiscWright's otherwise, because the alternative is
 /// the blank default and a menu that looks like nobody finished it.
 /// </param>
+/// <param name="IconOnTheDisc">
+/// The same icon, written from the root of the disc with forward slashes, for
+/// the script to turn into a path. An HTA's icon attribute does not resolve a
+/// relative one, so the attribute alone leaves the window wearing Windows'
+/// default.
+/// </param>
 /// <param name="Manual">Where the manual is on the disc, or nothing.</param>
 /// <param name="Extras">Where the extras folder is, or nothing.</param>
 public sealed record MenuFacts(
@@ -192,6 +199,7 @@ public sealed record MenuFacts(
     bool OnlyOneAtATime,
     IReadOnlyList<MenuGame>? Games = null,
     string Icon = "menu.ico",
+    string IconOnTheDisc = "AUTORUN/menu.ico",
     string? Manual = null,
     string? Extras = null)
 {

@@ -160,9 +160,10 @@ public class TheDiscThatIsActuallyIn
         string? said = TheDiscsThatAreIn.WhatToSayAboutTheTray(
             [ADrive("E:", 3, true, 359_847)], _ => false);
 
+        // Short on purpose. Three lines of explanation for one fact took more
+        // of the window than the thing it was about.
         Assert.Equal(
-            "E: cannot close its own tray. Every disc has to come out to be checked after it is "
-                + "written, so this will stop and wait for you to push it back in.",
+            "E: cannot close its own tray, so you will have to push it in after each disc.",
             said);
     }
 
@@ -223,7 +224,7 @@ public class TheDiscThatIsActuallyIn
         ],
             _ => false);
 
-        Assert.StartsWith("D: and E: cannot close their own trays.", said, StringComparison.Ordinal);
+        Assert.StartsWith("D: and E: cannot close their own trays,", said, StringComparison.Ordinal);
     }
 
     private static Recorder ADrive(string letter, int mediaType, bool blank, long freeSectors) =>
