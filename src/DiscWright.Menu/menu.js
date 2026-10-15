@@ -404,6 +404,179 @@ function oneStringFrom(registry, where, key, value) {
     return null;
 }
 
+// Where the disc is, worked out from the menu's own address.
+//
+// AutoRun can start a disc file with no drive letter, so a relative path is no
+// use and this has to come from the URL. The menu lives in AUTORUN, so the
+// disc itself is one folder above it.
+//
+// A file URL arrives with leading slashes that are not part of the path,
+// except on a network share, where two of them are. Learned in v1's launcher
+// and worth having in one place: the launcher at the top of the disc solves
+// the same problem for itself.
+function theDiscIsAbove(menuUrl) {
+    var cleaned = String(menuUrl || "").replace(/^file:/i, "").split("/").join(BACKSLASH);
+    var leading = 0;
+    var rest, cut;
+
+    try {
+        cleaned = decodeURIComponent(cleaned);
+    } catch (notEncoded) {
+    }
+
+    while (cleaned.charAt(leading) === BACKSLASH) {
+        leading++;
+    }
+
+    if (leading) {
+        rest = cleaned.substring(leading);
+
+        if (/^[A-Za-z]:/.test(rest)) {
+            cleaned = rest;
+        } else if (leading >= 3) {
+            cleaned = BACKSLASH + BACKSLASH + rest;
+        }
+    }
+
+    // Up twice: out of the file, then out of AUTORUN.
+    for (cut = 0; cut < 2; cut++) {
+        var at = cleaned.lastIndexOf(BACKSLASH);
+
+        if (at <= 0) {
+            return cleaned;
+        }
+
+        cleaned = cleaned.substring(0, at);
+    }
+
+    return cleaned;
+}
+
+// A path on the disc, out of the one the builder wrote into the facts.
+//
+// Those are written with forward slashes, because they go into a script rather
+// than into a Windows API, and they are relative to the root of the disc
+// because a disc does not know which letter it will be given.
+function onTheDisc(discFolder, relative) {
+    var parts, at, path;
+
+    if (!relative) {
+        return "";
+    }
+
+    parts = String(relative).split("/");
+    path = String(discFolder || "");
+
+    for (at = 0; at < parts.length; at++) {
+        if (parts[at] === "") {
+            continue;
+        }
+
+        if (path.length > 0 && path.charAt(path.length - 1) !== BACKSLASH) {
+            path += BACKSLASH;
+        }
+
+        path += parts[at];
+    }
+
+    return path;
+}
+
+// What pressing the one big button should actually do.
+//
+// Three different acts wearing one button, and which it is was already decided
+// by whatToDoWith: this says where the thing to do it to actually lives. Kept
+// apart from the doing so that it can be checked without running anything.
+function whatPressingItDoes(game, where, discFolder) {
+    if (!game) {
+        return null;
+    }
+
+    // Already on the machine. Play what is installed, from where it is
+    // installed, and do not offer to install over the top of a save game.
+    if (where) {
+        return { act: "play", run: where.exe, from: where.dir };
+    }
+
+    if (game.runs && String(game.runs).length > 0) {
+        return {
+            act: "install",
+            run: onTheDisc(discFolder, game.runs),
+            from: onTheDisc(discFolder, game.folder)
+        };
+    }
+
+    // Nothing to install. Open the folder it is in, which is the honest thing
+    // a disc can offer for a game that is just files.
+    return { act: "open", run: onTheDisc(discFolder, game.folder), from: "" };
+}
+
+// What an add-on's button runs, or nothing when it must not be pressed yet.
+//
+// Asked here as well as drawn dead in the page, because a dead button somebody
+// clicks anyway is still a click, and a patch run before its game half-applies
+// to nothing and leaves no sign that it did.
+function whatAnAddOnRuns(addOn, gameIsInstalled, discFolder) {
+    if (!addOn || !canRunAddOnYet(gameIsInstalled)) {
+        return null;
+    }
+
+    return onTheDisc(discFolder, addOn.runs);
+}
+
+// Starts something, and says what went wrong rather than nothing.
+//
+// Here rather than in the page because the page cannot be tested: an HTA is
+// invisible to UI Automation, so nothing can press its buttons. What lives
+// here runs under cscript against a real executable.
+//
+// Returns null when it started, or a sentence for the page to show.
+function startIt(what, from) {
+    var shell;
+
+    if (!what || String(what).length === 0) {
+        return "There is nothing on this disc for that button to start.";
+    }
+
+    try {
+        shell = new ActiveXObject("WScript.Shell");
+    } catch (noShell) {
+        return "This machine will not let the menu start anything.";
+    }
+
+    if (from && String(from).length > 0) {
+        try {
+            shell.CurrentDirectory = from;
+        } catch (cannotGoThere) {
+            // An installer run from the wrong folder still installs. Not being
+            // able to get there is not a reason to refuse to try.
+        }
+    }
+
+    try {
+        // Quoted, because the path has spaces in it more often than not, and
+        // not waited for, because the menu has no further part in it.
+        shell.Run('"' + what + '"', 1, false);
+        return null;
+    } catch (wrong) {
+        return "That would not start: " + what + " (" + wrong.message + ")";
+    }
+}
+
+// Opens a folder in Explorer. Same shape, same reason.
+function openTheFolder(where) {
+    if (!where || String(where).length === 0) {
+        return "There is no folder on this disc for that button to open.";
+    }
+
+    try {
+        new ActiveXObject("WScript.Shell").Run('explorer.exe "' + where + '"', 1, false);
+        return null;
+    } catch (wrong) {
+        return "That folder would not open: " + where + " (" + wrong.message + ")";
+    }
+}
+
 // Whether this game is on the machine the disc is in.
 //
 // Asked about the name it was REGISTERED under, which is not always the name on

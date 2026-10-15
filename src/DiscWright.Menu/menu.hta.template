@@ -24,6 +24,22 @@
 // generated script on the disc.
 var DISC = %%DATA%%;
 
+// Which game is on screen. The chooser sets it, and the buttons read it.
+var showing = 0;
+
+
+// Where the disc is. Worked out once, from this page's own address, because
+// AutoRun can start a disc file with no drive letter at all.
+var WHERE = null;
+
+function theDisc() {
+    if (WHERE === null) {
+        WHERE = theDiscIsAbove(document.URL);
+    }
+
+    return WHERE;
+}
+
 // Sized HERE, in the head, before the body exists.
 //
 // Done from body onload instead, mshta shows its own default window first and
@@ -82,6 +98,10 @@ function showGame(index) {
         return;
     }
 
+    // Which one the buttons are about. Without this the one big button has no
+    // idea what it is for, which is how it came to do nothing at all.
+    showing = index;
+
     document.getElementById("chooserScreen").style.display = "none";
     document.getElementById("gameScreen").style.display = "block";
     document.getElementById("gameName").innerText = game.name;
@@ -105,7 +125,7 @@ function showAddOnsOf(game) {
     var html = "", i;
 
     for (i = 0; i < ordered.length; i++) {
-        html += '<a class="btn' + (canRunAddOnYet(installed) ? '' : ' dead') + '" href="#" onclick="return false;">'
+        html += '<a class="btn' + (canRunAddOnYet(installed) ? '' : ' dead') + '" href="#" onclick="runTheAddOn(' + i + '); return false;">'
              + '<span id="addOn' + i + '"></span></a>';
     }
 
@@ -120,6 +140,64 @@ function showAddOnsOf(game) {
     var line = ordered.length > 0 ? whatAnAddOnSays(installed) : "";
     document.getElementById("addOnNote").innerText = line;
     document.getElementById("addOnNote").style.display = line === "" ? "none" : "block";
+}
+
+// The one big button.
+//
+// The starting itself is in menu.js, where cscript can run it against a real
+// executable. An HTA is invisible to UI Automation, so nothing can press a
+// button in this page: whatever lives here can never be tested.
+function doTheThing() {
+    var game = gameAt(DISC.games, showing);
+    var doing = whatPressingItDoes(game, whereTheGameIs(game ? (game.match || game.name) : ""), theDisc());
+    var wrong;
+
+    if (!doing) {
+        alert("There is nothing on this disc for that button to start.");
+        return;
+    }
+
+    if (doing.act === "open") {
+        wrong = openTheFolder(doing.run);
+
+        if (wrong) {
+            alert(wrong);
+        }
+
+        return;
+    }
+
+    wrong = startIt(doing.run, doing.from);
+
+    if (wrong) {
+        alert(wrong);
+        return;
+    }
+
+    // Installing and playing both hand over to something else, and the menu
+    // has no further part in it. It gets out of the way rather than sitting on
+    // top of whatever just started.
+    window.close();
+}
+
+// One add-on.
+function runTheAddOn(which) {
+    var game = gameAt(DISC.games, showing);
+    var ordered = addOnsInOrder(game ? (game.addOns || []) : []);
+    var what = whatAnAddOnRuns(ordered[which], isInstalled(game), theDisc());
+
+    // Dead in the page as well, but a dead button somebody clicks anyway is
+    // still a click, and a patch run before its game half-applies to nothing
+    // and leaves no sign that it did.
+    if (!what) {
+        return;
+    }
+
+    var wrong = startIt(what, "");
+
+    if (wrong) {
+        alert(wrong);
+    }
 }
 
 function doExit() {
@@ -173,7 +251,7 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 
         <div id="gameScreen" style="display: none">
             <h1 id="gameName"></h1>
-            <a class="btn next" href="#" onclick="doExit(); return false;"><span id="doIt"></span></a>
+            <a class="btn next" href="#" onclick="doTheThing(); return false;"><span id="doIt"></span></a>
             <div id="addOns"></div>
             <div id="addOnNote"></div>
             <a class="btn" id="back" href="#" onclick="showChooser(); return false;">Back</a>

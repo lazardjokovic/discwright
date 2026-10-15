@@ -386,6 +386,157 @@ public sealed class TheMenuScript : IDisposable
         "'" + text.Replace(((char)92).ToString(), ((char)92).ToString() + (char)92, StringComparison.Ordinal)
             .Replace("'", ((char)92) + "'", StringComparison.Ordinal) + "'";
 
+    // --------------------------------------------- what a button actually runs
+
+    [Fact]
+    public void Finds_the_disc_above_the_menu()
+    {
+        // AutoRun can start a disc file with no drive letter, so the menu has
+        // to work out where it is from its own address. It lives in AUTORUN,
+        // so the disc is one folder further up.
+        Assert.Equal(@"D:", Ask("theDiscIsAbove('file:///D:/AUTORUN/menu.hta')"));
+    }
+
+    [Fact]
+    public void Finds_the_disc_when_it_is_a_share_on_another_machine()
+    {
+        // The leading slashes of a file URL are not part of the path, except
+        // here, where two of them are.
+        Assert.Equal(
+            @"\\server\share",
+            Ask("theDiscIsAbove('file://///server/share/AUTORUN/menu.hta')"));
+    }
+
+    [Fact]
+    public void Reads_a_path_with_spaces_and_odd_characters_in_it()
+    {
+        Assert.Equal(
+            @"D:\GAME 1",
+            Ask("theDiscIsAbove('file:///D:/GAME%201/AUTORUN/menu.hta')"));
+    }
+
+    [Theory]
+    [InlineData("'GAME 1/setup.exe'", @"D:\GAME 1\setup.exe")]
+    [InlineData("'GAME 1'", @"D:\GAME 1")]
+    [InlineData("''", "")]
+    public void Turns_a_path_the_builder_wrote_into_one_Windows_can_use(string relative, string expected)
+    {
+        // The builder writes them with forward slashes, because they go into a
+        // script rather than into a Windows API.
+        Assert.Equal(expected, Ask("onTheDisc('D:', " + relative + ")"));
+    }
+
+    [Fact]
+    public void Plays_what_is_installed_rather_than_installing_over_it()
+    {
+        string where = @"{ exe: 'C:\\Games\\HK\\hk.exe', dir: 'C:\\Games\\HK' }";
+
+        Assert.Equal("play", Ask("whatPressingItDoes({ name: 'HK', runs: 'HK/setup.exe' }, " + where + ", 'D:').act"));
+        Assert.Equal(
+            @"C:\Games\HK\hk.exe",
+            Ask("whatPressingItDoes({ name: 'HK', runs: 'HK/setup.exe' }, " + where + ", 'D:').run"));
+    }
+
+    [Fact]
+    public void Installs_from_the_disc_when_it_is_not_installed()
+    {
+        const string game = "{ name: 'HK', runs: 'GAME 1/setup.exe', folder: 'GAME 1' }";
+
+        Assert.Equal("install", Ask("whatPressingItDoes(" + game + ", null, 'D:').act"));
+        Assert.Equal(@"D:\GAME 1\setup.exe", Ask("whatPressingItDoes(" + game + ", null, 'D:').run"));
+        Assert.Equal(@"D:\GAME 1", Ask("whatPressingItDoes(" + game + ", null, 'D:').from"));
+    }
+
+    [Fact]
+    public void Opens_the_folder_for_a_game_with_nothing_to_install()
+    {
+        const string game = "{ name: 'Arcanum', runs: '', folder: 'GAME 1' }";
+
+        // The honest thing a disc can offer for a game that is just files.
+        Assert.Equal("open", Ask("whatPressingItDoes(" + game + ", null, 'D:').act"));
+        Assert.Equal(@"D:\GAME 1", Ask("whatPressingItDoes(" + game + ", null, 'D:').run"));
+    }
+
+    [Fact]
+    public void Runs_an_add_on_only_once_its_game_is_there()
+    {
+        const string addOn = "{ name: 'Patch', runs: 'GAME 1/ADD-ONS/patch.exe' }";
+
+        Assert.Equal(@"D:\GAME 1\ADD-ONS\patch.exe", Ask("whatAnAddOnRuns(" + addOn + ", true, 'D:')"));
+
+        // A dead button somebody clicks anyway is still a click, and a patch
+        // run before its game half-applies to nothing.
+        Assert.Equal("null", Ask("String(whatAnAddOnRuns(" + addOn + ", false, 'D:'))"));
+    }
+
+    [Fact]
+    public void Really_starts_what_it_is_pointed_at()
+    {
+        // The only proof that a menu button does anything at all. An HTA is
+        // invisible to UI Automation, so no test can press one: the launching
+        // lives in menu.js precisely so that this can run it for real.
+        //
+        // It starts a script that writes a file and stops, which is harmless,
+        // observable, and leaves nothing running.
+        string marker = Path.Combine(_folder, "it-ran.txt");
+        string script = Path.Combine(_folder, "prove it.cmd");
+
+        File.WriteAllText(script, "@echo off" + Environment.NewLine + "echo yes> \"" + marker + "\"");
+
+        Assert.Equal("null", Ask("String(startIt(" + AsJScript(script) + ", ''))"));
+
+        bool appeared = false;
+
+        for (int waited = 0; waited < 100 && !appeared; waited++)
+        {
+            Thread.Sleep(100);
+            appeared = File.Exists(marker);
+        }
+
+        Assert.True(appeared, $"Nothing ran. Expected {marker} to appear.");
+    }
+
+    [Fact]
+    public void Says_what_went_wrong_rather_than_failing_in_silence()
+    {
+        // A menu button that does nothing when pressed is the worst outcome
+        // here: somebody is standing in front of a disc they burned, and no
+        // amount of correct behaviour elsewhere makes up for it.
+        string missing = Path.Combine(_folder, "there is no such thing.exe");
+
+        string said = Ask("String(startIt(" + AsJScript(missing) + ", ''))");
+
+        Assert.Contains("would not start", said, StringComparison.Ordinal);
+        Assert.Contains("there is no such thing.exe", said, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_so_when_there_is_nothing_to_start_at_all()
+    {
+        Assert.Equal(
+            "There is nothing on this disc for that button to start.",
+            Ask("String(startIt('', ''))"));
+
+        Assert.Equal(
+            "There is no folder on this disc for that button to open.",
+            Ask("String(openTheFolder(''))"));
+    }
+
+    /// <summary>
+    /// A Windows path as a JScript string, with its backslashes doubled.
+    /// </summary>
+    /// <remarks>
+    /// Built from a character code rather than typed. This exact character has
+    /// been halved on the way into a generated file several times in this
+    /// project, and a path that arrives halved points at nothing.
+    /// </remarks>
+    private static string AsJScript(string path)
+    {
+        string slash = ((char)92).ToString();
+
+        return "'" + path.Replace(slash, slash + slash, StringComparison.Ordinal) + "'";
+    }
+
     private string Ask(string expression)
     {
         (string output, int exitCode) = Run(expression);

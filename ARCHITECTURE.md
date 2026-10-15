@@ -697,6 +697,27 @@ A collapsed `Expander` hides its contents from the automation tree, which is cor
 
 **It also showed something about Smart App Control.** The app itself runs here, although the test host cannot load the same assemblies. That is almost certainly because a locally built exe carries no Mark of the Web, so it says nothing either way about a downloaded release, which will carry one. **The signing problem is unchanged.**
 
+### The buttons do things now
+
+The one big button was wired to close the window, and the add-on buttons to nothing at all. Both now do what they say.
+
+| What it says | What it does |
+|---|---|
+| Play | runs the installed executable, from where it is installed |
+| Install | runs the installer on the disc |
+| Copy and play | opens the game's folder, which is the honest offer for a game that is just files |
+| an add-on | runs it, and only once its game is on the machine |
+
+**Deciding and doing are separate.** `whatPressingItDoes` works out which of the three acts it is and where the thing lives; `startIt` does it. Both are in `menu.js`, which matters more here than anywhere else in the program: **an HTA is invisible to UI Automation**, so nothing can press a button in that page, and whatever logic stays in the page can never be tested at all.
+
+So `startIt` is tested by really starting something: a script that writes a file and stops, with the test waiting for the file. It is the only proof that a menu button does anything, and a menu button that does nothing when pressed is the worst outcome in this program, because somebody is standing in front of a disc they burned and no amount of correct behaviour elsewhere makes up for it.
+
+It also says what went wrong rather than failing in silence, and an add-on checks again that its game is installed before running, because a dead button somebody clicks anyway is still a click.
+
+#### Where the disc is
+
+Worked out from the page's own address, as the launcher does, because AutoRun can start a disc file with no drive letter. The menu sits in `AUTORUN`, so the disc is one folder further up. The paths in the menu's facts are written with forward slashes and relative to the root of the disc, since a disc does not know which letter it will be given.
+
 ## Seeing the menu before the disc
 
 **It runs the same step the build runs.** A preview written by a second piece of code that draws something similar is a preview that drifts from the disc, and the day it drifts is the day somebody burns a disc because the preview looked right.
