@@ -1,6 +1,17 @@
 <Project>
 
   <PropertyGroup>
+    <!--
+      What this build calls itself, which until now was nothing at all: with no
+      version set, .NET stamps 1.0.0 on everything, and a program that cannot
+      say which version it is cannot tell whether a newer one exists.
+
+      2.0.0 is the rewrite. The newest thing released in the public repository
+      is v1's 0.10.0, so every build between now and shipping is NEWER than
+      anything published, and the comparison has to be able to say so.
+    -->
+    <Version>2.0.0</Version>
+
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

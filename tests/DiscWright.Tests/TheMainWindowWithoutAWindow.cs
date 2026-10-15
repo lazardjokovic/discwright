@@ -1046,7 +1046,8 @@ public class TheMainWindowWithoutAWindow
         IFindRecorders? drives = null,
         IBurnDiscs? burner = null,
         IEraseDiscs? eraser = null,
-        IWorkTheTray? tray = null) =>
+        IWorkTheTray? tray = null,
+        IAskWhatIsReleased? releases = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -1058,6 +1059,8 @@ public class TheMainWindowWithoutAWindow
             new NoHashing(),
             new NothingIsRemembered(),
             tray ?? new ATrayThatShuts(),
+            releases ?? new NothingIsReleased(),
+            "2.0.0",
             _ => 1000));
 
     /// <summary>
@@ -1335,5 +1338,12 @@ public class TheMainWindowWithoutAWindow
     private sealed class NoHashing : IHasher
     {
         public string Sha256(string path, CancellationToken ct) => string.Empty;
+    }
+
+    /// <summary>Somewhere nothing has ever been published.</summary>
+    private sealed class NothingIsReleased : IAskWhatIsReleased
+    {
+        public Task<WhatWasReleased> TheLatest(CancellationToken ct) =>
+            Task.FromResult(new WhatWasReleased(null, null, "no asking in a test"));
     }
 }

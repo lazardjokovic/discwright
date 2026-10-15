@@ -48,6 +48,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private Medium _medium = Media.Dvd5;
     private bool _theSizeWasChosen;
     private bool _lookingAtTheDrives;
+    private bool _asking;
     private IReadOnlyList<Recorder> _lastSeen = [];
     private DiscOptions _options = new();
     private ReadOnlyObservableCollection<GameFolder>? _view;
@@ -115,6 +116,60 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// when they have nothing to say.
     /// </summary>
     public string AboutTheDiscInTheDrive { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// How this build compares with the newest released, once somebody has
+    /// asked, or nothing because nobody has.
+    /// </summary>
+    public HowThisBuildCompares? AboutTheVersion { get; private set; }
+
+    /// <summary>
+    /// Asks what the newest released version is.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Only when somebody asks.</strong> Checking on every start is a
+    /// network call nobody made, from a program whose whole point is putting
+    /// things on a disc so they keep working with no network at all.
+    /// </para>
+    /// <para>
+    /// It never acts on the answer. Saying a newer one exists is the whole of
+    /// it: replacing a running program is a far bigger thing than reading a
+    /// number, and doing it to an unsigned one that Windows already distrusts
+    /// would be worse than not offering it.
+    /// </para>
+    /// </remarks>
+    public async Task CheckForANewVersion(CancellationToken ct = default)
+    {
+        if (_asking)
+        {
+            return;
+        }
+
+        _asking = true;
+
+        try
+        {
+            WhatWasReleased said = await _machine.Releases.TheLatest(ct);
+
+            AboutTheVersion = new HowThisBuildCompares(
+                _machine.ThisBuild, said.Tag, said.Where, said.WhyNot);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            // The port is meant to report rather than throw, and a button that
+            // takes the program down because a web request misbehaved would be
+            // a poor trade for a version number.
+            AboutTheVersion = new HowThisBuildCompares(
+                _machine.ThisBuild, null, null, "Something went wrong asking.");
+        }
+        finally
+        {
+            _asking = false;
+        }
+
+        Tell(nameof(AboutTheVersion));
+    }
 
     /// <summary>
     /// What is worth saying about trays, or nothing when no drive needs a hand.

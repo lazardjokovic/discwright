@@ -408,6 +408,8 @@ public class WalkingThroughASet
             new NoHashing(),
             note ?? new ANoteInMemory(),
             new ATrayThatShuts(),
+            new NothingIsReleased(),
+            "2.0.0",
             howBig ?? (_ => 1000)));
 
         window.OutputFolder = @"C:\out";
@@ -542,5 +544,12 @@ public class WalkingThroughASet
     private sealed class NoEncoding : IAutorunEncoding
     {
         public string AsAutorunWillSeeIt(string text) => text;
+    }
+
+    /// <summary>Somewhere nothing has ever been published.</summary>
+    private sealed class NothingIsReleased : IAskWhatIsReleased
+    {
+        public Task<WhatWasReleased> TheLatest(CancellationToken ct) =>
+            Task.FromResult(new WhatWasReleased(null, null, "no asking in a test"));
     }
 }

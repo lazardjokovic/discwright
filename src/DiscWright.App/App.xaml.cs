@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -61,6 +62,8 @@ public partial class App : Application
             new Sha256Hasher(),
             new ANoteOnDisk(),
             burner,
+            new WhatGitHubHasReleased(),
+            WhatThisBuildIs(),
             HowBigIs(disk)));
 
         MainWindow window = new(screen, reader, disk, burner);
@@ -72,6 +75,32 @@ public partial class App : Application
         // message loop has not begun, and anything that wants to put a window
         // in front of somebody has nowhere to put it yet.
         window.Dispatcher.BeginInvoke(() => window.AddWhatWeWereOpenedWith(e.Args));
+    }
+
+    /// <summary>
+    /// What this build calls itself.
+    /// </summary>
+    /// <remarks>
+    /// The informational version, which carries the commit after a plus, cut
+    /// back to the part that is a version. Read from the assembly rather than
+    /// written down twice, because two places that both say what the version
+    /// is will disagree eventually and the wrong one will be the one shown.
+    /// </remarks>
+    private static string WhatThisBuildIs()
+    {
+        Assembly? app = Assembly.GetEntryAssembly();
+
+        string? said = app?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? app?.GetName().Version?.ToString();
+
+        if (said is null)
+        {
+            return string.Empty;
+        }
+
+        int plus = said.IndexOf('+', StringComparison.Ordinal);
+
+        return plus >= 0 ? said[..plus] : said;
     }
 
     /// <summary>

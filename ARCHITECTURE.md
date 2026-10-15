@@ -697,6 +697,37 @@ A collapsed `Expander` hides its contents from the automation tree, which is cor
 
 **It also showed something about Smart App Control.** The app itself runs here, although the test host cannot load the same assemblies. That is almost certainly because a locally built exe carries no Mark of the Web, so it says nothing either way about a downloaded release, which will carry one. **The signing problem is unchanged.**
 
+## Asking whether there is a newer one
+
+A button, and only a button. **Checking on every start is a network call nobody made**, from a program whose whole point is putting things on a disc so they keep working with no network at all.
+
+**It only ever says that a version exists.** Downloading and replacing a running program is a far bigger thing than reading a number, and doing it to an unsigned program that Windows already distrusts would be worse than not offering it at all. When there is something newer it offers the page; the browser does the rest.
+
+One request to `api.github.com/repos/lazardjokovic/discwright/releases/latest`, which needs no account and no key, and which GitHub allows sixty times an hour from one address. Nothing identifying goes with it: the user agent is the program's name.
+
+### Reading and comparing are separate things
+
+`HowThisBuildCompares` is handed what was said and works out a sentence, so every case can be tested without a network. The asking is a port, and it **reports a failure rather than throwing one**, because not being able to reach GitHub is an ordinary afternoon and not a fault in anything.
+
+Each failure gets its own sentence. Somebody told only that it did not work has no idea whether to try again in a minute or give up:
+
+| What happened | What it says |
+|---|---|
+| no releases yet | Nothing has been published there yet. |
+| rate limited | GitHub is asking for a rest. Try again in a few minutes. |
+| no network | There is no way out to the internet from here. |
+| timed out | It took too long to answer. |
+
+### Newer than anything released
+
+The program had no version at all: with none set, .NET stamps 1.0.0 on everything, and a program that cannot say which version it is cannot tell whether a newer one exists. It is **2.0.0** now, read from the assembly rather than written down twice, since two places that both state the version will disagree eventually and the wrong one will be the one shown.
+
+The newest thing published in the public repository is v1's **0.10.0**, so every build between now and shipping is newer than anything released. Saying "you are up to date" to somebody running something newer than the shop sells would be a small lie, so it says what is true:
+
+> This is 2.0.0, which is newer than anything released. The newest release is 0.10.0.
+
+A tag that is not a version number is not guessed at either. Tags are written by people, and deciding which of two unrelated words is larger would be worse than saying it cannot tell.
+
 ## The testing kit
 
 Everything DiscWright is tested against by hand lives in one place, `%USERPROFILE%\DiscWright-Kit`: twenty source folders, eleven discs already built, the artwork, a set that needs two CDs, and the real GOG downloads linked in rather than copied.

@@ -405,6 +405,55 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Asks whether anything newer has been released, and says so.
+    /// </summary>
+    /// <remarks>
+    /// It offers the page and never fetches anything. Replacing a running
+    /// program is a far bigger thing than reading a number, and doing it to an
+    /// unsigned one Windows already distrusts would be worse than not
+    /// offering it at all.
+    /// </remarks>
+    private async void CheckForANewVersion(object sender, RoutedEventArgs e)
+    {
+        await _screen.CheckForANewVersion();
+
+        if (_screen.AboutTheVersion is not HowThisBuildCompares how)
+        {
+            return;
+        }
+
+        if (!how.WorthGetting)
+        {
+            MessageBox.Show(this, how.InWords, "DiscWright", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        bool stay = WorthAsking.Ask(
+            this,
+            how.InWords,
+            "The page opens in your browser. DiscWright does not download or install anything by itself.",
+            "Not now",
+            "Open the page");
+
+        if (!stay && how.Where is not null)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(how.Where) { UseShellExecute = true });
+            }
+            catch (Exception wrong) when (wrong is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                MessageBox.Show(
+                    this,
+                    "No browser would open. The page is:" + Environment.NewLine + Environment.NewLine + how.Where,
+                    "DiscWright",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+        }
+    }
+
+    /// <summary>
     /// Clears the screen and starts a new disc.
     /// </summary>
     /// <remarks>

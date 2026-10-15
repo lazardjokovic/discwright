@@ -28,6 +28,8 @@ namespace DiscWright.ViewModels;
 /// <param name="Hasher">For proving what came back is what went on.</param>
 /// <param name="SetsPlace">Where a set part way through keeps its place.</param>
 /// <param name="Tray">What opens and shuts a drive, and says whether it can.</param>
+/// <param name="Releases">What says which version is newest, when asked.</param>
+/// <param name="ThisBuild">Which version this one is.</param>
 /// <param name="HowBigIs">
 /// How big a file or folder is. Handed in rather than read here, because this
 /// is asked again on every keystroke and the window must not touch a disk that
@@ -44,4 +46,6 @@ public sealed record TheMachine(
     IHasher Hasher,
     IKeepTheSetsPlace SetsPlace,
     IWorkTheTray Tray,
+    IAskWhatIsReleased Releases,
+    string ThisBuild,
     Func<string, long> HowBigIs);

@@ -66,6 +66,16 @@
                         Margin="0,8,0,0"
                         Click="OpenADisc"
                         AutomationProperties.AutomationId="OpenADisc" />
+
+                <!-- Only when pressed. Asking on every start is a network call
+                     nobody made, from a program whose whole point is putting
+                     things on a disc so they keep working with no network. -->
+                <Button Content="Check for a new version"
+                        Style="{StaticResource Ordinary}"
+                        HorizontalAlignment="Stretch"
+                        Margin="0,8,0,0"
+                        Click="CheckForANewVersion"
+                        AutomationProperties.AutomationId="CheckForANewVersion" />
             </StackPanel>
         </Grid>
 
