@@ -212,7 +212,7 @@ public class TheWindowsMarkup
         // The design was drawn at exactly this size and the window does not
         // resize, so every position in it was chosen against these numbers.
         Assert.Equal("920", (string?)window.Attribute("Width"));
-        Assert.Equal("700", (string?)window.Attribute("Height"));
+        Assert.Equal("740", (string?)window.Attribute("Height"));
 
         // And it cannot be stretched into a shape nobody drew. Every position
         // in this window is fixed, so a maximise button would be an invitation

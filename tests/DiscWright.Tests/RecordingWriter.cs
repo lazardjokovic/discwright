@@ -47,6 +47,10 @@ public sealed class RecordingWriter : IStageWriter
     public void CopyPart(string source, long offset, long bytes, string destination) =>
         Copies.Add(new Copied(source, destination, offset, bytes));
 
+    public List<string> Binaries { get; } = [];
+
+    public void WriteBytes(string path, byte[] bytes) => Binaries.Add(path);
+
     public void WriteText(string path, string text) => Texts.Add(new Written(path, text));
 
     public void WriteAutorunText(string path, string text) => AutorunTexts.Add(new Written(path, text));

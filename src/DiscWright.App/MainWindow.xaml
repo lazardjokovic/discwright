@@ -22,7 +22,7 @@
         Title="DiscWright"
         Icon="DiscWright.ico"
         Loaded="ListenForDiscs"
-        Height="700" Width="920"
+        Height="740" Width="920"
         ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource Page}"
@@ -45,27 +45,28 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <TextBlock Text="DiscWright" Style="{StaticResource Title}" />
+                <!-- The version beside the name, not under the line about
+                     discs: on its own underneath, "2.0.0" could as easily
+                     have been about the disc being made. -->
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="DiscWright" Style="{StaticResource Title}" />
+
+                    <TextBlock Style="{StaticResource Aside}"
+                               Margin="8,0,0,3"
+                               VerticalAlignment="Bottom"
+                               Text="{Binding ThisBuild}"
+                               AutomationProperties.AutomationId="ThisBuild" />
+                </StackPanel>
                 <TextBlock Style="{StaticResource Aside}"
                            Margin="0,2,0,0"
                            Text="Put a game on a disc that still works in ten years." />
 
-                <!-- Which version this is, and the only way to ask about
-                     newer ones. In the corner under the name, where a program
-                     usually keeps it, and as quiet as the line above it: this
-                     is barely an action and should not look like one. -->
-                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                    <TextBlock Style="{StaticResource Aside}"
-                               Text="{Binding ThisBuild}"
-                               AutomationProperties.AutomationId="ThisBuild" />
-
-                    <TextBlock Style="{StaticResource Aside}" Text="  " />
-
-                    <Button Content="Check for a new version"
-                            Style="{StaticResource Quietly}"
-                            Click="CheckForANewVersion"
-                            AutomationProperties.AutomationId="CheckForANewVersion" />
-                </StackPanel>
+                <!-- Barely an action, and it should not look like one. -->
+                <Button Content="Check for a new version"
+                        Style="{StaticResource Quietly}"
+                        Margin="0,8,0,0"
+                        Click="CheckForANewVersion"
+                        AutomationProperties.AutomationId="CheckForANewVersion" />
             </StackPanel>
 
             <!-- About the whole window rather than about one more game, which

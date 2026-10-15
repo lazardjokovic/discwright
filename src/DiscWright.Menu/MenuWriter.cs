@@ -33,8 +33,20 @@ public static class MenuWriter
 
     private static readonly string TheWayIn = Resource("start-here.hta");
 
+    private static readonly byte[] TheOwnIcon = Bytes("menu.ico");
+
     /// <summary>The logic, identical on every disc.</summary>
     public static string MenuScript() => Script;
+
+    /// <summary>
+    /// DiscWright's own icon, for a disc that chose none.
+    /// </summary>
+    /// <remarks>
+    /// Trimmed to the sizes a window actually shows, 16 up to 64. The full set
+    /// is 363 KB and almost all of that is a 256 pixel frame that nothing on a
+    /// disc will ever ask for.
+    /// </remarks>
+    public static byte[] TheIconToFallBackOn() => TheOwnIcon;
 
     /// <summary>
     /// The launcher that sits at the top of the disc, for when AutoRun is off.
@@ -58,6 +70,8 @@ public static class MenuWriter
         data.Append("    discsInSet: ").Append(JScript.Number(facts.DiscsInSet)).Append(",\n");
         data.Append("    discsCopied: ").Append('[').Append(JScript.Number(facts.DiscNumber)).Append("],\n");
         data.Append("    buttons: ").Append(JScript.ListOf(facts.Buttons)).Append(",\n");
+        data.Append("    manual: ").Append(JScript.Literal(facts.Manual ?? string.Empty)).Append(",\n");
+        data.Append("    extras: ").Append(JScript.Literal(facts.Extras ?? string.Empty)).Append(",\n");
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),
@@ -75,6 +89,7 @@ public static class MenuWriter
             .Replace("%%TITLE%%", Markup(facts.GameName), StringComparison.Ordinal)
             .Replace("%%APPNAME%%", Markup(facts.ApplicationName), StringComparison.Ordinal)
             .Replace("%%SINGLE%%", facts.OnlyOneAtATime ? "yes" : "no", StringComparison.Ordinal)
+            .Replace("%%ICON%%", Markup(facts.Icon), StringComparison.Ordinal)
             .Replace("%%PRIMARY%%", Markup(facts.PrimaryButton), StringComparison.Ordinal)
             .Replace("%%DATA%%", data.ToString(), StringComparison.Ordinal);
     }
@@ -89,6 +104,25 @@ public static class MenuWriter
             .Replace("<", "&lt;", StringComparison.Ordinal)
             .Replace(">", "&gt;", StringComparison.Ordinal)
             .Replace("\"", "&quot;", StringComparison.Ordinal);
+
+    /// <summary>
+    /// An embedded file that is not text.
+    /// </summary>
+    private static byte[] Bytes(string name)
+    {
+        Assembly assembly = typeof(MenuWriter).Assembly;
+        string full = "DiscWright.Menu." + name;
+
+        using Stream? stream = assembly.GetManifestResourceStream(full)
+            ?? throw new InvalidOperationException(
+                $"{full} is not an embedded resource. Found: "
+                + string.Join(", ", assembly.GetManifestResourceNames()));
+
+        using MemoryStream all = new();
+        stream.CopyTo(all);
+
+        return all.ToArray();
+    }
 
     private static string Resource(string name)
     {
@@ -132,6 +166,13 @@ public static class MenuWriter
 /// never built. Measured: with it on, only the first background loaded.
 /// </para>
 /// </param>
+/// <param name="Icon">
+/// The icon the menu window wears, relative to the menu itself. The disc's own
+/// when one was chosen, and DiscWright's otherwise, because the alternative is
+/// the blank default and a menu that looks like nobody finished it.
+/// </param>
+/// <param name="Manual">Where the manual is on the disc, or nothing.</param>
+/// <param name="Extras">Where the extras folder is, or nothing.</param>
 public sealed record MenuFacts(
     string GameName,
     string ApplicationName,
@@ -140,7 +181,10 @@ public sealed record MenuFacts(
     string PrimaryButton,
     IReadOnlyList<string> Buttons,
     bool OnlyOneAtATime,
-    IReadOnlyList<MenuGame>? Games = null)
+    IReadOnlyList<MenuGame>? Games = null,
+    string Icon = "menu.ico",
+    string? Manual = null,
+    string? Extras = null)
 {
     /// <summary>The games, or one standing for the disc when none were given.</summary>
     public IReadOnlyList<MenuGame> GamesOrTheOne => Games ?? [new MenuGame(GameName, string.Empty, string.Empty)];

@@ -36,6 +36,12 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
     /// </remarks>
     private const string TheWayIn = "Start Here.hta";
 
+    /// <summary>What the menu wears when the disc chose no artwork.</summary>
+    private const string OurOwnIcon = "menu.ico";
+
+    /// <summary>Where the extras land, which is where the manual lands too.</summary>
+    private const string ExtrasFolder = "Extras";
+
     public string Says => "writing the menu";
 
     /// <summary>
@@ -62,6 +68,14 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
         // without this the disc appears to do nothing at all, and the menu
         // sits in AUTORUN where nobody has any reason to look.
         context.Writer.WriteText(context.On(TheWayIn), MenuWriter.TheWayInWithoutAutorun());
+
+        // Only when the disc has no icon of its own. A menu wearing the blank
+        // default looks like nobody finished it, and this is 33 KB.
+        if (context.Project.Artwork?.IconPath is null)
+        {
+            context.Writer.WriteBytes(
+                context.On(Folder + @"\" + OurOwnIcon), MenuWriter.TheIconToFallBackOn());
+        }
 
         return Task.CompletedTask;
     }
@@ -97,6 +111,35 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
         buttons.Add("Exit");
 
         return buttons;
+    }
+
+    /// <summary>
+    /// Where the manual is on this disc, or nothing.
+    /// </summary>
+    /// <remarks>
+    /// Only on the one disc of a set that carries the extras. A Manual button
+    /// on a disc with no manual is a promise the disc cannot keep, found by
+    /// somebody who has already burned it.
+    /// </remarks>
+    private static string? TheManualOn(BuildContext context)
+    {
+        DiscExtras? extras = context.Project.Extras;
+
+        return extras?.ManualPath is not null && context.Disc.Number == context.Layout.DiscCarryingTheExtras
+            ? ExtrasFolder + "/" + System.IO.Path.GetFileName(extras.ManualPath)
+            : null;
+    }
+
+    /// <summary>Where the extras are on this disc, or nothing.</summary>
+    private static string? TheExtrasOn(BuildContext context)
+    {
+        DiscExtras? extras = context.Project.Extras;
+
+        bool anything = extras?.ExtrasFolderPath is not null || extras?.Loose.Count > 0;
+
+        return anything && context.Disc.Number == context.Layout.DiscCarryingTheExtras
+            ? ExtrasFolder
+            : null;
     }
 
     /// <summary>
@@ -178,6 +221,15 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
             // second disc refocuses the first one's stale window.
             forADisc,
 
-            GamesOn(context));
+            GamesOn(context),
+
+            // The disc's own icon sits at the root and the menu sits in
+            // AUTORUN, so it is one folder up from here.
+            context.Project.Artwork?.IconPath is not null
+                ? "../" + WriteTheAutorunStep.IconFileName
+                : OurOwnIcon,
+
+            TheManualOn(context),
+            TheExtrasOn(context));
     }
 }

@@ -85,6 +85,9 @@ public sealed class WindowsStageWriter : IStageWriter
         }
     }
 
+    /// <inheritdoc />
+    public void WriteBytes(string path, byte[] bytes) => File.WriteAllBytes(path, bytes);
+
     public void WriteText(string path, string text) =>
         File.WriteAllText(path, text, Utf8WithoutAMark);
 

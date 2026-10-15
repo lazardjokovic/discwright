@@ -47,6 +47,17 @@ public interface IStageWriter
     void WriteText(string path, string text);
 
     /// <summary>
+    /// Writes a file that is not text.
+    /// </summary>
+    /// <remarks>
+    /// For the one thing on a disc that comes out of this program rather than
+    /// off somebody's disk: the icon the menu wears when no artwork was
+    /// chosen. <see cref="Copy"/> needs a file to copy from and there is not
+    /// one, because it lives inside the program.
+    /// </remarks>
+    void WriteBytes(string path, byte[] bytes);
+
+    /// <summary>
     /// Writes text that AutoRun will read, which is a different thing: the
     /// system ANSI codepage, and no byte order mark, because AutoRun does not
     /// understand one.

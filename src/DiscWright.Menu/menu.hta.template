@@ -5,6 +5,7 @@
     id="discwright"
     applicationname="%%APPNAME%%"
     singleinstance="%%SINGLE%%"
+    icon="%%ICON%%"
     border="thin"
     borderstyle="normal"
     caption="yes"
@@ -109,6 +110,12 @@ function showGame(index) {
 
     showAddOnsOf(game);
 
+    // Only what this disc can honour. A Manual button on a disc with no manual
+    // is a promise discovered by somebody who has already burned it, and the
+    // one disc of a set that carries the extras is the only one that has them.
+    document.getElementById("manual").style.display = DISC.manual ? "block" : "none";
+    document.getElementById("extras").style.display = DISC.extras ? "block" : "none";
+
     // Only offered when there is somewhere to go back to.
     document.getElementById("back").style.display = DISC.games.length > 1 ? "block" : "none";
 }
@@ -178,6 +185,24 @@ function doTheThing() {
     // has no further part in it. It gets out of the way rather than sitting on
     // top of whatever just started.
     window.close();
+}
+
+// The manual, opened with whatever reads a PDF on this machine.
+function openTheManual() {
+    var wrong = startIt(onTheDisc(theDisc(), DISC.manual), "");
+
+    if (wrong) {
+        alert(wrong);
+    }
+}
+
+// The extras, which are a folder rather than a thing to run.
+function openTheExtras() {
+    var wrong = openTheFolder(onTheDisc(theDisc(), DISC.extras));
+
+    if (wrong) {
+        alert(wrong);
+    }
 }
 
 // One add-on.
@@ -254,6 +279,8 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
             <a class="btn next" href="#" onclick="doTheThing(); return false;"><span id="doIt"></span></a>
             <div id="addOns"></div>
             <div id="addOnNote"></div>
+            <a class="btn" id="manual" href="#" onclick="openTheManual(); return false;">Manual</a>
+            <a class="btn" id="extras" href="#" onclick="openTheExtras(); return false;">Extras</a>
             <a class="btn" id="back" href="#" onclick="showChooser(); return false;">Back</a>
             <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
         </div>

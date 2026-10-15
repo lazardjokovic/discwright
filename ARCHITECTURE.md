@@ -714,6 +714,14 @@ So `startIt` is tested by really starting something: a script that writes a file
 
 It also says what went wrong rather than failing in silence, and an add-on checks again that its game is installed before running, because a dead button somebody clicks anyway is still a click.
 
+#### The manual, the extras and the icon
+
+`ButtonsFor` had worked out for a while that a disc should offer a Manual and Extras, and the page never drew them, so they were computed and unused. They are drawn now, and **only on the disc that carries them**: the one disc of a set that has the extras is the only one that offers them, because a Manual button on a disc with no manual is a promise found by somebody who has already burned it.
+
+The menu window wears the disc's own icon where one was chosen, and **DiscWright's where none was**, rather than the blank default that makes a program look unfinished. Ours is trimmed to the sizes a window actually shows, 16 up to 64: the full set is 363 KB and almost all of that is a 256 pixel frame nothing on a disc will ever ask for. 33 KB, and only written when it is needed.
+
+That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
+
 #### Where the disc is
 
 Worked out from the page's own address, as the launcher does, because AutoRun can start a disc file with no drive letter. The menu sits in `AUTORUN`, so the disc is one folder further up. The paths in the menu's facts are written with forward slashes and relative to the root of the disc, since a disc does not know which letter it will be given.

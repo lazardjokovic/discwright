@@ -18,6 +18,7 @@
     <EmbeddedResource Include="menu.js" />
     <EmbeddedResource Include="menu.hta.template" />
     <EmbeddedResource Include="start-here.hta" />
+    <EmbeddedResource Include="menu.ico" />
   </ItemGroup>
 
 </Project>

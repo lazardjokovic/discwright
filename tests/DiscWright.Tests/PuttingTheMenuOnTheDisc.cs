@@ -19,6 +19,72 @@ public class PuttingTheMenuOnTheDisc
     }
 
     [Fact]
+    public async Task Wears_our_own_icon_when_the_disc_chose_none()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote);
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // The blank default is what a program looks like when nobody finished
+        // it, and this is 33 KB of the hundreds of megabytes on a disc.
+        Assert.Contains(@"icon=""menu.ico""", page, StringComparison.Ordinal);
+        Assert.Contains(wrote.Binaries, path => path.EndsWith(@"AUTORUN\menu.ico", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Wears_the_disc_s_own_icon_when_there_is_one()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote, artwork: new DiscArtwork(IconPath: @"C:\pictures\cover.png"));
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // At the root of the disc, and the menu is in AUTORUN, so one up.
+        Assert.Contains(@"icon=""../disc.ico""", page, StringComparison.Ordinal);
+
+        // And ours is not carried for nothing.
+        Assert.DoesNotContain(wrote.Binaries, path => path.EndsWith("menu.ico", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Tells_the_menu_where_the_manual_and_the_extras_are()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote, extras: new DiscExtras(ManualPath: @"C:\things\the manual.pdf",
+            ExtrasFolderPath: @"C:\things\extras"));
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // Forward slashed and relative to the root, like everything else the
+        // menu is handed, because a disc does not know its own drive letter.
+        Assert.Contains(@"manual: ""Extras/the manual.pdf""", page, StringComparison.Ordinal);
+        Assert.Contains(@"extras: ""Extras""", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Promises_no_manual_on_a_disc_that_has_none()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote);
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // A Manual button on a disc with no manual is a promise the disc
+        // cannot keep, found by somebody who has already burned it.
+        Assert.Contains(@"manual: """"", page, StringComparison.Ordinal);
+        Assert.Contains(@"extras: """"", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Writes_a_way_in_at_the_top_of_the_disc()
     {
         RecordingWriter wrote = new();
@@ -133,21 +199,32 @@ public class PuttingTheMenuOnTheDisc
         IStageWriter writer,
         string game = "Hollow Knight",
         GameKind kind = GameKind.GogInstaller,
-        bool menu = true) =>
-        new WriteTheMenuStep().Run(Context(writer, game, kind, menu), CancellationToken.None);
+        bool menu = true,
+        DiscArtwork? artwork = null,
+        DiscExtras? extras = null) =>
+        new WriteTheMenuStep().Run(Context(writer, game, kind, menu, artwork, extras), CancellationToken.None);
 
     private static BuildContext Context(
         IStageWriter writer,
         string game = "Hollow Knight",
         GameKind kind = GameKind.GogInstaller,
-        bool menu = true)
+        bool menu = true,
+        DiscArtwork? artwork = null,
+        DiscExtras? extras = null)
     {
         GameFolder found = new(@"C:\games\x", kind, game, game, null, [], [], null);
         PlannedDisc disc = new(1, [], 0);
 
         return new BuildContext(
-            new DiscProject("HOLLOW KNIGHT", [found], new DiscOptions(Menu: menu)),
-            new DiscLayout([disc], 1_000_000, 0),
+            new DiscProject("HOLLOW KNIGHT", [found], new DiscOptions(Menu: menu))
+            {
+                Artwork = artwork,
+                Extras = extras
+            },
+
+            // This disc carries the extras, which is the case worth testing:
+            // the other discs of a set must NOT offer a manual they do not have.
+            new DiscLayout([disc], 1_000_000, 1),
             disc,
             @"C:\stage",
             writer);
