@@ -43,6 +43,16 @@
                      Padding="4"
                      MouseDoubleClick="TakeThatOne"
                      AutomationProperties.AutomationId="Choices">
+                <!-- These rows are already plain words, so this changes
+                     nothing today. It is here because the rule is worth
+                     keeping absolute: the moment somebody binds this to
+                     objects instead, a reader would start announcing the
+                     whole of each one. -->
+                <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                        <Setter Property="AutomationProperties.Name" Value="{Binding}" />
+                    </Style>
+                </ListBox.ItemContainerStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
                         <TextBlock Text="{Binding}" Margin="6,7" />

@@ -89,6 +89,42 @@ public class TheWindowsMarkup
         Assert.True(literal.Length == 0, $"Colour written out in full in {window} on: " + string.Join(", ", literal));
     }
 
+    [Theory]
+    [MemberData(nameof(EveryWindow))]
+    public void Every_list_of_things_says_what_each_row_is(string window)
+    {
+        // A row takes its name from whatever the thing in it prints as, and a
+        // record prints as all of itself. DisplayMemberPath and an ItemTemplate
+        // both change what is SHOWN and neither changes what is SAID, so a
+        // reader announces "Medium { Key = CD, Name = CD-R 700 MB, Capacity =
+        // 730144440 }" and a window test sees that instead of a name.
+        //
+        // Caught twice by driving the window, in two different lists. This is
+        // the third time it cannot happen.
+        string[] silent =
+        [
+            .. Markup(window)
+                .Descendants()
+                .Where(element => element.Name.LocalName is "ListBox" or "ComboBox")
+                .Where(element => element.Attribute("ItemsSource") is not null)
+                .Where(element => !NamesItsRows(element))
+                .Select(Describe)
+        ];
+
+        Assert.True(
+            silent.Length == 0,
+            $"These lists in {window} do not say what each row is, so a reader announces the whole object: "
+                + string.Join(", ", silent));
+    }
+
+    /// <summary>
+    /// Whether a list gives its rows a name of their own.
+    /// </summary>
+    private static bool NamesItsRows(XElement list) =>
+        list.Descendants()
+            .Where(element => element.Name.LocalName == "Setter")
+            .Any(setter => (string?)setter.Attribute("Property") == "AutomationProperties.Name");
+
     /// <summary>
     /// Every window in the program. Found rather than listed, so a new one is
     /// guarded the day it is written rather than the day somebody remembers.

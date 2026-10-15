@@ -620,6 +620,18 @@ A progress report can be in flight on another thread while the build finishes. C
 
 **That one failed on the test VM and passed here**, which is the whole reason the VM is the default.
 
+### A row shows one thing and says another
+
+`DisplayMemberPath` and an `ItemTemplate` both set what a row **shows**, and neither sets what it **says**. Without being told otherwise a row answers to whatever the thing inside it prints as, so the disc size list announced:
+
+> Medium { Key = CD, Name = CD-R 700 MB, Capacity = 730144440 }
+
+That is what a screen reader reads out, and it is also what a test driving the window reads back, which is how it was found: a script asked which size was selected and got the whole record.
+
+The same slip was already fixed once in the games list and then made again in the dropdown, so `TheWindowsMarkup` now holds the rule for every window: **any `ListBox` or `ComboBox` bound to a source must give its rows a name of their own.** It found a third one the moment it was written. That one, the picker, holds plain words and read correctly anyway, and was fixed regardless, because the rule is worth keeping absolute rather than conditional on what happens to be in the list today.
+
+**No unit test sees this.** What a row announces is only visible from outside the program, which is the argument for driving the real window rather than trusting the markup to be what it looks like.
+
 ### Windows' own dialogs have the v1 problem
 
 The folder dialog exposes every control as a `Pane` with no patterns on it: the box is id `1152`, Select Folder is id `1`, Cancel is id `2`, and not one of them can be invoked or set. That is the same legacy accessibility bridge that made v1 hard to test, in Microsoft's own dialog. They are driven with the keyboard instead. The first Enter walks **into** a folder and the second accepts it.

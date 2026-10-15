@@ -147,7 +147,19 @@
                 <ComboBox ItemsSource="{Binding DiscSizes}"
                           SelectedItem="{Binding Medium}"
                           DisplayMemberPath="Name"
-                          AutomationProperties.AutomationId="DiscSize" />
+                          AutomationProperties.AutomationId="DiscSize">
+                    <!-- DisplayMemberPath sets what is SHOWN, and nothing
+                         else. Without this a row still answers to whatever
+                         the thing in it prints as, which here is
+                         "Medium { Key = CD, Name = CD-R 700 MB, Capacity =
+                         730144440 }". A reader would say all of that aloud.
+                         The same slip as the games list, in a second place. -->
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                </ComboBox>
 
                 <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHERE IT GOES" />
                 <Grid>
