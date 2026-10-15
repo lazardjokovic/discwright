@@ -183,6 +183,22 @@ public static class Refusals
     public static Refusal WindowsCouldNotMakeTheImage(string windowsSaid) =>
         new("Windows could not make the image", "Windows said: " + windowsSaid);
 
+    // ------------------------------------------------------- opening a disc
+
+    /// <remarks>
+    /// Refused whole rather than read in part. Half a project is a disc that
+    /// rebuilds without something somebody chose, and the one thing worse than
+    /// not opening a file is opening it wrongly.
+    /// </remarks>
+    public static Refusal ThatIsNotAProjectFile(string why) =>
+        new("That is not a DiscWright project",
+            "The file could not be read as one. " + why);
+
+    public static Refusal ThatProjectHasNoGamesInIt() =>
+        new("That project has no games in it",
+            "It was read, and there is nothing in it to put on a disc. The file may have been written by "
+                + "something else, or cut short.");
+
     // ---------------------------------------------------------------- burning
 
     public static Refusal ThereIsNoDiscWriter() =>

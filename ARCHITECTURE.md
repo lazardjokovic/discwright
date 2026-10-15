@@ -828,6 +828,36 @@ A wrong size is checked before hashing, because it is the same answer for none o
 
 Every one of them is an interface, and not one of them is Windows as far as `ViewModels` is concerned. That is what lets the whole burn, erase, check and all, be driven by a test with no disk, no drive and no disc.
 
+## Opening a disc
+
+Every disc DiscWright has ever built carries `discproject.json`. Somebody who finds one in a drawer should be able to open it, change one thing and build it again, and **that is the promise a rewrite has to keep**. So this reads every version back to the first rather than only the one being written now.
+
+The rule throughout: **a field that is not there is not an error, it is an older file**, and what it meant then is what it means now. Every default is the behaviour of the version that lacked the field, not a value that seemed sensible.
+
+| Missing | Read as | Because |
+|---|---|---|
+| `Games` | one game from `SourceFolder` | Version 1 held it there |
+| `Kind`, `Parent` | every entry a plain game | Version 3 added add-ons |
+| `Manual`, `Extras` per game | none of its own | Version 4; the menu then falls back to the disc-wide ones, as those discs behaved |
+| `MediaKey` | automatic | Version 5; the automatic setting is what those projects described |
+| `MatchName` | whatever the folder gives now | Version 6; so a project renamed under older code **repairs itself on opening** |
+| `Source` | a GOG download | Version 9; anything older could only hold those |
+| `ShowCaption` | **true** | The one that is not false. Every disc made before the option showed a caption |
+
+### The mark at the front
+
+Every project file on every disc begins `ef bb bf`. Windows PowerShell writes a byte order mark and **v1 is Windows PowerShell**, so a reader that will not look past it can open none of them. Found by reading the real files rather than inventing some.
+
+### Reading the file is only half of it
+
+The file holds paths. The games behind them are read again, which is the only way to know they are still there and still the same game, and it is also how a project repairs itself.
+
+**A folder that has gone is not a failure.** It is the commonest thing that happens to a project a year later, and the answer is to say which ones and open the rest rather than refuse a whole disc over one game somebody moved. An add-on whose game did not come back goes with it, because an add-on with no game is a button that does nothing.
+
+**The file counts entries and a disc counts games**, and they stop being the same number the moment an add-on sits anywhere but last. The entry number is mapped to the game number rather than used as one.
+
+Proved on the eleven discs in the testing kit, ten at version 14 and one deliberately at 11: all of them open, and all of their games come back off the disk.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.
