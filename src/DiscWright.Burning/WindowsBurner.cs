@@ -177,6 +177,9 @@ public sealed class WindowsBurner : IBurnDiscs, IEraseDiscs, IWorkTheTray
     /// A slim drive, and most of the ones in a laptop, cannot shut its own
     /// tray: it has to be pushed. False is that answer and not a fault.
     /// </remarks>
+    /// <inheritdoc />
+    public bool CanShutItsOwnTray(Recorder drive) => ShutIt(drive);
+
     public bool ShutIt(Recorder drive)
     {
         object? recorder = null;

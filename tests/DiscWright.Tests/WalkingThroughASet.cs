@@ -407,6 +407,7 @@ public class WalkingThroughASet
             checksOut ? new ADiskThatMatches() : new ADiskThatDoesNot(),
             new NoHashing(),
             note ?? new ANoteInMemory(),
+            new ATrayThatShuts(),
             howBig ?? (_ => 1000)));
 
         window.OutputFolder = @"C:\out";
@@ -423,6 +424,13 @@ public class WalkingThroughASet
         ListedFile only = new($"setup_{name}.exe", 1000);
 
         return new GameFolder(@"C:\games\" + name, GameKind.GogInstaller, name, name, only, [only], [], null);
+    }
+
+    private sealed class ATrayThatShuts : IWorkTheTray
+    {
+        public bool ShutIt(Recorder drive) => true;
+
+        public bool CanShutItsOwnTray(Recorder drive) => true;
     }
 
     /// <summary>

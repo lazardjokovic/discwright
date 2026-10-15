@@ -117,6 +117,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string AboutTheDiscInTheDrive { get; private set; } = string.Empty;
 
     /// <summary>
+    /// What is worth saying about trays, or nothing when no drive needs a hand.
+    /// </summary>
+    /// <remarks>
+    /// Said before anything is written, because the point of saying it is that
+    /// somebody can decide whether to stay in the room.
+    /// </remarks>
+    public string AboutTheTray { get; private set; } = string.Empty;
+
+    /// <summary>
     /// Whether what is in the drives is a different size from the one chosen.
     /// </summary>
     /// <remarks>
@@ -162,10 +171,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _lookingAtTheDrives = true;
 
         IReadOnlyList<Recorder> drives;
+        string trays;
 
         try
         {
-            drives = await Task.Run(_machine.Drives.All);
+            // The trays are asked about out here too. Each answer costs a
+            // call to a drive, and doing it in front of the window is how the
+            // window came to take thirteen seconds to open.
+            (drives, trays) = await Task.Run(() =>
+            {
+                IReadOnlyList<Recorder> found = _machine.Drives.All();
+
+                return (found, TheDiscsThatAreIn.WhatToSayAboutTheTray(
+                    found, _machine.Tray.CanShutItsOwnTray) ?? string.Empty);
+            });
         }
         catch (Exception)
         {
@@ -189,6 +208,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         SayWhatIsInTheDrives(drives);
+
+        AboutTheTray = trays;
+        Tell(nameof(AboutTheTray));
     }
 
     private void SayWhatIsInTheDrives(IReadOnlyList<Recorder>? drives = null)

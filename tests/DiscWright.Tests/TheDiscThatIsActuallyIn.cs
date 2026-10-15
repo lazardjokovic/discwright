@@ -152,6 +152,80 @@ public class TheDiscThatIsActuallyIn
         Assert.Equal("The disc in D: is a BD-ROM, pressed, and this is being built for DVD5 4.7 GB.", said);
     }
 
+    // ---------------------------------------------------------- the tray
+
+    [Fact]
+    public void Says_so_when_the_drive_cannot_shut_its_own_tray()
+    {
+        string? said = TheDiscsThatAreIn.WhatToSayAboutTheTray(
+            [ADrive("E:", 3, true, 359_847)], _ => false);
+
+        Assert.Equal(
+            "E: cannot close its own tray. Every disc has to come out to be checked after it is "
+                + "written, so this will stop and wait for you to push it back in.",
+            said);
+    }
+
+    [Fact]
+    public void Says_nothing_when_the_drive_shuts_its_own_tray()
+    {
+        Assert.Null(TheDiscsThatAreIn.WhatToSayAboutTheTray(
+            [ADrive("D:", 3, true, 359_847)], _ => true));
+    }
+
+    [Fact]
+    public void Never_asks_about_a_drive_with_nothing_in_it()
+    {
+        List<string> asked = [];
+
+        string? said = TheDiscsThatAreIn.WhatToSayAboutTheTray(
+        [
+            ADrive("D:", 0, false, 0),
+            ADrive("E:", 3, true, 359_847)
+        ],
+            drive =>
+            {
+                asked.Add(drive.Drive);
+                return true;
+            });
+
+        // The asking is done by shutting a tray that is already shut, so an
+        // empty one would close for no reason anybody could see.
+        Assert.Equal(["E:"], asked);
+        Assert.Null(said);
+    }
+
+    [Fact]
+    public void Asks_about_a_disc_that_would_have_to_be_erased_first()
+    {
+        List<string> asked = [];
+
+        TheDiscsThatAreIn.WhatToSayAboutTheTray(
+            [ADrive("D:", 3, false, 100_000)],
+            drive =>
+            {
+                asked.Add(drive.Drive);
+                return true;
+            });
+
+        // A used CD-RW is a disc somebody is about to burn to, once they have
+        // said yes to erasing it, so its tray matters just as much.
+        Assert.Equal(["D:"], asked);
+    }
+
+    [Fact]
+    public void Names_both_when_neither_can_shut_itself()
+    {
+        string? said = TheDiscsThatAreIn.WhatToSayAboutTheTray(
+        [
+            ADrive("D:", 3, true, 359_847),
+            ADrive("E:", 18, true, 12_219_392)
+        ],
+            _ => false);
+
+        Assert.StartsWith("D: and E: cannot close their own trays.", said, StringComparison.Ordinal);
+    }
+
     private static Recorder ADrive(string letter, int mediaType, bool blank, long freeSectors) =>
         new("id" + letter, letter, "A Drive", mediaType, blank, freeSectors, [750]);
 }

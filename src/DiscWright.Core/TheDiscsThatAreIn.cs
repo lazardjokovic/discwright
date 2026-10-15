@@ -73,6 +73,47 @@ public static class TheDiscsThatAreIn
     }
 
     /// <summary>
+    /// What is worth saying about trays, given which drives can shut their own,
+    /// or nothing when every drive worth using can.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A disc comes out after it is written so that reading it back sees a
+    /// freshly mounted volume. On a drive that cannot pull its tray in, that is
+    /// where everything stops until somebody pushes it, and somebody who is
+    /// told afterwards has already walked away.
+    /// </para>
+    /// <para>
+    /// Only drives holding a disc are asked about, because the asking is done
+    /// by shutting a tray that is already shut, and an open one would close for
+    /// no reason anybody could see.
+    /// </para>
+    /// </remarks>
+    public static string? WhatToSayAboutTheTray(
+        IReadOnlyList<Recorder> drives, Func<Recorder, bool> canShutItsOwnTray)
+    {
+        string[] needAPush =
+        [
+            .. drives
+                .Where(drive => drive.Ready || drive.ErasingWouldHelp)
+                .Where(drive => !canShutItsOwnTray(drive))
+                .Select(drive => drive.Drive)
+        ];
+
+        if (needAPush.Length == 0)
+        {
+            return null;
+        }
+
+        string which = needAPush.Length == 1
+            ? needAPush[0] + " cannot close its own tray"
+            : string.Join(" and ", needAPush) + " cannot close their own trays";
+
+        return $"{which}. Every disc has to come out to be checked after it is written, "
+            + "so this will stop and wait for you to push it back in.";
+    }
+
+    /// <summary>
     /// Which size of disc a blank one in this drive is, or nothing when it
     /// cannot be told.
     /// </summary>

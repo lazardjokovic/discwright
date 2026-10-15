@@ -49,6 +49,33 @@ public interface IEraseDiscs
 public interface IWorkTheTray
 {
     bool ShutIt(Recorder drive);
+
+    /// <summary>
+    /// Whether this drive can pull its own tray in, asked before anything is
+    /// written rather than discovered afterwards.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It matters because a disc is ejected after writing so it can be read
+    /// back properly. A drive that cannot pull its tray in stops dead at that
+    /// point and waits for a hand, which is a thing somebody deserves to be
+    /// told before they start rather than after they have walked away.
+    /// </para>
+    /// <para>
+    /// <strong>Only ask it about a drive with a disc in it.</strong> The way to
+    /// ask is to shut a tray that is already shut, which does nothing at all to
+    /// a drive that can and is refused outright by one that cannot. Asked of an
+    /// open tray it would shut it, which is a thing happening for no reason
+    /// somebody could see.
+    /// </para>
+    /// <para>
+    /// Measured on two drives here. An ASUS DRW-24D5MT says it worked; an
+    /// HL-DT-ST BD-RE BU40N, which is a slim one somebody pushes, refuses with
+    /// 0x80070001, incorrect function, which is a drive saying it does not do
+    /// that.
+    /// </para>
+    /// </remarks>
+    bool CanShutItsOwnTray(Recorder drive);
 }
 
 /// <summary>One drive, and whatever is in it at the moment of asking.</summary>

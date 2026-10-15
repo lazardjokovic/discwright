@@ -576,6 +576,27 @@ That is what turns "what happens when you pick a folder with no game in it" into
 
 It is also the insurance. If WPF turns out to be the wrong answer, what gets thrown away is the markup. None of the view models move.
 
+### Whether somebody has to be in the room
+
+A disc is ejected after it is written so that reading it back sees a freshly mounted volume rather than what Windows remembered about the blank. **A drive that cannot pull its own tray in stops dead at that point and waits for a hand**, and somebody who finds that out afterwards has already walked away.
+
+So it is asked before anything is written, and said in the window:
+
+> E: cannot close its own tray. Every disc has to come out to be checked after it is written, so this will stop and wait for you to push it back in.
+
+#### How a drive is asked
+
+By shutting a tray that is **already shut**. That does nothing at all to a drive that can, and is refused outright by one that cannot. Measured on two here:
+
+| Drive | `CloseTray()` on a shut tray |
+|---|---|
+| ASUS DRW-24D5MT | it worked |
+| HL-DT-ST BD-RE BU40N, a slim one | refused, `0x80070001`, incorrect function |
+
+**Only drives with a disc in them are asked**, because an open tray would close for no reason anybody could see. That rules in a disc that would have to be erased first, which is somebody's next burn once they have said yes to it, and rules out an empty drive, which is nobody's.
+
+This cannot be hardcoded to the two drives here. Other people have other drives, and the only honest way to know is to ask the one in front of you.
+
 ### The size starts from the disc that is in there
 
 The size of disc defaulted to DVD5 for everybody always. Somebody with a 700 MB disc in the tray was therefore planned for a 4.7 GB one, and a set that should have been two discs was built as a single 735 MB disc that nothing would fit on.

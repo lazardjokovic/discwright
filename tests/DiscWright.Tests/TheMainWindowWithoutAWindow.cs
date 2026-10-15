@@ -833,6 +833,28 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(string.Empty, window.AboutTheDiscInTheDrive);
     }
 
+    /// <summary>A drive that pulls its own tray in, like most of them.</summary>
+    private sealed class ATrayThatShuts : IWorkTheTray
+    {
+        public bool ShutIt(Recorder drive) => true;
+
+        public bool CanShutItsOwnTray(Recorder drive) => true;
+    }
+
+    /// <summary>A slim one somebody has to push.</summary>
+    private sealed class ATrayThatNeedsAPush : IWorkTheTray
+    {
+        internal List<string> Asked { get; } = [];
+
+        public bool ShutIt(Recorder drive) => false;
+
+        public bool CanShutItsOwnTray(Recorder drive)
+        {
+            Asked.Add(drive.Drive);
+            return false;
+        }
+    }
+
     /// <summary>One drive, with whatever is said to be in it at the moment.</summary>
     private sealed class ADriveHolding(int mediaType, bool blank, long freeSectors) : IFindRecorders
     {
@@ -849,6 +871,43 @@ public class TheMainWindowWithoutAWindow
 
         public IReadOnlyList<Recorder> All() =>
             [new("id-D", "D:", "A Drive", _mediaType, _blank, _freeSectors, [750])];
+    }
+
+    [Fact]
+    public async Task Says_before_anything_is_written_that_a_tray_needs_a_push()
+    {
+        ATrayThatNeedsAPush tray = new();
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847), tray: tray);
+
+        Assert.Equal(string.Empty, window.AboutTheTray);
+
+        await window.LookAtTheDrives();
+
+        // Told afterwards is told to an empty chair.
+        Assert.StartsWith("D: cannot close its own tray.", window.AboutTheTray, StringComparison.Ordinal);
+        Assert.Equal(["D:"], tray.Asked);
+    }
+
+    [Fact]
+    public async Task Says_nothing_about_trays_when_no_drive_needs_a_hand()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+
+        await window.LookAtTheDrives();
+
+        Assert.Equal(string.Empty, window.AboutTheTray);
+    }
+
+    [Fact]
+    public async Task Does_not_go_near_the_tray_of_an_empty_drive()
+    {
+        ATrayThatNeedsAPush tray = new();
+        MakeADisc window = New(drives: new ADriveHolding(0, false, 0), tray: tray);
+
+        await window.LookAtTheDrives();
+
+        Assert.Empty(tray.Asked);
+        Assert.Equal(string.Empty, window.AboutTheTray);
     }
 
     // ------------------------------------------------------ starting over
@@ -950,7 +1009,8 @@ public class TheMainWindowWithoutAWindow
         IMakeImages? images = null,
         IFindRecorders? drives = null,
         IBurnDiscs? burner = null,
-        IEraseDiscs? eraser = null) =>
+        IEraseDiscs? eraser = null,
+        IWorkTheTray? tray = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -961,6 +1021,7 @@ public class TheMainWindowWithoutAWindow
             new ADiskWithADiscOnIt(),
             new NoHashing(),
             new NothingIsRemembered(),
+            tray ?? new ATrayThatShuts(),
             _ => 1000));
 
     /// <summary>

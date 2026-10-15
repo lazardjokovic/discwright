@@ -195,6 +195,16 @@
                     </TextBlock.Style>
                 </TextBlock>
 
+                <!-- Whether this needs somebody in the room. Said here, before
+                     anything is written, because said afterwards it is said to
+                     an empty chair. -->
+                <TextBlock Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource WorryInk}"
+                           Text="{Binding AboutTheTray}"
+                           Visibility="{Binding AboutTheTray, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="AboutTheTray" />
+
                 <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHERE IT GOES" />
                 <Grid>
                     <Grid.ColumnDefinitions>
