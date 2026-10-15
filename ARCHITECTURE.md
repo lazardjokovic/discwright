@@ -289,6 +289,18 @@ The existing codebase already does this better than most, so the rule is just to
 
 That comment is worth twenty lines of guessing. A comment that says `// loop over the games` is worth less than nothing.
 
+### Which drive, before the burn
+
+A drive could only be chosen **in the middle of a burn**, and only when two were ready. That is the worst moment to ask: the question arrives after somebody has walked away, and on a machine with two writers the answer decides whether the run needs a hand at all, since one of these two cannot shut its own tray.
+
+So the window offers them, and leaving it alone keeps the old behaviour exactly: it works the drive out and asks only if there is something to ask. **A machine with one writer has no question to answer**, and asking somebody to pick the only drive they own is a decision shaped like a chore.
+
+A chosen drive is kept **by its letter and not by the record**, because what is in a drive has almost certainly changed since it was picked, and it is forgotten entirely when that drive stops being there: the slim writer here lives on a USB cable.
+
+Once one is chosen, the tray warning is about **that** drive. A sentence about the drive somebody is not using is noise.
+
+An empty dropdown reads as broken, so it says `Whichever one is ready` until somebody picks.
+
 ## What else goes on the disc
 
 The disc icon, the menu background, the music, the manual, the extras and the printed artwork **had no way in from the window at all**. Every one of them worked in the build pipeline from the first day and could only be set by *opening* a project somebody else had made, so a disc made here could not have had any of it.

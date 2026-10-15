@@ -857,6 +857,97 @@ public class TheMainWindowWithoutAWindow
         Assert.False(window.CutFiles);
     }
 
+    // ------------------------------------------------------ which drive
+
+    [Fact]
+    public async Task Offers_every_writer_on_the_machine()
+    {
+        MakeADisc window = New(drives: new TwoDrives());
+
+        Assert.Empty(window.Drives);
+
+        await window.LookAtTheDrives();
+
+        Assert.Equal(["D:", "E:"], window.Drives.Select(each => each.Drive));
+
+        // Nothing chosen is the right start. A machine with one writer has no
+        // question to answer, and asking somebody to pick the only drive they
+        // own is a decision shaped like a chore.
+        Assert.Null(window.TheDrive);
+    }
+
+    [Fact]
+    public async Task Forgets_a_drive_that_has_been_unplugged()
+    {
+        ADriveHolding one = new(3, true, 359_847);
+        MakeADisc window = New(drives: one);
+
+        await window.LookAtTheDrives();
+        window.TheDrive = window.Drives[0];
+
+        one.NowHolds(0, false, 0);
+        one.Vanish();
+        await window.LookAtTheDrives();
+
+        // The slim writer here lives on a USB cable, and a drive that is not
+        // there is not a choice.
+        Assert.Null(window.TheDrive);
+    }
+
+    [Fact]
+    public async Task Keeps_a_chosen_drive_up_to_date_with_what_is_in_it()
+    {
+        ADriveHolding one = new(0, false, 0);
+        MakeADisc window = New(drives: one);
+
+        await window.LookAtTheDrives();
+        window.TheDrive = window.Drives[0];
+        Assert.False(window.TheDrive!.Ready);
+
+        one.NowHolds(3, true, 359_847);
+        await window.LookAtTheDrives();
+
+        // Kept by letter rather than by the record, because what is in a drive
+        // has almost certainly changed since it was picked.
+        Assert.True(window.TheDrive!.Ready);
+    }
+
+    [Fact]
+    public async Task Burns_to_the_chosen_drive_without_asking_which()
+    {
+        ABurnerThatWorks burner = new();
+        MakeADisc window = New(drives: new TwoDrives(), burner: burner);
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("Hollow Knight", 1000));
+
+        await window.LookAtTheDrives();
+        window.TheDrive = window.Drives.First(each => each.Drive == "E:");
+
+        await window.BurnIt(
+            @"C:\out\A GAME.iso",
+            _ => throw new InvalidOperationException("It should not have had to ask which drive."),
+            NeverAskedAboutErasing,
+            Closes);
+
+        Assert.Equal("E:", burner.WroteTo);
+    }
+
+    [Fact]
+    public async Task Says_nothing_about_the_tray_of_a_drive_nobody_chose()
+    {
+        ATrayThatNeedsAPush tray = new();
+        MakeADisc window = New(drives: new TwoDrives(), tray: tray);
+
+        await window.LookAtTheDrives();
+        Assert.StartsWith("D: and E:", window.AboutTheTray, StringComparison.Ordinal);
+
+        window.TheDrive = window.Drives.First(each => each.Drive == "E:");
+        await window.LookAtTheDrives();
+
+        // A sentence about the drive somebody is not using is noise.
+        Assert.StartsWith("E: cannot close its own tray", window.AboutTheTray, StringComparison.Ordinal);
+    }
+
     // --------------------------------------------- the disc that is in there
 
     [Fact]
@@ -995,8 +1086,22 @@ public class TheMainWindowWithoutAWindow
             _freeSectors = free;
         }
 
+        private bool _gone;
+
+        internal void Vanish() => _gone = true;
+
         public IReadOnlyList<Recorder> All() =>
-            [new("id-D", "D:", "A Drive", _mediaType, _blank, _freeSectors, [750])];
+            _gone ? [] : [new("id-D", "D:", "A Drive", _mediaType, _blank, _freeSectors, [750])];
+    }
+
+    /// <summary>Two writers, which is the only time there is a question.</summary>
+    private sealed class TwoDrives : IFindRecorders
+    {
+        public IReadOnlyList<Recorder> All() =>
+        [
+            new("id-D", "D:", "A Drive", 3, true, 359_847, [750]),
+            new("id-E", "E:", "Another Drive", 3, true, 359_847, [750])
+        ];
     }
 
     [Fact]

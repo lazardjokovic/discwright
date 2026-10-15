@@ -220,6 +220,24 @@ public sealed class WhenAnything : IValueConverter
         throw new NotSupportedException("Nothing comes into being by being shown.");
 }
 
+/// <summary>
+/// Visible when there is nothing, collapsed when there is something.
+/// </summary>
+/// <remarks>
+/// For the line that stands in for an empty box. An empty dropdown reads as
+/// broken, and this says what it will do instead of saying nothing at all.
+/// </remarks>
+public sealed class WhenNothing : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is null || (value is string words && string.IsNullOrWhiteSpace(words))
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("Nothing ceases to be by being hidden.");
+}
+
 /// <summary>Visible when something is true, collapsed otherwise.</summary>
 public sealed class WhenSo : IValueConverter
 {

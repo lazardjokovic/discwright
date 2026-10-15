@@ -49,6 +49,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private Medium _medium = Media.Dvd5;
     private bool _theSizeWasChosen;
     private bool _lookingAtTheDrives;
+    private Recorder? _theDrive;
     private bool _asking;
     private IReadOnlyList<Recorder> _lastSeen = [];
     private DiscOptions _options = new();
@@ -234,6 +235,36 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Every writer on the machine, as of the last look.
+    /// </summary>
+    /// <remarks>
+    /// For choosing one BEFORE pressing burn. Being asked in the middle of a
+    /// burn is being asked at the worst moment: the question arrives after
+    /// somebody has walked away, and on a machine with two writers the answer
+    /// decides whether the run needs a hand at all.
+    /// </remarks>
+    public IReadOnlyList<Recorder> Drives { get; private set; } = [];
+
+    /// <summary>
+    /// The one to write to, or nothing to let it work that out.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is the right default. A machine with one writer has no question
+    /// to answer, and asking somebody to pick the only drive they own is a
+    /// decision shaped like a chore.
+    /// </remarks>
+    public Recorder? TheDrive
+    {
+        get => _theDrive;
+        set
+        {
+            _theDrive = value;
+            Tell(nameof(TheDrive));
+            Tell(nameof(AboutTheTray));
+        }
+    }
+
+    /// <summary>
     /// What is worth saying about trays, or nothing when no drive needs a hand.
     /// </summary>
     /// <remarks>
@@ -295,12 +326,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
             // The trays are asked about out here too. Each answer costs a
             // call to a drive, and doing it in front of the window is how the
             // window came to take thirteen seconds to open.
+            string? chosen = _theDrive?.Drive;
+
             (drives, trays) = await Task.Run(() =>
             {
                 IReadOnlyList<Recorder> found = _machine.Drives.All();
 
+                // Once a drive is chosen, the warning is about THAT one. A
+                // sentence about the drive somebody is not using is noise.
+                IReadOnlyList<Recorder> asking = chosen is null
+                    ? found
+                    : [.. found.Where(each => string.Equals(each.Drive, chosen, StringComparison.OrdinalIgnoreCase))];
+
                 return (found, TheDiscsThatAreIn.WhatToSayAboutTheTray(
-                    found, _machine.Tray.CanShutItsOwnTray) ?? string.Empty);
+                    asking, _machine.Tray.CanShutItsOwnTray) ?? string.Empty);
             });
         }
         catch (Exception)
@@ -325,6 +364,26 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         SayWhatIsInTheDrives(drives);
+
+        Drives = drives;
+        Tell(nameof(Drives));
+
+        // A drive that has been unplugged is not a choice any more. The slim
+        // one here lives on a USB cable.
+        if (_theDrive is not null
+            && !drives.Any(each => string.Equals(each.Drive, _theDrive.Drive, StringComparison.OrdinalIgnoreCase)))
+        {
+            TheDrive = null;
+        }
+        else if (_theDrive is not null)
+        {
+            // Kept by letter rather than by the record, because what is in it
+            // has almost certainly changed since it was picked.
+            _theDrive = drives.First(each =>
+                string.Equals(each.Drive, _theDrive.Drive, StringComparison.OrdinalIgnoreCase));
+
+            Tell(nameof(TheDrive));
+        }
 
         AboutTheTray = trays;
         Tell(nameof(AboutTheTray));
@@ -618,7 +677,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         try
         {
-            Recorder? onto = await Settle(_machine.HowBigIs(image), chooseADrive, whichToErase, ct);
+            // A drive chosen in the window is the answer, so nothing is asked.
+            Recorder? onto = _theDrive is Recorder picked
+                ? await SettleThatOne(picked.Drive, _machine.HowBigIs(image), whichToErase, ct)
+                : await Settle(_machine.HowBigIs(image), chooseADrive, whichToErase, ct);
 
             if (onto is null)
             {
@@ -979,9 +1041,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 written = broughtForward;
             }
 
-            // Once, before the first disc this run writes.
-            Recorder? drive = await Settle(
-                _machine.HowBigIs(images[broughtForward]), chooseADrive, whichToErase, ct);
+            // Once, before the first disc this run writes, and not at all
+            // when the window already says which drive.
+            Recorder? drive = _theDrive is Recorder picked
+                ? await SettleThatOne(picked.Drive, _machine.HowBigIs(images[broughtForward]), whichToErase, ct)
+                : await Settle(_machine.HowBigIs(images[broughtForward]), chooseADrive, whichToErase, ct);
 
             if (drive is null)
             {

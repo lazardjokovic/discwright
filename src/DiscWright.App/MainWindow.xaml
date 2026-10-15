@@ -29,7 +29,7 @@
         FontFamily="{StaticResource Face}"
         AutomationProperties.AutomationId="TheWindow">
 
-    <Grid Margin="28,22,28,20">
+    <Grid Margin="28,16,28,18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -37,7 +37,7 @@
         </Grid.RowDefinitions>
 
         <!-- ================================================== the top line -->
-        <Grid Grid.Row="0" Margin="0,0,0,18">
+        <Grid Grid.Row="0" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="28" />
@@ -71,21 +71,31 @@
 
             <!-- About the whole window rather than about one more game, which
                  is why it sits up here and not beside Add a game. -->
-            <StackPanel Grid.Column="2" VerticalAlignment="Center">
-                <Button Content="Start a new disc"
+            <!-- Side by side rather than stacked. Two of these one above the
+                 other was eighty pixels of button beside sixty of title, and
+                 the whole top of the window was the taller of them. -->
+            <Grid Grid.Column="2" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Button Grid.Column="0"
+                        Content="Start a new disc"
                         Style="{StaticResource Ordinary}"
                         HorizontalAlignment="Stretch"
+                        Margin="0,0,5,0"
                         Click="StartANewDisc"
                         AutomationProperties.AutomationId="StartANewDisc" />
 
-                <Button Content="Open one you built before..."
+                <Button Grid.Column="1"
+                        Content="Open one you built..."
                         Style="{StaticResource Ordinary}"
                         HorizontalAlignment="Stretch"
-                        Margin="0,8,0,0"
+                        Margin="5,0,0,0"
                         Click="OpenADisc"
                         AutomationProperties.AutomationId="OpenADisc" />
-
-            </StackPanel>
+            </Grid>
         </Grid>
 
         <!-- ===================================================== the middle -->
@@ -241,6 +251,43 @@
                            Text="{Binding AboutTheTray}"
                            Visibility="{Binding AboutTheTray, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="AboutTheTray" />
+
+                <!-- Chosen before anything is written, because being asked
+                     in the middle of a burn is being asked at the worst
+                     moment: the question arrives after somebody has walked
+                     away, and on a machine with two writers the answer decides
+                     whether the run needs a hand at all. -->
+                <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHICH DRIVE" />
+                <Grid>
+                    <ComboBox ItemsSource="{Binding Drives}"
+                              SelectedItem="{Binding TheDrive}"
+                              AutomationProperties.AutomationId="WhichDrive">
+                    <!-- A row answers to whatever is in it prints as, and a
+                         Recorder prints as "D: ASUS DRW-24D5MT, holding
+                         CD-RW", which is exactly what should be read out. -->
+                        <ComboBox.ItemContainerStyle>
+                            <Style TargetType="ComboBoxItem">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding}" />
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
+                    </ComboBox>
+
+                    <!-- An empty box reads as broken. This says what it will
+                         do instead, and gets out of the way of the pointer. -->
+                    <TextBlock Style="{StaticResource Aside}"
+                               Margin="10,0,0,0"
+                               VerticalAlignment="Center"
+                               IsHitTestVisible="False"
+                               Text="Whichever one is ready"
+                               Visibility="{Binding TheDrive, Converter={StaticResource WhenNothing}}"
+                               AutomationProperties.AutomationId="NoDriveChosen" />
+                </Grid>
+
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Text="Leave this alone and DiscWright works it out, and asks only if there is something to ask."
+                           AutomationProperties.AutomationId="AboutWhichDrive" />
 
                 <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHERE IT GOES" />
                 <Grid>
