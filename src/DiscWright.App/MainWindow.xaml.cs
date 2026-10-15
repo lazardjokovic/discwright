@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
 
 using System.Threading.Tasks;
 
@@ -361,6 +362,48 @@ public partial class MainWindow : Window
     /// been ejected. Saying which disc is next and how many there are is what
     /// stops somebody losing count halfway through a set of four.
     /// </remarks>
+    /// <summary>
+    /// What Windows sends when a drive gains or loses a disc.
+    /// </summary>
+    private const int ADeviceChanged = 0x0219;
+
+    /// <summary>
+    /// Starts listening for discs going in and coming out.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Windows says so, rather than this asking over and over. Polling optical
+    /// drives spins them up, so a window that checked every few seconds would
+    /// keep somebody's drive awake all day to answer a question nobody asked.
+    /// </para>
+    /// <para>
+    /// The handle only exists once the window is on screen, which is why this
+    /// is hooked here and not in the constructor.
+    /// </para>
+    /// </remarks>
+    private async void ListenForDiscs(object sender, EventArgs e)
+    {
+        if (PresentationSource.FromVisual(this) is HwndSource source)
+        {
+            source.AddHook(WhenSomethingChanged);
+        }
+
+        await _screen.LookAtTheDrives();
+    }
+
+    private IntPtr WhenSomethingChanged(IntPtr hwnd, int message, IntPtr big, IntPtr small, ref bool handled)
+    {
+        if (message == ADeviceChanged)
+        {
+            // Not handled: this is listening in, and the rest of Windows is
+            // still entitled to hear about it. Not waited for either, because
+            // this is Windows' thread and it wants it back.
+            _ = _screen.LookAtTheDrives();
+        }
+
+        return IntPtr.Zero;
+    }
+
     /// <summary>
     /// Clears the screen and starts a new disc.
     /// </summary>

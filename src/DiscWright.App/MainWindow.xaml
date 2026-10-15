@@ -15,6 +15,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="DiscWright"
         Icon="DiscWright.ico"
+        Loaded="ListenForDiscs"
         Height="620" Width="920"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
@@ -151,6 +152,10 @@
                            Text="What This PC shows when the disc goes in." />
 
                 <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHAT SIZE OF DISC" />
+                <!-- What is actually in the tray, said under the size that
+                     was asked for. A worry and never a refusal: planning a DVD
+                     with last week's CD still in the drive is an ordinary thing
+                     to be doing. -->
                 <ComboBox ItemsSource="{Binding DiscSizes}"
                           SelectedItem="{Binding Medium}"
                           DisplayMemberPath="Name"
@@ -167,6 +172,28 @@
                         </Style>
                     </ComboBox.ItemContainerStyle>
                 </ComboBox>
+
+                <TextBlock Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding AboutTheDiscInTheDrive}"
+                           Visibility="{Binding AboutTheDiscInTheDrive, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="AboutTheDiscInTheDrive">
+                    <!-- The style goes here and not in Resources, and there is
+                         no Style attribute as well. An implicit style sitting
+                         in an element's own Resources applies to its children
+                         and never to itself, and a Style attribute would win
+                         over it anyway, so the trigger below would have been
+                         dead markup that looked right. -->
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Aside}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding TheDiscIsADifferentSize}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource WorryInk}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
 
                 <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHERE IT GOES" />
                 <Grid>

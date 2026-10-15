@@ -731,6 +731,126 @@ public class TheMainWindowWithoutAWindow
     // ------------------------------------------------------------------ helpers
 
     /// <summary>A window with everything filled in, ready to press.</summary>
+    // --------------------------------------------- the disc that is in there
+
+    [Fact]
+    public async Task Starts_from_the_size_of_the_disc_that_is_already_in_a_drive()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+
+        // Before anything is asked, the default is the old one for everybody.
+        Assert.Equal("DVD5", window.Medium.Key);
+
+        await window.LookAtTheDrives();
+
+        // A 700 MB disc in the tray planned as one 4.7 GB disc is how a set
+        // came to be built as a single disc nothing would fit on.
+        Assert.Equal("CD", window.Medium.Key);
+        Assert.Equal(string.Empty, window.AboutTheDiscInTheDrive);
+        Assert.False(window.TheDiscIsADifferentSize);
+    }
+
+    [Fact]
+    public async Task Follows_the_disc_again_when_a_different_one_goes_in()
+    {
+        ADriveHolding drive = new(3, true, 359_847);
+        MakeADisc window = New(drives: drive);
+
+        await window.LookAtTheDrives();
+        Assert.Equal("CD", window.Medium.Key);
+
+        drive.NowHolds(9, true, 2_298_496);
+        await window.LookAtTheDrives();
+
+        // Still nobody has chosen a size, so taking a CD out and putting a DVD
+        // in is still the drives answering the question.
+        Assert.Equal("DVD5", window.Medium.Key);
+    }
+
+    [Fact]
+    public async Task Leaves_a_size_alone_once_somebody_has_chosen_one()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+
+        window.Medium = Media.Bd25;
+        await window.LookAtTheDrives();
+
+        // Somebody planning a Blu-ray with last week's CD still in the drive
+        // is doing something perfectly ordinary.
+        Assert.Equal("BD25", window.Medium.Key);
+    }
+
+    [Fact]
+    public async Task Says_what_is_in_the_drive_when_it_is_not_what_was_chosen()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+
+        window.Medium = Media.Dvd5;
+        await window.LookAtTheDrives();
+
+        Assert.True(window.TheDiscIsADifferentSize);
+        Assert.Equal(
+            "The disc in D: is a CD-RW, and this is being built for DVD5 4.7 GB.",
+            window.AboutTheDiscInTheDrive);
+    }
+
+    [Fact]
+    public async Task Says_so_again_the_moment_the_size_is_changed()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+
+        await window.LookAtTheDrives();
+        Assert.Equal(string.Empty, window.AboutTheDiscInTheDrive);
+
+        window.Medium = Media.Bd50;
+
+        // Without looking at a drive again, because the disc has not moved and
+        // asking one is not free.
+        Assert.True(window.TheDiscIsADifferentSize);
+    }
+
+    [Fact]
+    public async Task Starting_a_new_disc_lets_the_drives_decide_again()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+
+        window.Medium = Media.Bd25;
+        window.StartAgain();
+        await window.LookAtTheDrives();
+
+        // A new disc is a new question.
+        Assert.Equal("CD", window.Medium.Key);
+    }
+
+    [Fact]
+    public async Task Says_nothing_and_changes_nothing_when_there_is_no_disc_in_anything()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(0, false, 0));
+
+        await window.LookAtTheDrives();
+
+        Assert.Equal("DVD5", window.Medium.Key);
+        Assert.Equal(string.Empty, window.AboutTheDiscInTheDrive);
+    }
+
+    /// <summary>One drive, with whatever is said to be in it at the moment.</summary>
+    private sealed class ADriveHolding(int mediaType, bool blank, long freeSectors) : IFindRecorders
+    {
+        private int _mediaType = mediaType;
+        private bool _blank = blank;
+        private long _freeSectors = freeSectors;
+
+        internal void NowHolds(int type, bool isBlank, long free)
+        {
+            _mediaType = type;
+            _blank = isBlank;
+            _freeSectors = free;
+        }
+
+        public IReadOnlyList<Recorder> All() =>
+            [new("id-D", "D:", "A Drive", _mediaType, _blank, _freeSectors, [750])];
+    }
+
     // ------------------------------------------------------ starting over
 
     [Fact]

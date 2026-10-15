@@ -46,6 +46,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private string _label = string.Empty;
     private string _outputFolder = string.Empty;
     private Medium _medium = Media.Dvd5;
+    private bool _theSizeWasChosen;
+    private bool _lookingAtTheDrives;
+    private IReadOnlyList<Recorder> _lastSeen = [];
     private DiscOptions _options = new();
     private ReadOnlyObservableCollection<GameFolder>? _view;
 
@@ -87,10 +90,121 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>The size of disc being aimed at.</summary>
+    /// <summary>
+    /// The size of disc being aimed at.
+    /// </summary>
+    /// <remarks>
+    /// Setting it counts as somebody choosing, and from then on the drives stop
+    /// deciding it. Opening a project file counts too: the size it was saved
+    /// with was somebody's answer once, and this program does not know better
+    /// than the file.
+    /// </remarks>
     public Medium Medium
     {
         get => _medium;
-        set => Change(ref _medium, value);
+        set
+        {
+            _theSizeWasChosen = true;
+            Change(ref _medium, value);
+            SayWhatIsInTheDrives();
+        }
+    }
+
+    /// <summary>
+    /// What the discs in the drives have to say about that size, or nothing
+    /// when they have nothing to say.
+    /// </summary>
+    public string AboutTheDiscInTheDrive { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Whether what is in the drives is a different size from the one chosen.
+    /// </summary>
+    /// <remarks>
+    /// For the window to pick an ink with. It is a worry and never a refusal:
+    /// somebody planning a DVD with last week's CD still in the drive is doing
+    /// something perfectly ordinary, and the disc gets built for what was asked
+    /// for either way.
+    /// </remarks>
+    public bool TheDiscIsADifferentSize { get; private set; }
+
+    /// <summary>
+    /// Looks at what is in the drives, and takes the size from it while nobody
+    /// has chosen one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Called when the window opens and whenever a disc goes in or comes out,
+    /// and nowhere else. Asking a drive is not free, and asking one on every
+    /// keystroke would spin a disc up to answer a question nobody asked.
+    /// </para>
+    /// <para>
+    /// <strong>Off the thread the window is drawn on.</strong> Asking two
+    /// drives with discs in them took thirteen seconds here, because a drive
+    /// that has spun down has to spin up to answer, and done in front of the
+    /// window that is thirteen seconds of nothing on screen at all. It was
+    /// exactly that on the first go at this.
+    /// </para>
+    /// <para>
+    /// <strong>It never overrules a person.</strong> The default was DVD5 for
+    /// everybody always, which is how a 700 MB disc in the tray came to be
+    /// planned as one 4.7 GB disc, so now it starts from what is actually
+    /// there. The moment somebody picks a size themselves, this stops moving
+    /// it and only comments.
+    /// </para>
+    /// </remarks>
+    public async Task LookAtTheDrives()
+    {
+        if (_lookingAtTheDrives)
+        {
+            return;
+        }
+
+        _lookingAtTheDrives = true;
+
+        IReadOnlyList<Recorder> drives;
+
+        try
+        {
+            drives = await Task.Run(_machine.Drives.All);
+        }
+        catch (Exception)
+        {
+            // A drive that will not answer is not a reason to fail: the size
+            // simply stays whatever it was, which is where it started anyway.
+            return;
+        }
+        finally
+        {
+            _lookingAtTheDrives = false;
+        }
+
+        if (!_theSizeWasChosen
+            && TheDiscsThatAreIn.TheSizeToStartFrom(drives) is Medium found
+            && found != _medium)
+        {
+            // Not through the setter, which would count as a person choosing
+            // and stop the drives mattering ever again.
+            _medium = found;
+            Tell(nameof(Medium));
+        }
+
+        SayWhatIsInTheDrives(drives);
+    }
+
+    private void SayWhatIsInTheDrives(IReadOnlyList<Recorder>? drives = null)
+    {
+        string said = TheDiscsThatAreIn.WhatIsWorthSaying(drives ?? _lastSeen, _medium) ?? string.Empty;
+
+        if (drives is not null)
+        {
+            _lastSeen = drives;
+        }
+
+        AboutTheDiscInTheDrive = said;
+        TheDiscIsADifferentSize = said.Length > 0;
+
+        Tell(nameof(AboutTheDiscInTheDrive));
+        Tell(nameof(TheDiscIsADifferentSize));
     }
 
     /// <summary>Everything that has an answer already.</summary>
@@ -458,6 +572,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _extrasFolder = null;
 
         Label = string.Empty;
+
+        // A new disc is a new question, so the drives get to answer it again.
+        _theSizeWasChosen = false;
 
         Made = null;
         AboutTheImage = null;

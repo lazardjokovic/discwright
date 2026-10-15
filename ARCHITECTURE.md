@@ -576,6 +576,32 @@ That is what turns "what happens when you pick a folder with no game in it" into
 
 It is also the insurance. If WPF turns out to be the wrong answer, what gets thrown away is the markup. None of the view models move.
 
+### The size starts from the disc that is in there
+
+The size of disc defaulted to DVD5 for everybody always. Somebody with a 700 MB disc in the tray was therefore planned for a 4.7 GB one, and a set that should have been two discs was built as a single 735 MB disc that nothing would fit on.
+
+A `Medium` is a target and a `Recorder` is a tray with something in it, and keeping those apart is deliberate. `TheDiscsThatAreIn` is the one place allowed to put them side by side, and it does two separate things with the answer.
+
+**It offers a size to start from**, taken from what is actually in a drive. Two drives holding two different discs offers nothing, on the same principle as everywhere else here: it refuses to guess between drives rather than taking the first one and being quietly wrong.
+
+**It says so when the two have drifted apart**, in the worry ink, under the dropdown:
+
+> The disc in D: is a CD-RW, and this is being built for DVD5 4.7 GB.
+
+A worry and never a refusal. Planning a DVD with last week's CD still in the drive is an ordinary thing to be doing, and the disc is built for what was asked for either way.
+
+**The moment somebody chooses a size, the drives stop moving it** and only comment. Opening a project file counts as choosing, because the size it was saved with was somebody's answer once. Starting a new disc makes the drives matter again, since a new disc is a new question.
+
+#### Telling one size from another
+
+Nothing in IMAPI's numbers tells a BD-R 25 from a BD-R 50, and a DVD+R is the same number whether it has one layer or two. So the kind of disc narrows it to a family and how much the disc holds settles which one inside it, which works because the figures in `Media` are usable bytes and sit under the raw capacity by design.
+
+That leaves what to do with a disc that has something on it already, where what is **left** is not how big it **is**. A used DVD cannot be told apart from a smaller one, so it answers nothing. **A CD is a CD either way**, because there is only one size of CD this program aims at, and insisting on a blank one left somebody with a used CD-RW in the tray being planned for a DVD, which is the whole fault this exists to fix.
+
+#### Asking Windows rather than asking the drive
+
+The window learns about discs from `WM_DEVICECHANGE` rather than by looking repeatedly. **Polling an optical drive spins it up**, so a window that checked every few seconds would keep somebody's drive awake all day to answer a question nobody asked.
+
 ### What the two buttons mean
 
 This program made nothing but an ISO once, and its words outlasted that by a long way. Somebody reading **Make the disc** has every reason to think it burns one.
