@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -402,6 +403,58 @@ public partial class MainWindow : Window
         }
 
         return IntPtr.Zero;
+    }
+
+    /// <summary>
+    /// Writes the menu this disc would get and opens it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Somewhere temporary, and a fresh folder each time. A preview left in
+    /// somebody's output folder is a file they have to wonder about later,
+    /// and reusing one folder means a menu that quietly shows the last
+    /// project's games when this one refuses to plan.
+    /// </para>
+    /// <para>
+    /// Opened with mshta, which is what the disc itself uses, so what is on
+    /// screen is the thing that would be on the disc rather than an
+    /// approximation of it in a browser.
+    /// </para>
+    /// </remarks>
+    private void PreviewTheMenu(object sender, RoutedEventArgs e)
+    {
+        string into = Path.Combine(
+            Path.GetTempPath(),
+            "DiscWright preview",
+            DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+
+        _screen.PreviewTheMenu(into);
+
+        if (_screen.ItWentWrong is Refusal refusal)
+        {
+            Explain(refusal);
+            return;
+        }
+
+        if (_screen.ThePreview is not string where || !File.Exists(where))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo("mshta.exe", $"\"{where}\"") { UseShellExecute = false });
+        }
+        catch (Exception wrong) when (wrong is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            MessageBox.Show(
+                this,
+                "The menu was written but nothing would open it. It is at:"
+                    + Environment.NewLine + Environment.NewLine + where,
+                "DiscWright",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
     }
 
     /// <summary>

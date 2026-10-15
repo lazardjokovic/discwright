@@ -118,6 +118,58 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string AboutTheDiscInTheDrive { get; private set; } = string.Empty;
 
     /// <summary>
+    /// Whether there is anything to preview.
+    /// </summary>
+    /// <remarks>
+    /// The same answer as whether there is anything to build. A preview of
+    /// nothing is an empty window somebody has to close.
+    /// </remarks>
+    public bool CanPreview => !IsWorking && _games.Count > 0;
+
+    /// <summary>Where the last preview was written, or nothing.</summary>
+    public string? ThePreview { get; private set; }
+
+    /// <summary>
+    /// Writes the menu this project would get, for somebody to look at.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Before anything is built</strong>, which is the whole point:
+    /// seeing the menu after burning a disc is seeing it too late. So the
+    /// discs are planned exactly as building would plan them, and the menu for
+    /// the first one is written out.
+    /// </para>
+    /// <para>
+    /// It goes somewhere temporary. A preview is not an output and has no
+    /// business sitting in the folder somebody keeps their discs in.
+    /// </para>
+    /// </remarks>
+    public void PreviewTheMenu(string into)
+    {
+        if (!CanPreview)
+        {
+            return;
+        }
+
+        ThePreview = null;
+        ItWentWrong = null;
+
+        switch (_machine.Preview.Write(AsAProject(), Medium, _machine.HowBigIs, into))
+        {
+            case Outcome<string>.Ok(string where):
+                ThePreview = where;
+                break;
+
+            case Outcome<string>.No refused:
+                ItWentWrong = refused.Refusal;
+                break;
+        }
+
+        Tell(nameof(ThePreview));
+        Tell(nameof(ItWentWrong));
+    }
+
+    /// <summary>
     /// Which version this is, for the corner of the window.
     /// </summary>
     /// <remarks>
@@ -1364,6 +1416,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(ItWentWrong));
         Tell(nameof(CanMakeIt));
         Tell(nameof(CanBurn));
+        Tell(nameof(CanPreview));
     }
 
     private void Told()
@@ -1372,6 +1425,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(WhyNot));
         Tell(nameof(Worry));
         Tell(nameof(CanMakeIt));
+
+        // Adding a game is what makes previewing possible, and this is the
+        // path adding takes. A property nobody is told about keeps whatever
+        // the window read out of it the first time, which for this one was a
+        // button that stayed dead for ever.
+        Tell(nameof(CanPreview));
     }
 
     private void Change<T>(ref T field, T value, [CallerMemberName] string? name = null)

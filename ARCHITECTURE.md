@@ -697,6 +697,24 @@ A collapsed `Expander` hides its contents from the automation tree, which is cor
 
 **It also showed something about Smart App Control.** The app itself runs here, although the test host cannot load the same assemblies. That is almost certainly because a locally built exe carries no Mark of the Web, so it says nothing either way about a downloaded release, which will carry one. **The signing problem is unchanged.**
 
+## Seeing the menu before the disc
+
+**It runs the same step the build runs.** A preview written by a second piece of code that draws something similar is a preview that drifts from the disc, and the day it drifts is the day somebody burns a disc because the preview looked right.
+
+So it plans the discs exactly as building would, takes disc one, and runs `WriteTheMenuStep` over a folder that is not a disc. A test holds the two outputs side by side and asserts they are **the same text**, bar one difference.
+
+That difference: a disc insists on being the only one of itself open, so putting the same disc in twice refocuses its window rather than opening a second. A preview must not, or previewing one project would refocus the stale window left from previewing another a minute ago, and show somebody the wrong games.
+
+It goes somewhere temporary, in a fresh folder each time. A preview is not an output and has no business in the folder somebody keeps their discs in, and reusing one folder means a menu that quietly shows the last project's games when this one refuses to plan.
+
+It is opened with `mshta`, which is what the disc itself uses, so what is on screen is the thing that would be on the disc rather than an approximation of it in a browser.
+
+**What it does not show yet is the artwork.** Only the menu step runs, so a background chosen for the disc is not there to be drawn on. That waits with the rest of the artwork.
+
+### A property nobody is told about
+
+`CanPreview` was right every time it was read and the button stayed dead for ever, because nothing raised it: the window read it once, got false, and never looked again. Found by pressing the button in the real window, not by a test, since a test that reads the property gets the right answer.
+
 ## Asking whether there is a newer one
 
 In the corner under the name, where a program usually keeps its version, and as quiet as the line above it. It reads `2.0.0  Check for a new version`: which version this is, shown without anybody asking, because that is a question nobody should have to press a button to answer.

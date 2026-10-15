@@ -14,7 +14,14 @@ namespace DiscWright.Menu;
 /// reference <c>Menu</c> anyway. The window decides which steps make up a
 /// build; nothing else has to know the list.
 /// </remarks>
-public sealed class WriteTheMenuStep : IBuildStep
+/// <param name="forADisc">
+/// Whether this is a disc being made, as against a preview of one. The only
+/// thing it changes is whether the menu insists on being the only one open: a
+/// disc should refocus its own window rather than opening a second, and a
+/// preview must not refocus the stale window left from previewing something
+/// else a minute ago.
+/// </param>
+public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
 {
     /// <summary>Where the menu lives on a disc. Uppercase, as v1 writes it.</summary>
     private const string Folder = "AUTORUN";
@@ -140,7 +147,7 @@ public sealed class WriteTheMenuStep : IBuildStep
 
     private static string WithForwardSlashes(string path) => path.Replace('\\', '/');
 
-    private static MenuFacts FactsFor(BuildContext context)
+    private MenuFacts FactsFor(BuildContext context)
     {
         GameFolder? game = context.Project.Games.Count > 0 ? context.Project.Games[0] : null;
 
@@ -169,7 +176,7 @@ public sealed class WriteTheMenuStep : IBuildStep
 
             // A disc, not a preview. A preview sets this false, or previewing a
             // second disc refocuses the first one's stale window.
-            true,
+            forADisc,
 
             GamesOn(context));
     }

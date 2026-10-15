@@ -409,6 +409,7 @@ public class WalkingThroughASet
             note ?? new ANoteInMemory(),
             new ATrayThatShuts(),
             new NothingIsReleased(),
+            new NoPreview(),
             "2.0.0",
             howBig ?? (_ => 1000)));
 
@@ -551,5 +552,12 @@ public class WalkingThroughASet
     {
         public Task<WhatWasReleased> TheLatest(CancellationToken ct) =>
             Task.FromResult(new WhatWasReleased(null, null, "no asking in a test"));
+    }
+
+    /// <summary>A preview nobody looks at.</summary>
+    private sealed class NoPreview : IShowTheMenu
+    {
+        public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
+            Refusals.ThereIsNothingToPutOnADisc();
     }
 }

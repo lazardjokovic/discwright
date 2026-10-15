@@ -1,4 +1,5 @@
 using DiscWright.Core;
+using DiscWright.Staging;
 using DiscWright.ViewModels;
 
 namespace DiscWright.Tests;
@@ -191,6 +192,7 @@ public class AskingIfThereIsANewerOne
             new NothingIsRemembered(),
             new ATrayThatShuts(),
             asker,
+            new NoPreview(),
             "2.0.0",
             _ => 1000));
 
@@ -276,5 +278,12 @@ public class AskingIfThereIsANewerOne
         public bool ShutIt(Recorder drive) => true;
 
         public bool CanShutItsOwnTray(Recorder drive) => true;
+    }
+
+    /// <summary>A preview nobody looks at.</summary>
+    private sealed class NoPreview : IShowTheMenu
+    {
+        public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
+            Refusals.ThereIsNothingToPutOnADisc();
     }
 }

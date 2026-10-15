@@ -1047,7 +1047,8 @@ public class TheMainWindowWithoutAWindow
         IBurnDiscs? burner = null,
         IEraseDiscs? eraser = null,
         IWorkTheTray? tray = null,
-        IAskWhatIsReleased? releases = null) =>
+        IAskWhatIsReleased? releases = null,
+        IShowTheMenu? preview = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -1060,6 +1061,7 @@ public class TheMainWindowWithoutAWindow
             new NothingIsRemembered(),
             tray ?? new ATrayThatShuts(),
             releases ?? new NothingIsReleased(),
+            preview ?? new NoPreview(),
             "2.0.0",
             _ => 1000));
 
@@ -1345,5 +1347,12 @@ public class TheMainWindowWithoutAWindow
     {
         public Task<WhatWasReleased> TheLatest(CancellationToken ct) =>
             Task.FromResult(new WhatWasReleased(null, null, "no asking in a test"));
+    }
+
+    /// <summary>A preview nobody looks at.</summary>
+    private sealed class NoPreview : IShowTheMenu
+    {
+        public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
+            Refusals.ThereIsNothingToPutOnADisc();
     }
 }

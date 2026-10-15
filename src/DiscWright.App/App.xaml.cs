@@ -63,6 +63,7 @@ public partial class App : Application
             new ANoteOnDisk(),
             burner,
             new WhatGitHubHasReleased(),
+            new APreviewOfTheMenu(new WindowsStageWriter()),
             WhatThisBuildIs(),
             HowBigIs(disk)));
 
