@@ -375,6 +375,29 @@ public sealed class BuildingADisc : IDisposable
     }
 
     [Fact]
+    public async Task Leaves_the_printable_artwork_off_when_it_was_not_asked_for()
+    {
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+        DiscArtwork artwork = new(IconPath: APicture("icon", 256, 256), BackgroundPath: APicture("bg", 1920, 1080),
+            CoverPath: APicture("cover", 1200, 1700));
+
+        BuiltDisc disc = Assert.Single((await Build(Project(game) with
+        {
+            Artwork = artwork,
+            Options = new DiscOptions(ArtworkOnDisc: false)
+        })).Discs);
+
+        // The option is about the cover and the disc face, which are there to
+        // be PRINTED. Saying no means do not also carry them on the disc.
+        Assert.False(Directory.Exists(On(disc, "ARTWORK")));
+
+        // The icon and the background are not that. They are what the disc
+        // wears and what the menu is drawn on, so they go on regardless.
+        Assert.True(File.Exists(On(disc, "disc.ico")));
+        Assert.True(File.Exists(On(disc, @"AUTORUN\background.png")));
+    }
+
+    [Fact]
     public async Task Puts_the_artwork_on_when_there_is_any()
     {
         GameFolder game = AGogDownload("Hollow Knight", 500);

@@ -105,7 +105,11 @@
                             BorderBrush="{StaticResource Edge}"
                             BorderThickness="1"
                             CornerRadius="4">
-                        <ContentPresenter HorizontalAlignment="Center"
+                        <!-- Bound, not fixed. Centre is still the answer for
+                             almost every button here, and a button that is as
+                             wide as a column reads better with its words at
+                             the edge the labels start at. -->
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="Center"
                                           Margin="{TemplateBinding Padding}" />
                     </Border>
@@ -139,7 +143,11 @@
                     <Border x:Name="Shape"
                             Background="{TemplateBinding Background}"
                             CornerRadius="4">
-                        <ContentPresenter HorizontalAlignment="Center"
+                        <!-- Bound, not fixed. Centre is still the answer for
+                             almost every button here, and a button that is as
+                             wide as a column reads better with its words at
+                             the edge the labels start at. -->
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
                                           VerticalAlignment="Center"
                                           Margin="{TemplateBinding Padding}" />
                     </Border>

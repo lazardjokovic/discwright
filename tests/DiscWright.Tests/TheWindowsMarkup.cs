@@ -90,6 +90,27 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void The_option_that_depends_on_somebody_elses_settings_says_so()
+    {
+        // A disc opens its menu by itself only where AutoRun is on, and
+        // Windows has been turning that off for years. Somebody whose disc
+        // does nothing when it goes in has no way of knowing the reason is on
+        // their own machine rather than in the disc, unless this says so.
+        XElement? menu = Window()
+            .Descendants()
+            .FirstOrDefault(element =>
+                element.Name.LocalName == "CheckBox"
+                && (string?)element.Attribute("AutomationProperties.AutomationId") == "Menu");
+
+        Assert.NotNull(menu);
+
+        Assert.True(
+            menu.Elements().Any(child => child.Name.LocalName.EndsWith(".ToolTip", StringComparison.Ordinal))
+                || menu.Attribute("ToolTip") is not null,
+            "The menu option has nothing explaining that it needs AutoRun switched on.");
+    }
+
+    [Fact]
     public void The_window_has_an_icon_of_its_own()
     {
         // Without one, the title bar, the taskbar and Alt and Tab all show
@@ -191,7 +212,7 @@ public class TheWindowsMarkup
         // The design was drawn at exactly this size and the window does not
         // resize, so every position in it was chosen against these numbers.
         Assert.Equal("920", (string?)window.Attribute("Width"));
-        Assert.Equal("620", (string?)window.Attribute("Height"));
+        Assert.Equal("700", (string?)window.Attribute("Height"));
         Assert.Equal("NoResize", (string?)window.Attribute("ResizeMode"));
     }
 

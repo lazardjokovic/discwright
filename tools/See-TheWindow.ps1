@@ -4,10 +4,22 @@
 # The markup test proves the ids are WRITTEN. Only this proves they ARRIVE,
 # which is the single reason WPF was chosen over another go at WinForms.
 
+# Which build to open. Smart App Control is on and enforcing on this machine,
+# and it blocks the freshly built Debug assemblies outright: the app dies on
+# startup with 0x800711C7 before a window exists. A published Release copy gets
+# through, so that is worth being able to point this at.
+#
+# param comes FIRST. Put after anything else it is not a parse error, it is a
+# call to a command called param, which the parser is perfectly happy with and
+# which fails the moment the script is actually run.
+param(
+    [string] $Exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe'
+)
+
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, System.Windows.Forms
 
-$exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe'
+$exe = $Exe
 $shot = 'C:\Users\lazar\DiscWright-Lab\the-window.png'
 
 if (-not (Test-Path $exe)) { throw "No app at $exe" }

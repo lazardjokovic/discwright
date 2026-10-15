@@ -633,6 +633,20 @@ So the pair say what they do, and a line under them says what the difference is:
 
 One sentence, in the window, forever, is worth more than any amount of renaming. The buttons are now **Build it** and **Burn to a disc...**, and the one at the top is **Open one you built before...**, because what it opens is a folder on this PC and not a disc in a drive.
 
+### The one option that depends on somebody else
+
+A disc opens its menu by itself **only where AutoRun is switched on**, and Windows has been turning that off for years. Somebody whose disc does nothing when it goes in has no way of knowing the reason is on their own machine rather than in the disc, so the option says so on hover, and `TheWindowsMarkup` holds the rule that it must.
+
+It is the only option here whose effect is not entirely ours, and it is on by default because a menu is what the disc is for.
+
+**There is no launcher at the root of the disc.** v1 wrote a `Start Here.hta` beside the files; 2.0 writes the menu to `AUTORUN` and nothing at the top, so where AutoRun is off the disc opens in Explorer with no sign that a menu exists. The name is still reserved in `ReservedDiscNames`, which is the shape of the gap rather than the fix.
+
+### A window drawn for four options does not hold five
+
+The menu checkbox was moved out of More options and then back into it, which took the drawer from four entries to five, and the last two fell off the bottom of a window that had been 620 tall since it was drawn.
+
+The window is 700 now and the markup test says so. **The size is a decision, not a constant**: when the drawing changes the number changes with it, deliberately and in the same commit.
+
 ### The accent is a colour, not a size
 
 The button that matters wore a bigger font and twice the padding as well as the accent colour, which made it read as a different kind of thing rather than a louder one. Every button in the program is now the same shape, and the one that matters is the one that is teal.

@@ -16,7 +16,7 @@
         Title="DiscWright"
         Icon="DiscWright.ico"
         Loaded="ListenForDiscs"
-        Height="620" Width="920"
+        Height="700" Width="920"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource Page}"
@@ -34,10 +34,11 @@
         <Grid Grid.Row="0" Margin="0,0,0,18">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="28" />
+                <ColumnDefinition Width="340" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0">
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
                 <TextBlock Text="DiscWright" Style="{StaticResource Title}" />
                 <TextBlock Style="{StaticResource Aside}"
                            Margin="0,2,0,0"
@@ -46,15 +47,19 @@
 
             <!-- About the whole window rather than about one more game, which
                  is why it sits up here and not beside Add a game. -->
-            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel Grid.Column="2" VerticalAlignment="Center">
                 <Button Content="Start a new disc"
                         Style="{StaticResource Ordinary}"
-                        Margin="0,0,8,0"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
                         Click="StartANewDisc"
                         AutomationProperties.AutomationId="StartANewDisc" />
 
                 <Button Content="Open one you built before..."
                         Style="{StaticResource Ordinary}"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Margin="0,8,0,0"
                         Click="OpenADisc"
                         AutomationProperties.AutomationId="OpenADisc" />
             </StackPanel>
@@ -222,20 +227,29 @@
                             AutomationProperties.AutomationId="ChooseWhereItGoes" />
                 </Grid>
 
-                <!-- Out of the drawer, because it is the one somebody
-                     changes. What is left in there are the answers that are
-                     right for almost everybody almost always. -->
-                <CheckBox Margin="0,14,0,0"
-                          Content="A menu that opens when the disc goes in"
-                          IsChecked="{Binding Menu}"
-                          AutomationProperties.AutomationId="Menu" />
-
-                <Expander Margin="0,10,0,0"
+                <Expander Margin="0,16,0,0"
                           Foreground="{StaticResource Quiet}"
                           FontSize="12"
                           Header="More options"
                           AutomationProperties.AutomationId="MoreOptions">
                     <StackPanel Margin="4,10,0,0">
+                        <!-- On by default, and the only option here whose
+                             effect depends on a setting that is not ours. The
+                             tooltip says so, because a disc that does nothing
+                             when it goes in looks broken, and the reason is on
+                             the other person's machine. -->
+                        <CheckBox Content="A menu that opens when the disc goes in"
+                                  IsChecked="{Binding Menu}"
+                                  AutomationProperties.AutomationId="Menu">
+                            <CheckBox.ToolTip>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="360">
+                                    A disc opens its menu by itself only where AutoRun is switched on, and
+                                    Windows has been turning that off for years. Where it is off, the disc
+                                    opens in Explorer instead and the menu is the AUTORUN folder.
+                                </TextBlock>
+                            </CheckBox.ToolTip>
+                        </CheckBox>
+
                         <CheckBox Content="A list of what every file should be"
                                   IsChecked="{Binding Checksums}"
                                   AutomationProperties.AutomationId="Checksums" />

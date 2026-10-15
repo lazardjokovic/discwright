@@ -731,6 +731,42 @@ public class TheMainWindowWithoutAWindow
     // ------------------------------------------------------------------ helpers
 
     /// <summary>A window with everything filled in, ready to press.</summary>
+    // ------------------------------------------------------- More options
+
+    [Fact]
+    public async Task Asks_for_the_older_file_systems_only_when_that_was_asked()
+    {
+        ImagesThatWork images = new();
+        MakeADisc window = Ready(new BuilderThatWorks(), images);
+
+        await window.MakeIt();
+        Assert.Equal([false], images.Older);
+
+        window.LegacyFileSystems = true;
+        await window.MakeIt();
+
+        // The checkbox is the whole of this option: nothing else in the
+        // program reads it, and an image made without the flag is readable on
+        // Windows 11 and on nothing older.
+        Assert.Equal([false, true], images.Older);
+    }
+
+    [Fact]
+    public async Task Every_option_in_the_drawer_starts_where_it_should()
+    {
+        MakeADisc window = New();
+
+        // A menu and a checksum list and the cover art are what almost
+        // everybody wants. The other two cost something: one makes a disc an
+        // older Windows can read at the price of shorter names, and the other
+        // splits a file across two discs, which is only ever a last resort.
+        Assert.True(window.Menu);
+        Assert.True(window.Checksums);
+        Assert.True(window.ArtworkOnDisc);
+        Assert.False(window.LegacyFileSystems);
+        Assert.False(window.CutFiles);
+    }
+
     // --------------------------------------------- the disc that is in there
 
     [Fact]
@@ -1160,12 +1196,23 @@ public class TheMainWindowWithoutAWindow
         /// <summary>Every image it was asked for, in order.</summary>
         internal List<string> Paths { get; } = [];
 
+        /// <summary>
+        /// Whether each one was asked for with the older file systems.
+        /// </summary>
+        /// <remarks>
+        /// The only place that option goes. Nothing else in the program reads
+        /// it, so a checkbox that failed to reach here would be a checkbox
+        /// that did nothing at all.
+        /// </remarks>
+        internal List<bool> Older { get; } = [];
+
         public Task<Outcome<MadeImage>> Make(
             string stagedFolder, string imagePath, string label, bool wantsLegacyFileSystems,
             int discNumber, int ofDiscs, IProgress<ImageProgress>? progress, CancellationToken ct)
         {
             Made++;
             Paths.Add(imagePath);
+            Older.Add(wantsLegacyFileSystems);
             progress?.Report(new ImageProgress(1, 2));
 
             return Task.FromResult<Outcome<MadeImage>>(new MadeImage(imagePath, 1024, Worry));
