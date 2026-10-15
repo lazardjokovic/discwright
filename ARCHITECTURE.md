@@ -750,6 +750,8 @@ The drive in this machine holds exactly that disc, and the enumeration reads it 
 
 **Nothing erases on its own initiative.** When nothing is ready but a rewritable disc is sitting there, that is said, and the person holding it decides. Erasing takes under a minute and takes everything on the disc with it.
 
+**With more than one disc that could be erased, it asks which.** The rule that it never picks one to destroy is right; the first version then fell through to *"that disc cannot be written to"*, which is false about a rewritable disc and is precisely the wording that makes somebody bin a usable one. Found by asking the program what it would do with two real CD-RWs in two real drives, before writing anything.
+
 For a set, the drive is settled once before the first disc. A set that wanders between two writers is a set whose discs were written by two different lasers at two different speeds.
 
 ### Asking costs nothing, so it never throws
@@ -795,6 +797,16 @@ Trimmed to `E:`, it stops meaning the root of E: and starts meaning *wherever th
 **It only ever showed at a root, and a burned disc is the only thing read from one.** The relative path is worked out now rather than sliced, because the length of the root is not the same as where the name starts.
 
 The test for it makes a drive with `subst`, lists it, and puts the letter back afterwards. Watched failing against the old arithmetic.
+
+### Proved on two drives at once
+
+A machine with a DVD writer and a Blu-ray writer, each holding a disc with something on it, exercises every question the burn can ask.
+
+**Both discs in the way:** it offered the choice, named both, and erased only the one chosen. The other was still there afterwards, untouched.
+
+**Both discs blank:** it offered the choice of drive, and wrote to the one chosen. The other was still a blank afterwards.
+
+**The two drives behave differently and the program says so.** The DVD writer shuts its own tray, so the disc is written, ejected, taken back in and read through without anybody in the room. The slim Blu-ray writer cannot, so it says so and waits. That is an answer rather than a fault, and the run that needs hands makes a noise rather than hanging quietly.
 
 ## The burn button
 

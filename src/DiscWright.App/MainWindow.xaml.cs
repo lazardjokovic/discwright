@@ -285,7 +285,7 @@ public partial class MainWindow : Window
 
         try
         {
-            await _screen.BurnIt(image, ChooseADrive, MayIEraseIt, ShutTheTray);
+            await _screen.BurnIt(image, ChooseADrive, WhichToErase, ShutTheTray);
         }
         catch (Exception wrong)
         {
@@ -337,14 +337,39 @@ public partial class MainWindow : Window
             ready,
             drive => drive.ToString()));
 
-    private Task<bool> MayIEraseIt(Recorder disc) =>
-        Task.FromResult(!WorthAsking.Ask(
+    /// <summary>
+    /// Which disc to erase, out of the ones an erase would make usable.
+    /// </summary>
+    /// <remarks>
+    /// With one there is a question to answer, and with two there is a choice
+    /// to make. Neither is a decision to take on somebody's behalf, because
+    /// whatever is on the disc goes and cannot be got back.
+    /// </remarks>
+    private Task<Recorder?> WhichToErase(IReadOnlyList<Recorder> could)
+    {
+        if (could.Count == 1)
+        {
+            Recorder only = could[0];
+
+            return Task.FromResult(WorthAsking.Ask(
+                this,
+                $"Erase the {only.Holding} in {only.Drive}?",
+                "Everything on it goes, and it cannot be got back. A quick erase takes under a minute, and "
+                    + "then the disc can be written to again.",
+                "Leave it alone",
+                "Erase it")
+                ? null
+                : only);
+        }
+
+        return Task.FromResult(PickOne.From(
             this,
-            $"Erase the {disc.Holding} in {disc.Drive}?",
-            "Everything on it goes, and it cannot be got back. A quick erase takes under a minute, and then "
-                + "the disc can be written to again.",
-            "Leave it alone",
-            "Erase it"));
+            "Which disc should be erased?",
+            "There is no blank disc, and either of these could be erased and used again. Everything on the "
+                + "one you choose goes, and it cannot be got back.",
+            could,
+            disc => $"{disc.Drive}  the {disc.Holding} in the {disc.Name}"));
+    }
 
     /// <summary>
     /// Gets the disc back in so it can be read, and says whether it came back.

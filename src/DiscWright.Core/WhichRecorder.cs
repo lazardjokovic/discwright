@@ -62,11 +62,18 @@ public static class WhichRecorder
 
         // Nothing is ready. Say the most useful thing about why, which is
         // whether an erase would fix it, and in which drive.
-        Recorder? erasable = all.FirstOrDefault(each => each.ErasingWouldHelp);
+        Recorder[] erasable = [.. all.Where(each => each.ErasingWouldHelp)];
 
-        if (erasable is not null && all.Count(each => each.ErasingWouldHelp) == 1)
+        if (erasable.Length == 1)
         {
-            return Refusals.ThereIsADiscThatCouldBeErased(erasable.Drive, erasable.Holding);
+            return Refusals.ThereIsADiscThatCouldBeErased(erasable[0].Drive, erasable[0].Holding);
+        }
+
+        if (erasable.Length > 1)
+        {
+            // Both could be used again, and choosing which one to destroy is
+            // not a decision to make on somebody's behalf.
+            return Refusals.MoreThanOneDiscCouldBeErased([.. erasable.Select(each => each.Drive)]);
         }
 
         Recorder? loaded = all.FirstOrDefault(each => each.WhyNot is null && !each.Blank);

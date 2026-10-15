@@ -252,6 +252,18 @@ public static class Refusals
             "It can be erased and used again, which takes under a minute. Nothing has been erased: that is "
                 + "yours to decide, because whatever is on it now goes.");
 
+    /// <remarks>
+    /// Which disc to destroy is not a choice to make for somebody, so this
+    /// names them and stops. The old answer fell through to "that disc cannot
+    /// be written to", which is false about a rewritable one and is exactly the
+    /// wording that makes somebody bin a usable disc.
+    /// </remarks>
+    public static Refusal MoreThanOneDiscCouldBeErased(IReadOnlyList<string> drives) =>
+        new("More than one disc could be erased",
+            "There is no blank disc, and the discs in " + string.Join(" and ", drives)
+                + " could each be erased and used again. Which one goes is yours to decide, so nothing "
+                + "has been erased.");
+
     public static Refusal ThatDiscCannotBeWrittenTo(string drive, string what) =>
         new($"The {what} in {drive} cannot be written to",
             "It is either a pressed disc or one that has already been written and cannot be erased. A blank "

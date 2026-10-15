@@ -334,9 +334,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// Asked only when more than one drive is ready, because choosing for
     /// somebody is how a disc ends up written in the wrong one.
     /// </param>
-    /// <param name="mayErase">
-    /// Asked only when nothing is ready and an erase would fix it. Whatever is
-    /// on that disc goes, so it is never assumed.
+    /// <param name="whichToErase">
+    /// Asked only when nothing is ready and an erase would fix it, and given
+    /// every disc that an erase would fix. With one there is a question to
+    /// answer; with two there is a choice to make, and neither is a decision to
+    /// take on somebody's behalf. Answering with nothing erases nothing.
     /// </param>
     /// <param name="shutTheTray">
     /// Called after the disc is ejected, to get it back in so it can be read.
@@ -345,7 +347,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public async Task BurnIt(
         string image,
         Func<IReadOnlyList<Recorder>, Task<Recorder?>> chooseADrive,
-        Func<Recorder, Task<bool>> mayErase,
+        Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
         Func<Recorder, Task<bool>> shutTheTray,
         CancellationToken ct = default)
     {
@@ -363,7 +365,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         try
         {
-            Recorder? onto = await Settle(_machine.HowBigIs(image), chooseADrive, mayErase, ct);
+            Recorder? onto = await Settle(_machine.HowBigIs(image), chooseADrive, whichToErase, ct);
 
             if (onto is null)
             {
@@ -418,7 +420,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private async Task<Recorder?> Settle(
         long bytes,
         Func<IReadOnlyList<Recorder>, Task<Recorder?>> chooseADrive,
-        Func<Recorder, Task<bool>> mayErase,
+        Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
         CancellationToken ct)
     {
         IReadOnlyList<Recorder> all = _machine.Drives.All();
@@ -440,14 +442,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
                         return await chooseADrive(waiting);
                     }
 
-                    Recorder? erasable = all.FirstOrDefault(each => each.ErasingWouldHelp);
+                    Recorder[] erasable = [.. all.Where(each => each.ErasingWouldHelp)];
 
-                    if (attempt == 0 && erasable is not null && await mayErase(erasable))
+                    if (attempt == 0 && erasable.Length > 0 && await whichToErase(erasable) is Recorder chosen)
                     {
-                        Say("erasing the " + erasable.Holding + " in " + erasable.Drive, 0);
+                        Say("erasing the " + chosen.Holding + " in " + chosen.Drive, 0);
 
                         Outcome<string> erased = await _machine.Eraser.BlankIt(
-                            erasable, new Progress<string>(line => Say(line, 0)), ct);
+                            chosen, new Progress<string>(line => Say(line, 0)), ct);
 
                         if (erased is Outcome<string>.No stopped)
                         {

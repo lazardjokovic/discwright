@@ -526,7 +526,7 @@ public class TheMainWindowWithoutAWindow
         ABurnerThatWorks burner = new();
         MakeADisc window = await Built(drives: new TheseDrives(ABlankIn("E:")), burner: burner);
 
-        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
 
         Assert.Equal("E:", burner.WroteTo);
         Assert.Null(window.ItWentWrong);
@@ -537,7 +537,7 @@ public class TheMainWindowWithoutAWindow
     {
         MakeADisc window = await Built(drives: new TheseDrives(ABlankIn("E:")));
 
-        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
 
         // Written is not the same as readable. This is the part that answers
         // the question somebody actually has, holding the disc.
@@ -552,7 +552,7 @@ public class TheMainWindowWithoutAWindow
         // perfect, and nothing here can say so.
         MakeADisc window = New(drives: new TheseDrives(ABlankIn("E:")));
 
-        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
 
         Assert.Null(window.HowTheDiscCameOut);
         Assert.NotNull(window.ItWentWrong);
@@ -590,7 +590,7 @@ public class TheMainWindowWithoutAWindow
         ABurnerThatWorks burner = new();
         MakeADisc window = New(drives: new TheseDrives(ABlankIn("D:"), ABlankIn("E:")), burner: burner);
 
-        await window.BurnIt(@"C:\out\A GAME.iso", _ => Task.FromResult<Recorder?>(null), NeverAsked, Closes);
+        await window.BurnIt(@"C:\out\A GAME.iso", _ => Task.FromResult<Recorder?>(null), NeverAskedAboutErasing, Closes);
 
         Assert.Null(burner.WroteTo);
     }
@@ -612,15 +612,47 @@ public class TheMainWindowWithoutAWindow
         await window.BurnIt(
             @"C:\out\A GAME.iso",
             NeverAsked,
-            disc =>
+            could =>
             {
                 asked = true;
-                Assert.Equal("E:", disc.Drive);
-                return Task.FromResult(true);
+                Assert.Equal("E:", Assert.Single(could).Drive);
+                return Task.FromResult<Recorder?>(could[0]);
             },
             Closes);
 
         Assert.True(asked);
+        Assert.Equal("E:", eraser.Erased);
+        Assert.Equal("E:", burner.WroteTo);
+    }
+
+    [Fact]
+    public async Task Asks_which_disc_to_erase_when_either_of_two_could_go()
+    {
+        AnEraserThatWorks eraser = new();
+        ABurnerThatWorks burner = new();
+
+        TheseDrives drives = new(AUsedCdRwIn("D:"), AUsedCdRwIn("E:"));
+        drives.AfterErasing = ABlankIn("E:");
+
+        MakeADisc window = await Built(drives: drives, burner: burner, eraser: eraser);
+
+        IReadOnlyList<Recorder>? offered = null;
+
+        await window.BurnIt(
+            @"C:\out\A GAME.iso",
+            NeverAsked,
+            could =>
+            {
+                offered = could;
+                return Task.FromResult<Recorder?>(could.First(each => each.Drive == "E:"));
+            },
+            Closes);
+
+        // Both are offered, because which disc to destroy is not a choice to
+        // make on somebody's behalf. Before this, the burn refused with "that
+        // disc cannot be written to", which is false about a rewritable one.
+        Assert.NotNull(offered);
+        Assert.Equal(["D:", "E:"], offered.Select(each => each.Drive));
         Assert.Equal("E:", eraser.Erased);
         Assert.Equal("E:", burner.WroteTo);
     }
@@ -633,7 +665,8 @@ public class TheMainWindowWithoutAWindow
 
         MakeADisc window = New(drives: new TheseDrives(AUsedCdRwIn("E:")), burner: burner, eraser: eraser);
 
-        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, _ => Task.FromResult(false), Closes);
+        await window.BurnIt(
+            @"C:\out\A GAME.iso", NeverAsked, _ => Task.FromResult<Recorder?>(null), Closes);
 
         // Whatever is on that disc goes, so it is never assumed.
         Assert.Null(eraser.Erased);
@@ -646,7 +679,7 @@ public class TheMainWindowWithoutAWindow
     {
         MakeADisc window = New(drives: new NoDrives());
 
-        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
 
         Assert.NotNull(window.ItWentWrong);
     }
@@ -657,7 +690,7 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = New(drives: new TheseDrives(ABlankIn("E:")));
 
         // The tray never shuts, so nothing can be read back.
-        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, _ => Task.FromResult(false));
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, _ => Task.FromResult(false));
 
         // Not a failure of the burn. What is missing is the proof, and saying
         // "done" without it would be claiming something nobody checked.
@@ -670,7 +703,7 @@ public class TheMainWindowWithoutAWindow
     {
         MakeADisc window = New(drives: new TheseDrives(ABlankIn("E:")), burner: new ABurnerThatWorks());
 
-        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
 
         // Said after every burn, not only the bad ones: a quiet drive and a
         // listener that never worked look the same on screen.
@@ -852,7 +885,7 @@ public class TheMainWindowWithoutAWindow
     private static Task<Recorder?> NeverAsked(IReadOnlyList<Recorder> ready) =>
         throw new InvalidOperationException("It should not have had to ask which drive.");
 
-    private static Task<bool> NeverAsked(Recorder disc) =>
+    private static Task<Recorder?> NeverAskedAboutErasing(IReadOnlyList<Recorder> could) =>
         throw new InvalidOperationException("It should not have had to ask about erasing.");
 
     private static Task<bool> Closes(Recorder drive) => Task.FromResult(true);

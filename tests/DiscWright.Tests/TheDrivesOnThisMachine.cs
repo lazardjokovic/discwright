@@ -42,6 +42,37 @@ public class TheDrivesOnThisMachine(Xunit.Abstractions.ITestOutputHelper says)
     }
 
     [Fact]
+    public void Says_what_it_would_do_with_the_discs_that_are_in_there_now()
+    {
+        // Nothing is written, erased or ejected. This only asks the question
+        // the Burn button asks, and writes down the answer, so that what the
+        // program would say about a real pair of drives can be read without
+        // spending a disc to find out.
+        IReadOnlyList<Recorder> drives = new WindowsRecorders().All();
+
+        says.WriteLine($"{drives.Count} drive(s), and {drives.Count(each => each.Ready)} ready.");
+
+        foreach (Recorder drive in drives)
+        {
+            says.WriteLine($"  {drive}");
+        }
+
+        says.WriteLine("");
+
+        switch (WhichRecorder.For(drives, 10_000_000))
+        {
+            case Outcome<Recorder>.Ok(Recorder onto):
+                says.WriteLine($"It would write to {onto.Drive}.");
+                break;
+
+            case Outcome<Recorder>.No refused:
+                says.WriteLine($"It would refuse: {refused.Refusal.Headline}");
+                says.WriteLine($"  because: {refused.Refusal.Because}");
+                break;
+        }
+    }
+
+    [Fact]
     public void Can_be_asked_without_anything_going_wrong()
     {
         // The one thing that must never happen: a machine with no writer, or a

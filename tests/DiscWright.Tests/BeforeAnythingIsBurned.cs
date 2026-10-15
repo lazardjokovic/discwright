@@ -186,6 +186,24 @@ public class BeforeAnythingIsBurned
     }
 
     [Fact]
+    public void Names_both_discs_when_either_of_them_could_be_erased()
+    {
+        Outcome<Recorder> chosen = WhichRecorder.For(
+            [ADrive("D:", 3, blank: false), ADrive("E:", 3, blank: false)],
+            10_000_000);
+
+        // It used to fall through to "that disc cannot be written to", which is
+        // false about a rewritable one and is the wording that makes somebody
+        // bin a usable disc. Which one goes is theirs to decide, so both are
+        // named and nothing is erased.
+        Refusal why = Assert.IsType<Outcome<Recorder>.No>(chosen).Refusal;
+        Assert.Contains("More than one", why.Headline, StringComparison.Ordinal);
+        Assert.Contains("D:", why.Because, StringComparison.Ordinal);
+        Assert.Contains("E:", why.Because, StringComparison.Ordinal);
+        Assert.Contains("nothing has been erased", why.Because, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Says_when_what_is_in_there_can_never_be_written_to()
     {
         Outcome<Recorder> chosen = WhichRecorder.For([ADrive("E:", 1, blank: false)], 10_000_000);
