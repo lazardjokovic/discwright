@@ -105,7 +105,7 @@ public sealed class WriteTheMenuStep : IBuildStep
                     Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(addOn.Path))))
             ];
 
-            onTheMenu.Add(new MenuGame(game.Name, runs, folder, addOns));
+            onTheMenu.Add(new MenuGame(game.Name, runs, folder, addOns, game.MatchName));
         }
 
         return onTheMenu;

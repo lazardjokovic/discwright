@@ -886,6 +886,39 @@ Proved on the eleven discs in the testing kit, ten at version 14 and one deliber
 
 **A folder path is long**, and a scrollbar along the bottom of the list to read the end of one is a poor trade for the room it takes. Trimmed, with the whole path on hover.
 
+## Is the game already on the machine?
+
+The one question the menu could not answer. Until now every add-on stayed dead for ever and the main button always said **Install**, even to somebody who had the game installed and only wanted to play it.
+
+GOG writes what it installs into the registry, and that is what the menu reads. The answer changes two things: an add-on stops being dead, and the button says **Play**, because offering to install it again over the top is how a save game dies.
+
+### Read through WMI, not WScript.Shell
+
+The games sit under a key named by a number nobody knows in advance, and only WMI can list the keys under a key. Both views are looked in: a 32 bit game on a 64 bit Windows registers under `WOW6432Node` and a 64 bit one does not.
+
+**The executable is checked on the disk, not believed.** An entry left behind by an uninstall that did not finish is the common case, and it would otherwise light up a Play button that cannot work.
+
+### The names never match as written
+
+GOG's registry name drops and changes punctuation, so the comparison is on letters and digits alone. The real case, on the machine this was written on:
+
+```
+  The Witcher - Enhanced Edition  ->  installed:
+      C:\Program Files (x86)\GOG Galaxy\Games\The Witcher Enhanced Edition\launcher.exe
+```
+
+The disc says *The Witcher - Enhanced Edition*; the registry says *The Witcher Enhanced Edition Director's Cut*. Either may be the longer, so it is a containment test both ways, **with one guard: a registry name shorter than six letters may not swallow ours.** "war" sits inside "starwars" and "ana" inside "analogue", and a Play button that runs the wrong game is worse than one that does nothing.
+
+**The trademark marks come off first and on their own**, because they are the one punctuation that leaves a letter behind. GOG registers Empire at War as `STAR WARS(R): Empire At War(TM)`, and dropping only the brackets leaves an `r` and a `tm` wedged into the middle of the name, matching nothing.
+
+### The disc remembers the name it was registered under
+
+`MatchName` is on the menu now, beside the name somebody reads. They are not the same thing: a folder can be renamed and a project can be given a name somebody typed, while what GOG wrote stays as it was. A disc built before this carries only a name, and the lookup falls back to it.
+
+### Not knowing is not the same as knowing it is absent
+
+If WMI cannot be reached at all, the answer is the same as "not installed", because the menu has only one honest move either way: leave the add-ons alone.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

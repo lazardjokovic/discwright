@@ -85,7 +85,7 @@ function showGame(index) {
     document.getElementById("chooserScreen").style.display = "none";
     document.getElementById("gameScreen").style.display = "block";
     document.getElementById("gameName").innerText = game.name;
-    document.getElementById("doIt").innerText = whatToDoWith(game);
+    document.getElementById("doIt").innerText = whatToDoWith(game, isInstalled(game));
 
     showAddOnsOf(game);
 
@@ -95,10 +95,9 @@ function showGame(index) {
 
 // The add-ons of one game, under it, and DEAD until the game is installed.
 //
-// Whether it is installed is a question for the machine the disc is in, and the
-// menu has no way to ask it yet, so for now it is never installed and every
-// add-on says so. That is the honest state: a button that cannot work saying it
-// cannot work, rather than a button that half-applies a patch to nothing.
+// Whether it is installed is a question for the machine the disc is in, and
+// menu.js asks it: GOG writes what it installs into the registry, and the disc
+// remembers the name it was registered under.
 function showAddOnsOf(game) {
     var list = document.getElementById("addOns");
     var ordered = addOnsInOrder(game.addOns || []);
@@ -121,16 +120,6 @@ function showAddOnsOf(game) {
     var line = ordered.length > 0 ? whatAnAddOnSays(installed) : "";
     document.getElementById("addOnNote").innerText = line;
     document.getElementById("addOnNote").style.display = line === "" ? "none" : "block";
-}
-
-// Is this game on the machine already?
-//
-// Not answerable yet. It needs a look in the registry for what GOG registered,
-// which is the same lookup the Play button will want, and neither exists. False
-// is the safe answer: an add-on stays dead and says why, which is wrong in only
-// one direction and the harmless one.
-function isInstalled(game) {
-    return false;
 }
 
 function doExit() {

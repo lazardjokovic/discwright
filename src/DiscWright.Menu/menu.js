@@ -24,6 +24,10 @@
 // What the menu's window is called. A disc on its own is just the game; a disc
 // in a set says which one it is, because somebody holding three discs needs to
 // know what is in their hand without putting it in a drive.
+// The separator a registry path is made of, built from its code so that
+// nothing that copies this file can halve it.
+var BACKSLASH = String.fromCharCode(92);
+
 function discTitle(gameName, discNumber, discsInSet) {
     if (discsInSet <= 1) {
         return gameName;
@@ -183,13 +187,21 @@ function gameAt(games, index) {
 // copied and played from wherever it was copied to, because a game run off a
 // disc cannot save: the disc is read only, and the first time it tries to write
 // a save it either fails or silently writes nowhere.
-function whatToDoWith(game) {
+function whatToDoWith(game, installed) {
     if (!game) {
         return "";
     }
+
+    // Already on the machine, so the thing somebody came to do is play it.
+    // Offering to install it again over the top is how a save game dies.
+    if (installed === true) {
+        return "Play";
+    }
+
     if (game.runs && game.runs.length > 0) {
         return "Install";
     }
+
     return "Copy and play";
 }
 
@@ -240,4 +252,166 @@ function addOnsInOrder(addOns) {
     });
 
     return patches.concat(others);
+}
+
+// ===========================================================================
+// Is this game already on the machine?
+//
+// The one question the menu could not answer. Until now every add-on stayed
+// dead for ever and the main button always said Install, even to somebody who
+// had the game installed and only wanted to play it.
+//
+// GOG writes what it installs into the registry, and that is what this reads.
+// ===========================================================================
+
+// A name with everything but letters and digits taken out.
+//
+// GOG's registry name drops and changes punctuation: it writes "The Witcher
+// Enhanced Edition Director's Cut" where the folder said "The Witcher -
+// Enhanced Edition". Compared as written, those are two different games.
+//
+// The trademark marks come out first and on their own, because they are the
+// one kind of punctuation that leaves a LETTER behind. GOG registers Empire at
+// War as "STAR WARS(R): Empire At War(TM)", and dropping only the brackets
+// leaves an r and a tm wedged into the middle of the name, which matches
+// nothing.
+function nameAsItCompares(name) {
+    return String(name)
+        .toLowerCase()
+        .replace(/\((r|tm|c)\)/g, "")
+        .replace(/[\u00ae\u2122\u00a9]/g, "")
+        .replace(/[^a-z0-9]+/g, "");
+}
+
+// Whether the name in the registry and the name on the disc are the same game.
+//
+// Either may be the longer: GOG sometimes registers more words than the folder
+// had, and sometimes fewer. So it is a containment test both ways round, with
+// one guard: a registry name shorter than six letters is not allowed to swallow
+// ours, because "Gothic" inside "Gothic 3" is a match worth having and "AI"
+// inside anything is not.
+function isTheSameGame(registryName, ourName) {
+    var theirs = nameAsItCompares(registryName);
+    var ours = nameAsItCompares(ourName);
+
+    if (!theirs || !ours) {
+        return false;
+    }
+
+    if (theirs.indexOf(ours) >= 0) {
+        return true;
+    }
+
+    return theirs.length >= 6 && ours.indexOf(theirs) >= 0;
+}
+
+// Where an installed copy of this game is, or null.
+//
+// Read through WMI rather than with WScript.Shell, because the games are under
+// a key named by a number nobody knows in advance, and only WMI can list the
+// keys under a key. Both views are looked in: a 32 bit game on a 64 bit Windows
+// registers under WOW6432Node and a 64 bit one does not.
+//
+// The folder matters as much as the executable. It is where GOG's own
+// goggame-<id>.info sits, and that file is the only place a bundle admits to
+// holding more than one game.
+function whereTheGameIs(match) {
+    var UNDER_LOCAL_MACHINE = 0x80000002;
+    var bases = ["SOFTWARE" + BACKSLASH + "WOW6432Node" + BACKSLASH + "GOG.com" + BACKSLASH + "Games",
+                 "SOFTWARE" + BACKSLASH + "GOG.com" + BACKSLASH + "Games"];
+    var files, registry, at, ids, which, key, name, folder, exe, named;
+
+    try {
+        files = new ActiveXObject("Scripting.FileSystemObject");
+        registry = GetObject("winmgmts:" + BACKSLASH + BACKSLASH + "." + BACKSLASH
+            + "root" + BACKSLASH + "default").Get("StdRegProv");
+    } catch (noRegistry) {
+        // No WMI, or no permission to ask it. Not knowing is not the same as
+        // knowing it is absent, but the menu has only one honest move either
+        // way: leave the add-ons alone.
+        return null;
+    }
+
+    for (at = 0; at < bases.length; at++) {
+        ids = keysUnder(registry, UNDER_LOCAL_MACHINE, bases[at]);
+
+        for (which = 0; which < ids.length; which++) {
+            key = bases[at] + BACKSLASH + ids[which];
+            name = oneStringFrom(registry, UNDER_LOCAL_MACHINE, key, "gameName");
+
+            if (!name || !isTheSameGame(name, match)) {
+                continue;
+            }
+
+            folder = oneStringFrom(registry, UNDER_LOCAL_MACHINE, key, "path");
+            exe = oneStringFrom(registry, UNDER_LOCAL_MACHINE, key, "exe");
+
+            // Checked on the disk, not believed. An entry left behind by an
+            // uninstall that did not finish is the common case, and it would
+            // otherwise light up a Play button that cannot work.
+            if (exe && files.FileExists(exe)) {
+                return { exe: exe, dir: folder || files.GetParentFolderName(exe) };
+            }
+
+            named = oneStringFrom(registry, UNDER_LOCAL_MACHINE, key, "exeFile");
+
+            if (folder && named && files.FileExists(files.BuildPath(folder, named))) {
+                return { exe: files.BuildPath(folder, named), dir: folder };
+            }
+        }
+    }
+
+    return null;
+}
+
+// The names of the keys under one key, or an empty list.
+function keysUnder(registry, where, key) {
+    var asking, answer;
+
+    try {
+        asking = registry.Methods_.Item("EnumKey").InParameters.SpawnInstance_();
+        asking.hDefKey = where;
+        asking.sSubKeyName = key;
+        answer = registry.ExecMethod_("EnumKey", asking);
+
+        if (answer.ReturnValue !== 0 || answer.sNames === null) {
+            return [];
+        }
+
+        return new VBArray(answer.sNames).toArray();
+    } catch (nothingThere) {
+        return [];
+    }
+}
+
+// One string value, or null.
+function oneStringFrom(registry, where, key, value) {
+    var asking, answer;
+
+    try {
+        asking = registry.Methods_.Item("GetStringValue").InParameters.SpawnInstance_();
+        asking.hDefKey = where;
+        asking.sSubKeyName = key;
+        asking.sValueName = value;
+        answer = registry.ExecMethod_("GetStringValue", asking);
+
+        if (answer.ReturnValue === 0) {
+            return answer.sValue;
+        }
+    } catch (nothingThere) {
+    }
+
+    return null;
+}
+
+// Whether this game is on the machine the disc is in.
+//
+// Asked about the name it was REGISTERED under, which is not always the name on
+// the disc: the folder may have been renamed, and the disc remembers both.
+function isInstalled(game) {
+    if (!game) {
+        return false;
+    }
+
+    return whereTheGameIs(game.match || game.name) !== null;
 }

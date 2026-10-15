@@ -32,8 +32,12 @@ public sealed class TheMenuScript : IDisposable
     private readonly string _folder = Path.Combine(
         Path.GetTempPath(), "dwjs_" + Guid.NewGuid().ToString("N")[..8]);
 
-    public TheMenuScript()
+    private readonly Xunit.Abstractions.ITestOutputHelper _says;
+
+    public TheMenuScript(Xunit.Abstractions.ITestOutputHelper says)
     {
+        _says = says;
+
         Directory.CreateDirectory(_folder);
         File.Copy(MenuScriptInTheSourceTree(), Path.Combine(_folder, "menu.js"));
     }
@@ -255,6 +259,133 @@ public sealed class TheMenuScript : IDisposable
     // ------------------------------------------------------------------ helpers
 
     /// <summary>Runs one JScript expression against menu.js and returns what it printed.</summary>
+    // --------------------------------------------- is the game installed
+
+    [Theory]
+    [InlineData("The Witcher Enhanced Edition Director's Cut", "The Witcher - Enhanced Edition")]
+    [InlineData("Hollow Knight", "Hollow Knight")]
+    [InlineData("Gothic 3", "Gothic")]
+    [InlineData("STAR WARS(R): Empire At War(TM)", "Star Wars Empire at War")]
+    public void Knows_two_spellings_of_the_same_game(string registry, string ours)
+    {
+        // GOG's registry name drops and changes punctuation, so compared as
+        // written these are different games and the Play button never lights
+        // up for anybody who has the game.
+        Assert.Equal("yes", Ask($"isTheSameGame({Quoted(registry)}, {Quoted(ours)}) ? 'yes' : 'no'"));
+    }
+
+    [Theory]
+    [InlineData("Gothic", "Gothic 3")]
+    [InlineData("The Witcher", "The Witcher 3 Wild Hunt")]
+    public void Takes_a_shorter_registry_name_inside_a_longer_one_of_ours(string registry, string ours)
+    {
+        // GOG sometimes registers fewer words than the folder had.
+        Assert.Equal("yes", Ask($"isTheSameGame({Quoted(registry)}, {Quoted(ours)}) ? 'yes' : 'no'"));
+    }
+
+    [Theory]
+    // These two really are inside ours, which is the whole point: "war" sits
+    // in "starwars" and "ana" in "analogue". Without the guard on length they
+    // would both be taken for the same game.
+    [InlineData("War", "Star Wars Empire at War")]
+    [InlineData("Ana", "Analogue A Hate Story")]
+    [InlineData("AI", "Alan Wake")]
+    [InlineData("Doom", "Hollow Knight")]
+    [InlineData("", "Hollow Knight")]
+    [InlineData("Hollow Knight", "")]
+    public void Does_not_take_two_different_games_for_each_other(string registry, string ours)
+    {
+        // The short one matters: a two letter registry name sits inside half
+        // the games ever made, and a Play button that runs the wrong game is
+        // worse than one that does nothing.
+        Assert.Equal("no", Ask($"isTheSameGame({Quoted(registry)}, {Quoted(ours)}) ? 'yes' : 'no'"));
+    }
+
+    [Fact]
+    public void Asks_about_the_name_the_game_was_registered_under()
+    {
+        // Not the name on the disc: a folder can be renamed, and a project can
+        // be given a name somebody typed.
+        Assert.Equal(
+            "The Witcher",
+            Ask("(function () { var g = { name: 'My Favourite Game', match: 'The Witcher' };"
+                + " return g.match || g.name; }())"));
+    }
+
+    [Fact]
+    public void Falls_back_to_the_name_on_the_disc_when_there_is_no_other()
+    {
+        // Every disc built before the match name was carried has only a name.
+        Assert.Equal(
+            "Hollow Knight",
+            Ask("(function () { var g = { name: 'Hollow Knight' }; return g.match || g.name; }())"));
+    }
+
+    [Fact]
+    public void Says_Play_rather_than_Install_when_the_game_is_already_there()
+    {
+        // Offering to install it again over the top is how a save game dies.
+        Assert.Equal("Play", Ask("whatToDoWith({ name: 'A Game', runs: 'setup.exe' }, true)"));
+        Assert.Equal("Install", Ask("whatToDoWith({ name: 'A Game', runs: 'setup.exe' }, false)"));
+    }
+
+    [Fact]
+    public void Still_says_copy_and_play_for_a_game_with_no_installer()
+    {
+        Assert.Equal("Copy and play", Ask("whatToDoWith({ name: 'A Game', runs: '' }, false)"));
+    }
+
+    [Fact]
+    public void Answers_about_a_game_that_is_not_installed_without_falling_over()
+    {
+        // The whole lookup, on whatever machine this runs on, against a name no
+        // game has. It must come back with an answer rather than an error: the
+        // menu runs on somebody else's machine, where anything may be missing.
+        Assert.Equal("no", Ask("isInstalled({ name: 'A Game Nobody Has Ever Published' }) ? 'yes' : 'no'"));
+    }
+
+    [Fact]
+    public void Answers_about_nothing_at_all()
+    {
+        Assert.Equal("no", Ask("isInstalled(null) ? 'yes' : 'no'"));
+    }
+
+    [Fact]
+    public void Finds_whatever_is_really_installed_on_this_machine()
+    {
+        // The whole lookup, through the registry, on whatever machine this runs
+        // on. It asserts nothing about which games are there, because that is
+        // not the same on two machines and is nothing on the test VM. What it
+        // proves is that the walk runs and comes back.
+        string names = Ask(
+            "(function () {"
+            + " var out = [], bases = ['SOFTWARE' + BACKSLASH + 'WOW6432Node' + BACKSLASH + 'GOG.com' + BACKSLASH + 'Games',"
+            + "                        'SOFTWARE' + BACKSLASH + 'GOG.com' + BACKSLASH + 'Games'];"
+            + " var reg = GetObject('winmgmts:' + BACKSLASH + BACKSLASH + '.' + BACKSLASH + 'root' + BACKSLASH + 'default').Get('StdRegProv');"
+            + " for (var b = 0; b < bases.length; b++) {"
+            + "   var ids = keysUnder(reg, 0x80000002, bases[b]);"
+            + "   for (var k = 0; k < ids.length; k++) {"
+            + "     var nm = oneStringFrom(reg, 0x80000002, bases[b] + BACKSLASH + ids[k], 'gameName');"
+            + "     if (nm) { out.push(nm + ' -> ' + (isInstalled({ name: nm }) ? 'found' : 'NOT FOUND')); }"
+            + "   } }"
+            + " return out.length ? out.join('; ') : 'nothing is installed here';"
+            + "}())");
+
+        _says.WriteLine("  " + names);
+
+        // Every game the registry names must be found by the lookup that reads
+        // the same registry. One that is not means the matching is wrong about
+        // a real name on a real machine.
+        Assert.DoesNotContain("NOT FOUND", names, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A string the script can take, with the quotes it needs.
+    /// </summary>
+    private static string Quoted(string text) =>
+        "'" + text.Replace(((char)92).ToString(), ((char)92).ToString() + (char)92, StringComparison.Ordinal)
+            .Replace("'", ((char)92) + "'", StringComparison.Ordinal) + "'";
+
     private string Ask(string expression)
     {
         (string output, int exitCode) = Run(expression);

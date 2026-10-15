@@ -49,6 +49,9 @@ public static class MenuWriter
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),
+
+                // What to look up, which the menu needs and nobody reads.
+                ("match", JScript.Literal(game.MatchName ?? game.Name)),
                 ("runs", JScript.Literal(game.Runs)),
                 ("folder", JScript.Literal(game.Folder)),
                 ("addOns", JScript.ArrayOf(game.AddOns.Select(addOn => JScript.Fields(
@@ -147,7 +150,18 @@ public sealed record MenuFacts(
 /// What goes under this game, in the order it should be offered. Dead on the
 /// menu until the game itself is installed.
 /// </param>
-public sealed record MenuGame(string Name, string Runs, string Folder, IReadOnlyList<MenuAddOn>? Given = null)
+/// <param name="MatchName">
+/// The name the game is registered under, which is not always the name on the
+/// disc. A folder can be renamed and a project can be given a name somebody
+/// typed; what GOG wrote in the registry stays as it was, and that is what the
+/// menu has to ask about.
+/// </param>
+public sealed record MenuGame(
+    string Name,
+    string Runs,
+    string Folder,
+    IReadOnlyList<MenuAddOn>? Given = null,
+    string? MatchName = null)
 {
     /// <summary>Its add-ons, or none.</summary>
     public IReadOnlyList<MenuAddOn> AddOns => Given ?? [];
