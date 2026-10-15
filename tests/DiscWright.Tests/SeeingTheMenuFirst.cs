@@ -187,6 +187,7 @@ public class SeeingTheMenuFirst
             new ATrayThatShuts(),
             new NothingIsReleased(),
             new APreviewOfTheMenu(new RecordingWriter()),
+            new PicturesThatRead(),
             "2.0.0",
             _ => 1000));
 
@@ -261,5 +262,22 @@ public class SeeingTheMenuFirst
     {
         public Task<WhatWasReleased> TheLatest(CancellationToken ct) =>
             Task.FromResult(new WhatWasReleased(null, null, "no asking in a test"));
+    }
+
+    /// <summary>Pictures that can all be read, which is the ordinary case.</summary>
+    private sealed class PicturesThatRead : IImages
+    {
+        internal string? Refuse { get; init; }
+
+        public ImageFacts Read(string path) =>
+            Refuse is null ? new ImageFacts(true, 512, 512, null) : new ImageFacts(false, 0, 0, Refuse);
+
+        public void WriteIcon(string source, string destination)
+        {
+        }
+
+        public void WriteBackground(string source, string destination, int width, int height, bool asIs)
+        {
+        }
     }
 }

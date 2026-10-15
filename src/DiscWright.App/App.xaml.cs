@@ -64,6 +64,7 @@ public partial class App : Application
             burner,
             new WhatGitHubHasReleased(),
             new APreviewOfTheMenu(new WindowsStageWriter()),
+            new WindowsImages(),
             WhatThisBuildIs(),
             HowBigIs(disk)));
 

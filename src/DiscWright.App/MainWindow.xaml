@@ -168,8 +168,17 @@
                 </Border>
             </DockPanel>
 
-            <!-- What it is called, and where it goes -->
-            <StackPanel Grid.Column="2">
+            <!-- What it is called, and where it goes.
+
+                 In a scroller because this column has twice grown past the
+                 bottom of a window drawn for what was in it before, and both
+                 times the answer was a taller window. A scrollbar appears only
+                 when it is needed and nothing can be lost again. -->
+            <ScrollViewer Grid.Column="2"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="0,0,6,0">
+            <StackPanel>
                 <TextBlock Style="{StaticResource Step}" Text="WHAT IT IS CALLED" />
                 <TextBox Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
                          CharacterCasing="Upper"
@@ -250,6 +259,247 @@
                             AutomationProperties.AutomationId="ChooseWhereItGoes" />
                 </Grid>
 
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Text="The disc is built into a folder here, with its ISO beside it. Nothing is written to a disc until you press Burn."
+                           AutomationProperties.AutomationId="WhatGoesThere" />
+
+                <!-- Everything that is not a game. All of it has worked in
+                     the build pipeline from the start and none of it had a way
+                     in from this window, so a disc made here could not have a
+                     background, an icon, music, a manual or extras on it. -->
+                <Expander Margin="0,16,0,0"
+                          Foreground="{StaticResource Quiet}"
+                          FontSize="12"
+                          Header="What else goes on it"
+                          AutomationProperties.AutomationId="WhatElseGoesOnIt">
+                    <StackPanel Margin="4,4,0,0">
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Text="Disc icon" />
+
+                            <TextBlock Grid.Column="1"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding DiscIcon}"
+                                       Text="{Binding DiscIcon, TargetNullValue=nothing chosen}"
+                                       AutomationProperties.AutomationId="TheDiscIcon" />
+
+                            <Button Grid.Column="2"
+                                    Content="Choose..."
+                                    Style="{StaticResource Quietly}"
+                                    VerticalAlignment="Center"
+                                    Click="ChooseTheDiscIcon"
+                                    AutomationProperties.AutomationId="ChooseTheDiscIcon" />
+                        </Grid>
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Text="Background" />
+
+                            <TextBlock Grid.Column="1"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Background}"
+                                       Text="{Binding Background, TargetNullValue=nothing chosen}"
+                                       AutomationProperties.AutomationId="TheBackground" />
+
+                            <Button Grid.Column="2"
+                                    Content="Choose..."
+                                    Style="{StaticResource Quietly}"
+                                    VerticalAlignment="Center"
+                                    Click="ChooseTheBackground"
+                                    AutomationProperties.AutomationId="ChooseTheBackground" />
+                        </Grid>
+
+                        <CheckBox Margin="96,4,0,0"
+                                  Content="Stretch it to fit rather than cropping"
+                                  IsChecked="{Binding BackgroundAsIs}"
+                                  AutomationProperties.AutomationId="BackgroundAsIs" />
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Text="Music" />
+
+                            <TextBlock Grid.Column="1"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Music}"
+                                       Text="{Binding Music, TargetNullValue=nothing chosen}"
+                                       AutomationProperties.AutomationId="TheMusic" />
+
+                            <Button Grid.Column="2"
+                                    Content="Choose..."
+                                    Style="{StaticResource Quietly}"
+                                    VerticalAlignment="Center"
+                                    Click="ChooseTheMusic"
+                                    AutomationProperties.AutomationId="ChooseTheMusic" />
+                        </Grid>
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Text="Manual" />
+
+                            <TextBlock Grid.Column="1"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Manual}"
+                                       Text="{Binding Manual, TargetNullValue=nothing chosen}"
+                                       AutomationProperties.AutomationId="TheManual" />
+
+                            <Button Grid.Column="2"
+                                    Content="Choose..."
+                                    Style="{StaticResource Quietly}"
+                                    VerticalAlignment="Center"
+                                    Click="ChooseTheManual"
+                                    AutomationProperties.AutomationId="ChooseTheManual" />
+                        </Grid>
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Text="Extras" />
+
+                            <TextBlock Grid.Column="1"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding ExtrasFolder}"
+                                       Text="{Binding ExtrasFolder, TargetNullValue=nothing chosen}"
+                                       AutomationProperties.AutomationId="TheExtrasFolder" />
+
+                            <Button Grid.Column="2"
+                                    Content="Choose..."
+                                    Style="{StaticResource Quietly}"
+                                    VerticalAlignment="Center"
+                                    Click="ChooseTheExtras"
+                                    AutomationProperties.AutomationId="ChooseTheExtras" />
+                        </Grid>
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Text="Cover" />
+
+                            <TextBlock Grid.Column="1"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Cover}"
+                                       Text="{Binding Cover, TargetNullValue=nothing chosen}"
+                                       AutomationProperties.AutomationId="TheCover" />
+
+                            <Button Grid.Column="2"
+                                    Content="Choose..."
+                                    Style="{StaticResource Quietly}"
+                                    VerticalAlignment="Center"
+                                    Click="ChooseTheCover"
+                                    AutomationProperties.AutomationId="ChooseTheCover" />
+                        </Grid>
+                        <Grid Margin="0,7,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Grid.Column="0"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Text="Disc face" />
+
+                            <TextBlock Grid.Column="1"
+                                       Style="{StaticResource Aside}"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"
+                                       TextWrapping="NoWrap"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding DiscFace}"
+                                       Text="{Binding DiscFace, TargetNullValue=nothing chosen}"
+                                       AutomationProperties.AutomationId="TheDiscFace" />
+
+                            <Button Grid.Column="2"
+                                    Content="Choose..."
+                                    Style="{StaticResource Quietly}"
+                                    VerticalAlignment="Center"
+                                    Click="ChooseTheDiscFace"
+                                    AutomationProperties.AutomationId="ChooseTheDiscFace" />
+                        </Grid>
+
+                        <TextBlock Style="{StaticResource Aside}"
+                                   Margin="0,10,0,0"
+                                   TextWrapping="Wrap"
+                                   Text="The cover and the disc face are for printing. Everything above them goes on the disc."
+                                   AutomationProperties.AutomationId="AboutTheArtwork" />
+
+                        <TextBlock Foreground="{StaticResource WorryInk}"
+                                   FontSize="12"
+                                   Margin="0,6,0,0"
+                                   TextWrapping="Wrap"
+                                   Text="{Binding WhyNotThatPicture}"
+                                   Visibility="{Binding WhyNotThatPicture, Converter={StaticResource WhenAnything}}"
+                                   AutomationProperties.AutomationId="WhyNotThatPicture" />
+                    </StackPanel>
+                </Expander>
+
                 <Expander Margin="0,16,0,0"
                           Foreground="{StaticResource Quiet}"
                           FontSize="12"
@@ -298,6 +548,7 @@
                     </StackPanel>
                 </Expander>
             </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <!-- ================================================ the bottom line

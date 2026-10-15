@@ -232,6 +232,88 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Everything that is not a game.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A picture is looked at the moment it is picked rather than at build
+    /// time. The icon used to be checked when it was chosen and the background
+    /// never was, so a file Windows cannot decode sailed through the whole
+    /// window and failed at the end as "A generic error occurred in GDI+",
+    /// which tells somebody nothing about which file is at fault.
+    /// </para>
+    /// <para>
+    /// Cancelling leaves what was there. Choosing the same file again is how
+    /// somebody confirms it, and there is a Clear beside nothing because the
+    /// picker itself can be pointed at the thing they want instead.
+    /// </para>
+    /// </remarks>
+    private void ChooseTheDiscIcon(object sender, RoutedEventArgs e) =>
+        TakeAPicture("The icon the disc wears", path => _screen.DiscIcon = path);
+
+    private void ChooseTheBackground(object sender, RoutedEventArgs e) =>
+        TakeAPicture("The picture the menu is drawn on", path => _screen.Background = path);
+
+    private void ChooseTheCover(object sender, RoutedEventArgs e) =>
+        TakeAPicture("The picture for the printed cover", path => _screen.Cover = path);
+
+    private void ChooseTheDiscFace(object sender, RoutedEventArgs e) =>
+        TakeAPicture("The picture for the printed disc face", path => _screen.DiscFace = path);
+
+    private void ChooseTheMusic(object sender, RoutedEventArgs e) =>
+        TakeAFile(
+            "What plays behind the menu",
+            "Music|*.mp3;*.wav;*.wma;*.m4a|Anything|*.*",
+            path => _screen.Music = path);
+
+    private void ChooseTheManual(object sender, RoutedEventArgs e) =>
+        TakeAFile(
+            "The manual",
+            "A manual|*.pdf;*.txt;*.htm;*.html;*.rtf|Anything|*.*",
+            path => _screen.Manual = path);
+
+    private void ChooseTheExtras(object sender, RoutedEventArgs e)
+    {
+        OpenFolderDialog asking = new() { Title = "A folder of extras to put on the disc" };
+
+        if (asking.ShowDialog(this) == true)
+        {
+            _screen.ExtrasFolder = asking.FolderName;
+        }
+    }
+
+    private void TakeAPicture(string title, Action<string> keep)
+    {
+        TakeAFile(
+            title,
+            "Pictures|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|Anything|*.*",
+            path =>
+            {
+                // Said now, with the file named, rather than at the end of a
+                // build in somebody else's words.
+                if (_screen.ThatPictureIsUsable(path))
+                {
+                    keep(path);
+                }
+            });
+    }
+
+    private void TakeAFile(string title, string kinds, Action<string> keep)
+    {
+        OpenFileDialog asking = new()
+        {
+            Title = title,
+            Filter = kinds,
+            CheckFileExists = true
+        };
+
+        if (asking.ShowDialog(this) == true)
+        {
+            keep(asking.FileName);
+        }
+    }
+
     private void ChooseWhereItGoes(object sender, RoutedEventArgs e)
     {
         OpenFolderDialog asking = new() { Title = "Where should the discs go?" };

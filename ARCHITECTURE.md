@@ -289,6 +289,20 @@ The existing codebase already does this better than most, so the rule is just to
 
 That comment is worth twenty lines of guessing. A comment that says `// loop over the games` is worth less than nothing.
 
+## What else goes on the disc
+
+The disc icon, the menu background, the music, the manual, the extras and the printed artwork **had no way in from the window at all**. Every one of them worked in the build pipeline from the first day and could only be set by *opening* a project somebody else had made, so a disc made here could not have had any of it.
+
+They are a section of their own now, beside More options. The cover and the disc face are in it too, because choosing them is not printing them: a picture can be picked tonight and printed whenever a printer turns up.
+
+**Music was worse than unreachable.** `AsAProject` built its extras without it, so a project saved with music lost it on the way back in, and nothing could have put any there to begin with.
+
+**A picture is looked at the moment it is picked.** The icon used to be checked when it was chosen and the background never was, so a file Windows cannot decode sailed through the whole window and failed at the end as "A generic error occurred in GDI+", which tells somebody nothing about which file is at fault.
+
+### The column scrolls
+
+It has twice grown past the bottom of a window drawn for what was in it before, and both times the answer was a taller window. It is a scroller now: the bar appears only when it is needed, and nothing can be lost off the bottom again whatever gets added next.
+
 ## The window
 
 **WPF on .NET 10, MVVM, 920 by 620 fixed.** The view models hold no WPF types and are unit tested like anything else; the window holds no arithmetic and no refusal wording.

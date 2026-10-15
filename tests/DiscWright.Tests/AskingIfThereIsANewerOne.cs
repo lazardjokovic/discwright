@@ -193,6 +193,7 @@ public class AskingIfThereIsANewerOne
             new ATrayThatShuts(),
             asker,
             new NoPreview(),
+            new PicturesThatRead(),
             "2.0.0",
             _ => 1000));
 
@@ -285,5 +286,22 @@ public class AskingIfThereIsANewerOne
     {
         public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
             Refusals.ThereIsNothingToPutOnADisc();
+    }
+
+    /// <summary>Pictures that can all be read, which is the ordinary case.</summary>
+    private sealed class PicturesThatRead : IImages
+    {
+        internal string? Refuse { get; init; }
+
+        public ImageFacts Read(string path) =>
+            Refuse is null ? new ImageFacts(true, 512, 512, null) : new ImageFacts(false, 0, 0, Refuse);
+
+        public void WriteIcon(string source, string destination)
+        {
+        }
+
+        public void WriteBackground(string source, string destination, int width, int height, bool asIs)
+        {
+        }
     }
 }

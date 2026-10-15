@@ -30,6 +30,7 @@ namespace DiscWright.ViewModels;
 /// <param name="Tray">What opens and shuts a drive, and says whether it can.</param>
 /// <param name="Releases">What says which version is newest, when asked.</param>
 /// <param name="Preview">What writes a menu somebody can look at.</param>
+/// <param name="Pictures">What can read a picture, for checking one when it is picked.</param>
 /// <param name="ThisBuild">Which version this one is.</param>
 /// <param name="HowBigIs">
 /// How big a file or folder is. Handed in rather than read here, because this
@@ -49,5 +50,6 @@ public sealed record TheMachine(
     IWorkTheTray Tray,
     IAskWhatIsReleased Releases,
     IShowTheMenu Preview,
+    IImages Pictures,
     string ThisBuild,
     Func<string, long> HowBigIs);

@@ -42,6 +42,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private DiscArtwork? _artwork;
     private string? _manual;
     private string? _extrasFolder;
+    private string? _music;
 
     private string _label = string.Empty;
     private string _outputFolder = string.Empty;
@@ -666,6 +667,131 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
     }
 
+    // ------------------------------------------- what else goes on the disc
+    //
+    // Every one of these was reachable only by OPENING a project somebody else
+    // had made. The build pipeline has handled all of it from the start; there
+    // was simply no way in from the window, so a disc made here could never
+    // have a background, an icon, music, a manual or extras on it.
+
+    /// <summary>The picture the disc wears in This PC and on the menu.</summary>
+    public string? DiscIcon
+    {
+        get => _artwork?.IconPath;
+        set => ChangeTheArtwork(Art() with { IconPath = Tidy(value) });
+    }
+
+    /// <summary>The picture the menu is drawn on.</summary>
+    public string? Background
+    {
+        get => _artwork?.BackgroundPath;
+        set => ChangeTheArtwork(Art() with { BackgroundPath = Tidy(value) });
+    }
+
+    /// <summary>
+    /// Whether the background is stretched to fit exactly rather than cropped.
+    /// </summary>
+    public bool BackgroundAsIs
+    {
+        get => _artwork?.BackgroundAsIs == true;
+        set => ChangeTheArtwork(Art() with { BackgroundAsIs = value });
+    }
+
+    /// <summary>The picture for the printed cover.</summary>
+    public string? Cover
+    {
+        get => _artwork?.CoverPath;
+        set => ChangeTheArtwork(Art() with { CoverPath = Tidy(value) });
+    }
+
+    /// <summary>The picture for the printed disc face.</summary>
+    public string? DiscFace
+    {
+        get => _artwork?.DiscFacePath;
+        set => ChangeTheArtwork(Art() with { DiscFacePath = Tidy(value) });
+    }
+
+    /// <summary>What plays behind the menu.</summary>
+    public string? Music
+    {
+        get => _music;
+        set
+        {
+            _music = Tidy(value);
+            Tell(nameof(Music));
+            Told();
+        }
+    }
+
+    /// <summary>The manual, which the menu offers a button for.</summary>
+    public string? Manual
+    {
+        get => _manual;
+        set
+        {
+            _manual = Tidy(value);
+            Tell(nameof(Manual));
+            Told();
+        }
+    }
+
+    /// <summary>A folder of extras that rides one disc of a set.</summary>
+    public string? ExtrasFolder
+    {
+        get => _extrasFolder;
+        set
+        {
+            _extrasFolder = Tidy(value);
+            Tell(nameof(ExtrasFolder));
+            Told();
+        }
+    }
+
+    /// <summary>
+    /// Why a picture cannot be used, or nothing.
+    /// </summary>
+    /// <remarks>
+    /// Asked the moment a file is picked rather than at build time. The icon
+    /// used to be checked when it was chosen and the background never was, so
+    /// a file Windows cannot decode sailed through the whole window and failed
+    /// at the end as "A generic error occurred in GDI+", which tells somebody
+    /// nothing about which file is at fault.
+    /// </remarks>
+    public string? WhyNotThatPicture { get; private set; }
+
+    private DiscArtwork Art() => _artwork ?? new DiscArtwork();
+
+    private static string? Tidy(string? path) =>
+        string.IsNullOrWhiteSpace(path) ? null : path;
+
+    private void ChangeTheArtwork(DiscArtwork now)
+    {
+        _artwork = now.IsAnything || now.BackgroundAsIs ? now : null;
+
+        foreach (string named in new[]
+        {
+            nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace)
+        })
+        {
+            Tell(named);
+        }
+
+        Told();
+    }
+
+    /// <summary>
+    /// Looks at a picture before it is accepted, and says why not if not.
+    /// </summary>
+    public bool ThatPictureIsUsable(string path)
+    {
+        ImageFacts facts = _machine.Pictures.Read(path);
+
+        WhyNotThatPicture = facts.Readable ? null : facts.Why;
+        Tell(nameof(WhyNotThatPicture));
+
+        return facts.Readable;
+    }
+
     /// <summary>
     /// Whether there is anything on this screen worth losing.
     /// </summary>
@@ -676,7 +802,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     public bool HasAnythingOnIt =>
         _games.Count > 0 || Label.Length > 0 || Made is not null || _artwork is not null
-        || _manual is not null || _extrasFolder is not null;
+        || _manual is not null || _extrasFolder is not null || _music is not null;
 
     /// <summary>
     /// Clears this disc and leaves the machine alone.
@@ -708,6 +834,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _artwork = null;
         _manual = null;
         _extrasFolder = null;
+        _music = null;
 
         Label = string.Empty;
 
@@ -1186,9 +1313,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
             _games,
             Options,
             Artwork: _artwork,
-            Extras: _manual is null && _extrasFolder is null && _loose.Count == 0
+            Extras: _manual is null && _extrasFolder is null && _loose.Count == 0 && _music is null
                 ? null
-                : new DiscExtras(_manual, _extrasFolder, _loose),
+                : new DiscExtras(_manual, _extrasFolder, _loose, _music),
             AddOns: _addOns);
 
     /// <summary>
@@ -1225,6 +1352,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _artwork = was.Artwork;
         _manual = was.Extras?.ManualPath;
         _extrasFolder = was.Extras?.ExtrasFolderPath;
+        _music = was.Extras?.MusicPath;
 
         _label = was.Label;
         _options = was.Options;

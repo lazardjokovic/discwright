@@ -731,6 +731,96 @@ public class TheMainWindowWithoutAWindow
     // ------------------------------------------------------------------ helpers
 
     /// <summary>A window with everything filled in, ready to press.</summary>
+    // ---------------------------------------- what else goes on the disc
+
+    [Fact]
+    public void Can_be_told_about_the_things_that_are_not_games()
+    {
+        MakeADisc window = New();
+
+        // Every one of these was reachable only by OPENING a project somebody
+        // else had made. The pipeline has handled all of it from the start and
+        // there was no way in from the window, so a disc made here could never
+        // have had a background, an icon, music, a manual or extras.
+        window.DiscIcon = @"C:\art\icon.png";
+        window.Background = @"C:\art\bg.png";
+        window.Music = @"C:\sound\theme.mp3";
+        window.Manual = @"C:\things\manual.pdf";
+        window.ExtrasFolder = @"C:\things\extras";
+        window.Cover = @"C:\art\cover.png";
+        window.DiscFace = @"C:\art\face.png";
+
+        DiscProject project = window.AsAProject();
+
+        Assert.Equal(@"C:\art\icon.png", project.Artwork?.IconPath);
+        Assert.Equal(@"C:\art\bg.png", project.Artwork?.BackgroundPath);
+        Assert.Equal(@"C:\art\cover.png", project.Artwork?.CoverPath);
+        Assert.Equal(@"C:\art\face.png", project.Artwork?.DiscFacePath);
+        Assert.Equal(@"C:\sound\theme.mp3", project.Extras?.MusicPath);
+        Assert.Equal(@"C:\things\manual.pdf", project.Extras?.ManualPath);
+        Assert.Equal(@"C:\things\extras", project.Extras?.ExtrasFolderPath);
+    }
+
+    [Fact]
+    public void Carries_the_music_into_the_project_at_all()
+    {
+        MakeADisc window = New();
+
+        // It did not. AsAProject built its extras without the music, so a
+        // project saved with music lost it the moment it was opened again,
+        // and nothing could have put any there in the first place.
+        window.Music = @"C:\sound\theme.mp3";
+
+        Assert.Equal(@"C:\sound\theme.mp3", window.AsAProject().Extras?.MusicPath);
+    }
+
+    [Fact]
+    public void Forgets_a_picture_that_is_cleared_rather_than_keeping_an_empty_one()
+    {
+        MakeADisc window = New();
+        window.DiscIcon = @"C:\art\icon.png";
+
+        window.DiscIcon = null;
+
+        // An artwork record holding nothing but empty strings is not the same
+        // as no artwork, and the steps ask whether there IS any.
+        Assert.Null(window.AsAProject().Artwork);
+    }
+
+    [Fact]
+    public void Says_why_a_picture_cannot_be_used_when_it_is_picked()
+    {
+        MakeADisc window = New(pictures: new PicturesThatRead { Refuse = "Windows cannot read that file." });
+
+        Assert.False(window.ThatPictureIsUsable(@"C:\art\broken.png"));
+        Assert.Equal("Windows cannot read that file.", window.WhyNotThatPicture);
+    }
+
+    [Fact]
+    public void Says_nothing_about_a_picture_that_is_fine()
+    {
+        MakeADisc window = New();
+
+        Assert.True(window.ThatPictureIsUsable(@"C:\art\icon.png"));
+        Assert.Null(window.WhyNotThatPicture);
+    }
+
+    [Fact]
+    public void Starting_a_new_disc_forgets_the_artwork_and_the_extras()
+    {
+        MakeADisc window = New();
+        window.DiscIcon = @"C:\art\icon.png";
+        window.Music = @"C:\sound\theme.mp3";
+        window.Manual = @"C:\things\manual.pdf";
+
+        window.StartAgain();
+
+        Assert.Null(window.DiscIcon);
+        Assert.Null(window.Music);
+        Assert.Null(window.Manual);
+        Assert.False(window.HasAnythingOnIt);
+    }
+
     // ------------------------------------------------------- More options
 
     [Fact]
@@ -1048,7 +1138,8 @@ public class TheMainWindowWithoutAWindow
         IEraseDiscs? eraser = null,
         IWorkTheTray? tray = null,
         IAskWhatIsReleased? releases = null,
-        IShowTheMenu? preview = null) =>
+        IShowTheMenu? preview = null,
+        IImages? pictures = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -1062,6 +1153,7 @@ public class TheMainWindowWithoutAWindow
             tray ?? new ATrayThatShuts(),
             releases ?? new NothingIsReleased(),
             preview ?? new NoPreview(),
+            pictures ?? new PicturesThatRead(),
             "2.0.0",
             _ => 1000));
 
@@ -1354,5 +1446,22 @@ public class TheMainWindowWithoutAWindow
     {
         public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
             Refusals.ThereIsNothingToPutOnADisc();
+    }
+
+    /// <summary>Pictures that can all be read, which is the ordinary case.</summary>
+    private sealed class PicturesThatRead : IImages
+    {
+        internal string? Refuse { get; init; }
+
+        public ImageFacts Read(string path) =>
+            Refuse is null ? new ImageFacts(true, 512, 512, null) : new ImageFacts(false, 0, 0, Refuse);
+
+        public void WriteIcon(string source, string destination)
+        {
+        }
+
+        public void WriteBackground(string source, string destination, int width, int height, bool asIs)
+        {
+        }
     }
 }
