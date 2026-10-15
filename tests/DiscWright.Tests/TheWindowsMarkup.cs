@@ -89,6 +89,42 @@ public class TheWindowsMarkup
         Assert.True(literal.Length == 0, $"Colour written out in full in {window} on: " + string.Join(", ", literal));
     }
 
+    [Fact]
+    public void The_window_has_an_icon_of_its_own()
+    {
+        // Without one, the title bar, the taskbar and Alt and Tab all show
+        // Windows' blank default, which is what a program looks like when
+        // nobody finished it.
+        Assert.Equal("DiscWright.ico", (string?)Window().Attribute("Icon"));
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryWindow))]
+    public void No_button_decides_its_own_size(string window)
+    {
+        // A button wearing its own padding is a button that stops matching the
+        // one next to it the moment either is touched. The accent button was
+        // a size bigger than the button beside it for exactly this reason, and
+        // it read as a different kind of thing rather than a louder one.
+        string[] sized =
+        [
+            .. Markup(window)
+                .Descendants()
+                .Where(element => element.Name.LocalName == "Button")
+                .Where(element =>
+                    element.Attribute("Padding") is not null
+                    || element.Attribute("Width") is not null
+                    || element.Attribute("Height") is not null
+                    || element.Attribute("FontSize") is not null)
+                .Select(Describe)
+        ];
+
+        Assert.True(
+            sized.Length == 0,
+            $"These buttons in {window} size themselves instead of taking it from a style: "
+                + string.Join(", ", sized));
+    }
+
     [Theory]
     [MemberData(nameof(EveryWindow))]
     public void Every_list_of_things_says_what_each_row_is(string window)

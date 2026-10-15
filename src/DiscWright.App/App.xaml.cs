@@ -118,6 +118,25 @@ public partial class App : Application
     }
 }
 
+/// <summary>
+/// Visible when there is something to show, collapsed when there is not.
+/// </summary>
+/// <remarks>
+/// For the refusal and the worry. Left visible, an empty line still takes the
+/// height of a line, and two of them under the progress bar were most of the
+/// empty space at the bottom of the window.
+/// </remarks>
+public sealed class WhenAnything : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is null || (value is string words && string.IsNullOrWhiteSpace(words))
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("Nothing comes into being by being shown.");
+}
+
 /// <summary>Visible when something is true, collapsed otherwise.</summary>
 public sealed class WhenSo : IValueConverter
 {

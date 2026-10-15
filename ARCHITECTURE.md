@@ -576,6 +576,36 @@ That is what turns "what happens when you pick a folder with no game in it" into
 
 It is also the insurance. If WPF turns out to be the wrong answer, what gets thrown away is the markup. None of the view models move.
 
+### What the two buttons mean
+
+This program made nothing but an ISO once, and its words outlasted that by a long way. Somebody reading **Make the disc** has every reason to think it burns one.
+
+So the pair say what they do, and a line under them says what the difference is:
+
+> Building puts the discs on this PC. Burning writes one to a real disc.
+
+One sentence, in the window, forever, is worth more than any amount of renaming. The buttons are now **Build it** and **Burn to a disc...**, and the one at the top is **Open one you built before...**, because what it opens is a folder on this PC and not a disc in a drive.
+
+### The accent is a colour, not a size
+
+The button that matters wore a bigger font and twice the padding as well as the accent colour, which made it read as a different kind of thing rather than a louder one. Every button in the program is now the same shape, and the one that matters is the one that is teal.
+
+`TheWindowsMarkup` holds the rule that **no button sets its own padding, width, height or font size**. A button wearing its own measurements is a button that stops matching the one beside it the moment either is touched, which is exactly how the two came to differ.
+
+### A line with nothing to say is not there
+
+The refusal and the worry used to sit in the window always, empty most of the time. An empty line still takes the height of a line, and two of them were most of the gap at the bottom of the window.
+
+They are collapsed now, which has a consequence worth stating: **a collapsed thing is not in the automation tree at all**. That is right rather than unfortunate, since an empty label is not something to read out, and it means `See-TheWindow.ps1` cannot simply ask for them. It checks the useful half instead: that they are absent while nothing is wrong, and that the worry comes back the moment a name arrives that AutoRun cannot carry.
+
+### Starting a new disc keeps the machine and forgets the disc
+
+The games, the name, the artwork, the manual and everything the last run left behind all go. **Where the discs get built, and what is in More options, stay**, because they are how this person works rather than what they are making, and having to find that folder again every time is its own small insult.
+
+It does nothing at all while a build or a burn is running. There is no sensible meaning for clearing the screen out from under a laser.
+
+It asks first, but **only when there is something to lose**. Confirming an empty screen is how somebody learns to click through the question that matters, and the question that matters here is the one about erasing a disc.
+
 ### Two rules the window itself keeps
 
 **Everything the tests touch gets an `AutomationId`**, set deliberately and never left to the framework.

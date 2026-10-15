@@ -414,6 +414,73 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
     }
 
+    /// <summary>
+    /// Whether there is anything on this screen worth losing.
+    /// </summary>
+    /// <remarks>
+    /// Asked by the window before it offers to throw it away. A screen with
+    /// nothing on it needs no confirming, and being asked to confirm nothing
+    /// teaches somebody to click through the question that matters.
+    /// </remarks>
+    public bool HasAnythingOnIt =>
+        _games.Count > 0 || Label.Length > 0 || Made is not null || _artwork is not null
+        || _manual is not null || _extrasFolder is not null;
+
+    /// <summary>
+    /// Clears this disc and leaves the machine alone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The games, the name, the artwork, the manual and everything the last
+    /// run left behind all go, because they are this disc. <strong>Where the
+    /// discs get built and what is in More options stay</strong>, because they
+    /// are how this person works rather than what they are making, and having
+    /// to find that folder again every time is its own small insult.
+    /// </para>
+    /// <para>
+    /// It does nothing while a build or a burn is running. There is no sensible
+    /// meaning for clearing the screen out from under a laser.
+    /// </para>
+    /// </remarks>
+    public void StartAgain()
+    {
+        if (IsWorking)
+        {
+            return;
+        }
+
+        _games.Clear();
+        _addOns.Clear();
+        _loose.Clear();
+
+        _artwork = null;
+        _manual = null;
+        _extrasFolder = null;
+
+        Label = string.Empty;
+
+        Made = null;
+        AboutTheImage = null;
+        ItWentWrong = null;
+        HowTheDiscCameOut = null;
+        HowTheSetWent = null;
+        TheImages = [];
+
+        foreach (string gone in new[]
+        {
+            nameof(Made), nameof(AboutTheImage), nameof(ItWentWrong), nameof(HowTheDiscCameOut),
+            nameof(HowTheSetWent), nameof(TheImages), nameof(HasAnythingOnIt)
+        })
+        {
+            Tell(gone);
+        }
+
+        // Which puts the window back to the sentence it opens with, and works
+        // the refusal out again from nothing.
+        Started();
+        LookForImages();
+    }
+
     /// <summary>How far through a set the last burn got, or null.</summary>
     public TheSetSoFar? HowTheSetWent { get; private set; }
 

@@ -85,12 +85,17 @@
     </Style>
 
     <!-- An ordinary button: the things somebody does on the way. -->
+    <!-- Every button in the program is this shape. The one that matters wears
+         the accent colour and a heavier weight, and is otherwise the same size,
+         because a button that is both bigger and brighter than its neighbour
+         looks like a different kind of thing rather than a louder one. -->
     <Style x:Key="Ordinary" TargetType="Button">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{StaticResource Ink}" />
         <Setter Property="Background" Value="{StaticResource Panel}" />
-        <Setter Property="Padding" Value="14,7" />
+        <Setter Property="Padding" Value="16,8" />
+        <Setter Property="MinHeight" Value="36" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
@@ -121,11 +126,12 @@
          window, and it is the only thing wearing the accent colour. -->
     <Style x:Key="TheButton" TargetType="Button">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="Background" Value="{StaticResource Accent}" />
-        <Setter Property="Padding" Value="22,10" />
+        <Setter Property="Padding" Value="16,8" />
+        <Setter Property="MinHeight" Value="36" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>

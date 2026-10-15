@@ -39,11 +39,17 @@ try {
     Write-Host ""
 
     # Every id the markup promises, asked for the way a window test would.
+    #
+    # The refusal and the worry are NOT in here. They are collapsed while there
+    # is nothing to say, and a collapsed thing is not in the automation tree at
+    # all, which is right: an empty line is not something to read out. That they
+    # come back when there IS something to say is checked further down, which is
+    # the half of it worth checking.
     $wanted = @(
         'AddAGame', 'TakeItOff', 'Games', 'NothingYet',
         'Label', 'DiscSize', 'OutputFolder', 'ChooseWhereItGoes',
         'MoreOptions', 'Menu', 'Checksums', 'ArtworkOnDisc', 'LegacyFileSystems', 'CutFiles',
-        'WhatItWillMake', 'WhyNot', 'Worry', 'MakeTheDisc'
+        'WhatItWillMake', 'WhatTheButtonsMean', 'StartANewDisc', 'OpenADisc', 'MakeTheDisc'
     )
 
     $missing = @()
@@ -130,11 +136,47 @@ try {
     Write-Host ""
     Write-Host "Photographed to $shot"
 
+    # ------------------------------------------------- the lines that hide
+
+    function Find-ById($root, $id) {
+        return $root.FindFirst(
+            [System.Windows.Automation.TreeScope]::Descendants,
+            (New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::AutomationIdProperty, $id)))
+    }
+
+    # Nothing is wrong yet, so neither line should be anywhere at all.
+    foreach ($id in @('WhyNot', 'Worry')) {
+        if ($null -ne (Find-ById $window $id)) {
+            $missing += ($id + ' was in the tree with nothing to say')
+        }
+    }
+
+    Write-Host ""
+    Write-Host "With nothing wrong, the refusal and the worry are not in the tree, which is right."
+
+    # A name AutoRun cannot carry. That is a worry and not a refusal: the disc
+    # gets built, and what This PC shows will not be what was typed.
+    if ($null -ne $name) {
+        $cyrillic = -join @(0x0414, 0x0430, 0x043D, 0x043D, 0x044B, 0x0435 | ForEach-Object { [char]$_ })
+        $name.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($cyrillic)
+        Start-Sleep -Milliseconds 800
+
+        $worry = Find-ById $window 'Worry'
+
+        if ($null -ne $worry) {
+            Write-Host "With a name AutoRun cannot carry, it says: $($worry.Current.Name)"
+        }
+        else {
+            $missing += 'Worry never came back when there was something to say'
+        }
+    }
+
     if ($missing.Count -gt 0) {
         throw ("UI Automation could not reach: " + ($missing -join ', '))
     }
 
-    Write-Host "Every one of the $($wanted.Count) ids was reachable."
+    Write-Host "Every one of the $($wanted.Count) ids was reachable, and the worry came and went."
 }
 finally {
     if (-not $app.HasExited) { $app.CloseMainWindow() | Out-Null; Start-Sleep -Milliseconds 400 }

@@ -731,6 +731,91 @@ public class TheMainWindowWithoutAWindow
     // ------------------------------------------------------------------ helpers
 
     /// <summary>A window with everything filled in, ready to press.</summary>
+    // ------------------------------------------------------ starting over
+
+    [Fact]
+    public void Says_whether_there_is_anything_on_it_worth_losing()
+    {
+        MakeADisc window = New();
+
+        // An empty screen needs no confirming, and being asked to confirm
+        // nothing is how somebody learns to click through the question that
+        // matters.
+        Assert.False(window.HasAnythingOnIt);
+
+        window.Add(AGame("Hollow Knight", 1000));
+
+        Assert.True(window.HasAnythingOnIt);
+    }
+
+    [Fact]
+    public void Starting_a_new_disc_clears_the_games_and_the_name()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+        window.Label = "MY COMPILATION";
+
+        window.StartAgain();
+
+        Assert.Empty(window.Games);
+        Assert.Equal(string.Empty, window.Label);
+        Assert.False(window.HasAnythingOnIt);
+    }
+
+    [Fact]
+    public void Starting_a_new_disc_keeps_where_the_discs_get_built()
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\somewhere\of\mine";
+        window.Checksums = false;
+        window.Add(AGame("Hollow Knight", 1000));
+
+        window.StartAgain();
+
+        // How somebody works, rather than what they are making. Having to find
+        // that folder again every time is its own small insult.
+        Assert.Equal(@"C:\somewhere\of\mine", window.OutputFolder);
+        Assert.False(window.Checksums);
+    }
+
+    [Fact]
+    public async Task Starting_a_new_disc_forgets_what_the_last_run_left_behind()
+    {
+        MakeADisc window = Ready(new BuilderThatWorks());
+
+        await window.MakeIt();
+        Assert.NotNull(window.Made);
+
+        window.StartAgain();
+
+        // Left lying about, the last build's discs are what the burn button
+        // would reach for next.
+        Assert.Null(window.Made);
+        Assert.Empty(window.TheImages);
+        Assert.Null(window.HowTheSetWent);
+        Assert.Null(window.HowTheDiscCameOut);
+        Assert.False(window.CanBurn);
+    }
+
+    [Fact]
+    public async Task Will_not_clear_the_screen_out_from_under_a_build()
+    {
+        BuilderThatWaits builder = new();
+        MakeADisc window = Ready(builder);
+
+        Task building = window.MakeIt();
+        await builder.Started.Task;
+
+        window.StartAgain();
+
+        // There is no sensible meaning for throwing the games away while they
+        // are being copied onto a disc.
+        Assert.Single(window.Games);
+
+        builder.LetItFinish();
+        await building;
+    }
+
     private static MakeADisc Ready(IBuildDiscs builder, IMakeImages? images = null)
     {
         MakeADisc window = New(builder, images);

@@ -362,6 +362,33 @@ public partial class MainWindow : Window
     /// stops somebody losing count halfway through a set of four.
     /// </remarks>
     /// <summary>
+    /// Clears the screen and starts a new disc.
+    /// </summary>
+    /// <remarks>
+    /// Asked first, but only when there is something to lose. Confirming an
+    /// empty screen is how somebody learns to click through the question that
+    /// matters, and the question that matters here is the one about erasing a
+    /// disc.
+    /// </remarks>
+    private void StartANewDisc(object sender, RoutedEventArgs e)
+    {
+        if (_screen.HasAnythingOnIt
+            && WorthAsking.Ask(
+                this,
+                "Start a new disc?",
+                "What is on the screen now goes: the games, the name, the artwork and the manual. "
+                    + "Nothing already built or burned is touched, and where the discs get built stays "
+                    + "as it is.",
+                "Keep what is here",
+                "Start a new disc"))
+        {
+            return;
+        }
+
+        _screen.StartAgain();
+    }
+
+    /// <summary>
     /// Asks whether to carry on part way through a set, or start it again.
     /// </summary>
     /// <remarks>

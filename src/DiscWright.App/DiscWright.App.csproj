@@ -13,6 +13,15 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+
+    <!-- v1's icon, which is a proper set from 16 up to 256, so the title bar,
+         the taskbar, the Start menu and the file in Explorer all get one that
+         was drawn for the size they show it at. -->
+    <ApplicationIcon>DiscWright.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="DiscWright.ico" />
+  </ItemGroup>
 
 </Project>
