@@ -4,6 +4,7 @@
     <ProjectReference Include="..\DiscWright.ViewModels\DiscWright.ViewModels.csproj" />
     <ProjectReference Include="..\DiscWright.Platform\DiscWright.Platform.csproj" />
     <ProjectReference Include="..\DiscWright.Imaging\DiscWright.Imaging.csproj" />
+    <ProjectReference Include="..\DiscWright.Burning\DiscWright.Burning.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

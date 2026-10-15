@@ -239,6 +239,16 @@ public static class Refusals
             ],
             null);
 
+    /// <remarks>
+    /// Not a failure of the burn. The disc is written and may well be perfect;
+    /// what is missing is the proof, and saying "done" without it would be
+    /// claiming something nobody checked.
+    /// </remarks>
+    public static Refusal TheDiscWasNotChecked(string drive) =>
+        new("The disc was written but not checked",
+            $"Nothing could be read back from {drive}, so nothing here knows whether the disc reads. "
+                + "Put it back in and check it before trusting it.");
+
     public static Refusal TheDriveCouldNotWriteIt(string drive, string windowsSaid) =>
         new($"{drive} could not write the disc",
             "The disc in it may now be unusable. Windows said: " + windowsSaid);

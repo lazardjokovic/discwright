@@ -207,12 +207,21 @@
                                AutomationProperties.AutomationId="Worry" />
                 </StackPanel>
 
-                <Button Grid.Column="1"
-                        Content="Make the disc"
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="Burn it to a disc..."
+                            Style="{StaticResource Ordinary}"
+                            VerticalAlignment="Center"
+                            Margin="0,0,10,0"
+                            IsEnabled="{Binding CanBurn}"
+                            Click="BurnIt"
+                            AutomationProperties.AutomationId="BurnIt" />
+
+                    <Button Content="Make the disc"
                         Style="{StaticResource TheButton}"
                         IsEnabled="{Binding CanMakeIt}"
-                        Click="MakeTheDisc"
-                        AutomationProperties.AutomationId="MakeTheDisc" />
+                            Click="MakeTheDisc"
+                            AutomationProperties.AutomationId="MakeTheDisc" />
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

@@ -11,7 +11,13 @@ public sealed class WindowsFileSystem : IFileSystem
 
     public FolderListing List(string path)
     {
-        string root = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        // NOT trimmed of its trailing separator. A drive root trimmed to "E:"
+        // is not the root of E: at all, it is "wherever the process last was on
+        // drive E", and Windows hands back paths with no separator in them. The
+        // old arithmetic then sliced one character too many off every name, so
+        // a disc read back held "utorun.inf" and nothing matched anything. It
+        // only ever showed up at a root, which is the one place a disc is read.
+        string root = Path.GetFullPath(path);
 
         EnumerationOptions howToWalk = new()
         {
@@ -56,9 +62,14 @@ public sealed class WindowsFileSystem : IFileSystem
                 continue;
             }
 
-            found.Add(new ListedFile(file[(root.Length + 1)..], bytes));
+            // Worked out rather than sliced, because the length of the root
+            // is not the same as where the name starts.
+            found.Add(new ListedFile(Path.GetRelativePath(root, file), bytes));
         }
 
-        return new FolderListing(root, found);
+        // Reported without its trailing separator, which is what the rest of
+        // the program has always been given, except on a root, where there is
+        // nothing to take off.
+        return new FolderListing(Path.TrimEndingDirectorySeparator(root), found);
     }
 }

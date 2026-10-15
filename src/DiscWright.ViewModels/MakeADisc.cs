@@ -27,10 +27,7 @@ namespace DiscWright.ViewModels;
 /// </remarks>
 public sealed class MakeADisc : INotifyPropertyChanged
 {
-    private readonly IAutorunEncoding _encoding;
-    private readonly Func<string, long> _howBigIs;
-    private readonly IBuildDiscs _builder;
-    private readonly IMakeImages _images;
+    private readonly TheMachine _machine;
 
     /// <summary>Held while a build starts or stops, and while a report lands.</summary>
     private readonly Lock _oneAtATime = new();
@@ -44,26 +41,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private DiscOptions _options = new();
     private ReadOnlyObservableCollection<GameFolder>? _view;
 
-    /// <param name="encoding">
-    /// What AutoRun can carry, for the warning about a name it cannot show.
-    /// </param>
-    /// <param name="howBigIs">
-    /// How big a file or folder is. Handed in rather than read here, because
-    /// this is asked again on every keystroke and the window must not touch a
-    /// disk that often.
-    /// </param>
-    /// <param name="builder">What turns the project into discs on a disk.</param>
-    /// <param name="images">What turns each staged disc into one file.</param>
-    public MakeADisc(
-        IAutorunEncoding encoding,
-        Func<string, long> howBigIs,
-        IBuildDiscs builder,
-        IMakeImages images)
+    public MakeADisc(TheMachine machine)
     {
-        _encoding = encoding;
-        _howBigIs = howBigIs;
-        _builder = builder;
-        _images = images;
+        _machine = machine;
         Reconsider();
     }
 
@@ -91,7 +71,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string OutputFolder
     {
         get => _outputFolder;
-        set => Change(ref _outputFolder, value);
+        set
+        {
+            Change(ref _outputFolder, value);
+            LookForImages();
+        }
     }
 
     /// <summary>The size of disc being aimed at.</summary>
@@ -283,7 +267,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         try
         {
-            switch (await _builder.Build(AsAProject(), Medium, OutputFolder, saying, ct))
+            switch (await _machine.Builder.Build(AsAProject(), Medium, OutputFolder, saying, ct))
             {
                 case Outcome<BuiltDiscs>.Ok(BuiltDiscs made):
                     // The folder is the disc and the image is the same disc as
@@ -314,6 +298,211 @@ public sealed class MakeADisc : INotifyPropertyChanged
             }
 
             Started();
+        }
+    }
+
+    /// <summary>
+    /// Whether there is anything to burn.
+    /// </summary>
+    /// <remarks>
+    /// An image on disk is the only thing worth checking here. Whether a
+    /// recorder exists and what is in it is asked at the moment of pressing,
+    /// because a disc can be put in after the window opened, and asking the
+    /// burning service on every keystroke would make the whole window crawl.
+    /// </remarks>
+    public bool CanBurn => TheImages.Count > 0 && !IsWorking;
+
+    /// <summary>The images sitting in the output folder.</summary>
+    public IReadOnlyList<string> TheImages { get; private set; } = [];
+
+    /// <summary>What reading the last burned disc back found, or null.</summary>
+    public DiscCheck? HowTheDiscCameOut { get; private set; }
+
+    /// <summary>
+    /// Writes an image to a disc, and reads the disc back afterwards.
+    /// </summary>
+    /// <param name="image">Which image, out of whatever is in the folder.</param>
+    /// <param name="chooseADrive">
+    /// Asked only when more than one drive is ready, because choosing for
+    /// somebody is how a disc ends up written in the wrong one.
+    /// </param>
+    /// <param name="mayErase">
+    /// Asked only when nothing is ready and an erase would fix it. Whatever is
+    /// on that disc goes, so it is never assumed.
+    /// </param>
+    /// <param name="shutTheTray">
+    /// Called after the disc is ejected, to get it back in so it can be read.
+    /// It answers whether the disc came back.
+    /// </param>
+    public async Task BurnIt(
+        string image,
+        Func<IReadOnlyList<Recorder>, Task<Recorder?>> chooseADrive,
+        Func<Recorder, Task<bool>> mayErase,
+        Func<Recorder, Task<bool>> shutTheTray,
+        CancellationToken ct = default)
+    {
+        if (IsWorking)
+        {
+            return;
+        }
+
+        IsWorking = true;
+        ItWentWrong = null;
+        HowTheDiscCameOut = null;
+        Doing = "looking at the drives";
+        HowFar = 0;
+        Started();
+
+        try
+        {
+            Recorder? onto = await Settle(_machine.HowBigIs(image), chooseADrive, mayErase, ct);
+
+            if (onto is null)
+            {
+                return;
+            }
+
+            Progress<BurnProgress> saying = new(step => Say(step.ToString(), step.HowFar ?? 0));
+
+            switch (await _machine.Burner.Burn(image, onto, saying, ct))
+            {
+                case Outcome<BurnedDisc>.No stopped:
+                    ItWentWrong = stopped.Refusal;
+                    return;
+
+                case Outcome<BurnedDisc>.Ok(BurnedDisc burned):
+                    AboutTheImage = burned.AboutTheReporting;
+                    Tell(nameof(AboutTheImage));
+
+                    // Written is not the same as readable. The drive ejected so
+                    // that whatever reads it next sees a freshly mounted volume.
+                    Say("waiting for the disc to come back", 0);
+
+                    if (!await shutTheTray(onto))
+                    {
+                        ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
+                        return;
+                    }
+
+                    await CheckIt(onto, ct);
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            lock (_oneAtATime)
+            {
+                IsWorking = false;
+                Doing = string.Empty;
+                HowFar = 0;
+            }
+
+            Started();
+        }
+    }
+
+    /// <summary>
+    /// Which drive, asking only where there is something to ask.
+    /// </summary>
+    private async Task<Recorder?> Settle(
+        long bytes,
+        Func<IReadOnlyList<Recorder>, Task<Recorder?>> chooseADrive,
+        Func<Recorder, Task<bool>> mayErase,
+        CancellationToken ct)
+    {
+        IReadOnlyList<Recorder> all = _machine.Drives.All();
+
+        // Twice at most: once as it stands, and once more after an erase,
+        // because erasing changes the answer.
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            switch (WhichRecorder.For(all, bytes))
+            {
+                case Outcome<Recorder>.Ok(Recorder ready):
+                    return ready;
+
+                case Outcome<Recorder>.No refused:
+                    Recorder[] waiting = [.. all.Where(each => each.Ready)];
+
+                    if (waiting.Length > 1)
+                    {
+                        return await chooseADrive(waiting);
+                    }
+
+                    Recorder? erasable = all.FirstOrDefault(each => each.ErasingWouldHelp);
+
+                    if (attempt == 0 && erasable is not null && await mayErase(erasable))
+                    {
+                        Say("erasing the " + erasable.Holding + " in " + erasable.Drive, 0);
+
+                        Outcome<string> erased = await _machine.Eraser.BlankIt(
+                            erasable, new Progress<string>(line => Say(line, 0)), ct);
+
+                        if (erased is Outcome<string>.No stopped)
+                        {
+                            ItWentWrong = stopped.Refusal;
+                            return null;
+                        }
+
+                        all = _machine.Drives.All();
+                        continue;
+                    }
+
+                    ItWentWrong = refused.Refusal;
+                    return null;
+            }
+        }
+
+        return null;
+    }
+
+    private async Task CheckIt(Recorder onto, CancellationToken ct)
+    {
+        string root = onto.Drive.TrimEnd((char)92) + (char)92;
+        string staged = Made is { Discs.Count: > 0 } made ? made.Discs[0].Folder : string.Empty;
+
+        if (staged.Length == 0 || !_machine.Disk.FolderExists(staged))
+        {
+            // Nothing to check it against. The disc is written, and that is all
+            // that can honestly be said about it.
+            ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
+            return;
+        }
+
+        HowTheDiscCameOut = await TheDiscAgainstWhatWasBuilt.Check(
+            root,
+            staged,
+            _machine.Disk,
+            _machine.Hasher,
+            new Progress<CheckProgress>(step => Say(step.ToString(), step.HowFar)),
+            ct);
+
+        Tell(nameof(HowTheDiscCameOut));
+    }
+
+    /// <summary>One line about what is happening, and how far through it is.</summary>
+    private void Say(string doing, double far)
+    {
+        bool worth;
+
+        lock (_oneAtATime)
+        {
+            worth = IsWorking;
+
+            if (worth)
+            {
+                Doing = doing;
+                HowFar = far;
+            }
+        }
+
+        if (worth)
+        {
+            Tell(nameof(Doing));
+            Tell(nameof(HowFar));
         }
     }
 
@@ -410,7 +599,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     private void Reconsider()
     {
-        Worry = Label.Length == 0 ? null : DiscLabel.WhatWindowsWillMakeOfIt(Label, _encoding);
+        Worry = Label.Length == 0 ? null : DiscLabel.WhatWindowsWillMakeOfIt(Label, _machine.Encoding);
 
         if (_games.Count == 0)
         {
@@ -431,7 +620,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             return;
         }
 
-        switch (WhatWouldBeMade.For(AsAProject(), Medium, _howBigIs))
+        switch (WhatWouldBeMade.For(AsAProject(), Medium, _machine.HowBigIs))
         {
             case Outcome<PlannedBuild>.Ok(PlannedBuild planned):
                 WhyNot = null;
@@ -507,7 +696,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 System.IO.Path.GetDirectoryName(disc.Folder) ?? disc.Folder,
                 OnTheDisc.Tidied(disc.Label) + ".iso");
 
-            Outcome<MadeImage> one = await _images.Make(
+            Outcome<MadeImage> one = await _machine.Images.Make(
                 disc.Folder, image, disc.Label, Options.LegacyFileSystems, saying, ct);
 
             if (one is Outcome<MadeImage>.No stopped)
@@ -525,14 +714,40 @@ public sealed class MakeADisc : INotifyPropertyChanged
         return null;
     }
 
+    /// <summary>
+    /// What images are sitting in the output folder.
+    /// </summary>
+    /// <remarks>
+    /// Looked at when the folder changes and when a build finishes, rather than
+    /// on every keystroke.
+    /// </remarks>
+    private void LookForImages()
+    {
+        TheImages = OutputFolder.Length > 0 && _machine.Disk.FolderExists(OutputFolder)
+            ?
+            [
+                .. _machine.Disk.List(OutputFolder).Files
+                    .Where(file => file.RelativePath.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
+                    .Select(file => System.IO.Path.Combine(OutputFolder, file.RelativePath))
+                    .Order(StringComparer.OrdinalIgnoreCase)
+            ]
+            : [];
+
+        Tell(nameof(TheImages));
+        Tell(nameof(CanBurn));
+    }
+
     private void Started()
     {
+        LookForImages();
+
         Tell(nameof(IsWorking));
         Tell(nameof(Doing));
         Tell(nameof(HowFar));
         Tell(nameof(Made));
         Tell(nameof(ItWentWrong));
         Tell(nameof(CanMakeIt));
+        Tell(nameof(CanBurn));
     }
 
     private void Told()

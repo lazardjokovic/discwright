@@ -26,6 +26,43 @@ public class BurningARealDisc(Xunit.Abstractions.ITestOutputHelper says)
 {
     private const string TheGoAhead = "DISCWRIGHT_SPEND_A_DISC";
 
+    /// <summary>
+    /// Reads a disc that is already in a drive, and compares it with the folder
+    /// it was built from.
+    /// </summary>
+    /// <remarks>
+    /// Spends nothing, so it only needs a disc and somewhere to compare it
+    /// with: set <c>DISCWRIGHT_CHECK_A_DISC</c> to a drive letter and
+    /// <c>DISCWRIGHT_CHECK_AGAINST</c> to the staged folder. It is the same
+    /// code the window runs after a burn, which is otherwise only reachable by
+    /// burning one.
+    /// </remarks>
+    [Fact]
+    public async Task Reads_a_disc_that_is_already_in_a_drive()
+    {
+        string? drive = Environment.GetEnvironmentVariable("DISCWRIGHT_CHECK_A_DISC");
+        string? against = Environment.GetEnvironmentVariable("DISCWRIGHT_CHECK_AGAINST");
+
+        if (string.IsNullOrWhiteSpace(drive) || string.IsNullOrWhiteSpace(against))
+        {
+            says.WriteLine("Nothing was checked: DISCWRIGHT_CHECK_A_DISC and DISCWRIGHT_CHECK_AGAINST are not both set.");
+            return;
+        }
+
+        DiscCheck check = await TheDiscAgainstWhatWasBuilt.Check(
+            drive.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+            against,
+            new WindowsFileSystem(),
+            new Sha256Hasher(),
+            new Progress<CheckProgress>(step => says.WriteLine("  " + step)),
+            default);
+
+        says.WriteLine("");
+        says.WriteLine("  " + check.InWords);
+
+        Assert.True(check.Good, check.InWords);
+    }
+
     [Fact]
     public async Task Writes_a_disc_and_reads_every_file_back_off_it()
     {

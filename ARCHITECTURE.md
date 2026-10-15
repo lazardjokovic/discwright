@@ -786,6 +786,48 @@ A quick erase, which blanks the table of contents in well under a minute, rather
 
 The drive is asked to shut its own tray so that the check afterwards can happen without somebody being in the room. **A slim drive, and most of the ones in a laptop, cannot**: it has to be pushed. That is an answer and not a fault, and it is said out loud so that a run which is waiting for hands says so.
 
+## A drive root is not a folder with the slash taken off
+
+Every folder in this program is listed the same way, and it was wrong for days without anything noticing, because **a drive root is the only path whose trailing separator cannot be taken off**.
+
+Trimmed to `E:`, it stops meaning the root of E: and starts meaning *wherever this process last was on drive E*. Windows then hands back paths with no separator in them, and the arithmetic that worked out where each name began took one character too many. A disc read back held `utorun.inf`, `hecksums.sha256` and `EAD ME.txt`, so every file was reported missing and the disc was called wrong when the disc was perfect.
+
+**It only ever showed at a root, and a burned disc is the only thing read from one.** The relative path is worked out now rather than sliced, because the length of the root is not the same as where the name starts.
+
+The test for it makes a drive with `subst`, lists it, and puts the letter back afterwards. Watched failing against the old arithmetic.
+
+## The burn button
+
+The window burns now. It asks only where there is something to ask, and everything a person has to answer is handed in from the window: which drive, whether a disc may be erased, and getting the tray shut again. **The screen asks; it never decides.**
+
+### When the button is alive
+
+An image on disk, and nothing else. **Whether a recorder exists and what is in it is asked at the moment of pressing**, because a disc can be put in after the window opened, and asking the burning service on every keystroke would make the whole window crawl. That is v1's rule and it is the right one.
+
+### The two questions, and the one that is not asked
+
+**Which drive**, only when more than one holds a blank. One ready drive is not a question.
+
+**Whether a disc may be erased**, only when nothing is ready and an erase would fix it. Everything on that disc goes, so it is never assumed.
+
+**Which image is not asked when there is only one**, which is nearly always.
+
+### Reading the disc back
+
+`TheDiscAgainstWhatWasBuilt` reads every file off the burned disc and hashes it against the folder it was built from. Hashed rather than compared byte by byte, because that is the same answer the disc's own checksum list gives and somebody can repeat it by hand with `sha256sum`.
+
+A wrong size is checked before hashing, because it is the same answer for none of the reading time, which on a full disc is minutes.
+
+**Something extra on the disc does not make it wrong.** Everything that was meant to be there being there, readable, and the same, does make it right.
+
+**A disc that cannot be read back is not reported as a success.** The disc may well be perfect; what is missing is the proof, and saying "done" without it would be claiming something nobody checked.
+
+### Nine arguments became one machine
+
+`TheMachine` carries everything the screen needs from the machine it happens to be running on: the encoding, the builder, the image maker, the drives, the burner, the eraser, the disk and the hasher. They arrived one at a time as the program grew, and a constructor somebody has to count the commas in is a constructor nobody reads.
+
+Every one of them is an interface, and not one of them is Windows as far as `ViewModels` is concerned. That is what lets the whole burn, erase, check and all, be driven by a test with no disk, no drive and no disc.
+
 ## The order to build it in
 
 Each step ends with something that runs and something that is tested. No step is bigger than a sitting.

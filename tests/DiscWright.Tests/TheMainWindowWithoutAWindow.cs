@@ -447,6 +447,174 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(0, window.HowFar);
     }
 
+    // ----------------------------------------------------------------- burning
+
+    [Fact]
+    public void Will_not_offer_to_burn_with_no_image_to_burn()
+    {
+        // An image on disk is the only thing worth checking. Whether a drive
+        // exists and what is in it is asked when the button is pressed, because
+        // a disc can be put in after the window opened.
+        Assert.False(New().CanBurn);
+    }
+
+    [Fact]
+    public async Task Writes_the_image_to_the_one_drive_that_is_ready()
+    {
+        ABurnerThatWorks burner = new();
+        MakeADisc window = await Built(drives: new TheseDrives(ABlankIn("E:")), burner: burner);
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+
+        Assert.Equal("E:", burner.WroteTo);
+        Assert.Null(window.ItWentWrong);
+    }
+
+    [Fact]
+    public async Task Reads_the_disc_back_and_says_it_is_the_disc()
+    {
+        MakeADisc window = await Built(drives: new TheseDrives(ABlankIn("E:")));
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+
+        // Written is not the same as readable. This is the part that answers
+        // the question somebody actually has, holding the disc.
+        Assert.NotNull(window.HowTheDiscCameOut);
+        Assert.True(window.HowTheDiscCameOut.Good);
+    }
+
+    [Fact]
+    public async Task Will_not_claim_a_disc_is_good_when_there_is_nothing_to_compare_it_with()
+    {
+        // Burning an image with no record of what was built: the disc may be
+        // perfect, and nothing here can say so.
+        MakeADisc window = New(drives: new TheseDrives(ABlankIn("E:")));
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+
+        Assert.Null(window.HowTheDiscCameOut);
+        Assert.NotNull(window.ItWentWrong);
+        Assert.Contains("not checked", window.ItWentWrong.Headline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Asks_which_drive_when_two_of_them_are_ready()
+    {
+        ABurnerThatWorks burner = new();
+        MakeADisc window = New(drives: new TheseDrives(ABlankIn("D:"), ABlankIn("E:")), burner: burner);
+
+        bool asked = false;
+
+        await window.BurnIt(
+            @"C:\out\A GAME.iso",
+            ready =>
+            {
+                asked = true;
+                Assert.Equal(2, ready.Count);
+                return Task.FromResult<Recorder?>(ready[1]);
+            },
+            NeverAsked,
+            Closes);
+
+        // Choosing for somebody is how a disc ends up written in the wrong
+        // drive, and the one in the other drive is often their only blank.
+        Assert.True(asked);
+        Assert.Equal("E:", burner.WroteTo);
+    }
+
+    [Fact]
+    public async Task Writes_nothing_when_nobody_picks_a_drive()
+    {
+        ABurnerThatWorks burner = new();
+        MakeADisc window = New(drives: new TheseDrives(ABlankIn("D:"), ABlankIn("E:")), burner: burner);
+
+        await window.BurnIt(@"C:\out\A GAME.iso", _ => Task.FromResult<Recorder?>(null), NeverAsked, Closes);
+
+        Assert.Null(burner.WroteTo);
+    }
+
+    [Fact]
+    public async Task Offers_to_erase_a_disc_that_is_in_the_way()
+    {
+        AnEraserThatWorks eraser = new();
+        ABurnerThatWorks burner = new();
+
+        // A CD-RW with something on it, which becomes a blank once erased.
+        TheseDrives drives = new(AUsedCdRwIn("E:"));
+        drives.AfterErasing = ABlankIn("E:");
+
+        MakeADisc window = await Built(drives: drives, burner: burner, eraser: eraser);
+
+        bool asked = false;
+
+        await window.BurnIt(
+            @"C:\out\A GAME.iso",
+            NeverAsked,
+            disc =>
+            {
+                asked = true;
+                Assert.Equal("E:", disc.Drive);
+                return Task.FromResult(true);
+            },
+            Closes);
+
+        Assert.True(asked);
+        Assert.Equal("E:", eraser.Erased);
+        Assert.Equal("E:", burner.WroteTo);
+    }
+
+    [Fact]
+    public async Task Erases_nothing_when_the_answer_is_no()
+    {
+        AnEraserThatWorks eraser = new();
+        ABurnerThatWorks burner = new();
+
+        MakeADisc window = New(drives: new TheseDrives(AUsedCdRwIn("E:")), burner: burner, eraser: eraser);
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, _ => Task.FromResult(false), Closes);
+
+        // Whatever is on that disc goes, so it is never assumed.
+        Assert.Null(eraser.Erased);
+        Assert.Null(burner.WroteTo);
+        Assert.NotNull(window.ItWentWrong);
+    }
+
+    [Fact]
+    public async Task Says_so_when_there_is_no_drive_at_all()
+    {
+        MakeADisc window = New(drives: new NoDrives());
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+
+        Assert.NotNull(window.ItWentWrong);
+    }
+
+    [Fact]
+    public async Task Says_a_disc_was_written_but_not_checked_when_it_never_comes_back()
+    {
+        MakeADisc window = New(drives: new TheseDrives(ABlankIn("E:")));
+
+        // The tray never shuts, so nothing can be read back.
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, _ => Task.FromResult(false));
+
+        // Not a failure of the burn. What is missing is the proof, and saying
+        // "done" without it would be claiming something nobody checked.
+        Assert.NotNull(window.ItWentWrong);
+        Assert.Contains("not checked", window.ItWentWrong.Headline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Keeps_what_the_drive_said_about_its_own_reporting()
+    {
+        MakeADisc window = New(drives: new TheseDrives(ABlankIn("E:")), burner: new ABurnerThatWorks());
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAsked, Closes);
+
+        // Said after every burn, not only the bad ones: a quiet drive and a
+        // listener that never worked look the same on screen.
+        Assert.NotNull(window.AboutTheImage);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /// <summary>A window with everything filled in, ready to press.</summary>
@@ -459,8 +627,22 @@ public class TheMainWindowWithoutAWindow
         return window;
     }
 
-    private static MakeADisc New(IBuildDiscs? builder = null, IMakeImages? images = null) =>
-        new(new Codepage1252(), _ => 0, builder ?? new BuilderThatWorks(), images ?? new ImagesThatWork());
+    private static MakeADisc New(
+        IBuildDiscs? builder = null,
+        IMakeImages? images = null,
+        IFindRecorders? drives = null,
+        IBurnDiscs? burner = null,
+        IEraseDiscs? eraser = null) =>
+        new(new TheMachine(
+            new Codepage1252(),
+            builder ?? new BuilderThatWorks(),
+            images ?? new ImagesThatWork(),
+            drives ?? new NoDrives(),
+            burner ?? new ABurnerThatWorks(),
+            eraser ?? new AnEraserThatWorks(),
+            new ADiskWithADiscOnIt(),
+            new NoHashing(),
+            _ => 1000));
 
     private static LeftBehind APatch(string name) =>
         new(new ListedFile(name, 200), LeftBehindKind.LooksLikeAnAddOn);
@@ -586,5 +768,98 @@ public class TheMainWindowWithoutAWindow
             IProgress<ImageProgress>? progress, CancellationToken ct) =>
             Task.FromResult<Outcome<MadeImage>>(
                 Refusals.TheOldImageWillNotMoveAside(imagePath, "it is mounted"));
+    }
+
+    // ------------------------------------------------------------ the machine
+
+    /// <summary>A window that has already built something, ready to burn it.</summary>
+    private static async Task<MakeADisc> Built(
+        IFindRecorders drives,
+        IBurnDiscs? burner = null,
+        IEraseDiscs? eraser = null)
+    {
+        MakeADisc window = New(drives: drives, burner: burner, eraser: eraser);
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("A Game", 1000));
+
+        await window.MakeIt();
+
+        return window;
+    }
+
+    private static Task<Recorder?> NeverAsked(IReadOnlyList<Recorder> ready) =>
+        throw new InvalidOperationException("It should not have had to ask which drive.");
+
+    private static Task<bool> NeverAsked(Recorder disc) =>
+        throw new InvalidOperationException("It should not have had to ask about erasing.");
+
+    private static Task<bool> Closes(Recorder drive) => Task.FromResult(true);
+
+    private static Recorder ABlankIn(string drive) =>
+        new($"id-{drive}", drive, "A Drive", 2, true, 360_000, [750]);
+
+    private static Recorder AUsedCdRwIn(string drive) =>
+        new($"id-{drive}", drive, "A Drive", 3, false, 0, [750]);
+
+    private sealed class NoDrives : IFindRecorders
+    {
+        public IReadOnlyList<Recorder> All() => [];
+    }
+
+    private sealed class TheseDrives(params Recorder[] drives) : IFindRecorders
+    {
+        private int _asked;
+
+        /// <summary>
+        /// What the drive holds the next time it is asked, which is how a disc
+        /// that has just been erased stops being the one in the way.
+        /// </summary>
+        internal Recorder? AfterErasing { get; set; }
+
+        public IReadOnlyList<Recorder> All() =>
+            _asked++ > 0 && AfterErasing is not null ? [AfterErasing] : drives;
+    }
+
+    private sealed class ABurnerThatWorks : IBurnDiscs
+    {
+        internal string? WroteTo { get; private set; }
+
+        public Task<Outcome<BurnedDisc>> Burn(
+            string imagePath, Recorder onto, IProgress<BurnProgress>? progress, CancellationToken ct)
+        {
+            WroteTo = onto.Drive;
+            progress?.Report(new BurnProgress("writing the disc", 0.5, 30));
+
+            return Task.FromResult<Outcome<BurnedDisc>>(new BurnedDisc(onto.Drive, 47, 16, true));
+        }
+    }
+
+    private sealed class AnEraserThatWorks : IEraseDiscs
+    {
+        internal string? Erased { get; private set; }
+
+        public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<string>? progress, CancellationToken ct)
+        {
+            Erased = disc.Drive;
+            progress?.Report("erasing the disc");
+
+            return Task.FromResult<Outcome<string>>("blank again");
+        }
+    }
+
+    /// <summary>
+    /// A disk where every folder holds the same one file, so that a disc
+    /// checked against what was built comes back matching.
+    /// </summary>
+    private sealed class ADiskWithADiscOnIt : IFileSystem
+    {
+        public bool FolderExists(string path) => true;
+
+        public FolderListing List(string path) => new(path, [new ListedFile("setup_a_game.exe", 1000)]);
+    }
+
+    private sealed class NoHashing : IHasher
+    {
+        public string Sha256(string path, CancellationToken ct) => string.Empty;
     }
 }

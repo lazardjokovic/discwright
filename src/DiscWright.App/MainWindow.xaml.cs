@@ -2,6 +2,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 
+using System.Threading.Tasks;
+
 using DiscWright.Core;
 using DiscWright.Staging;
 using DiscWright.ViewModels;
@@ -30,12 +32,14 @@ public partial class MainWindow : Window
     private readonly MakeADisc _screen;
     private readonly GameFolderReader _reader;
     private readonly IFileSystem _disk;
+    private readonly IWorkTheTray _tray;
 
-    public MainWindow(MakeADisc screen, GameFolderReader reader, IFileSystem disk)
+    public MainWindow(MakeADisc screen, GameFolderReader reader, IFileSystem disk, IWorkTheTray tray)
     {
         _screen = screen;
         _reader = reader;
         _disk = disk;
+        _tray = tray;
 
         InitializeComponent();
         DataContext = screen;
@@ -175,6 +179,137 @@ public partial class MainWindow : Window
         {
             Say(made);
         }
+    }
+
+    /// <summary>
+    /// Writes an image to a disc, and reads the disc back.
+    /// </summary>
+    /// <remarks>
+    /// Everything that needs a person to answer it is handed in from here, and
+    /// only from here: which drive, whether a disc may be erased, and getting
+    /// the tray shut again. The screen asks; it never decides.
+    /// </remarks>
+    private async void BurnIt(object sender, RoutedEventArgs e)
+    {
+        string? image = WhichImage();
+
+        if (image is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _screen.BurnIt(image, ChooseADrive, MayIEraseIt, ShutTheTray);
+        }
+        catch (Exception wrong)
+        {
+            MessageBox.Show(this, wrong.Message, "DiscWright", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        if (_screen.ItWentWrong is Refusal refusal)
+        {
+            Explain(refusal);
+        }
+
+        if (_screen.HowTheDiscCameOut is DiscCheck check)
+        {
+            MessageBox.Show(
+                this,
+                check.InWords,
+                "DiscWright",
+                MessageBoxButton.OK,
+                check.Good ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
+    /// Which image to burn, asked only when there is more than one.
+    /// </summary>
+    private string? WhichImage()
+    {
+        IReadOnlyList<string> images = _screen.TheImages;
+
+        if (images.Count <= 1)
+        {
+            return images.Count == 1 ? images[0] : null;
+        }
+
+        return PickOne.From(
+            this,
+            "Which disc of the set?",
+            "The output folder holds more than one image. They are meant to be burned in order.",
+            images,
+            System.IO.Path.GetFileNameWithoutExtension);
+    }
+
+    private Task<Recorder?> ChooseADrive(IReadOnlyList<Recorder> ready) =>
+        Task.FromResult(PickOne.From(
+            this,
+            "Which drive?",
+            "More than one drive has a blank disc in it. Nothing is written until you say which.",
+            ready,
+            drive => drive.ToString()));
+
+    private Task<bool> MayIEraseIt(Recorder disc) =>
+        Task.FromResult(!WorthAsking.Ask(
+            this,
+            $"Erase the {disc.Holding} in {disc.Drive}?",
+            "Everything on it goes, and it cannot be got back. A quick erase takes under a minute, and then "
+                + "the disc can be written to again.",
+            "Leave it alone",
+            "Erase it"));
+
+    /// <summary>
+    /// Gets the disc back in so it can be read, and says whether it came back.
+    /// </summary>
+    /// <remarks>
+    /// The drive is asked first, because a drive that can shut its own tray
+    /// should not make somebody walk over to it. Most slim drives cannot, and
+    /// then it is a person's job.
+    /// </remarks>
+    private async Task<bool> ShutTheTray(Recorder drive)
+    {
+        if (_tray.ShutIt(drive))
+        {
+            return await WaitForTheDisc(drive);
+        }
+
+        MessageBoxResult go = MessageBox.Show(
+            this,
+            $"The disc is written, and {drive.Drive} has ejected it so it can be read back properly."
+                + Environment.NewLine + Environment.NewLine
+                + "Close the tray, then press OK to check every file on it.",
+            "Written",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Information);
+
+        return go == MessageBoxResult.OK && await WaitForTheDisc(drive);
+    }
+
+    private static async Task<bool> WaitForTheDisc(Recorder drive)
+    {
+        string root = drive.Drive.TrimEnd(System.IO.Path.DirectorySeparatorChar)
+            + System.IO.Path.DirectorySeparatorChar;
+
+        for (int tries = 0; tries < 60; tries++)
+        {
+            try
+            {
+                if (Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root).Any())
+                {
+                    return true;
+                }
+            }
+            catch (IOException)
+            {
+            }
+
+            await Task.Delay(1000);
+        }
+
+        return false;
     }
 
     private void Say(BuiltDiscs made)
