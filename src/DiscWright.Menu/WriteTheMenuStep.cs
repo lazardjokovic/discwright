@@ -19,6 +19,16 @@ public sealed class WriteTheMenuStep : IBuildStep
     /// <summary>Where the menu lives on a disc. Uppercase, as v1 writes it.</summary>
     private const string Folder = "AUTORUN";
 
+    /// <summary>
+    /// The one file at the top of the disc that starts the menu by hand.
+    /// </summary>
+    /// <remarks>
+    /// The name is reserved in <see cref="ReservedDiscNames"/>, so a game
+    /// bringing its own file of this name is moved out of the way rather than
+    /// quietly overwriting this one.
+    /// </remarks>
+    private const string TheWayIn = "Start Here.hta";
+
     public string Says => "writing the menu";
 
     /// <summary>
@@ -38,6 +48,13 @@ public sealed class WriteTheMenuStep : IBuildStep
         context.Writer.WriteText(context.On(Folder + @"\menu.js"), MenuWriter.MenuScript());
 
         context.Writer.WriteText(context.On(Folder + @"\menu.hta"), MenuWriter.MenuPage(FactsFor(context)));
+
+        // At the TOP of the disc, where somebody looking at it in Explorer
+        // will see it. A disc opens its menu by itself only where AutoRun is
+        // switched on, and Windows has been turning that off for years:
+        // without this the disc appears to do nothing at all, and the menu
+        // sits in AUTORUN where nobody has any reason to look.
+        context.Writer.WriteText(context.On(TheWayIn), MenuWriter.TheWayInWithoutAutorun());
 
         return Task.CompletedTask;
     }

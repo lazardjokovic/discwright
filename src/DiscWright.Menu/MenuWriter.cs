@@ -31,8 +31,20 @@ public static class MenuWriter
 
     private static readonly string Script = Resource("menu.js");
 
+    private static readonly string TheWayIn = Resource("start-here.hta");
+
     /// <summary>The logic, identical on every disc.</summary>
     public static string MenuScript() => Script;
+
+    /// <summary>
+    /// The launcher that sits at the top of the disc, for when AutoRun is off.
+    /// </summary>
+    /// <remarks>
+    /// Identical on every disc, and carries no facts about one: it finds the
+    /// menu beside itself and starts it. Nothing to fill in means nothing that
+    /// can be left unfilled.
+    /// </remarks>
+    public static string TheWayInWithoutAutorun() => TheWayIn;
 
     /// <summary>
     /// The shell, carrying this disc's own facts and nothing else generated.

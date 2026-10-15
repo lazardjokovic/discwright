@@ -17,6 +17,7 @@
          that ends up on the disc. A test asserts the two are identical. -->
     <EmbeddedResource Include="menu.js" />
     <EmbeddedResource Include="menu.hta.template" />
+    <EmbeddedResource Include="start-here.hta" />
   </ItemGroup>
 
 </Project>

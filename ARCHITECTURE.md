@@ -639,7 +639,15 @@ A disc opens its menu by itself **only where AutoRun is switched on**, and Windo
 
 It is the only option here whose effect is not entirely ours, and it is on by default because a menu is what the disc is for.
 
-**There is no launcher at the root of the disc.** v1 wrote a `Start Here.hta` beside the files; 2.0 writes the menu to `AUTORUN` and nothing at the top, so where AutoRun is off the disc opens in Explorer with no sign that a menu exists. The name is still reserved in `ReservedDiscNames`, which is the shape of the gap rather than the fix.
+#### The way in when AutoRun is off
+
+So every disc carries **`Start Here.hta` at the top**, where somebody looking at it in Explorer will see it. It shows no window of its own: it works out where it is, starts `AUTORUN\menu.hta`, and closes.
+
+Ported from v1 with its comments, because the hard part was learned there. **AutoRun can start a disc file with no drive letter**, so the launcher cannot use a relative path and has to work its own folder out of `document.URL`, allowing for the leading slashes a file URL arrives with, which are not part of the path except on a network share where two of them are.
+
+Every backslash in it is built from `String.fromCharCode(92)` and there is not one literal backslash in the file, which a test asserts. A typed backslash has been halved on the way into a generated file more than once in this project, and a launcher with a broken path is a disc that cannot be opened by the one person whose AutoRun is off.
+
+The name is reserved in `ReservedDiscNames`, so a game bringing its own file of that name is moved aside rather than quietly overwriting it.
 
 ### A window drawn for four options does not hold five
 

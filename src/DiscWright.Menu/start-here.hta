@@ -1,0 +1,63 @@
+<html>
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>DiscWright</title>
+<hta:application id="launcher" showInTaskbar="no" scroll="no" caption="no"
+                 border="none" sysmenu="no" singleinstance="yes" windowState="minimize" />
+</head>
+<body>
+<!--
+    The way in when AutoRun is off.
+
+    A disc opens its menu by itself only where AutoRun is switched on, and
+    Windows has been turning that off for years. Without this file the disc
+    opens in Explorer, the menu sits in AUTORUN where nobody looks, and the
+    disc appears to do nothing at all.
+
+    It shows no window of its own: it works out where it is, starts the real
+    menu, and closes. Ported from v1, comments and all, because the hard part
+    below was learned there.
+-->
+<script language="JScript">
+var BS = String.fromCharCode(92);
+
+// Where this file is, from its own URL. AutoRun can start a disc file with no
+// drive letter, and a relative path cannot be turned into the menu's path.
+function here() {
+  var u = "";
+  try { u = String(document.URL); } catch (e) { u = ""; }
+
+  u = u.replace(/^file:/i, "").split("/").join(BS);
+  try { u = decodeURIComponent(u); } catch (e) {}
+
+  // A file URL arrives with leading slashes that are not part of the path,
+  // except on a network share, where two of them are.
+  var n = 0;
+  while (u.charAt(n) == BS) n++;
+
+  if (n) {
+    var rest = u.substring(n);
+    if (/^[A-Za-z]:/.test(rest)) u = rest;
+    else if (n >= 3) u = BS + BS + rest;
+  }
+
+  return u;
+}
+
+try {
+  var fso = new ActiveXObject("Scripting.FileSystemObject");
+  var sh = new ActiveXObject("WScript.Shell");
+
+  var dir = fso.GetParentFolderName(here());
+  var menu = fso.BuildPath(fso.BuildPath(dir, "AUTORUN"), "menu.hta");
+
+  if (fso.FileExists(menu)) sh.Run('mshta "' + menu + '"', 1, false);
+  else alert("The menu is missing from this disc: " + menu);
+} catch (e) {
+  alert(e.message);
+}
+
+window.close();
+</script>
+</body>
+</html>

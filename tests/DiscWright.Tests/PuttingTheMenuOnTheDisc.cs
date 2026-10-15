@@ -14,8 +14,54 @@ public class PuttingTheMenuOnTheDisc
         await Write(wrote);
 
         Assert.Equal(
-            [@"C:\stage\AUTORUN\menu.js", @"C:\stage\AUTORUN\menu.hta"],
+            [@"C:\stage\AUTORUN\menu.js", @"C:\stage\AUTORUN\menu.hta", @"C:\stage\Start Here.hta"],
             wrote.Texts.Select(text => text.Path));
+    }
+
+    [Fact]
+    public async Task Writes_a_way_in_at_the_top_of_the_disc()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote);
+
+        // At the TOP, not in AUTORUN. A disc opens its menu by itself only
+        // where AutoRun is switched on, and Windows has been turning that off
+        // for years: without this the disc appears to do nothing at all and
+        // the menu sits in a folder nobody has any reason to open.
+        RecordingWriter.Written way = Assert.Single(
+            wrote.Texts, text => text.Path.EndsWith("Start Here.hta", StringComparison.Ordinal));
+
+        Assert.Equal(@"C:\stage\Start Here.hta", way.Path);
+
+        // It starts the real menu, and says so rather than failing silently
+        // when the menu is not where it expects.
+        Assert.Contains("AUTORUN", way.Text, StringComparison.Ordinal);
+        Assert.Contains("menu.hta", way.Text, StringComparison.Ordinal);
+        Assert.Contains("mshta", way.Text, StringComparison.Ordinal);
+        Assert.Contains("The menu is missing from this disc", way.Text, StringComparison.Ordinal);
+
+        // It shows nothing of its own and gets out of the way.
+        Assert.Contains("windowState=\"minimize\"", way.Text, StringComparison.Ordinal);
+        Assert.Contains("window.close()", way.Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Builds_its_backslashes_rather_than_writing_them()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote);
+
+        string way = wrote.Texts.Single(
+            text => text.Path.EndsWith("Start Here.hta", StringComparison.Ordinal)).Text;
+
+        // Every backslash in it comes from a character code. A typed one has
+        // been halved on the way into a generated file more than once in this
+        // project, and a launcher with a broken path is a disc that cannot be
+        // opened by the one person whose AutoRun is off.
+        Assert.DoesNotContain(@"\", way, StringComparison.Ordinal);
+        Assert.Contains("String.fromCharCode(92)", way, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -51,7 +97,7 @@ public class PuttingTheMenuOnTheDisc
 
         await Write(wrote, game: "Hollow Knight");
 
-        string page = wrote.Texts.Single(text => text.Path.EndsWith(".hta", StringComparison.Ordinal)).Text;
+        string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
         Assert.Contains("Hollow Knight", page, StringComparison.Ordinal);
     }
@@ -63,7 +109,7 @@ public class PuttingTheMenuOnTheDisc
 
         await Write(wrote, kind: GameKind.FilesOnly);
 
-        string page = wrote.Texts.Single(text => text.Path.EndsWith(".hta", StringComparison.Ordinal)).Text;
+        string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
         // Not a failure and not an Install button that does nothing: the menu
         // offers the folder, and the disc is still a disc.

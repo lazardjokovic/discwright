@@ -351,6 +351,17 @@ public sealed class BuildingADisc : IDisposable
     // ---------------------------------------------------------------- options
 
     [Fact]
+    public async Task Puts_a_way_in_at_the_top_of_the_disc_beside_the_files()
+    {
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+
+        BuiltDisc disc = Assert.Single((await Build(Project(game))).Discs);
+
+        // Where somebody looking at the disc in Explorer will actually see it.
+        Assert.True(File.Exists(On(disc, "Start Here.hta")));
+    }
+
+    [Fact]
     public async Task Leaves_the_menu_off_when_it_was_not_asked_for()
     {
         GameFolder game = AGogDownload("Hollow Knight", 500);

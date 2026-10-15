@@ -10,6 +10,12 @@
     fought UI Automation the whole way, which is the single largest reason this
     is WPF.
 -->
+<!--
+    CanMinimize rather than NoResize. Every position in this window is fixed,
+    so a maximise button would be an invitation to break it, but NoResize takes
+    the minimise button away as well, and a burn can take a quarter of an hour
+    with this window sitting in front of everything else.
+-->
 <Window x:Class="DiscWright.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -17,7 +23,7 @@
         Icon="DiscWright.ico"
         Loaded="ListenForDiscs"
         Height="700" Width="920"
-        ResizeMode="NoResize"
+        ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
         Background="{StaticResource Page}"
         FontFamily="{StaticResource Face}"
@@ -51,14 +57,12 @@
                 <Button Content="Start a new disc"
                         Style="{StaticResource Ordinary}"
                         HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
                         Click="StartANewDisc"
                         AutomationProperties.AutomationId="StartANewDisc" />
 
                 <Button Content="Open one you built before..."
                         Style="{StaticResource Ordinary}"
                         HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
                         Margin="0,8,0,0"
                         Click="OpenADisc"
                         AutomationProperties.AutomationId="OpenADisc" />
