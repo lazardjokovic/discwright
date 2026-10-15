@@ -233,6 +233,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Opens the window for everything that is not a game.
+    /// </summary>
+    private void WhatElseGoesOnIt(object sender, RoutedEventArgs e) =>
+        new WhatElseGoesOnIt(_screen) { Owner = this }.ShowDialog();
+
+    /// <summary>
     /// Everything that is not a game.
     /// </summary>
     /// <remarks>

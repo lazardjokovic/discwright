@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Data;
+using System.Windows.Media.Imaging;
 
 using DiscWright.Core;
 using DiscWright.Burning;
@@ -148,6 +149,56 @@ public partial class App : Application
             return bytes;
         };
     }
+}
+
+/// <summary>
+/// A small picture of a file somebody chose, for showing it back to them.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Loaded whole and then let go, rather than left attached to the file. Bound
+/// straight to a path, WPF keeps the file open, and the first thing somebody
+/// does after choosing the wrong picture is try to replace it.
+/// </para>
+/// <para>
+/// Decoded small on purpose. A cover is a couple of thousand pixels tall and
+/// this shows it at forty eight.
+/// </para>
+/// </remarks>
+public sealed class APicture : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not string path || string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            BitmapImage small = new();
+            small.BeginInit();
+            small.CacheOption = BitmapCacheOption.OnLoad;
+            small.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+            small.DecodePixelHeight = 96;
+            small.UriSource = new Uri(path);
+            small.EndInit();
+            small.Freeze();
+
+            return small;
+        }
+        catch (Exception wrong) when (wrong is NotSupportedException or ArgumentException or IOException
+            or UnauthorizedAccessException)
+        {
+            // Why it cannot be read is said beside the picker, by the screen,
+            // in words that name the file. A broken thumbnail says it twice
+            // and worse.
+            return null;
+        }
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("Nothing becomes a file by being shown.");
 }
 
 /// <summary>

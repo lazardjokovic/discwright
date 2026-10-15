@@ -17,6 +17,7 @@
             <local:WhenSo x:Key="WhenSo" />
             <local:WhenNot x:Key="WhenNot" />
             <local:WhenAnything x:Key="WhenAnything" />
+            <local:APicture x:Key="APicture" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

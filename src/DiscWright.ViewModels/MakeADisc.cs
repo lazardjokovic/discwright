@@ -719,6 +719,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _music = Tidy(value);
             Tell(nameof(Music));
+            Tell(nameof(WhatElseIsChosen));
             Told();
         }
     }
@@ -731,6 +732,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _manual = Tidy(value);
             Tell(nameof(Manual));
+            Tell(nameof(WhatElseIsChosen));
             Told();
         }
     }
@@ -743,7 +745,37 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _extrasFolder = Tidy(value);
             Tell(nameof(ExtrasFolder));
+            Tell(nameof(WhatElseIsChosen));
             Told();
+        }
+    }
+
+    /// <summary>
+    /// What has been chosen, in a line, for the window that does not show it.
+    /// </summary>
+    /// <remarks>
+    /// So that somebody can see at a glance whether their disc has a
+    /// background on it without opening anything.
+    /// </remarks>
+    public string WhatElseIsChosen
+    {
+        get
+        {
+            List<string> got = [];
+
+            if (DiscIcon is not null) { got.Add("an icon"); }
+            if (Background is not null) { got.Add("a background"); }
+            if (Music is not null) { got.Add("music"); }
+            if (Manual is not null) { got.Add("a manual"); }
+            if (ExtrasFolder is not null) { got.Add("extras"); }
+            if (Cover is not null || DiscFace is not null) { got.Add("artwork to print"); }
+
+            return got.Count switch
+            {
+                0 => "Nothing chosen. A disc with none of it is still a disc.",
+                1 => "This disc has " + got[0] + ".",
+                _ => "This disc has " + string.Join(", ", got.Take(got.Count - 1)) + " and " + got[^1] + "."
+            };
         }
     }
 
@@ -770,7 +802,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         foreach (string named in new[]
         {
-            nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace)
+            nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace),
+            nameof(WhatElseIsChosen)
         })
         {
             Tell(named);

@@ -1,0 +1,340 @@
+<!--
+    Everything that goes on a disc and is not a game.
+
+    A window of its own rather than another drawer in the main one. There are
+    seven of these, most of them pictures, and a picture somebody chose is only
+    really confirmed by seeing it again: squeezed into a column beside the
+    games list they were twelve pixel grey labels with a link beside them,
+    quieter than anything else on the screen, for the two things almost
+    everybody sets.
+-->
+<Window x:Class="DiscWright.App.WhatElseGoesOnIt"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="What else goes on it"
+        Height="700" Width="680"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False"
+        Icon="DiscWright.ico"
+        Background="{StaticResource Page}"
+        FontFamily="{StaticResource Face}"
+        AutomationProperties.AutomationId="WhatElseGoesOnIt">
+
+    <Grid Margin="24,20,24,18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,14">
+            <TextBlock Style="{StaticResource Title}" FontSize="17" Text="What else goes on it" />
+            <TextBlock Style="{StaticResource Aside}"
+                       Margin="0,3,0,0"
+                       Text="None of it is required. A disc with none of this is still a disc." />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="0,0,8,0">
+
+                <!-- ============================================ the disc icon -->
+                <TextBlock Style="{StaticResource Step}" Text="THE DISC ICON" />
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,2,0,6"
+                           Text="What This PC shows for the disc, and what the menu wears." />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="64" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="48" Height="48"
+                            HorizontalAlignment="Left"
+                            Background="{StaticResource Panel}"
+                            BorderBrush="{StaticResource Edge}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <Image Source="{Binding DiscIcon, Converter={StaticResource APicture}}"
+                               Stretch="Uniform"
+                               Margin="3"
+                               AutomationProperties.AutomationId="TheDiscIconPicture" />
+                    </Border>
+
+                    <TextBlock Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding DiscIcon}"
+                               Text="{Binding DiscIcon, TargetNullValue=Nothing chosen}"
+                               AutomationProperties.AutomationId="TheDiscIcon" />
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="Choose..."
+                                Style="{StaticResource Ordinary}"
+                                Click="ChooseTheDiscIcon"
+                                AutomationProperties.AutomationId="ChooseTheDiscIcon" />
+                        <Button Content="Clear"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="ClearTheDiscIcon"
+                                AutomationProperties.AutomationId="ClearTheDiscIcon" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- =========================================== the background -->
+                <TextBlock Style="{StaticResource Step}" Margin="0,22,0,0" Text="THE MENU BACKGROUND" />
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,2,0,6"
+                           Text="The picture the menu is drawn on, at 760 by 480." />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="190" Height="120"
+                            HorizontalAlignment="Left"
+                            Background="{StaticResource Panel}"
+                            BorderBrush="{StaticResource Edge}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <Image Source="{Binding Background, Converter={StaticResource APicture}}"
+                               Stretch="UniformToFill"
+                               Margin="2"
+                               AutomationProperties.AutomationId="TheBackgroundPicture" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,10,0">
+                        <TextBlock TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Background}"
+                                   Text="{Binding Background, TargetNullValue=Nothing chosen}"
+                                   AutomationProperties.AutomationId="TheBackground" />
+
+                        <CheckBox Margin="0,8,0,0"
+                                  Content="Stretch it to fit rather than cropping"
+                                  IsChecked="{Binding BackgroundAsIs}"
+                                  AutomationProperties.AutomationId="BackgroundAsIs" />
+
+                        <TextBlock Style="{StaticResource Aside}"
+                                   Margin="0,4,0,0"
+                                   TextWrapping="Wrap"
+                                   Text="Cropping keeps the proportions, which is almost always what somebody wants from cover art or a screenshot." />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="Choose..."
+                                Style="{StaticResource Ordinary}"
+                                Click="ChooseTheBackground"
+                                AutomationProperties.AutomationId="ChooseTheBackground" />
+                        <Button Content="Clear"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="ClearTheBackground"
+                                AutomationProperties.AutomationId="ClearTheBackground" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- ============================================ music, manual -->
+                <TextBlock Style="{StaticResource Step}" Margin="0,22,0,0" Text="AND THE REST OF IT" />
+
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Music" />
+                    <TextBlock Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding Music}"
+                               Text="{Binding Music, TargetNullValue=Nothing chosen}"
+                               AutomationProperties.AutomationId="TheMusic" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Content="Choose..."
+                                Style="{StaticResource Ordinary}"
+                                Click="ChooseTheMusic"
+                                AutomationProperties.AutomationId="ChooseTheMusic" />
+                        <Button Content="Clear"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="ClearTheMusic"
+                                AutomationProperties.AutomationId="ClearTheMusic" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Manual" />
+                    <TextBlock Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding Manual}"
+                               Text="{Binding Manual, TargetNullValue=Nothing chosen}"
+                               AutomationProperties.AutomationId="TheManual" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Content="Choose..."
+                                Style="{StaticResource Ordinary}"
+                                Click="ChooseTheManual"
+                                AutomationProperties.AutomationId="ChooseTheManual" />
+                        <Button Content="Clear"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="ClearTheManual"
+                                AutomationProperties.AutomationId="ClearTheManual" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Extras folder" />
+                    <TextBlock Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding ExtrasFolder}"
+                               Text="{Binding ExtrasFolder, TargetNullValue=Nothing chosen}"
+                               AutomationProperties.AutomationId="TheExtrasFolder" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Content="Choose..."
+                                Style="{StaticResource Ordinary}"
+                                Click="ChooseTheExtras"
+                                AutomationProperties.AutomationId="ChooseTheExtras" />
+                        <Button Content="Clear"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="ClearTheExtras"
+                                AutomationProperties.AutomationId="ClearTheExtras" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- =============================================== for printing -->
+                <TextBlock Style="{StaticResource Step}" Margin="0,22,0,0" Text="FOR PRINTING" />
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,2,0,6"
+                           Text="These never go on the disc. Choosing them now is not printing them." />
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="52" Height="72"
+                            HorizontalAlignment="Left"
+                            Background="{StaticResource Panel}"
+                            BorderBrush="{StaticResource Edge}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                        <Image Source="{Binding Cover, Converter={StaticResource APicture}}"
+                               Stretch="Uniform"
+                               Margin="2"
+                               AutomationProperties.AutomationId="TheCoverPicture" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,10,0">
+                        <TextBlock Text="Cover" />
+                        <TextBlock Style="{StaticResource Aside}"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Cover}"
+                                   Text="{Binding Cover, TargetNullValue=Nothing chosen}"
+                                   AutomationProperties.AutomationId="TheCover" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="Choose..."
+                                Style="{StaticResource Ordinary}"
+                                Click="ChooseTheCover"
+                                AutomationProperties.AutomationId="ChooseTheCover" />
+                        <Button Content="Clear"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="ClearTheCover"
+                                AutomationProperties.AutomationId="ClearTheCover" />
+                    </StackPanel>
+                </Grid>
+
+                <Grid Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Width="72" Height="72"
+                            HorizontalAlignment="Left"
+                            Background="{StaticResource Panel}"
+                            BorderBrush="{StaticResource Edge}"
+                            BorderThickness="1"
+                            CornerRadius="36">
+                        <Image Source="{Binding DiscFace, Converter={StaticResource APicture}}"
+                               Stretch="UniformToFill"
+                               Margin="2"
+                               AutomationProperties.AutomationId="TheDiscFacePicture" />
+                    </Border>
+
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,10,0">
+                        <TextBlock Text="Disc face" />
+                        <TextBlock Style="{StaticResource Aside}"
+                                   TextWrapping="NoWrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding DiscFace}"
+                                   Text="{Binding DiscFace, TargetNullValue=Nothing chosen}"
+                                   AutomationProperties.AutomationId="TheDiscFace" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button Content="Choose..."
+                                Style="{StaticResource Ordinary}"
+                                Click="ChooseTheDiscFace"
+                                AutomationProperties.AutomationId="ChooseTheDiscFace" />
+                        <Button Content="Clear"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="ClearTheDiscFace"
+                                AutomationProperties.AutomationId="ClearTheDiscFace" />
+                    </StackPanel>
+                </Grid>
+
+                <TextBlock Foreground="{StaticResource WorryInk}"
+                           FontSize="12"
+                           Margin="0,14,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding WhyNotThatPicture}"
+                           Visibility="{Binding WhyNotThatPicture, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhyNotThatPicture" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <Button Grid.Row="2"
+                Content="Done"
+                Style="{StaticResource TheButton}"
+                HorizontalAlignment="Right"
+                Margin="0,16,0,0"
+                IsDefault="True"
+                Click="Done"
+                AutomationProperties.AutomationId="Done" />
+    </Grid>
+</Window>
