@@ -109,6 +109,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _theSizeWasChosen = true;
             Change(ref _medium, value);
+
+            // The row of the list under it moves as well, and a dropdown only
+            // redraws for a property it was told about.
+            Tell(nameof(TheSizeChosen));
             SayWhatIsInTheDrives();
         }
     }
@@ -361,6 +365,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             // and stop the drives mattering ever again.
             _medium = found;
             Tell(nameof(Medium));
+            Tell(nameof(TheSizeChosen));
         }
 
         SayWhatIsInTheDrives(drives);
@@ -448,15 +453,58 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     public bool CanMakeIt => WhyNot is null && Games.Count > 0 && OutputFolder.Length > 0 && !IsWorking;
 
-    /// <summary>Every size of disc that can be aimed at.</summary>
+    /// <summary>
+    /// Every size of disc that can be aimed at, worded as the list shows them.
+    /// </summary>
     /// <remarks>
-    /// An instance property although it reads nothing of the instance, because
-    /// a WPF binding cannot reach a static one. Static would mean every list in
-    /// the window having to know the class it comes from, which is the window
-    /// knowing more about this than it should.
+    /// <para>
+    /// The words are worked out here rather than in the window because a
+    /// dropdown's open list lives in a visual tree of its own, and a binding
+    /// that reaches out of it to ask the screen a question is a classic way to
+    /// end up with rows that quietly show nothing.
+    /// </para>
+    /// <para>
+    /// They change with the option to split a file: a size that will be split
+    /// across discs is a different answer from the same size that will not,
+    /// and saying so where the size is chosen beats a refusal further down the
+    /// window that somebody has to work backwards from.
+    /// </para>
     /// </remarks>
-    [SuppressMessage("Performance", "CA1822", Justification = "A binding cannot reach a static property.")]
-    public IReadOnlyList<Medium> DiscSizes => Media.All;
+    public IReadOnlyList<ASizeToAimAt> DiscSizes { get; private set; } =
+        [.. Media.All.Select(each => new ASizeToAimAt(each, each.Name))];
+
+    /// <summary>
+    /// The row of that list which is chosen, for the window to bind to.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Medium"/> stays the one true answer. This is a view of it,
+    /// so that saved project files and everything downstream go on naming a
+    /// size rather than a sentence about one.
+    /// </remarks>
+    public ASizeToAimAt? TheSizeChosen
+    {
+        get => DiscSizes.FirstOrDefault(each => each.Medium.Key == Medium.Key);
+        set
+        {
+            if (value is not null)
+            {
+                Medium = value.Medium;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Words the sizes again, because what they mean has changed.
+    /// </summary>
+    private void SayTheSizesAgain()
+    {
+        string also = Options.CutFiles ? ", split across discs" : string.Empty;
+
+        DiscSizes = [.. Media.All.Select(each => new ASizeToAimAt(each, each.Name + also))];
+
+        Tell(nameof(DiscSizes));
+        Tell(nameof(TheSizeChosen));
+    }
 
     /// <summary>Whether the disc gets a menu that opens when it goes in.</summary>
     public bool Menu
@@ -1467,6 +1515,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(Label));
         Tell(nameof(OutputFolder));
         Tell(nameof(Medium));
+        Tell(nameof(TheSizeChosen));
         Tell(nameof(Options));
         Tell(nameof(Menu));
         Tell(nameof(Checksums));
@@ -1539,6 +1588,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _options = to;
         Tell(name);
         Tell(nameof(Options));
+
+        // A size that will be split across discs is a different answer from
+        // the same size that will not, and the list says which.
+        SayTheSizesAgain();
 
         // Splitting a file changes what would be made, so the line saying so
         // has to be worked out again.

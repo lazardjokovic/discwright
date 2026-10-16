@@ -148,6 +148,45 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void Lets_the_splitting_box_answer_the_refusal_it_is_the_answer_to()
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+        window.Medium = Media.Cd;
+        window.Add(AGame("Too Big", 800_000_000));
+
+        Assert.NotNull(window.WhyNot);
+
+        window.CutFiles = true;
+
+        // The red line stands until the box is ticked and then it goes,
+        // because ticking it is what makes the thing possible. A refusal that
+        // stayed after being answered would read as a bug.
+        Assert.Null(window.WhyNot);
+        Assert.True(window.CanMakeIt);
+
+        // And the size says what it is now going to do.
+        Assert.EndsWith(", split across discs", window.TheSizeChosen!.InWords, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Moves_the_dropdown_when_the_size_is_set_from_anywhere_else()
+    {
+        MakeADisc window = New();
+        List<string> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        window.Medium = Media.Cd;
+
+        // Opening a project, and a disc appearing in a drive, both set the
+        // size without anybody touching the dropdown. A dropdown only redraws
+        // for a property it was told about, so without this the window would
+        // go on saying DVD5 while holding a CD.
+        Assert.Contains(nameof(MakeADisc.TheSizeChosen), told);
+        Assert.Equal(Media.Cd.Key, window.TheSizeChosen!.Medium.Key);
+    }
+
+    [Fact]
     public void Warns_about_a_name_Windows_cannot_show_without_stopping_anything()
     {
         MakeADisc window = New();
@@ -498,6 +537,22 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(@"D:\manual.pdf", again.Extras?.ManualPath);
         Assert.Equal([@"D:\read me.txt"], again.Extras?.Loose);
         Assert.Single(again.AddOnsOrNone);
+    }
+
+    [Fact]
+    public void Moves_the_dropdown_when_an_opened_project_names_a_size()
+    {
+        MakeADisc window = New();
+        List<string> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        window.OpenThis(AReopenedDisc());
+
+        // Opening a project sets the size without going through the setter,
+        // so the dropdown has to be told separately or it goes on showing
+        // whatever was there before the file was opened.
+        Assert.Contains(nameof(MakeADisc.TheSizeChosen), told);
+        Assert.Equal(window.Medium.Key, window.TheSizeChosen!.Medium.Key);
     }
 
     [Fact]
@@ -874,6 +929,23 @@ public class TheMainWindowWithoutAWindow
         // question to answer, and asking somebody to pick the only drive they
         // own is a decision shaped like a chore.
         Assert.Null(window.TheDrive);
+    }
+
+    [Fact]
+    public async Task Moves_the_dropdown_when_a_disc_in_a_drive_settles_the_size()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+        List<string> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        await window.LookAtTheDrives();
+
+        // A CD in the drive settles the size on its own, behind the setter so
+        // that it does not count as a person choosing. The dropdown still has
+        // to be told, or it reads DVD5 over a disc that holds a fifth of that.
+        Assert.Equal(Media.Cd.Key, window.Medium.Key);
+        Assert.Contains(nameof(MakeADisc.TheSizeChosen), told);
+        Assert.Equal(Media.Cd.Key, window.TheSizeChosen!.Medium.Key);
     }
 
     [Fact]
@@ -1568,5 +1640,73 @@ public class TheMainWindowWithoutAWindow
         public void WriteBackground(string source, string destination, int width, int height, bool asIs)
         {
         }
+    }
+
+    [Fact]
+    public void Says_in_the_list_of_sizes_that_files_will_be_split()
+    {
+        MakeADisc screen = New();
+
+        Assert.All(screen.DiscSizes, size => Assert.DoesNotContain("split", size.InWords, StringComparison.Ordinal));
+
+        screen.CutFiles = true;
+
+        // Somebody choosing a size is the person who wants to know a file is
+        // about to be cut in half. Saying it there beats a refusal further
+        // down the window that has to be worked backwards from.
+        Assert.All(screen.DiscSizes, size => Assert.EndsWith(", split across discs", size.InWords, StringComparison.Ordinal));
+        Assert.StartsWith("CD-R", screen.DiscSizes[0].InWords, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Keeps_the_size_that_was_chosen_when_the_words_change()
+    {
+        MakeADisc screen = New();
+
+        // Built again rather than taken from the list, the way a size comes
+        // back out of a saved project file: equal, and not the same object.
+        // A row looked up by identity would come back empty here and the
+        // dropdown would show a blank where the choice used to be.
+        //
+        // Not DVD5, which is what the screen starts on. Setting a size that
+        // is value-equal to the one already held changes nothing, so the
+        // stranger would never be stored and this would prove nothing.
+        Medium stranger = new(Media.Dvd9.Key, Media.Dvd9.Name, Media.Dvd9.Capacity);
+        screen.Medium = stranger;
+        Assert.False(ReferenceEquals(stranger, Media.Dvd9), "the premise of this test");
+
+        screen.CutFiles = true;
+
+        // The rows are built again, so a chosen row that was compared by
+        // identity would come back empty and the dropdown would look blank.
+        Assert.NotNull(screen.TheSizeChosen);
+        Assert.Equal(Media.Dvd9.Key, screen.TheSizeChosen!.Medium.Key);
+        Assert.EndsWith(", split across discs", screen.TheSizeChosen.InWords, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Choosing_a_row_chooses_the_size_under_it()
+    {
+        MakeADisc screen = New();
+
+        screen.TheSizeChosen = screen.DiscSizes.Single(size => size.Medium.Key == Media.Dvd9.Key);
+
+        // What gets saved is a size and never a sentence about one.
+        Assert.Equal(Media.Dvd9, screen.Medium);
+    }
+
+    [Fact]
+    public void Tells_the_window_the_list_of_sizes_changed()
+    {
+        MakeADisc screen = New();
+        List<string> told = [];
+        screen.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        screen.CutFiles = true;
+
+        // Without both of these the dropdown goes on showing the old words,
+        // or shows nothing at all where the choice used to be.
+        Assert.Contains(nameof(MakeADisc.DiscSizes), told);
+        Assert.Contains(nameof(MakeADisc.TheSizeChosen), told);
     }
 }

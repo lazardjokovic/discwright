@@ -19,3 +19,20 @@ namespace DiscWright.Core;
 /// Usable bytes, which is less than the number on the box. See <see cref="Media"/>.
 /// </param>
 public sealed record Medium(string Key, string Name, long Capacity);
+
+/// <summary>
+/// One row of the list of disc sizes, as the window shows it.
+/// </summary>
+/// <remarks>
+/// A size and the words for it, kept together. The words are not part of the
+/// <see cref="Medium"/> because they depend on what else has been asked for:
+/// the same disc reads differently when a file is going to be split across
+/// two of them.
+/// </remarks>
+/// <param name="Medium">The size itself, which is what gets saved.</param>
+/// <param name="InWords">What the list shows for it.</param>
+public sealed record ASizeToAimAt(Medium Medium, string InWords)
+{
+    /// <summary>What a list shows when it is given no template.</summary>
+    public override string ToString() => InWords;
+}

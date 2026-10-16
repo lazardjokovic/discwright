@@ -762,6 +762,14 @@ The menu window wears the disc's own icon where one was chosen, and **DiscWright
 
 That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
 
+#### A dropdown's open list is somewhere else
+
+The sizes are worded in `MakeADisc` and not in the markup, because a `ComboBox`'s open list lives in a visual tree of its own. A binding inside a row that reaches out to ask the window a question is a well known way to end up with rows that quietly show nothing, and nothing in the build would say so.
+
+`Medium` stays the one true answer and `ASizeToAimAt` is a view of it, so a saved project file goes on naming a size rather than a sentence about one. The row is found **by key and never by identity**: a size restored from a file is equal to the one in the list without being the same object.
+
+Three places set the size without going through its setter, and each has to say the row moved as well: the setter itself, a disc settling it from the drive, and a project being opened. A dropdown only redraws for a property it was told about.
+
 #### An HTA will not resolve a relative icon
 
 `icon="menu.ico"` leaves the window wearing Windows' blank default even with `menu.ico` sitting beside the page. An HTA wants an absolute path, and **a disc has no idea which letter it will be given**.

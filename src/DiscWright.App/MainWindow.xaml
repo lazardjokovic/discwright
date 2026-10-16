@@ -204,8 +204,8 @@
                      with last week's CD still in the drive is an ordinary thing
                      to be doing. -->
                 <ComboBox ItemsSource="{Binding DiscSizes}"
-                          SelectedItem="{Binding Medium}"
-                          DisplayMemberPath="Name"
+                          SelectedItem="{Binding TheSizeChosen}"
+                          DisplayMemberPath="InWords"
                           AutomationProperties.AutomationId="DiscSize">
                     <!-- DisplayMemberPath sets what is SHOWN, and nothing
                          else. Without this a row still answers to whatever
@@ -215,7 +215,7 @@
                          The same slip as the games list, in a second place. -->
                     <ComboBox.ItemContainerStyle>
                         <Style TargetType="ComboBoxItem">
-                            <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
+                            <Setter Property="AutomationProperties.Name" Value="{Binding InWords}" />
                         </Style>
                     </ComboBox.ItemContainerStyle>
                 </ComboBox>
