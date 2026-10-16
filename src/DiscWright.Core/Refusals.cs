@@ -276,6 +276,34 @@ public static class Refusals
                 : "A disc has to be rewritable and have something on it. Put one in "
                     + string.Join(" or ", drives) + " and try again.");
 
+    /// <remarks>
+    /// Windows let go of the drive while the job was still using it. It is
+    /// not a disc that failed and not a drive that refused, and saying either
+    /// would send somebody to throw away a disc that is fine.
+    ///
+    /// Seen at the end of an erase: the managed callback the drive is handed
+    /// outlives the release of the COM objects around it, and the result
+    /// reaches the window as an exception rather than an answer.
+    /// </remarks>
+    /// <remarks>
+    /// The last resort. Everything this program expects to go wrong has a
+    /// sentence of its own, so reaching this means something got out that
+    /// nobody wrote a sentence for.
+    ///
+    /// It still has to arrive as an answer rather than as raw exception text
+    /// in a box, which reads as a crash and tells somebody nothing they can
+    /// act on.
+    /// </remarks>
+    public static Refusal SomethingNobodyExpected(string doing, string said) =>
+        new($"Something went wrong while {doing}",
+            "This one is not accounted for, which means it is worth reporting. Nothing has been lost that "
+                + "was not already written. It said: " + said);
+
+    public static Refusal WindowsLetGoOfTheDrive(string drive, string windowsSaid) =>
+        new($"Windows let go of {drive} part way through",
+            "Nothing is wrong with the disc and nothing has been lost. Try it again, and if it keeps "
+                + "happening, closing and reopening DiscWright clears it. Windows said: " + windowsSaid);
+
     public static Refusal ThatDiscCannotBeWrittenTo(string drive, string what) =>
         new($"The {what} in {drive} cannot be written to",
             "It is either a pressed disc or one that has already been written and cannot be erased. A blank "

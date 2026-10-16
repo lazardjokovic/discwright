@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using System.Text;
 
+using System.Runtime.InteropServices;
 using DiscWright.Core;
 using DiscWright.Core.Staging;
 using DiscWright.Staging;
@@ -1607,6 +1608,14 @@ public class TheMainWindowWithoutAWindow
     }
 
     /// <summary>An eraser that counts its way along, as a drive does.</summary>
+    /// <summary>An eraser that throws the way COM interop does.</summary>
+    private sealed class AnEraserThatFallsOver : IEraseDiscs
+    {
+        public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct) =>
+            throw new InvalidComObjectException(
+                "Attempt has been made to use a COM object that does not have a backing class factory.");
+    }
+
     private sealed class AnEraserThatCounts : IEraseDiscs
     {
         public async Task<Outcome<string>> BlankIt(
@@ -2095,6 +2104,37 @@ public class TheMainWindowWithoutAWindow
         // whether or not a single step along the way was ever passed on, so
         // the first version of this test passed with the plumbing cut.
         Assert.Contains(bar, far => far > 0 && far < 1);
+    }
+
+    [Fact]
+    public async Task Turns_something_nobody_expected_into_an_answer()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, false, 0), eraser: new AnEraserThatFallsOver());
+        await window.LookAtTheDrives();
+
+        // No exception out of here. This is the shape of what reached Lazar
+        // as "Attempt has been made to use a COM object that does not have a
+        // backing class factory" in a message box at the end of an erase:
+        // raw exception text, which reads as a crash and says nothing he
+        // could act on.
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        Assert.NotNull(window.ItWentWrong);
+        Assert.Contains("Something went wrong while erasing", window.ItWentWrong!.Headline, StringComparison.Ordinal);
+        Assert.Contains("worth reporting", window.ItWentWrong.Because, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Stops_working_even_when_something_nobody_expected_happens()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, false, 0), eraser: new AnEraserThatFallsOver());
+        await window.LookAtTheDrives();
+
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        // A window left thinking it is working is one where every button
+        // stays dead and nothing says why.
+        Assert.False(window.IsWorking);
     }
 
     [Fact]

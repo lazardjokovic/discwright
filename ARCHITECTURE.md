@@ -818,6 +818,16 @@ There was a setting and the usual answer was no, because **the usual answer to a
 
 `ArtworkOnDisc` is gone from `DiscOptions` and from the window. It is still **written to the project file as true**, because v1 reads that field and a file saying false would open there as a disc without artwork.
 
+#### InvalidComObjectException is not a COMException
+
+The burning code catches `COMException` around every call into IMAPI. **`InvalidComObjectException` does not derive from it**, so it walks straight past, out of the burner, out of the view model, and into the window's catch-all, where it is shown as raw exception text in a message box. It reads as a crash and is not one.
+
+What it means is that something used a COM object after it was released. The drive is handed a managed callback for the length of an erase, and the teardown calls `Marshal.FinalReleaseComObject` with a forced collection behind it, so a late call into that callback is enough to produce it. Seen at the end of an erase in the middle of a two-disc set, which stopped the set.
+
+Both the erase and the burn catch it by name now and answer with a sentence.
+
+**And the view model no longer lets anything out.** Whatever escapes becomes a refusal saying it was not accounted for and is worth reporting, because an answer somebody can act on beats exception text every time, and the window's catch-all should never be what somebody sees.
+
 #### An erase has no unit of work but seconds
 
 The drive hands the eraser **elapsed and expected seconds** and the eraser threw both away into a sentence, so the bar sat at nothing for the whole half minute while the words counted up beside it, which reads as a program that has stopped.

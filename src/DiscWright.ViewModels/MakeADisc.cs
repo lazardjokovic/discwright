@@ -779,6 +779,17 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
             Say($"{chosen.Drive} is blank again", 1);
         }
+        catch (Exception nobodyExpected) when (nobodyExpected is not OperationCanceledException)
+        {
+            // Anything that gets this far is something nobody wrote a
+            // sentence for, and it still has to reach the window as an
+            // answer. Letting it out turns into raw exception text in a
+            // message box, which reads as a crash: that is how
+            // "Attempt has been made to use a COM object that does not have
+            // a backing class factory" reached Lazar at the end of an erase.
+            ItWentWrong = Refusals.SomethingNobodyExpected("erasing the disc", nobodyExpected.Message);
+            Tell(nameof(ItWentWrong));
+        }
         finally
         {
             IsWorking = false;

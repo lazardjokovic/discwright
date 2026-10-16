@@ -118,6 +118,14 @@ public sealed class WindowsBurner : IBurnDiscs, IEraseDiscs, IWorkTheTray
         {
             return Refusals.TheDriveCouldNotWriteIt(onto.Drive, FirstLineOf(wrong.Message));
         }
+        catch (InvalidComObjectException wrong)
+        {
+            // The same hole as the erase has: not a COMException, so it walks
+            // past the catch above and out to the window as raw exception
+            // text. A burn is longer and has more objects in flight, so if it
+            // can happen at all it can happen here.
+            return Refusals.WindowsLetGoOfTheDrive(onto.Drive, FirstLineOf(wrong.Message));
+        }
         finally
         {
             Release(reading);
@@ -160,6 +168,19 @@ public sealed class WindowsBurner : IBurnDiscs, IEraseDiscs, IWorkTheTray
         catch (COMException wrong)
         {
             return Refusals.TheDriveCouldNotWriteIt(disc.Drive, FirstLineOf(wrong.Message));
+        }
+        catch (InvalidComObjectException wrong)
+        {
+            // NOT a COMException, which is why this walked past the catch
+            // above, out of the burner, out of the view model and into the
+            // window's catch-all, where it was shown as raw exception text in
+            // a message box. It reads as a crash and is not one.
+            //
+            // "A COM object that does not have a backing class factory" means
+            // something used an object after it had been released. The drive
+            // is handed a managed callback for the duration of the erase, and
+            // a late call into it arriving after the release below is enough.
+            return Refusals.WindowsLetGoOfTheDrive(disc.Drive, FirstLineOf(wrong.Message));
         }
         finally
         {
