@@ -7,6 +7,11 @@ artifacts/
 # packaging\Build-TheMsix.ps1, and a 62 MB bundle does not belong in history
 # of a repository that is going public.
 build/
+
+# Python leaves these beside any module it imports, and tools/Mutate.py is
+# imported by every mutation run.
+__pycache__/
+*.pyc
 [Dd]ebug/
 [Rr]elease/
 x64/
