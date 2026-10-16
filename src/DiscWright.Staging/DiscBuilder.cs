@@ -19,7 +19,13 @@ namespace DiscWright.Staging;
 /// can open and click before any of that exists.
 /// </para>
 /// </remarks>
-public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages images, IHasher hasher)
+public sealed class DiscBuilder(
+    IFileSystem files,
+    IStageWriter writer,
+    IImages images,
+    IHasher hasher,
+    string madeBy = "",
+    Func<DateTimeOffset>? now = null)
     : IBuildDiscs
 {
     /// <summary>
@@ -31,7 +37,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
     /// would hash a half-made disc and still look like it worked. The rest
     /// could be in any order and are in the order somebody would describe them.
     /// </remarks>
-    private IReadOnlyList<IBuildStep> Steps =>
+    private IReadOnlyList<IBuildStep> StepsFor(Medium medium, string outputFolder) =>
     [
         new CopyTheFilesStep(),
         new CopyTheExtrasStep(files),
@@ -39,7 +45,12 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
         new WriteTheAutorunStep(),
         new CopyTheArtworkStep(images),
         new WriteTheMenuStep(),
-        new WriteTheChecksumsStep(files, hasher)
+        new WriteTheChecksumsStep(files, hasher),
+
+        // Last of all, and beside the discs rather than on one. Nothing
+        // written before this point can be opened again without it.
+        new WriteTheProjectFileStep(
+            madeBy, medium.Key, outputFolder, now ?? (() => DateTimeOffset.UtcNow))
     ];
 
     /// <summary>
@@ -114,7 +125,7 @@ public sealed class DiscBuilder(IFileSystem files, IStageWriter writer, IImages 
         CancellationToken ct)
     {
         DiscProject forThisDisc = project with { Label = label, Games = games };
-        BuildPipeline pipeline = new(Steps);
+        BuildPipeline pipeline = new(StepsFor(medium, outputFolder));
         List<BuiltDisc> made = [];
 
         foreach (PlannedDisc disc in layout.Discs)

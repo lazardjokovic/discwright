@@ -1777,15 +1777,32 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _games.Clear();
         _addOns.Clear();
         _loose.Clear();
+        _asFound.Clear();
+        _addOnsAsFound.Clear();
+        _tree.Clear();
 
         DiscProject was = back.Project;
 
         foreach (GameFolder game in was.Games)
         {
             _games.Add(game);
+            _asFound.Add(game);
         }
 
         _addOns.AddRange(was.AddOnsOrNone);
+        _addOnsAsFound.AddRange(was.AddOnsOrNone);
+
+        // The tree is what the window shows, so a project opened without one
+        // is a project whose games are invisible while everything else on the
+        // window insists they are there: the size says one disc and the button
+        // that builds them is lit.
+        for (int at = 0; at < _asFound.Count; at++)
+        {
+            _tree.Add(TheTreeOfWhatGoesOn.For(
+                _asFound[at],
+                _addOnsAsFound.Where(addOn => addOn.BelongsTo == at),
+                TakeTheTicksAsTheAnswer));
+        }
         _loose.AddRange(was.Extras?.Loose ?? []);
         _artwork = was.Artwork;
         _manual = was.Extras?.ManualPath;

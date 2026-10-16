@@ -48,7 +48,10 @@ public partial class App : Application
         WindowsFileSystem disk = new();
         GameFolderReader reader = GameFolderReader.InTheUsualOrder(new FileVersionFacts());
 
-        DiscBuilder builder = new(disk, new WindowsStageWriter(), new WindowsImages(), new Sha256Hasher());
+        // The version goes in, because every disc it builds writes a project
+        // file that says which build made it.
+        DiscBuilder builder = new(
+            disk, new WindowsStageWriter(), new WindowsImages(), new Sha256Hasher(), WhatThisBuildIs());
 
         WindowsBurner burner = new();
 

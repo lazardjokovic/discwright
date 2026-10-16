@@ -762,6 +762,16 @@ The menu window wears the disc's own icon where one was chosen, and **DiscWright
 
 That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
 
+#### Every disc carries its own recipe, and now one gets written
+
+`AProjectFile` read `discproject.json` from the first day of the rewrite, and **nothing ever wrote one**, so every disc 2.0 built was a disc nothing could reopen. The promise in that file, that somebody who finds a disc in a drawer can open it, change one thing and build it again, was half kept: the reading half.
+
+`TheProjectAsJson` writes version 14, the shape v1 wrote and the shape the reader understands. A field the reader reads is written **even when it carries a default**, because the reader treats a missing field as "what the version that lacked it did", so leaving out whatever happens to be false writes a file that means something else.
+
+It goes **beside the discs, not on one**, which is where v1 put it and therefore where "Open one you built" looks. A disc is a copy of a game; the project is the recipe, and a recipe on the disc is a file on every copy nobody asked for. Written once per build, not once per disc: a set is one project.
+
+The guard is the **round trip**, never a list of expected field names. A writer checked against what its author believed the reader wanted is how a file nothing can open gets written with complete confidence.
+
 #### A drive that has not finished thinking is not a drive that refused
 
 Asked the moment a tray shuts, a writer can take **ten seconds** to say what is in it, measured on the ASUS here. Until then, IMAPI throws rather than answering, and `WindowsRecorders` turns that into `Recorder.WhyNot`.

@@ -1836,6 +1836,34 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void An_opened_project_shows_its_games_in_the_tree()
+    {
+        MakeADisc window = New();
+
+        window.OpenThis(AReopenedDisc());
+
+        // The tree is what the window shows. Without this, an opened project
+        // is a window with nothing in it while everything else insists the
+        // games are there: the size says one disc and Build it is lit.
+        Assert.NotEmpty(window.Games);
+        Assert.Equal(window.Games.Count, window.WhatGoesOnIt.Count);
+        Assert.Equal(window.Games.Select(game => game.Name), window.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Opening_a_second_project_does_not_leave_the_first_ones_rows_behind()
+    {
+        MakeADisc window = New();
+
+        window.OpenThis(AReopenedDisc());
+        window.OpenThis(AReopenedDisc());
+
+        // Two collections that have to agree, and the one that is easy to
+        // forget to clear is the one that is easy to forget to fill.
+        Assert.Equal(window.Games.Count, window.WhatGoesOnIt.Count);
+    }
+
+    [Fact]
     public void Starting_again_empties_the_tree_as_well_as_the_list()
     {
         MakeADisc window = New();

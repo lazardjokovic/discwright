@@ -1,6 +1,10 @@
 # Opens a disc through the real window and reads back what the window now says.
 
+# -Exe points this at a build to drive. The default is the Debug build, which
+# on a machine with Smart App Control enforcing is an exe beside loose DLLs and
+# is refused outright, so a single-file publish is what actually runs here.
 param(
+    [string] $Exe,
     [string] $Disc = (Join-Path $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' }) '2 DISCS - open these\10 everything at once')
 )
 
@@ -11,7 +15,8 @@ $UIA = [System.Windows.Automation.AutomationElement]
 $Deep = [System.Windows.Automation.TreeScope]::Descendants
 $Kids = [System.Windows.Automation.TreeScope]::Children
 
-$exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe'
+if (-not $Exe) { $Exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe' }
+$exe = $Exe
 
 function ById($root, $id, $sec = 10) {
     $want = New-Object System.Windows.Automation.PropertyCondition($UIA::AutomationIdProperty, $id)

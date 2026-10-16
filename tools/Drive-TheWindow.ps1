@@ -8,7 +8,11 @@
 # It needs a desktop. Say so before running it.
 
 [CmdletBinding()]
+# -Exe points this at a build to drive. The default is the Debug build, which
+# on a machine with Smart App Control enforcing is an exe beside loose DLLs and
+# is refused outright, so a single-file publish is what actually runs here.
 param(
+    [string] $Exe,
     [string] $Game = (Join-Path $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' }) '1 SOURCES - add these\A - GOG download (Hollow Knight)'),
     [string] $Into = 'C:\Users\lazar\DiscWright-Lab\driven-by-the-window',
     [string] $Shots = 'C:\Users\lazar\DiscWright-Lab'
@@ -20,7 +24,8 @@ Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, Sy
 $UIA = [System.Windows.Automation.AutomationElement]
 $Scope = [System.Windows.Automation.TreeScope]::Descendants
 
-$exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe'
+if (-not $Exe) { $Exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe' }
+$exe = $Exe
 if (-not (Test-Path $exe)) { throw "No app at $exe" }
 if (-not (Test-Path $Game)) { throw "No game folder at $Game" }
 
