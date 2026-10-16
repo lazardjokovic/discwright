@@ -32,6 +32,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// <summary>Held while a build starts or stops, and while a report lands.</summary>
     private readonly Lock _oneAtATime = new();
     private readonly ObservableCollection<GameFolder> _games = [];
+
+    // What was found, before anything was turned off, and the tree of ticks
+    // over it. _games holds what will actually be written, which is these
+    // trimmed to whatever is still ticked.
+    private readonly List<GameFolder> _asFound = [];
+    private readonly List<AddOn> _addOnsAsFound = [];
+    private readonly ObservableCollection<AThingOnTheDisc> _tree = [];
+    private ReadOnlyObservableCollection<AThingOnTheDisc>? _treeView;
     private readonly List<AddOn> _addOns = [];
     private readonly List<string> _loose = [];
 
@@ -73,6 +81,18 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// found by driving a real one.
     /// </remarks>
     public ReadOnlyObservableCollection<GameFolder> Games => _view ??= new(_games);
+
+    /// <summary>
+    /// What goes on the disc, as a tree that can be edited: a game, the
+    /// folders inside it, its files and its add-ons, each with a tick.
+    /// </summary>
+    /// <remarks>
+    /// The tree holds everything that was found and never forgets a row that
+    /// was turned off, because turning it back on has to put the same file
+    /// back. <see cref="Games"/> is what will be written, read off the tree
+    /// whenever a tick changes.
+    /// </remarks>
+    public ReadOnlyObservableCollection<AThingOnTheDisc> WhatGoesOnIt => _treeView ??= new(_tree);
 
     /// <summary>What This PC will show when the disc goes in.</summary>
     public string Label
@@ -494,6 +514,96 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Reads the tree back into what will actually be written.
+    /// </summary>
+    /// <remarks>
+    /// Everything downstream reads a game's file list: the size, the
+    /// refusals, how many discs it takes, what the builder writes and what
+    /// goes in the ISO. So a game carrying fewer files is the whole of
+    /// leaving a file off, and nothing else had to learn about it.
+    /// </remarks>
+    private void TakeTheTicksAsTheAnswer()
+    {
+        for (int at = 0; at < _asFound.Count && at < _tree.Count; at++)
+        {
+            _games[at] = _tree[at].AsChosen(_asFound[at]);
+        }
+
+        _addOns.Clear();
+        for (int at = 0; at < _tree.Count; at++)
+        {
+            _addOns.AddRange(_tree[at].AddOnsChosen(_addOnsAsFound.Where(addOn => addOn.BelongsTo == at)));
+        }
+
+        Reconsider();
+        Tell(nameof(WhatIsLeftOff));
+        Tell(nameof(WhyThatMatters));
+    }
+
+    /// <summary>
+    /// What has been taken off the disc, said plainly, or nothing when the
+    /// answer is everything.
+    /// </summary>
+    /// <remarks>
+    /// Leaving the installer off is allowed, because this window refuses by
+    /// explaining rather than by greying things out, and somebody making a
+    /// disc of just the extras has a reason nobody here can guess. It is said
+    /// out loud because a disc that cannot install the game is not what
+    /// anybody sets out to make by accident.
+    /// </remarks>
+    public string? WhatIsLeftOff
+    {
+        get
+        {
+            int left = 0;
+            long bytes = 0;
+            bool noInstaller = false;
+
+            for (int at = 0; at < _tree.Count; at++)
+            {
+                foreach (AThingOnTheDisc thing in _tree[at].EveryThing())
+                {
+                    if (thing.IsOn == false)
+                    {
+                        left++;
+                        bytes += thing.Bytes;
+                    }
+                }
+
+                noInstaller |= _tree[at].ItsInstallerIsOff();
+            }
+
+            if (left == 0)
+            {
+                return null;
+            }
+
+            string what = left == 1 ? "1 thing" : $"{left} things";
+
+            return $"Leaving off {what}, {ByteSize.Describe(bytes)}.";
+        }
+    }
+
+    /// <summary>
+    /// The one thing about leaving rows off that is worth a warning colour, or
+    /// nothing.
+    /// </summary>
+    /// <remarks>
+    /// Apart from <see cref="WhatIsLeftOff"/> because the two are different
+    /// kinds of statement, and a window where everything is amber is a window
+    /// where amber means nothing.
+    ///
+    /// Leaving a file off is not a mistake, it is the thing somebody just
+    /// deliberately did, so it is said in ordinary ink. A disc that cannot
+    /// install the game it is a disc of is a different matter, and is the
+    /// only part of this that changes what the disc can do.
+    /// </remarks>
+    public string? WhyThatMatters =>
+        _tree.Any(game => game.ItsInstallerIsOff())
+            ? "Without its installer, the disc will not install the game."
+            : null;
+
+    /// <summary>
     /// Words the sizes again, because what they mean has changed.
     /// </summary>
     private void SayTheSizesAgain()
@@ -542,6 +652,17 @@ public sealed class MakeADisc : INotifyPropertyChanged
         get => Options.CutFiles;
         set => Switch(Options with { CutFiles = value });
     }
+
+    /// <summary>
+    /// Why a tray that needs pushing matters, for the window to hover with.
+    /// </summary>
+    /// <remarks>
+    /// The warning itself is short enough not to wrap, because it has to be
+    /// read before an unattended run is started. This is the reason behind
+    /// it, which only has to be findable by somebody who wonders.
+    /// </remarks>
+    [SuppressMessage("Performance", "CA1822", Justification = "A binding cannot reach a static property.")]
+    public string WhyTheTrayMatters => TheDiscsThatAreIn.WhyTheTrayMatters;
 
     /// <summary>Whether a build is running right now.</summary>
     public bool IsWorking { get; private set; }
@@ -972,6 +1093,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         _games.Clear();
         _addOns.Clear();
+        _asFound.Clear();
+        _addOnsAsFound.Clear();
+        _tree.Clear();
         _loose.Clear();
 
         _artwork = null;
@@ -1386,15 +1510,25 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public void Add(GameFolder game, IEnumerable<LeftBehind>? asAddOns = null)
     {
         _games.Add(game);
+        _asFound.Add(game);
 
         foreach (LeftBehind each in asAddOns ?? [])
         {
-            _addOns.Add(new AddOn(
+            AddOn addOn = new(
                 _games.Count - 1,
                 System.IO.Path.Combine(game.Path, each.File.RelativePath),
                 each.AsAnAddOn,
-                each.Bytes));
+                each.Bytes);
+
+            _addOns.Add(addOn);
+            _addOnsAsFound.Add(addOn);
         }
+
+        // Its branch of the tree, over everything that was found.
+        _tree.Add(TheTreeOfWhatGoesOn.For(
+            game,
+            _addOnsAsFound.Where(addOn => addOn.BelongsTo == _games.Count - 1),
+            TakeTheTicksAsTheAnswer));
 
         // The first game names the disc, because that is nearly always what
         // somebody would have typed. Only the first: renaming it afterwards is
@@ -1406,6 +1540,25 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         Reconsider();
+    }
+
+    /// <summary>
+    /// Takes off the game that this row belongs to, whatever the row is.
+    /// </summary>
+    /// <remarks>
+    /// The tree selects one row, and that row may be a file deep inside a
+    /// game. Remove has always meant "take this game off the disc", so it goes
+    /// on meaning that rather than quietly becoming a way to drop one file.
+    /// Leaving one file off is what its tick is for.
+    /// </remarks>
+    public void RemoveTheGameOf(AThingOnTheDisc thing)
+    {
+        int at = _tree.IndexOf(thing.TheGameItIsIn);
+
+        if (at >= 0 && at < _games.Count)
+        {
+            Remove(_games[at]);
+        }
     }
 
     /// <summary>Takes a game back off the list, and its add-ons with it.</summary>
@@ -1425,7 +1578,18 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         _games.RemoveAt(which);
+        _asFound.RemoveAt(which);
+        _tree.RemoveAt(which);
+        _addOnsAsFound.RemoveAll(addOn => addOn.BelongsTo == which);
         _addOns.RemoveAll(addOn => addOn.BelongsTo == which);
+
+        for (int at = 0; at < _addOnsAsFound.Count; at++)
+        {
+            if (_addOnsAsFound[at].BelongsTo > which)
+            {
+                _addOnsAsFound[at] = _addOnsAsFound[at] with { BelongsTo = _addOnsAsFound[at].BelongsTo - 1 };
+            }
+        }
 
         for (int at = 0; at < _addOns.Count; at++)
         {

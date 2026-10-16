@@ -118,7 +118,7 @@
                                    AutomationProperties.AutomationId="TheBackground" />
 
                         <CheckBox Margin="0,8,0,0"
-                                  Content="Stretch it to fit rather than cropping"
+                                  Content="Stretch to fit"
                                   IsChecked="{Binding BackgroundAsIs}"
                                   AutomationProperties.AutomationId="BackgroundAsIs" />
 
@@ -232,7 +232,7 @@
                 <TextBlock Style="{StaticResource Step}" Margin="0,22,0,0" Text="FOR PRINTING" />
                 <TextBlock Style="{StaticResource Aside}"
                            Margin="0,2,0,6"
-                           Text="These never go on the disc. Choosing them now is not printing them." />
+                           Text="Choosing them is not printing them." />
 
                 <Grid>
                     <Grid.ColumnDefinitions>

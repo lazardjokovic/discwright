@@ -89,6 +89,19 @@ public static class TheDiscsThatAreIn
     /// no reason anybody could see.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Why a tray that needs pushing matters, for somewhere a pointer rests
+    /// rather than somewhere it takes up room.
+    /// </summary>
+    /// <remarks>
+    /// Said apart from the warning itself because the two have different
+    /// jobs. The warning has to be seen before an unattended run is started.
+    /// The reason only has to be findable by somebody who wonders.
+    /// </remarks>
+    public const string WhyTheTrayMatters =
+        "Every disc has to come out to be checked after it is written, so this "
+        + "will stop and wait for you to push it back in.";
+
     public static string? WhatToSayAboutTheTray(
         IReadOnlyList<Recorder> drives, Func<Recorder, bool> canShutItsOwnTray)
     {
@@ -106,13 +119,13 @@ public static class TheDiscsThatAreIn
         }
 
         string which = needAPush.Length == 1
-            ? needAPush[0] + " cannot close its own tray"
-            : string.Join(" and ", needAPush) + " cannot close their own trays";
+            ? needAPush[0] + " needs the tray pushed in"
+            : string.Join(" and ", needAPush) + " need the tray pushed in";
 
-        // Three lines of explanation for one fact took more of the window
-        // than the thing it was about. The reason is true and is not needed
-        // every time somebody looks at the screen.
-        return $"{which}, so you will have to push it in after each disc.";
+        // Short enough not to wrap. The reason is true and is not needed
+        // every time somebody looks at the screen, so it moved to
+        // <see cref="WhyTheTrayMatters"/> and the window hovers for it.
+        return which;
     }
 
     /// <summary>

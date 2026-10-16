@@ -30,7 +30,10 @@ public class TheWindowsMarkup
     /// things. A Grid has no business carrying an id; a Button does.
     /// </summary>
     private static readonly string[] Interactive =
-        ["Button", "TextBox", "CheckBox", "ComboBox", "ListBox", "RadioButton", "Expander", "Slider", "PasswordBox"];
+    [
+        "Button", "TextBox", "CheckBox", "ComboBox", "ListBox", "TreeView",
+        "RadioButton", "Expander", "Slider", "PasswordBox"
+    ];
 
     [Theory]
     [MemberData(nameof(EveryWindow))]
@@ -41,13 +44,14 @@ public class TheWindowsMarkup
             .. Markup(window)
                 .Descendants()
                 .Where(element => Interactive.Contains(element.Name.LocalName))
-                .Where(element => IdOf(element) is null)
+                .Where(element => !CanBeFound(element))
                 .Select(Describe)
         ];
 
         Assert.True(
             unreachable.Length == 0,
-            "Every control somebody uses needs an AutomationId, or no window test can reach it. "
+            "Every control somebody uses needs an AutomationId, or an AutomationProperties.Name when it "
+                + "lives in a row template and there is one of it per row, or no window test can reach it. "
                 + $"Missing in {window} on: " + string.Join(", ", unreachable));
     }
 
@@ -162,7 +166,7 @@ public class TheWindowsMarkup
         [
             .. Markup(window)
                 .Descendants()
-                .Where(element => element.Name.LocalName is "ListBox" or "ComboBox")
+                .Where(element => element.Name.LocalName is "ListBox" or "ComboBox" or "TreeView")
                 .Where(element => element.Attribute("ItemsSource") is not null)
                 .Where(element => !NamesItsRows(element))
                 .Select(Describe)
@@ -262,6 +266,180 @@ public class TheWindowsMarkup
         Assert.Null(button.Attribute("Visibility"));
     }
 
+    // ------------------------------------------------- what it does not say
+
+    [Fact]
+    public void The_tray_warning_fits_on_one_line_and_hovers_for_the_reason()
+    {
+        XElement warning = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "AboutTheTray");
+
+        // In a 340 pixel column a wrapped paragraph for one fact took more
+        // room than the control it was about. The fact still has to be on
+        // screen, because an unattended run that stops for a push is the
+        // whole reason for saying it. What goes is the explanation.
+        Assert.Equal("NoWrap", (string?)warning.Attribute("TextWrapping"));
+        Assert.Equal("{Binding WhyTheTrayMatters}", (string?)warning.Attribute("ToolTip"));
+    }
+
+    [Fact]
+    public void The_place_for_the_iso_is_named_for_what_lands_in_it()
+    {
+        // "WHERE IT GOES" read as if it were about the disc, which is the one
+        // thing that folder never holds.
+        Assert.Contains(
+            "WHERE TO SAVE THE ISO",
+            Window().Descendants(Xaml + "TextBlock").Select(each => (string?)each.Attribute("Text")));
+    }
+
+    [Fact]
+    public void The_version_and_the_way_to_check_it_are_one_thought()
+    {
+        XElement check = Window()
+            .Descendants(Xaml + "Button")
+            .Single(each => IdOf(each) == "CheckForANewVersion");
+
+        // Side by side rather than two rows apart, which is what they were.
+        Assert.Contains(
+            "ThisBuild",
+            check.Parent!.Elements().Select(IdOf));
+    }
+
+    [Theory]
+    [InlineData("Put a game on a disc that still works in ten years.")]
+    [InlineData("Leave this alone and DiscWright works it out, and asks only if there is something to ask.")]
+    public void Does_not_spend_a_row_on_what_a_hover_or_nothing_can_carry(string gone)
+    {
+        // The first sold the app to somebody who has already opened it. The
+        // second explained a placeholder that says the same thing itself, and
+        // is now the dropdown's tooltip.
+        Assert.DoesNotContain(
+            gone,
+            Window().Descendants().Select(each => (string?)each.Attribute("Text")));
+    }
+
+    [Fact]
+    public void The_preview_sits_beside_what_it_previews()
+    {
+        XElement preview = Window()
+            .Descendants(Xaml + "Button")
+            .Single(each => IdOf(each) == "PreviewTheMenu");
+
+        // On the header row of the list it is about, rather than buried in
+        // More options beside a checkbox, where nobody found it.
+        Assert.Contains(
+            "WHAT GOES ON IT",
+            preview.Parent!.Elements(Xaml + "TextBlock").Select(each => (string?)each.Attribute("Text")));
+
+        // Still dead unless there is a menu to preview, so moving it cannot
+        // make it show something that is not going to be on the disc.
+        Assert.Equal("{Binding CanPreview}", (string?)preview.Attribute("IsEnabled"));
+    }
+
+    [Fact]
+    public void Does_not_claim_the_printing_artwork_never_reaches_the_disc()
+    {
+        // It does reach it, the moment somebody ticks "The cover art on the
+        // disc as well", which writes cover and label into an ARTWORK folder.
+        // The sentence was true of the default and false of the option, and a
+        // window that says something false about its own behaviour is worse
+        // than one that says nothing.
+        Assert.DoesNotContain(
+            "These never go on the disc. Choosing them now is not printing them.",
+            Markup("WhatElseGoesOnIt.xaml").Descendants().Select(each => (string?)each.Attribute("Text")));
+
+        Assert.Contains(
+            "ArtworkOnDisc",
+            Window().Descendants(Xaml + "CheckBox").Select(IdOf));
+    }
+
+    [Fact]
+    public void No_label_on_a_tick_box_is_long_enough_to_wrap()
+    {
+        // A label that wraps makes a row twice as tall as the box in it, and
+        // the artwork window is already seven rows of the same shape.
+        foreach (string window in new[] { "MainWindow.xaml", "WhatElseGoesOnIt.xaml" })
+        {
+            foreach (XElement box in Markup(window).Descendants(Xaml + "CheckBox"))
+            {
+                string? label = (string?)box.Attribute("Content");
+                if (label is null)
+                {
+                    continue;
+                }
+
+                Assert.True(
+                    label.Length <= 40,
+                    $"\"{label}\" is {label.Length} characters, which wraps. The reason belongs under it or in a tooltip.");
+            }
+        }
+    }
+
+    [Fact]
+    public void A_control_with_neither_a_name_nor_an_id_is_not_reachable()
+    {
+        // The guard above is the one that stops v1 happening again, so it
+        // needs a guard of its own. Turning it into "yes, always" broke
+        // nothing, which means it was being trusted rather than tested.
+        XElement loose = new(Xaml + "Button");
+        Assert.False(TheWindowsMarkup.CanBeFound(loose));
+
+        XElement withAnId = new(Xaml + "Button");
+        withAnId.SetAttributeValue("AutomationProperties.AutomationId", "Something");
+        Assert.True(TheWindowsMarkup.CanBeFound(withAnId));
+
+        // A name alone is not enough out in the window, where there is one of
+        // each control and an id is what a test looks it up by.
+        XElement named = new(Xaml + "Button");
+        named.SetAttributeValue("AutomationProperties.Name", "Something");
+        Assert.False(TheWindowsMarkup.CanBeFound(named));
+
+        // Inside a row template there is one per row, so a name bound to the
+        // row is the only thing that could work.
+        XElement template = new(Xaml + "HierarchicalDataTemplate");
+        XElement inARow = new(Xaml + "CheckBox");
+        inARow.SetAttributeValue("AutomationProperties.Name", "{Binding Name}");
+        template.Add(inARow);
+        Assert.True(TheWindowsMarkup.CanBeFound(inARow));
+    }
+
+    [Fact]
+    public void A_name_in_a_tree_row_cannot_push_the_rest_of_the_row_off_the_edge()
+    {
+        // A TreeViewItem's header sits in an Auto column of its own template,
+        // so a row is only ever as wide as what is in it and
+        // HorizontalContentAlignment has nothing to stretch into. A long file
+        // name grew the row past the panel and everything after the name was
+        // clipped, with no scrollbar and nothing else to say so.
+        //
+        // That was tried, photographed, and still wrong, which is why the
+        // guard is on the thing that actually prevents it.
+        XElement row = Window()
+            .Descendants(Xaml + "HierarchicalDataTemplate")
+            .Single()
+            .Descendants(Xaml + "TextBlock")
+            .First(each => (string?)each.Attribute("Text") == "{Binding Name}");
+
+        Assert.NotNull(row.Attribute("Width"));
+        Assert.Equal("CharacterEllipsis", (string?)row.Attribute("TextTrimming"));
+    }
+
+    [Fact]
+    public void Says_what_was_left_off_in_ordinary_ink_and_warns_only_about_the_installer()
+    {
+        XElement[] text = [.. Window().Descendants(Xaml + "TextBlock")];
+
+        XElement count = text.Single(each => IdOf(each) == "WhatIsLeftOff");
+        XElement matters = text.Single(each => IdOf(each) == "WhyThatMatters");
+
+        // Leaving a file off is not a mistake. It is the thing somebody just
+        // deliberately did, and a window where everything is amber is a
+        // window where amber means nothing, including on the tray line.
+        Assert.Null(count.Attribute("Foreground"));
+        Assert.Equal("{StaticResource WorryInk}", (string?)matters.Attribute("Foreground"));
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static XElement Window() => Markup("MainWindow.xaml");
@@ -271,6 +449,28 @@ public class TheWindowsMarkup
 
     private static string? IdOf(XElement element) =>
         (string?)element.Attribute("AutomationProperties.AutomationId");
+
+    /// <summary>
+    /// Whether a window test could get hold of this control.
+    /// </summary>
+    /// <remarks>
+    /// An id normally, because there is one of each control. Inside a row
+    /// template there is one PER ROW, so a single id would name every row the
+    /// same thing and finding one of them would be luck. Such a control earns
+    /// its place with a name bound to the row instead.
+    /// </remarks>
+    internal static bool CanBeFound(XElement element)
+    {
+        if (IdOf(element) is not null)
+        {
+            return true;
+        }
+
+        bool inARow = element.Ancestors().Any(
+            up => up.Name.LocalName is "DataTemplate" or "HierarchicalDataTemplate");
+
+        return inARow && (string?)element.Attribute("AutomationProperties.Name") is not null;
+    }
 
     private static string Describe(XElement element)
     {

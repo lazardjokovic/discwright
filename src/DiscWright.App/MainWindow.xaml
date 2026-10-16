@@ -56,17 +56,17 @@
                                VerticalAlignment="Bottom"
                                Text="{Binding ThisBuild}"
                                AutomationProperties.AutomationId="ThisBuild" />
-                </StackPanel>
-                <TextBlock Style="{StaticResource Aside}"
-                           Margin="0,2,0,0"
-                           Text="Put a game on a disc that still works in ten years." />
 
-                <!-- Barely an action, and it should not look like one. -->
-                <Button Content="Check for a new version"
-                        Style="{StaticResource Quietly}"
-                        Margin="0,8,0,0"
-                        Click="CheckForANewVersion"
-                        AutomationProperties.AutomationId="CheckForANewVersion" />
+                    <!-- Beside the version it is about, because a version and
+                         a way to check it are one thought and were two rows.
+                         Barely an action, and it should not look like one. -->
+                    <Button Content="Check for a new version"
+                            Style="{StaticResource Quietly}"
+                            Margin="12,0,0,2"
+                            VerticalAlignment="Bottom"
+                            Click="CheckForANewVersion"
+                            AutomationProperties.AutomationId="CheckForANewVersion" />
+                </StackPanel>
             </StackPanel>
 
             <!-- About the whole window rather than about one more game, which
@@ -108,7 +108,55 @@
 
             <!-- What goes on it -->
             <DockPanel Grid.Column="0">
-                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Step}" Text="WHAT GOES ON IT" />
+                <!-- The preview sits on the header row rather than buried
+                     beside the menu option in More options, where nobody
+                     found it. It is still dead unless there is a menu to
+                     preview, so it cannot show something that is not going
+                     to be on the disc. -->
+                <Grid DockPanel.Dock="Top">
+                    <TextBlock Style="{StaticResource Step}" Text="WHAT GOES ON IT" />
+                    <!-- A real button, not something that looks like a link.
+                         Pressing it opens a window, which is what a button
+                         does, and it was quiet enough to be missed even after
+                         it moved out here. -->
+                    <Button Content="See what it will look like"
+                            Style="{StaticResource Ordinary}"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Margin="0,0,0,4"
+                            IsEnabled="{Binding CanPreview}"
+                            Click="PreviewTheMenu"
+                            AutomationProperties.AutomationId="PreviewTheMenu" />
+                </Grid>
+
+                <!-- Said under the tree rather than beside a row, because
+                     it is about the disc and not about one file. Leaving the
+                     installer off is allowed, so the one thing that cannot be
+                     left to be discovered is a disc that will not install
+                     anything. -->
+                <!-- Two pieces of text rather than one sentence, because a
+                     TextBlock has one colour and these are two different
+                     kinds of statement.
+
+                     Leaving a file off is not a mistake. It is the thing
+                     somebody just deliberately did, so it is said in ordinary
+                     ink. A window where everything is amber is a window where
+                     amber means nothing, including on the tray line. -->
+                <TextBlock DockPanel.Dock="Bottom"
+                           Margin="0,2,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource WorryInk}"
+                           Text="{Binding WhyThatMatters}"
+                           Visibility="{Binding WhyThatMatters, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhyThatMatters" />
+
+                <TextBlock DockPanel.Dock="Bottom"
+                           Style="{StaticResource Aside}"
+                           Margin="0,8,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding WhatIsLeftOff}"
+                           Visibility="{Binding WhatIsLeftOff, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhatIsLeftOff" />
 
                 <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
                     <Button Content="Add a game..."
@@ -136,44 +184,89 @@
                                    AutomationProperties.AutomationId="NothingYet"
                                    Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in." />
 
-                        <ListBox x:Name="Games"
-                                 ItemsSource="{Binding Games}"
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 Padding="4"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                 AutomationProperties.AutomationId="Games">
+                        <!-- A tree, because a game is not one thing.
+                             It is an installer, its parts, whatever folders
+                             came with it and the patches that were taken on
+                             beside it, and the only way to leave one of those
+                             off used to be to not add the game at all.
+
+                             Every row carries a tick. Everything under a row
+                             follows it, and a row follows what is under it, so
+                             a folder with some of its files left out shows
+                             neither on nor off rather than lying about what
+                             will be written. -->
+                        <TreeView x:Name="Games"
+                                  ItemsSource="{Binding WhatGoesOnIt}"
+                                  BorderThickness="0"
+                                  Background="Transparent"
+                                  Padding="4"
+                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  AutomationProperties.AutomationId="Games">
                             <!-- Without this a row answers to whatever the
                                  thing in it prints as, which here is the whole
                                  record: every file, every size. A reader would
                                  say all of it aloud, and a window test would
                                  see it instead of a name. -->
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
+                            <TreeView.ItemContainerStyle>
+                                <Style TargetType="TreeViewItem">
                                     <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
-                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="IsExpanded" Value="True" />
+
                                 </Style>
-                            </ListBox.ItemContainerStyle>
+                            </TreeView.ItemContainerStyle>
 
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Margin="6,7">
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                            <TreeView.ItemTemplate>
+                                <HierarchicalDataTemplate ItemsSource="{Binding Inside}">
+                                    <!-- Laid out left to right with the
+                                         name given a width, rather than a
+                                         grid with a column pushed to the
+                                         right.
 
-                                        <!-- Trimmed rather than scrolled. A
-                                             folder path is long, and a bar
-                                             along the bottom of the list to
-                                             read the end of one is a poor
-                                             trade for the room it takes. -->
-                                        <TextBlock Style="{StaticResource Aside}"
-                                                   Text="{Binding Path}"
+                                         A TreeViewItem's header sits in an
+                                         Auto column of its own template, so it
+                                         is only ever as wide as what is in it
+                                         and HorizontalContentAlignment has
+                                         nothing to stretch into. A row with a
+                                         long file name in it simply grew past
+                                         the panel and everything after the
+                                         name was clipped, with no scrollbar
+                                         and nothing else to say so. Tried,
+                                         photographed, and still wrong.
+
+                                         Bounding the name fixes it for good:
+                                         the row cannot outgrow the panel
+                                         whatever is in it. -->
+                                    <StackPanel Orientation="Horizontal" Margin="0,3">
+                                        <CheckBox VerticalAlignment="Center"
+                                                  Margin="0,0,7,0"
+                                                  IsThreeState="{Binding HasThingsInside}"
+                                                  IsChecked="{Binding IsOn, Mode=TwoWay}"
+                                                  AutomationProperties.Name="{Binding Name}" />
+
+                                        <TextBlock Width="250"
+                                                   VerticalAlignment="Center"
+                                                   Text="{Binding Name}"
                                                    TextWrapping="NoWrap"
                                                    TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding Path}" />
+                                                   ToolTip="{Binding ItsPath}" />
+
+                                        <!-- The installer and a patch are
+                                             worth naming. An ordinary file is
+                                             not, and this is empty for one. -->
+                                        <TextBlock Style="{StaticResource Aside}"
+                                                   Width="70"
+                                                   VerticalAlignment="Center"
+                                                   Margin="8,0,0,0"
+                                                   Text="{Binding What}" />
+
+                                        <TextBlock Style="{StaticResource Aside}"
+                                                   VerticalAlignment="Center"
+                                                   Margin="4,0,2,0"
+                                                   Text="{Binding HowBig}" />
                                     </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                                </HierarchicalDataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
                     </Grid>
                 </Border>
             </DockPanel>
@@ -246,9 +339,11 @@
                      anything is written, because said afterwards it is said to
                      an empty chair. -->
                 <TextBlock Margin="0,4,0,0"
-                           TextWrapping="Wrap"
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
                            Foreground="{StaticResource WorryInk}"
                            Text="{Binding AboutTheTray}"
+                           ToolTip="{Binding WhyTheTrayMatters}"
                            Visibility="{Binding AboutTheTray, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="AboutTheTray" />
 
@@ -261,6 +356,7 @@
                 <Grid>
                     <ComboBox ItemsSource="{Binding Drives}"
                               SelectedItem="{Binding TheDrive}"
+                              ToolTip="Leave this alone and DiscWright works it out, and asks only if there is something to ask."
                               AutomationProperties.AutomationId="WhichDrive">
                     <!-- A row answers to whatever is in it prints as, and a
                          Recorder prints as "D: ASUS DRW-24D5MT, holding
@@ -283,13 +379,10 @@
                                AutomationProperties.AutomationId="NoDriveChosen" />
                 </Grid>
 
-                <TextBlock Style="{StaticResource Aside}"
-                           Margin="0,4,0,0"
-                           TextWrapping="Wrap"
-                           Text="Leave this alone and DiscWright works it out, and asks only if there is something to ask."
-                           AutomationProperties.AutomationId="AboutWhichDrive" />
-
-                <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHERE IT GOES" />
+                <!-- Named for what lands there. "WHERE IT GOES" read as if it
+                     were about the disc, which is the one thing this folder
+                     never holds. -->
+                <TextBlock Style="{StaticResource Step}" Margin="0,16,0,6" Text="WHERE TO SAVE THE ISO" />
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
@@ -297,6 +390,7 @@
                     </Grid.ColumnDefinitions>
                     <TextBox Grid.Column="0"
                              Text="{Binding OutputFolder, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="The disc is built into a folder here, with its ISO beside it."
                              AutomationProperties.AutomationId="OutputFolder" />
                     <Button Grid.Column="1"
                             Content="Browse..."
@@ -305,12 +399,6 @@
                             Click="ChooseWhereItGoes"
                             AutomationProperties.AutomationId="ChooseWhereItGoes" />
                 </Grid>
-
-                <TextBlock Style="{StaticResource Aside}"
-                           Margin="0,4,0,0"
-                           TextWrapping="Wrap"
-                           Text="The disc is built into a folder here, with its ISO beside it. Nothing is written to a disc until you press Burn."
-                           AutomationProperties.AutomationId="WhatGoesThere" />
 
                 <!-- A window of its own. There are seven of these, most of
                      them pictures, and a picture somebody chose is only really
@@ -354,16 +442,6 @@
                             </CheckBox.ToolTip>
                         </CheckBox>
 
-                        <!-- Beside the option it is about. Previewing a menu
-                             nobody asked for would be showing something that
-                             is not going to be on the disc. -->
-                        <Button Content="See what it will look like"
-                                Style="{StaticResource Quietly}"
-                                Margin="22,4,0,2"
-                                IsEnabled="{Binding CanPreview}"
-                                Click="PreviewTheMenu"
-                                AutomationProperties.AutomationId="PreviewTheMenu" />
-
                         <CheckBox Content="A list of what every file should be"
                                   IsChecked="{Binding Checksums}"
                                   AutomationProperties.AutomationId="Checksums" />
@@ -373,7 +451,7 @@
                         <CheckBox Content="Readable by Windows 98 and Mac OS 9"
                                   IsChecked="{Binding LegacyFileSystems}"
                                   AutomationProperties.AutomationId="LegacyFileSystems" />
-                        <CheckBox Content="Split a file across two discs if it will not fit"
+                        <CheckBox Content="Split a file across two discs"
                                   IsChecked="{Binding CutFiles}"
                                   AutomationProperties.AutomationId="CutFiles" />
                     </StackPanel>

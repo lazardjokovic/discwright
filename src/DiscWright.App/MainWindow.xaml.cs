@@ -224,11 +224,12 @@ public partial class MainWindow : Window
 
     private void TakeItOff(object sender, RoutedEventArgs e)
     {
-        // Copied first, because removing from the list while walking the
-        // selection is walking a list that is changing underneath.
-        foreach (GameFolder game in Games.SelectedItems.OfType<GameFolder>().ToList())
+        // A tree selects one row, and that row may be a file deep inside a
+        // game. Remove means take this game off the disc; leaving one file
+        // off is what its own tick is for.
+        if (Games.SelectedItem is AThingOnTheDisc thing)
         {
-            _screen.Remove(game);
+            _screen.RemoveTheGameOf(thing);
         }
     }
 

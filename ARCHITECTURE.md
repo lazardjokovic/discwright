@@ -762,6 +762,20 @@ The menu window wears the disc's own icon where one was chosen, and **DiscWright
 
 That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
 
+#### A tree, because a game is not one thing
+
+A game is an installer, its parts, whatever folders came with it, and the patches taken on beside it. Shown as one row, the only way to leave any of that off was to not add the game at all.
+
+Every row carries a tick. Everything under a row follows it and a row follows what is under it, so **a folder with some of its files left out shows neither on nor off** rather than lying about what will be written.
+
+The tree holds everything that was found and never forgets a row that was turned off, because turning it back on has to put the same file back. What will be written is read off the tree whenever a tick changes: `Games` gets `game with { Files = kept }`, and since every size, refusal, disc count, staged folder and ISO is worked out from that file list, **nothing else had to learn about leaving a file off**.
+
+Leaving the installer off is allowed, because this window refuses by explaining rather than by greying things out. `Installer` is cleared rather than left pointing at a file nobody put on the disc, and the menu already copes by writing no Install button.
+
+#### A mutation run has to prove it ran
+
+`tools\Mutate.py` refuses to draw a conclusion without seeing `Passed!` or `Failed!`. Smart App Control blocks a freshly rebuilt unsigned test assembly here, `0x800711C7`, so the run never starts, there is no `[FAIL]` anywhere, and a harness looking only for failure calls that a survivor. A `caught` verdict is always sound; only `SURVIVED` is suspect. A mutant that stays inconclusive gets planted and run on the VM, which has no Application Control.
+
 #### The Microsoft Store route is open
 
 A packaged DiscWright **can burn**. Tested rather than reasoned about: a disc written and read back clean by the MSIX-registered app, under real package identity, on real hardware.

@@ -533,7 +533,7 @@ public class TheMainWindowWithoutAWindow
         // because this cannot edit them would mean rebuilding a disc without
         // the cover somebody picked.
         DiscProject again = window.AsAProject();
-        Assert.Equal(@"D:rt\icon.png", again.Artwork?.IconPath);
+        Assert.Equal(@"D:\art\icon.png", again.Artwork?.IconPath);
         Assert.Equal(@"D:\manual.pdf", again.Extras?.ManualPath);
         Assert.Equal([@"D:\read me.txt"], again.Extras?.Loose);
         Assert.Single(again.AddOnsOrNone);
@@ -1017,7 +1017,7 @@ public class TheMainWindowWithoutAWindow
         await window.LookAtTheDrives();
 
         // A sentence about the drive somebody is not using is noise.
-        Assert.StartsWith("E: cannot close its own tray", window.AboutTheTray, StringComparison.Ordinal);
+        Assert.Equal("E: needs the tray pushed in", window.AboutTheTray);
     }
 
     // --------------------------------------------- the disc that is in there
@@ -1187,7 +1187,7 @@ public class TheMainWindowWithoutAWindow
         await window.LookAtTheDrives();
 
         // Told afterwards is told to an empty chair.
-        Assert.StartsWith("D: cannot close its own tray,", window.AboutTheTray, StringComparison.Ordinal);
+        Assert.Equal("D: needs the tray pushed in", window.AboutTheTray);
         Assert.Equal(["D:"], tray.Asked);
     }
 
@@ -1536,7 +1536,7 @@ public class TheMainWindowWithoutAWindow
             "AN OLD DISC",
             [game],
             new DiscOptions(CutFiles: true),
-            Artwork: new DiscArtwork(IconPath: @"D:rt\icon.png"),
+            Artwork: new DiscArtwork(IconPath: @"D:\art\icon.png"),
             Extras: new DiscExtras(@"D:\manual.pdf", null, [@"D:\read me.txt"]),
             AddOns: [new AddOn(0, @"D:\patch_the_witcher_1_to_2.exe", "Update 2", 100)]);
 
@@ -1708,5 +1708,125 @@ public class TheMainWindowWithoutAWindow
         // or shows nothing at all where the choice used to be.
         Assert.Contains(nameof(MakeADisc.DiscSizes), told);
         Assert.Contains(nameof(MakeADisc.TheSizeChosen), told);
+    }
+
+    // ------------------------------------------------- the tree of what goes on
+
+    [Fact]
+    public void Grows_a_branch_of_the_tree_for_every_game()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 500));
+        window.Add(AGame("Two", 500));
+
+        Assert.Equal(["One", "Two"], window.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Taking_a_file_off_the_tree_changes_what_will_be_built()
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("One", 900, parts: 2));
+
+        long whole = window.Games[0].Bytes;
+        AThingOnTheDisc thing = window.WhatGoesOnIt[0].EveryThing().Last();
+
+        thing.IsOn = false;
+
+        // Not a note kept beside the game: the game itself now carries fewer
+        // files, which is what every size, refusal and disc count is worked
+        // out from.
+        Assert.True(window.Games[0].Bytes < whole);
+        Assert.Equal(whole - thing.Bytes, window.Games[0].Bytes);
+    }
+
+    [Fact]
+    public void Says_what_is_being_left_off_and_how_much_of_it()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900, parts: 2));
+
+        Assert.Null(window.WhatIsLeftOff);
+
+        window.WhatGoesOnIt[0].EveryThing().Last().IsOn = false;
+
+        Assert.StartsWith("Leaving off 1 thing", window.WhatIsLeftOff, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_plainly_when_a_disc_will_no_longer_install_the_game()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900));
+
+        AThingOnTheDisc installer = window.WhatGoesOnIt[0]
+            .EveryThing()
+            .Single(each => each.What == TheTreeOfWhatGoesOn.TheInstaller);
+
+        installer.IsOn = false;
+
+        // Allowed, because this window refuses by explaining rather than by
+        // greying things out. Said out loud, because a disc that cannot
+        // install the game is not something to find out afterwards.
+        //
+        // Said apart from the count, because the count is ordinary ink and
+        // this is the only part worth a warning colour.
+        Assert.Equal("Without its installer, the disc will not install the game.", window.WhyThatMatters);
+        Assert.DoesNotContain("install", window.WhatIsLeftOff!, StringComparison.Ordinal);
+        Assert.Null(window.Games[0].Installer);
+    }
+
+    [Fact]
+    public void Tells_the_window_about_both_lines_when_a_tick_changes()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900));
+        List<string> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        window.WhatGoesOnIt[0]
+            .EveryThing()
+            .Single(each => each.What == TheTreeOfWhatGoesOn.TheInstaller)
+            .IsOn = false;
+
+        // Two separate pieces of text on the window, so both have to be
+        // announced or one of them goes on saying what was true a tick ago.
+        // The amber one is the one that would be missed, because it is only
+        // ever there in the one case.
+        Assert.Contains(nameof(MakeADisc.WhatIsLeftOff), told);
+        Assert.Contains(nameof(MakeADisc.WhyThatMatters), told);
+    }
+
+    [Fact]
+    public void Remove_takes_the_whole_game_even_when_a_file_inside_it_is_chosen()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900, parts: 2));
+        window.Add(AGame("Two", 500));
+
+        AThingOnTheDisc aFileDeepInside = window.WhatGoesOnIt[0].EveryThing().First();
+
+        window.RemoveTheGameOf(aFileDeepInside);
+
+        // Remove has always meant "take this game off the disc". A tree
+        // selects one row, and that row may be a file, so the button must not
+        // quietly become a way to drop a single file.
+        Assert.Equal(["Two"], window.Games.Select(game => game.Name));
+        Assert.Equal(["Two"], window.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Starting_again_empties_the_tree_as_well_as_the_list()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 500));
+
+        window.StartAgain();
+
+        // Two collections that have to agree, so the one that is easy to
+        // forget is the one worth a test.
+        Assert.Empty(window.Games);
+        Assert.Empty(window.WhatGoesOnIt);
     }
 }
