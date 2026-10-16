@@ -762,6 +762,16 @@ The menu window wears the disc's own icon where one was chosen, and **DiscWright
 
 That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
 
+#### The Microsoft Store route is open
+
+A packaged DiscWright **can burn**. Tested rather than reasoned about: a disc written and read back clean by the MSIX-registered app, under real package identity, on real hardware.
+
+The worry was that IMAPI2 could not reach a drive from inside the container, which would have killed the Store route outright, and nobody on the internet appears to have written down an answer either way. The answer is that the question was misframed. A packaged desktop app declaring `EntryPoint="Windows.FullTrustApplication"` runs at medium integrity and **not in an AppContainer**, and the capability-gated device access that stops a UWP app touching hardware is an AppContainer mechanism. Outside it, COM and device handles behave exactly as they do for an ordinary exe.
+
+`packaging\Test-ImapiInsideThePackage.ps1` asks the question without needing a disc, and **refuses to answer unless it can prove it is inside the package**: `GetCurrentPackageFullName` returns 15700 for a process with no package identity, and a probe that quietly slipped outside would report success for the wrong reason.
+
+The Store still matters for a different reason: a package it signs is trusted, which is the actual answer to Smart App Control rather than the single-file workaround above.
+
 #### One file, because of Smart App Control
 
 The app ships as **one self-contained file** and that is not a packaging preference.
