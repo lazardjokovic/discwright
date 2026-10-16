@@ -1051,7 +1051,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                         return;
                     }
 
-                    await CheckIt(onto, ct);
+                    await CheckIt(onto, image, ct);
                     break;
             }
         }
@@ -1557,8 +1557,23 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         if (staged.Length == 0 || !_machine.Disk.FolderExists(staged))
         {
-            ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
-            HowTheDiscCameOut = null;
+            // Walking a set after opening the project it was built from is
+            // the ordinary way to finish one, so this is the common case and
+            // not the odd one.
+            HowTheDiscCameOut = TheDiscAgainstItsOwnList.IsOn(root, _machine.Disk)
+                ? await TheDiscAgainstItsOwnList.Check(
+                    root,
+                    _machine.Disk,
+                    _machine.Hasher,
+                    new Progress<CheckProgress>(step => Say($"disc {number}: {step}", step.HowFar)),
+                    ct)
+                : null;
+
+            if (HowTheDiscCameOut is null)
+            {
+                ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
+            }
+
             return;
         }
 
@@ -1690,28 +1705,71 @@ public sealed class MakeADisc : INotifyPropertyChanged
         return null;
     }
 
-    private async Task CheckIt(Recorder onto, CancellationToken ct)
+    private async Task CheckIt(Recorder onto, string image, CancellationToken ct)
     {
         string root = onto.Drive.TrimEnd((char)92) + (char)92;
-        string staged = Made is { Discs.Count: > 0 } made ? made.Discs[0].Folder : string.Empty;
 
-        if (staged.Length == 0 || !_machine.Disk.FolderExists(staged))
+        // The disc that was burned, not whichever was built first. This took
+        // Discs[0] every time, so burning disc 2 of a set made in the same
+        // sitting compared it against disc 1 and called every file on it
+        // wrong, which looks exactly like a ruined disc.
+        string staged = Made is { Discs.Count: > 0 } made
+            ? (TheOneThatMade(made, image) ?? made.Discs[0]).Folder
+            : string.Empty;
+
+        HowTheDiscCameOut = await ReadItBack(root, staged, onto, ct);
+        Tell(nameof(HowTheDiscCameOut));
+    }
+
+    /// <summary>Which built disc an image came from, by its name.</summary>
+    /// <remarks>
+    /// Every disc in a set carries the same label, so the label alone cannot
+    /// tell them apart. The name is rebuilt the way TheImageOf builds it, so
+    /// the two cannot drift: "{label} D{number}.iso" in a set, "{label}.iso"
+    /// for a disc on its own.
+    /// </remarks>
+    private static BuiltDisc? TheOneThatMade(BuiltDiscs made, string image)
+    {
+        string name = System.IO.Path.GetFileNameWithoutExtension(image);
+
+        return made.Discs.FirstOrDefault(disc =>
+            string.Equals(
+                disc.OfDiscs > 1 ? $"{disc.Label} D{disc.Number}" : disc.Label,
+                name,
+                StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Reads a disc back, against the folder it was built from when that is
+    /// still here, and against the list the disc carries when it is not.
+    /// </summary>
+    /// <remarks>
+    /// Opening a finished project and pressing Burn leaves nothing built in
+    /// this sitting, so there was no folder to compare with and a disc that
+    /// read back perfectly was reported as written but not checked. The same
+    /// went for a disc from another machine, or one whose staging folder had
+    /// been tidied away, and always would have.
+    /// </remarks>
+    private async Task<DiscCheck?> ReadItBack(string root, string staged, Recorder onto, CancellationToken ct)
+    {
+        Progress<CheckProgress> saying = new(step => Say(step.ToString(), step.HowFar));
+
+        if (staged.Length > 0 && _machine.Disk.FolderExists(staged))
         {
-            // Nothing to check it against. The disc is written, and that is all
-            // that can honestly be said about it.
-            ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
-            return;
+            return await TheDiscAgainstWhatWasBuilt.Check(
+                root, staged, _machine.Disk, _machine.Hasher, saying, ct);
         }
 
-        HowTheDiscCameOut = await TheDiscAgainstWhatWasBuilt.Check(
-            root,
-            staged,
-            _machine.Disk,
-            _machine.Hasher,
-            new Progress<CheckProgress>(step => Say(step.ToString(), step.HowFar)),
-            ct);
+        if (TheDiscAgainstItsOwnList.IsOn(root, _machine.Disk))
+        {
+            return await TheDiscAgainstItsOwnList.Check(
+                root, _machine.Disk, _machine.Hasher, saying, ct);
+        }
 
-        Tell(nameof(HowTheDiscCameOut));
+        // Neither. The disc is written, and that is all that can honestly be
+        // said about it.
+        ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
+        return null;
     }
 
     /// <summary>One line about what is happening, and how far through it is.</summary>

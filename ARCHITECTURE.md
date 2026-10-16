@@ -818,6 +818,19 @@ There was a setting and the usual answer was no, because **the usual answer to a
 
 `ArtworkOnDisc` is gone from `DiscOptions` and from the window. It is still **written to the project file as true**, because v1 reads that field and a file saying false would open there as a disc without artwork.
 
+#### A disc can answer for itself
+
+Reading a disc back compared it with the folder it was built from, which is the better answer when that folder is in hand: it also notices files nobody put there. It is only available while the build that made it is still in memory.
+
+Which it usually is not. **Opening a finished project and pressing Burn is the ordinary way to finish a set**, and it leaves `Made` null, so a disc that read back perfectly was reported as written but not checked. The same went for a disc from another machine, or one whose staging folder had been tidied away.
+
+Every disc carries `checksums.sha256` at its root for exactly this, so `TheDiscAgainstItsOwnList` checks a disc against it when the staging folder is gone. That needed one method on `IFileSystem` to read a text file, defaulted to returning null so the fakes that stand in for it do not all have to grow a method none of them use.
+
+Two things the fakes could never have shown, both found by running it against a real disc:
+
+- **`Disc set.txt` is written after the checksum list**, so the list never mentions it, and counting it as a stranger made a good disc report that something was already on it. It and the list itself are ours, not strangers.
+- The count in the list's own header is **checked, not read**. A list that has lost its tail verifies every file it still mentions and reports them all correct, which is the one way a checksum list can lie.
+
 #### An HTA is IE5 unless you tell it otherwise
 
 Rendered the menu and asked it: `documentMode: 5`, `compatMode: BackCompat`. An HTA with no doctype and no compatibility meta runs the **IE5 quirks** engine, which has no `rgba`, no `box-sizing`, and no modern anything. A see-through colour written in that file is simply dropped, and the menu comes out looking exactly as it always did.

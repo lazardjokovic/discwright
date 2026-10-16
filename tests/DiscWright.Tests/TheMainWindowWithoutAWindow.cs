@@ -687,6 +687,50 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task Checks_the_disc_that_was_burned_not_whichever_was_built_first()
+    {
+        ADiskThatRemembers disk = new();
+        MakeADisc window = New(
+            builder: new ABuilderThatMakesASet(),
+            drives: new TheseDrives(ABlankIn("E:")),
+            disk: disk);
+
+        window.OutputFolder = @"C:\out";
+        window.Label = "A Game";
+        window.Add(AGame("A Game", 1000));
+        await window.MakeIt();
+
+        await window.BurnIt(@"C:\out\A Game D2.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        // This took the first disc of the set every time, so burning disc 2
+        // compared it against disc 1 and called every file on it wrong. That
+        // looks exactly like a ruined disc, and would send somebody to throw
+        // away a disc that is perfect.
+        Assert.Contains(disk.Listed, where => where.EndsWith("disc D2", StringComparison.Ordinal));
+        Assert.DoesNotContain(disk.Listed, where => where.EndsWith("disc D1", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Checks_a_disc_against_its_own_list_when_nothing_was_built_here()
+    {
+        MakeADisc window = New(
+            drives: new TheseDrives(ABlankIn("E:")),
+            disk: new ADiscCarryingItsOwnList(),
+            hasher: new AHasherThatAgrees());
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        // Opening a finished project and pressing Burn is the ordinary way to
+        // finish a set, and it left nothing built in this sitting to compare
+        // against. A disc that read back perfectly was reported as written
+        // but not checked, and Lazar's disc 2 was exactly that: eleven files,
+        // every one correct, and the window would not say so.
+        Assert.NotNull(window.HowTheDiscCameOut);
+        Assert.True(window.HowTheDiscCameOut.Good);
+        Assert.Null(window.ItWentWrong);
+    }
+
+    [Fact]
     public async Task Will_not_claim_a_disc_is_good_when_there_is_nothing_to_compare_it_with()
     {
         // Burning an image with no record of what was built: the disc may be
@@ -1405,7 +1449,8 @@ public class TheMainWindowWithoutAWindow
         IAskWhatIsReleased? releases = null,
         IShowTheMenu? preview = null,
         IImages? pictures = null,
-        IFileSystem? disk = null) =>
+        IFileSystem? disk = null,
+        IHasher? hasher = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -1414,7 +1459,7 @@ public class TheMainWindowWithoutAWindow
             burner ?? new ABurnerThatWorks(),
             eraser ?? new AnEraserThatWorks(),
             disk ?? new ADiskWithADiscOnIt(),
-            new NoHashing(),
+            hasher ?? new NoHashing(),
             new NothingIsRemembered(),
             tray ?? new ATrayThatShuts(),
             releases ?? new NothingIsReleased(),
@@ -1746,6 +1791,58 @@ public class TheMainWindowWithoutAWindow
 
         public FolderListing List(string path) =>
             new(path, [new ListedFile("AN OLD DISC.iso", 4_000_000)]);
+    }
+
+    /// <summary>A disk that remembers which folders were looked in.</summary>
+    private sealed class ADiskThatRemembers : IFileSystem
+    {
+        internal List<string> Listed { get; } = [];
+
+        public bool FolderExists(string path) => true;
+
+        public FolderListing List(string path)
+        {
+            Listed.Add(path);
+            return new FolderListing(path, [new ListedFile("setup_a_game.exe", 1000)]);
+        }
+    }
+
+    /// <summary>A disc with checksums.sha256 on it, as every disc has.</summary>
+    private sealed class ADiscCarryingItsOwnList : IFileSystem
+    {
+        private static readonly string[] OnIt = ["autorun.inf", "game.exe"];
+
+        public bool FolderExists(string path) => true;
+
+        public FolderListing List(string path) =>
+            new(path, [.. OnIt.Select(file => new ListedFile(file, 10)), new ListedFile(ChecksumList.FileName, 90)]);
+
+        public string? ReadText(string path)
+        {
+            if (!path.EndsWith(ChecksumList.FileName, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            System.Text.StringBuilder text = new();
+            text.Append("# DiscWright checksum list for A GAME\n");
+            text.Append("# ").Append(OnIt.Length).Append(" files, 20 bytes, SHA-256, sha256sum format.\n");
+
+            foreach (string file in OnIt)
+            {
+                text.Append(AHasherThatAgrees.TheAnswer).Append(" *").Append(file).Append('\n');
+            }
+
+            return text.ToString();
+        }
+    }
+
+    /// <summary>A hasher whose answer always matches the list above.</summary>
+    private sealed class AHasherThatAgrees : IHasher
+    {
+        internal const string TheAnswer = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+        public string Sha256(string path, CancellationToken ct) => TheAnswer;
     }
 
     private sealed class NoHashing : IHasher

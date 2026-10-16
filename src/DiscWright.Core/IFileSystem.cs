@@ -21,4 +21,18 @@ public interface IFileSystem
     /// a disc missing them is a disc missing part of the game.
     /// </summary>
     FolderListing List(string path);
+
+    /// <summary>
+    /// A text file's contents, or nothing when there is no such file.
+    /// </summary>
+    /// <remarks>
+    /// Defaulted rather than required, because almost nothing here reads a
+    /// file: the pipeline is built out of listing folders and handing paths
+    /// to things that copy them. The one caller that does need it is checking
+    /// a disc against the checksum list the disc carries.
+    ///
+    /// A default also means the fakes that stand in for this in tests do not
+    /// all have to grow a method none of them use.
+    /// </remarks>
+    string? ReadText(string path) => null;
 }

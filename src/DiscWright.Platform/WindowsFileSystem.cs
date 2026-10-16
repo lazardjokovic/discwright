@@ -9,6 +9,21 @@ public sealed class WindowsFileSystem : IFileSystem
 {
     public bool FolderExists(string path) => Directory.Exists(path);
 
+    /// <inheritdoc />
+    public string? ReadText(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? File.ReadAllText(path) : null;
+        }
+        catch (Exception wrong) when (wrong is IOException or UnauthorizedAccessException)
+        {
+            // A disc that will not give up its checksum list is a disc that
+            // cannot be checked, which is an answer rather than a crash.
+            return null;
+        }
+    }
+
     public FolderListing List(string path)
     {
         // NOT trimmed of its trailing separator. A drive root trimmed to "E:"
