@@ -67,6 +67,12 @@ function wearTheRightIcon() {
 }
 
 function start() {
+    // Before anything is drawn, so that no button can be pressed in a
+    // preview before the script has been told it is one.
+    if (!DISC.onADisc) {
+        thisIsAPreview();
+    }
+
     wearTheRightIcon();
 
     document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);

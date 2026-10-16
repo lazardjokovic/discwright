@@ -18,6 +18,30 @@ namespace DiscWright.Tests;
 public class SeeingTheMenuFirst
 {
     [Fact]
+    public void A_preview_tells_the_script_it_is_one_before_drawing_anything()
+    {
+        RecordingWriter previewed = new();
+
+        new APreviewOfTheMenu(previewed, new PicturesThatRead())
+            .Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+
+        string page = previewed.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // The script refuses to start anything once it has been told, and the
+        // page is the only thing that can tell it. Without this line the
+        // guard is present, correct, tested, and never switched on.
+        Assert.Contains("thisIsAPreview();", page, StringComparison.Ordinal);
+        Assert.Contains("onADisc: false", page, StringComparison.Ordinal);
+
+        // Before the icon, before the games, before anything can be pressed.
+        Assert.True(
+            page.IndexOf("thisIsAPreview();", StringComparison.Ordinal)
+                < page.IndexOf("wearTheRightIcon();", StringComparison.Ordinal),
+            "the script is told after the page has started drawing");
+    }
+
+    [Fact]
     public async Task Writes_the_same_menu_the_disc_would_get()
     {
         RecordingWriter previewed = new();
@@ -34,9 +58,16 @@ public class SeeingTheMenuFirst
         string inThePreview = previewed.Texts.Single(
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
-        // One difference, and it is the one that has to differ.
+        // Two differences, and both have to differ.
+        //
+        // singleinstance, or previewing a second disc refocuses the first
+        // one's stale window. And onADisc, which is how the script knows to
+        // start nothing: a preview stages the menu and the artwork and
+        // nothing else, so every button points at a file that is not there.
         Assert.Equal(
-            onTheDisc.Replace("singleinstance=\"yes\"", "singleinstance=\"no\"", StringComparison.Ordinal),
+            onTheDisc
+                .Replace("singleinstance=\"yes\"", "singleinstance=\"no\"", StringComparison.Ordinal)
+                .Replace("onADisc: true", "onADisc: false", StringComparison.Ordinal),
             inThePreview);
     }
 

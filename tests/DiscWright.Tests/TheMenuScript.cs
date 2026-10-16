@@ -736,6 +736,44 @@ public sealed class TheMenuScript : IDisposable
         return "'" + path.Replace(slash, slash + slash, StringComparison.Ordinal) + "'";
     }
 
+    // ------------------------------------------------ a preview starts nothing
+
+    [Fact]
+    public void Starts_things_normally_on_a_real_disc()
+    {
+        // The default, because a disc is the ordinary case and a menu that
+        // had to be told it was real would be one wrong line from inert.
+        Assert.Equal("null", Ask("String(whyNothingRuns())"));
+    }
+
+    [Theory]
+    [InlineData("startIt('C:\\somewhere\\setup.exe', '')")]
+    [InlineData("openTheFolder('C:\\somewhere')")]
+    public void Starts_nothing_at_all_once_it_is_told_it_is_a_preview(string pressing)
+    {
+        // A preview stages the menu, the artwork and the music and nothing
+        // else, so every button points at a file that is not there. Pressing
+        // one used to produce whatever Windows says about a missing path,
+        // which reads as the disc being broken rather than as the preview
+        // doing its job.
+        string said = Ask("(thisIsAPreview(), String(" + pressing + "))");
+
+        Assert.Contains("preview of the menu", said, StringComparison.Ordinal);
+        Assert.Contains("has not been made yet", said, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_it_is_a_preview_before_it_says_a_path_is_missing()
+    {
+        // Both are true of a preview, and only one of them is useful. "There
+        // is nothing on this disc for that button to start" invites somebody
+        // to go looking for what went wrong with their disc.
+        string said = Ask("(thisIsAPreview(), String(startIt('', '')))");
+
+        Assert.Contains("preview of the menu", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("nothing on this disc", said, StringComparison.Ordinal);
+    }
+
     private string Ask(string expression)
     {
         (string output, int exitCode) = Run(expression);

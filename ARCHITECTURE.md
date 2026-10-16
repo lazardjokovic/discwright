@@ -762,6 +762,14 @@ The menu window wears the disc's own icon where one was chosen, and **DiscWright
 
 That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
 
+#### A preview does not pretend it is a disc
+
+A preview stages the menu, the artwork and the music, and **nothing else**. No installer, no manual, no extras. So every button on it points at a file that is not there, and pressing one produced whatever Windows says about a missing path, which reads as the disc being broken rather than as the preview doing its job.
+
+The page could not tell: `forADisc` only ever reached the markup as `singleinstance`, never the data the script reads. It is in the data now as `onADisc`, and the page calls `thisIsAPreview()` **before it draws anything**, so no button can be pressed before the script has been told.
+
+The flag lives in `menu.js` rather than being read from `DISC`, because **the page cannot be tested**: an HTA is invisible to UI Automation, so nothing can press its buttons. `menu.js` runs under cscript, where there is no page at all. The page being the only thing that can switch the guard on is why there is a separate test that it does.
+
 #### Every disc carries its own recipe, and now one gets written
 
 `AProjectFile` read `discproject.json` from the first day of the rewrite, and **nothing ever wrote one**, so every disc 2.0 built was a disc nothing could reopen. The promise in that file, that somebody who finds a disc in a drawer can open it, change one thing and build it again, was half kept: the reading half.

@@ -526,6 +526,32 @@ function whatAnAddOnRuns(addOn, gameIsInstalled, discFolder) {
     return onTheDisc(discFolder, addOn.runs);
 }
 
+// Whether this is a disc or a preview of one.
+//
+// A preview stages the menu, the artwork and the music and nothing else: no
+// installer, no manual, no extras. Every button therefore points at a file
+// that is not there, and pressing one used to produce whatever Windows says
+// about a missing path, which reads as the disc being broken rather than as
+// the preview doing its job.
+//
+// A variable rather than a look at DISC, because DISC lives in the page and
+// the page cannot be tested: an HTA is invisible to UI Automation, so nothing
+// can press its buttons. This file runs under cscript, where there is no page
+// at all.
+var thisIsADisc = true;
+
+// Said by the page when it is drawing a preview.
+function thisIsAPreview() {
+    thisIsADisc = false;
+}
+
+// Why nothing runs, or null when things do.
+function whyNothingRuns() {
+    return thisIsADisc
+        ? null
+        : "This is a preview of the menu. Nothing starts from here, because the disc has not been made yet.";
+}
+
 // Starts something, and says what went wrong rather than nothing.
 //
 // Here rather than in the page because the page cannot be tested: an HTA is
@@ -535,6 +561,11 @@ function whatAnAddOnRuns(addOn, gameIsInstalled, discFolder) {
 // Returns null when it started, or a sentence for the page to show.
 function startIt(what, from) {
     var shell;
+    var preview = whyNothingRuns();
+
+    if (preview) {
+        return preview;
+    }
 
     if (!what || String(what).length === 0) {
         return "There is nothing on this disc for that button to start.";
@@ -567,6 +598,12 @@ function startIt(what, from) {
 
 // Opens a folder in Explorer. Same shape, same reason.
 function openTheFolder(where) {
+    var preview = whyNothingRuns();
+
+    if (preview) {
+        return preview;
+    }
+
     if (!where || String(where).length === 0) {
         return "There is no folder on this disc for that button to open.";
     }

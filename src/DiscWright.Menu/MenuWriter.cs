@@ -75,6 +75,10 @@ public static class MenuWriter
         data.Append("    extras: ").Append(JScript.Literal(facts.Extras ?? string.Empty)).Append(",\n");
         data.Append("    icon: ").Append(JScript.Literal(facts.IconOnTheDisc)).Append(",\n");
 
+        // So the script can refuse to start things that are not there. A
+        // preview stages the menu and the artwork and nothing else.
+        data.Append("    onADisc: ").Append(facts.OnlyOneAtATime ? "true" : "false").Append(",\n");
+
         // The disc's own files, so that copying a game off the root does not
         // carry the menu and the autorun with it. Written from the one list
         // that decides what belongs to a disc rather than from a second copy
