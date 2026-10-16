@@ -806,6 +806,14 @@ Taking that as an answer is worse than it sounds, because **`ErasingWouldHelp` i
 
 Both ways in now give the drive fifteen seconds to wake up before its silence counts, and the one that is waiting on a named drive waits only on that one.
 
+#### A tick and Remove mean different things
+
+**Unticked** is *not on this disc*, still listed, one click from coming back. **Removed** is *gone*, and comes back only by adding the folder again.
+
+So Remove takes **the row that is selected**, whatever it is, and when nothing is selected it clears out **everything unticked**, which is the tidying gesture after deciding what is not going on. The first version took the whole game whatever was selected, so clicking a file and pressing Remove emptied the window.
+
+A disc carrying a patch whose game is not on it is **allowed and said out loud**. Somebody making a disc of patches is doing something unusual, not something wrong, and this window refuses by explaining rather than by greying things out. It is the kind of disc somebody makes by accident far more often than on purpose, which is why it is worth a line.
+
 #### A tree, because a game is not one thing
 
 A game is an installer, its parts, whatever folders came with it, and the patches taken on beside it. Shown as one row, the only way to leave any of that off was to not add the game at all.

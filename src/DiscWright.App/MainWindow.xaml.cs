@@ -224,13 +224,8 @@ public partial class MainWindow : Window
 
     private void TakeItOff(object sender, RoutedEventArgs e)
     {
-        // A tree selects one row, and that row may be a file deep inside a
-        // game. Remove means take this game off the disc; leaving one file
-        // off is what its own tick is for.
-        if (Games.SelectedItem is AThingOnTheDisc thing)
-        {
-            _screen.RemoveTheGameOf(thing);
-        }
+        // Whatever is selected, or everything unticked when nothing is.
+        _screen.TakeOff(Games.SelectedItem as AThingOnTheDisc);
     }
 
     /// <summary>

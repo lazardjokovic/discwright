@@ -397,6 +397,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // nobody tells about is judged once at startup, when there are no
         // drives yet, and stays dead for the rest of the run.
         Tell(nameof(CanErase));
+        Tell(nameof(WhatTheDrivesAreDoing));
 
         // A drive that has been unplugged is not a choice any more. The slim
         // one here lives on a USB cable.
@@ -543,6 +544,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Reconsider();
         Tell(nameof(WhatIsLeftOff));
         Tell(nameof(WhyThatMatters));
+        Tell(nameof(APatchWithNothingToPatch));
     }
 
     /// <summary>
@@ -603,6 +605,35 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// install the game it is a disc of is a different matter, and is the
     /// only part of this that changes what the disc can do.
     /// </remarks>
+    /// <summary>
+    /// A disc carrying a patch for a game that is not on it.
+    /// </summary>
+    /// <remarks>
+    /// Allowed, because somebody may be making a disc of patches on purpose
+    /// and this window refuses by explaining rather than by greying things
+    /// out. Said out loud, because a patch with nothing to patch is the kind
+    /// of disc somebody makes by accident far more often than on purpose.
+    /// </remarks>
+    public string? APatchWithNothingToPatch
+    {
+        get
+        {
+            for (int at = 0; at < _tree.Count && at < _games.Count; at++)
+            {
+                bool theGameIsOff = _games[at].Files.Count == 0;
+                bool anAddOnIsOn = _addOns.Any(addOn => addOn.BelongsTo == at);
+
+                if (theGameIsOff && anAddOnIsOn)
+                {
+                    return $"{_tree[at].Name} is not on the disc, but its add-ons are. "
+                        + "They will have nothing to install onto.";
+                }
+            }
+
+            return null;
+        }
+    }
+
     public string? WhyThatMatters =>
         _tree.Any(game => game.ItsInstallerIsOff())
             ? "Without its installer, the disc will not install the game."
@@ -656,6 +687,34 @@ public sealed class MakeADisc : INotifyPropertyChanged
     {
         get => Options.CutFiles;
         set => Switch(Options with { CutFiles = value });
+    }
+
+    /// <summary>
+    /// Everything worth knowing about the drives, for the picker to hover
+    /// with: what it does when nobody chooses, and any tray that needs a push.
+    /// </summary>
+    /// <remarks>
+    /// The tray warning had a line of its own and that was still a line, on a
+    /// window where every row was being counted. It belongs on the picker:
+    /// the warning is about a drive, the picker is where a drive is chosen,
+    /// and hovering it is where somebody already goes to ask what the drives
+    /// are doing.
+    ///
+    /// Nothing is lost by moving it. A burn stops and asks when a tray needs
+    /// a push, so the fact still reaches whoever is standing there, and this
+    /// is the part that reaches them beforehand.
+    /// </remarks>
+    public string WhatTheDrivesAreDoing
+    {
+        get
+        {
+            const string leaveIt =
+                "Leave this alone and DiscWright works it out, and asks only if there is something to ask.";
+
+            return AboutTheTray is string tray
+                ? leaveIt + "\n\n" + tray + ". " + WhyTheTrayMatters
+                : leaveIt;
+        }
     }
 
     /// <summary>
@@ -1677,22 +1736,82 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Takes off the game that this row belongs to, whatever the row is.
+    /// Takes things off the list: the one that is selected, or everything
+    /// that has been unticked when nothing is.
     /// </summary>
     /// <remarks>
-    /// The tree selects one row, and that row may be a file deep inside a
-    /// game. Remove has always meant "take this game off the disc", so it goes
-    /// on meaning that rather than quietly becoming a way to drop one file.
-    /// Leaving one file off is what its tick is for.
+    /// <para>
+    /// A tick and this button mean different things. Unticked is <em>not on
+    /// this disc</em>, still listed, and one click from coming back. Removed
+    /// is <em>gone</em>, and comes back only by adding the folder again.
+    /// </para>
+    /// <para>
+    /// With nothing selected it clears out everything unticked, which is the
+    /// tidying-up gesture after deciding what is not going on. The first
+    /// version of this took the whole game whatever was selected, so clicking
+    /// a file and pressing Remove emptied the window.
+    /// </para>
     /// </remarks>
-    public void RemoveTheGameOf(AThingOnTheDisc thing)
+    public void TakeOff(AThingOnTheDisc? selected)
+    {
+        if (selected is not null)
+        {
+            TakeOffJustThis(selected);
+        }
+        else
+        {
+            foreach (AThingOnTheDisc off in
+                _tree.SelectMany(game => game.EveryThing()).Where(each => each.IsOn == false).ToList())
+            {
+                TakeOffJustThis(off);
+            }
+
+            // A game with every row unticked is itself unticked, and goes.
+            foreach (AThingOnTheDisc game in _tree.Where(each => each.IsOn == false).ToList())
+            {
+                TakeOffJustThis(game);
+            }
+        }
+
+        TakeTheTicksAsTheAnswer();
+    }
+
+    private void TakeOffJustThis(AThingOnTheDisc thing)
     {
         int at = _tree.IndexOf(thing.TheGameItIsIn);
 
-        if (at >= 0 && at < _games.Count)
+        if (at < 0 || at >= _games.Count)
+        {
+            return;
+        }
+
+        if (thing.IsAWholeGame)
         {
             Remove(_games[at]);
+            return;
         }
+
+        // One row out of a game. The game stays, carrying one thing less.
+        if (thing.What == TheTreeOfWhatGoesOn.AnAddOn)
+        {
+            _addOnsAsFound.RemoveAll(addOn =>
+                addOn.BelongsTo == at && string.Equals(addOn.Path, thing.ItsPath, StringComparison.OrdinalIgnoreCase));
+        }
+        else
+        {
+            _asFound[at] = _asFound[at] with
+            {
+                Files = [.. _asFound[at].Files.Where(file =>
+                    !string.Equals(file.RelativePath, thing.ItsPath, StringComparison.OrdinalIgnoreCase))]
+            };
+        }
+
+        // Built again from what is left, which is the only way the tree and
+        // the list cannot drift apart.
+        _tree[at] = TheTreeOfWhatGoesOn.For(
+            _asFound[at],
+            _addOnsAsFound.Where(addOn => addOn.BelongsTo == at),
+            TakeTheTicksAsTheAnswer);
     }
 
     /// <summary>Takes a game back off the list, and its add-ons with it.</summary>

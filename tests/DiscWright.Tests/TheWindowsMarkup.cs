@@ -269,18 +269,18 @@ public class TheWindowsMarkup
     // ------------------------------------------------- what it does not say
 
     [Fact]
-    public void The_tray_warning_fits_on_one_line_and_hovers_for_the_reason()
+    public void The_tray_warning_lives_on_the_drive_picker_and_not_on_a_line_of_its_own()
     {
-        XElement warning = Window()
-            .Descendants(Xaml + "TextBlock")
-            .Single(each => IdOf(each) == "AboutTheTray");
+        // A line of its own was still a line, on a window where every row was
+        // being counted. The warning is about a drive and the picker is where
+        // a drive is chosen, so that is where it hovers.
+        Assert.DoesNotContain("AboutTheTray", Window().Descendants().Select(IdOf));
 
-        // In a 340 pixel column a wrapped paragraph for one fact took more
-        // room than the control it was about. The fact still has to be on
-        // screen, because an unattended run that stops for a push is the
-        // whole reason for saying it. What goes is the explanation.
-        Assert.Equal("NoWrap", (string?)warning.Attribute("TextWrapping"));
-        Assert.Equal("{Binding WhyTheTrayMatters}", (string?)warning.Attribute("ToolTip"));
+        XElement picker = Window()
+            .Descendants(Xaml + "ComboBox")
+            .Single(each => IdOf(each) == "WhichDrive");
+
+        Assert.Equal("{Binding WhatTheDrivesAreDoing}", (string?)picker.Attribute("ToolTip"));
     }
 
     [Fact]
@@ -455,6 +455,19 @@ public class TheWindowsMarkup
         // afterwards instead of a button that was never offered.
         Assert.Equal(bound, (string?)button.Attribute("IsEnabled"));
         Assert.Null(button.Attribute("Visibility"));
+    }
+
+    [Fact]
+    public void Splitting_across_discs_is_on_the_window_and_not_folded_away()
+    {
+        XElement split = Window()
+            .Descendants(Xaml + "CheckBox")
+            .Single(each => IdOf(each) == "CutFiles");
+
+        // It is the answer to "that will not fit" and it changes what every
+        // row of the size dropdown says. Folded into More options it was a
+        // setting somebody had to already know about to go looking for.
+        Assert.DoesNotContain("Expander", split.Ancestors().Select(up => up.Name.LocalName));
     }
 
     // ------------------------------------------------------------------ helpers

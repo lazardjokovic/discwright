@@ -1371,6 +1371,10 @@ public class TheMainWindowWithoutAWindow
 
     private static Medium ADiscHolding(long bytes) => new("TEST", "a test disc", (2L * 1024 * 1024) + bytes);
 
+    /// <summary>Something found beside a game and taken on as an add-on.</summary>
+    private static LeftBehind AnExtra(string name, int bytes) =>
+        new(new ListedFile(name, bytes), LeftBehindKind.LooksLikeAnAddOn);
+
     private static GameFolder AGame(string name, int bytes, int parts = 0)
     {
         List<ListedFile> files = [new($"setup_{name}.exe", bytes)];
@@ -1818,21 +1822,76 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
-    public void Remove_takes_the_whole_game_even_when_a_file_inside_it_is_chosen()
+    public void Remove_takes_the_one_file_that_was_chosen_and_leaves_the_game()
     {
         MakeADisc window = New();
         window.Add(AGame("One", 900, parts: 2));
         window.Add(AGame("Two", 500));
 
-        AThingOnTheDisc aFileDeepInside = window.WhatGoesOnIt[0].EveryThing().First();
+        AThingOnTheDisc aFile = window.WhatGoesOnIt[0].EveryThing().First();
+        int was = window.WhatGoesOnIt[0].EveryThing().Count();
 
-        window.RemoveTheGameOf(aFileDeepInside);
+        window.TakeOff(aFile);
 
-        // Remove has always meant "take this game off the disc". A tree
-        // selects one row, and that row may be a file, so the button must not
-        // quietly become a way to drop a single file.
+        // The first version took the whole game whatever was selected, so
+        // clicking a file and pressing Remove emptied the window.
+        Assert.Equal(["One", "Two"], window.Games.Select(game => game.Name));
+        Assert.Equal(was - 1, window.WhatGoesOnIt[0].EveryThing().Count());
+    }
+
+    [Fact]
+    public void Remove_takes_the_whole_game_when_the_game_is_what_was_chosen()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900));
+        window.Add(AGame("Two", 500));
+
+        window.TakeOff(window.WhatGoesOnIt[0]);
+
         Assert.Equal(["Two"], window.Games.Select(game => game.Name));
         Assert.Equal(["Two"], window.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Remove_clears_out_everything_unticked_when_nothing_is_chosen()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900, parts: 2));
+
+        AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
+        rows[0].IsOn = false;
+        int was = rows.Length;
+
+        window.TakeOff(null);
+
+        // The tidying-up gesture after deciding what is not going on.
+        // Unticked is "not on this disc, still listed"; removed is gone.
+        Assert.Equal(was - 1, window.WhatGoesOnIt[0].EveryThing().Count());
+        Assert.All(window.WhatGoesOnIt[0].EveryThing(), each => Assert.True(each.IsOn));
+    }
+
+    [Fact]
+    public void Says_when_a_patch_is_left_with_nothing_to_patch()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900), [AnExtra("patch.exe", 70)]);
+
+        Assert.Null(window.APatchWithNothingToPatch);
+
+        // Every file of the game off, its add-on still on.
+        foreach (AThingOnTheDisc thing in window.WhatGoesOnIt[0].EveryThing())
+        {
+            if (thing.What != TheTreeOfWhatGoesOn.AnAddOn) { thing.IsOn = false; }
+        }
+
+        // Allowed, because somebody may be making a disc of patches on
+        // purpose. Said out loud, because it is the kind of disc somebody
+        // makes by accident far more often than on purpose.
+        Assert.Contains("nothing to install onto", window.APatchWithNothingToPatch ?? string.Empty, StringComparison.Ordinal);
+
+        // A warning and never a refusal. Somebody making a disc of patches on
+        // purpose is doing something unusual, not something wrong.
+        Assert.Null(window.WhyNot);
     }
 
     [Fact]

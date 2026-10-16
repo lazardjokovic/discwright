@@ -164,6 +164,9 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// </remarks>
     public AThingOnTheDisc TheGameItIsIn => _above is null ? this : _above.TheGameItIsIn;
 
+    /// <summary>Whether this row is a game rather than something in one.</summary>
+    public bool IsAWholeGame => _above is null;
+
     /// <summary>Puts something under it.</summary>
     public AThingOnTheDisc Holding(AThingOnTheDisc thing)
     {

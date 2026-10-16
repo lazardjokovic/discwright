@@ -146,6 +146,14 @@
                            Margin="0,2,0,0"
                            TextWrapping="Wrap"
                            Foreground="{StaticResource WorryInk}"
+                           Text="{Binding APatchWithNothingToPatch}"
+                           Visibility="{Binding APatchWithNothingToPatch, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="APatchWithNothingToPatch" />
+
+                <TextBlock DockPanel.Dock="Bottom"
+                           Margin="0,2,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource WorryInk}"
                            Text="{Binding WhyThatMatters}"
                            Visibility="{Binding WhyThatMatters, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhyThatMatters" />
@@ -335,17 +343,27 @@
                     </TextBlock.Style>
                 </TextBlock>
 
-                <!-- Whether this needs somebody in the room. Said here, before
-                     anything is written, because said afterwards it is said to
-                     an empty chair. -->
-                <TextBlock Margin="0,4,0,0"
-                           TextWrapping="NoWrap"
-                           TextTrimming="CharacterEllipsis"
-                           Foreground="{StaticResource WorryInk}"
-                           Text="{Binding AboutTheTray}"
-                           ToolTip="{Binding WhyTheTrayMatters}"
-                           Visibility="{Binding AboutTheTray, Converter={StaticResource WhenAnything}}"
-                           AutomationProperties.AutomationId="AboutTheTray" />
+                <!-- Whether this needs somebody in the room.
+
+                     A line of its own was still a line, on a window where
+                     every row was being counted. It is on the drive picker
+                     now: the warning is about a drive, the picker is where a
+                     drive is chosen, and hovering it is where somebody
+                     already goes to ask what the drives are doing.
+
+                     It is still said before anything is written, because said
+                     afterwards it is said to an empty chair, and the burn
+                     itself stops and asks when a tray needs a push. -->
+
+                <!-- Beside the size, because it is about the size: it is
+                     the answer to "that will not fit", and it changes what
+                     every row of the dropdown above now says. In More options
+                     it was a setting somebody had to already know about to go
+                     looking for. -->
+                <CheckBox Margin="0,8,0,0"
+                          Content="Split a file across two discs"
+                          IsChecked="{Binding CutFiles}"
+                          AutomationProperties.AutomationId="CutFiles" />
 
                 <!-- Chosen before anything is written, because being asked
                      in the middle of a burn is being asked at the worst
@@ -356,7 +374,7 @@
                 <Grid>
                     <ComboBox ItemsSource="{Binding Drives}"
                               SelectedItem="{Binding TheDrive}"
-                              ToolTip="Leave this alone and DiscWright works it out, and asks only if there is something to ask."
+                              ToolTip="{Binding WhatTheDrivesAreDoing}"
                               AutomationProperties.AutomationId="WhichDrive">
                     <!-- A row answers to whatever is in it prints as, and a
                          Recorder prints as "D: ASUS DRW-24D5MT, holding
@@ -451,9 +469,6 @@
                         <CheckBox Content="Readable by Windows 98 and Mac OS 9"
                                   IsChecked="{Binding LegacyFileSystems}"
                                   AutomationProperties.AutomationId="LegacyFileSystems" />
-                        <CheckBox Content="Split a file across two discs"
-                                  IsChecked="{Binding CutFiles}"
-                                  AutomationProperties.AutomationId="CutFiles" />
                     </StackPanel>
                 </Expander>
             </StackPanel>
