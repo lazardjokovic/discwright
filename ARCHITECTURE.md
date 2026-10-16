@@ -762,6 +762,14 @@ The menu window wears the disc's own icon where one was chosen, and **DiscWright
 
 That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
 
+#### Making the .msix
+
+`packaging\Build-TheMsix.ps1 -Pack` produces one with `MakeAppx`, which ships with the Windows SDK.
+
+**MakeAppx lives under a version folder, beside which sit `x86`, `x64` and `arm64` folders of the same depth.** Sorting them all by name and taking the top looks in `x86\x64` and concludes the SDK is not installed, which is exactly what was reported here for a day while the SDK had been installed since February. Only folders beginning with a digit are versions.
+
+The package comes out **unsigned on purpose**. The Store signs what it accepts, and installing one locally needs a certificate of your own trusted on the machine, which is a different job from building it.
+
 #### A preview does not pretend it is a disc
 
 A preview stages the menu, the artwork and the music, and **nothing else**. No installer, no manual, no extras. So every button on it points at a file that is not there, and pressing one produced whatever Windows says about a missing path, which reads as the disc being broken rather than as the preview doing its job.

@@ -37,7 +37,8 @@ param(
     [string] $Publisher = 'CN=Lazar Djokovic',
     [string] $PublisherDisplayName = 'Lazar Djokovic',
     [string] $Version,
-    [switch] $SkipPublish
+    [switch] $SkipPublish,
+    [switch] $Pack
 )
 
 $ErrorActionPreference = 'Stop'
@@ -184,6 +185,47 @@ Get-ChildItem $into | ForEach-Object {
     if ($_.PSIsContainer) { "  {0}\" -f $_.Name }
     else { "  {0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
 }
-Write-Host ""
-Write-Host "To register it for testing (needs Developer Mode on):"
-Write-Host "  Add-AppxPackage -Register '$manifestPath'"
+if ($Pack) {
+    # MakeAppx lives under a VERSION folder, beside which sit x86, x64 and
+    # arm64 folders of the same depth. Sorting the lot by name and taking the
+    # top is how this was got wrong once: 'x86' sorts above '10.0.26100.0', so
+    # the search looked in x86\x64 and concluded the SDK was not installed at
+    # all. Only folders that start with a digit are versions.
+    $maker = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin', 'C:\Program Files\Windows Kits\10\bin' `
+                -Directory -ErrorAction SilentlyContinue |
+             Where-Object { $_.Name -match '^\d' } |
+             Sort-Object Name -Descending |
+             ForEach-Object { Join-Path $_.FullName 'x64\makeappx.exe' } |
+             Where-Object { Test-Path $_ } |
+             Select-Object -First 1
+
+    if (-not $maker) {
+        throw 'MakeAppx is not installed. It comes with the Windows SDK: winget install --id Microsoft.WindowsSDK.10.0.26100'
+    }
+
+    $msix = Join-Path (Join-Path $repo 'build') "DiscWright-$Version.msix"
+    Remove-Item $msix -Force -ErrorAction SilentlyContinue
+
+    Write-Host ""
+    Write-Host "packing with $maker" -ForegroundColor DarkGray
+
+    # /o overwrites, /p is what comes out, /d is the folder going in.
+    & $maker pack /o /p $msix /d $into | ForEach-Object {
+        if ($_ -match 'error|warning|Package creation succeeded') { Write-Host "  $_" }
+    }
+
+    if ($LASTEXITCODE -ne 0) { throw "MakeAppx failed with $LASTEXITCODE." }
+    if (-not (Test-Path $msix)) { throw "MakeAppx said it worked and there is no $msix." }
+
+    Write-Host ""
+    Write-Host ("{0}  ({1:N1} MB)" -f $msix, ((Get-Item $msix).Length / 1MB)) -ForegroundColor Green
+    Write-Host "Unsigned on purpose. The Store signs what it accepts, and a local install needs a"
+    Write-Host "certificate of your own trusted on this machine."
+}
+else {
+    Write-Host ""
+    Write-Host "To register it for testing (needs Developer Mode on):"
+    Write-Host "  Add-AppxPackage -Register '$manifestPath'"
+    Write-Host ""
+    Write-Host "Or pass -Pack to make an .msix out of it."
+}
