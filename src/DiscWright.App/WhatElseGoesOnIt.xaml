@@ -73,7 +73,7 @@
                                AutomationProperties.AutomationId="TheDiscIcon" />
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Content="Choose..."
+                        <Button Content="Choose"
                                 Style="{StaticResource Ordinary}"
                                 Click="ChooseTheDiscIcon"
                                 AutomationProperties.AutomationId="ChooseTheDiscIcon" />
@@ -129,7 +129,7 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Content="Choose..."
+                        <Button Content="Choose"
                                 Style="{StaticResource Ordinary}"
                                 Click="ChooseTheBackground"
                                 AutomationProperties.AutomationId="ChooseTheBackground" />
@@ -160,7 +160,7 @@
                                Text="{Binding Music, TargetNullValue=Nothing chosen}"
                                AutomationProperties.AutomationId="TheMusic" />
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <Button Content="Choose..."
+                        <Button Content="Choose"
                                 Style="{StaticResource Ordinary}"
                                 Click="ChooseTheMusic"
                                 AutomationProperties.AutomationId="ChooseTheMusic" />
@@ -188,7 +188,7 @@
                                Text="{Binding Manual, TargetNullValue=Nothing chosen}"
                                AutomationProperties.AutomationId="TheManual" />
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <Button Content="Choose..."
+                        <Button Content="Choose"
                                 Style="{StaticResource Ordinary}"
                                 Click="ChooseTheManual"
                                 AutomationProperties.AutomationId="ChooseTheManual" />
@@ -216,7 +216,7 @@
                                Text="{Binding ExtrasFolder, TargetNullValue=Nothing chosen}"
                                AutomationProperties.AutomationId="TheExtrasFolder" />
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
-                        <Button Content="Choose..."
+                        <Button Content="Choose"
                                 Style="{StaticResource Ordinary}"
                                 Click="ChooseTheExtras"
                                 AutomationProperties.AutomationId="ChooseTheExtras" />
@@ -264,7 +264,7 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Content="Choose..."
+                        <Button Content="Choose"
                                 Style="{StaticResource Ordinary}"
                                 Click="ChooseTheCover"
                                 AutomationProperties.AutomationId="ChooseTheCover" />
@@ -306,7 +306,7 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Content="Choose..."
+                        <Button Content="Choose"
                                 Style="{StaticResource Ordinary}"
                                 Click="ChooseTheDiscFace"
                                 AutomationProperties.AutomationId="ChooseTheDiscFace" />

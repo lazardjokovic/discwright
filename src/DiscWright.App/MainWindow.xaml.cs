@@ -222,10 +222,13 @@ public partial class MainWindow : Window
         }
     }
 
+    private void WhatIsPickedChanged(object sender, RoutedPropertyChangedEventArgs<object> e) =>
+        _screen.WhatIsSelected = e.NewValue as AThingOnTheDisc;
+
     private void TakeItOff(object sender, RoutedEventArgs e)
     {
         // Whatever is selected, or everything unticked when nothing is.
-        _screen.TakeOff(Games.SelectedItem as AThingOnTheDisc);
+        _screen.TakeOff(_screen.WhatIsSelected);
     }
 
     /// <summary>

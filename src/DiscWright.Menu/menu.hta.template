@@ -1,5 +1,14 @@
 <html>
 <head>
+<!-- An HTA is IE5 in quirks mode by default, and IE5 has no rgba: every
+     see-through colour in here would be dropped and come out solid. This
+     line is what makes the menu render in a modern engine.
+
+     It also moves the box model from quirks to standards, which is why the
+     panel below has to be told its width includes its padding. Checked by
+     rendering it: documentMode 5 and BackCompat before, 11 and CSS1Compat
+     after. -->
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
 <title>%%TITLE%%</title>
 <hta:application
     id="discwright"
@@ -444,24 +453,28 @@ body {
 #stage { position: absolute; left: 0; top: 0; width: 760px; height: 480px;
          %%BACKDROP%% }
 #panel { position: absolute; right: 0; top: 0; width: 240px; height: 480px;
-         background: #060E11; padding: 28px 22px; }
+         background: #060E11; background: rgba(6, 14, 17, 0.58);
+         padding: 28px 22px; box-sizing: border-box; }
 h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5px;
      text-transform: uppercase; line-height: 20px; }
 .btn { display: block; height: 38px; line-height: 38px; margin-bottom: 9px;
        padding-left: 14px; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;
-       text-transform: uppercase; color: #CBD6DB; background: #0C1519;
+       text-transform: uppercase; color: #CBD6DB;
+       background: #080F12; background: rgba(18, 32, 38, 0.22);
        border: 1px solid #27353B; text-decoration: none; overflow: hidden;
        white-space: nowrap; text-overflow: ellipsis;
        width: 100%; box-sizing: border-box; }
 #addOns { width: 100%; }
 /* One accent, on one button: whichever is the thing to do next. Everything else
    is two greys, so the game's own picture is the only colour in the window. */
-.btn.next { background: #103A3E; border-color: #00BEC8; border-left-width: 3px; color: #FFFFFF; }
+.btn.next { background: #0C2B2E; background: rgba(16, 58, 62, 0.55);
+            border-color: #00BEC8; border-left-width: 3px; color: #FFFFFF; }
 #stillWanted { margin-top: 18px; font-size: 11px; line-height: 16px; color: #8FA3AA; }
 .hint { margin: 0 0 14px 0; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #5E727A; }
 /* A button that cannot be pressed yet looks like one, rather than looking like
    a button that does nothing when you press it. */
-.btn.dead { color: #5E727A; border-color: #1A2429; background: #0A1114; cursor: default; }
+.btn.dead { color: #5E727A; border-color: #1A2429;
+            background: #070D10; background: rgba(10, 17, 20, 0.18); cursor: default; }
 #addOnNote { margin: -4px 0 12px 0; font-size: 10px; line-height: 14px; color: #8FA3AA; }
 </style>
 </head>

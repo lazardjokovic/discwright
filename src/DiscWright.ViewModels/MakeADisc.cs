@@ -767,6 +767,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             IsWorking = true;
             Tell(nameof(IsWorking));
+            Tell(nameof(NothingIsRunning));
+            Tell(nameof(CanTakeSomethingOff));
             Say($"erasing the {chosen.Holding} in {chosen.Drive}", 0);
 
             if (await _machine.Eraser.BlankIt(chosen, new Progress<EraseProgress>(step => Say(step.Doing, step.HowFar ?? 0)), ct)
@@ -794,6 +796,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             IsWorking = false;
             Tell(nameof(IsWorking));
+            Tell(nameof(NothingIsRunning));
+            Tell(nameof(CanTakeSomethingOff));
             await LookAtTheDrives();
         }
     }
@@ -934,6 +938,41 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// burning service on every keystroke would make the whole window crawl.
     /// </remarks>
     public bool CanBurn => TheImages.Count > 0 && !IsWorking;
+
+    /// <summary>Whether anything would come off if Remove were pressed.</summary>
+    /// <remarks>
+    /// Remove takes what is selected, or everything unticked when nothing is,
+    /// so there is nothing for it to do on an empty list, and nothing for it
+    /// to do when everything is ticked and no row is picked. A button that
+    /// does nothing when pressed should look like one.
+    /// </remarks>
+    public bool CanTakeSomethingOff =>
+        !IsWorking
+        && (WhatIsSelected is not null
+            || _tree.SelectMany(game => game.EveryThing()).Any(each => each.IsOn == false));
+
+    /// <summary>The row the tree has picked, or nothing.</summary>
+    private AThingOnTheDisc? _selected;
+
+    public AThingOnTheDisc? WhatIsSelected
+    {
+        get => _selected;
+        set
+        {
+            _selected = value;
+            Tell(nameof(CanTakeSomethingOff));
+        }
+    }
+
+    /// <summary>
+    /// Whether the project can be changed at all just now.
+    /// </summary>
+    /// <remarks>
+    /// Adding a game to a disc that is part way through being written, or
+    /// pointing the output somewhere else mid-burn, is not something to find
+    /// out about by trying it.
+    /// </remarks>
+    public bool NothingIsRunning => !IsWorking;
 
     /// <summary>The images sitting in the output folder.</summary>
     public IReadOnlyList<string> TheImages { get; private set; } = [];
@@ -1945,6 +1984,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
             _outputFolder = where;
         }
 
+        // The images are already sitting in that folder, and without this
+        // nothing goes looking for them, so Burn to a disc stayed dead after
+        // opening a project that was finished and ready to write. The setter
+        // for OutputFolder does this; assigning the field behind it does not.
+        LookForImages();
+
         if (back.Medium is Medium chosen)
         {
             _medium = chosen;
@@ -2126,6 +2171,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
         LookForImages();
 
         Tell(nameof(IsWorking));
+            Tell(nameof(NothingIsRunning));
+            Tell(nameof(CanTakeSomethingOff));
         Tell(nameof(Doing));
         Tell(nameof(HowFar));
         Tell(nameof(Made));

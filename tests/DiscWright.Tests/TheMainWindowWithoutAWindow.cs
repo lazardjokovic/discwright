@@ -508,6 +508,73 @@ public class TheMainWindowWithoutAWindow
     // ----------------------------------------------------------- opening one
 
     [Fact]
+    public void Finds_the_images_that_are_already_there_when_one_is_opened()
+    {
+        MakeADisc window = New(disk: new ADiskWithAnImageOnIt());
+
+        window.OpenThis(AReopenedDisc());
+
+        // Opening a project that was finished and pressing Burn is the whole
+        // point of being able to open one. It set the output folder behind
+        // the property rather than through it, so nothing went looking, and
+        // Burn to a disc sat there dead on a project ready to write.
+        Assert.NotEmpty(window.TheImages);
+        Assert.True(window.CanBurn);
+    }
+
+    // -------------------------------------------- a button that cannot act
+
+    [Fact]
+    public void Remove_is_dead_when_there_is_nothing_to_take_off()
+    {
+        MakeADisc window = New();
+
+        Assert.False(window.CanTakeSomethingOff);
+
+        // Everything on and nothing picked: pressing it would do nothing.
+        window.Add(AGame("The Witcher", 500));
+        Assert.False(window.CanTakeSomethingOff);
+    }
+
+    [Fact]
+    public void Remove_wakes_up_for_a_picked_row_and_for_an_unticked_one()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("The Witcher", 500));
+
+        window.WhatIsSelected = window.WhatGoesOnIt[0];
+        Assert.True(window.CanTakeSomethingOff);
+
+        window.WhatIsSelected = null;
+        Assert.False(window.CanTakeSomethingOff);
+
+        window.WhatGoesOnIt[0].IsOn = false;
+        Assert.True(window.CanTakeSomethingOff);
+    }
+
+    [Fact]
+    public async Task Nothing_that_changes_the_disc_is_live_while_one_is_being_made()
+    {
+        bool? couldChangeItMidWay = null;
+        MakeADisc? window = null;
+        window = New(
+            drives: new ADriveHolding(3, false, 0),
+            eraser: new AnEraserThatAsks(() => couldChangeItMidWay = window!.NothingIsRunning));
+
+        Assert.True(window.NothingIsRunning);
+
+        await window.LookAtTheDrives();
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        // Adding a game to a disc part way through being written, or pointing
+        // the output somewhere else mid-burn, is not a thing to find out
+        // about by trying it.
+        Assert.False(couldChangeItMidWay);
+        Assert.True(window.NothingIsRunning);
+    }
+
+
+    [Fact]
     public void Fills_itself_in_from_a_disc_that_was_made_before()
     {
         MakeADisc window = New();
@@ -1337,7 +1404,8 @@ public class TheMainWindowWithoutAWindow
         IWorkTheTray? tray = null,
         IAskWhatIsReleased? releases = null,
         IShowTheMenu? preview = null,
-        IImages? pictures = null) =>
+        IImages? pictures = null,
+        IFileSystem? disk = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -1345,7 +1413,7 @@ public class TheMainWindowWithoutAWindow
             drives ?? new NoDrives(),
             burner ?? new ABurnerThatWorks(),
             eraser ?? new AnEraserThatWorks(),
-            new ADiskWithADiscOnIt(),
+            disk ?? new ADiskWithADiscOnIt(),
             new NoHashing(),
             new NothingIsRemembered(),
             tray ?? new ATrayThatShuts(),
@@ -1609,6 +1677,16 @@ public class TheMainWindowWithoutAWindow
 
     /// <summary>An eraser that counts its way along, as a drive does.</summary>
     /// <summary>An eraser that throws the way COM interop does.</summary>
+    /// <summary>An eraser that asks the window a question while it works.</summary>
+    private sealed class AnEraserThatAsks(Action looking) : IEraseDiscs
+    {
+        public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct)
+        {
+            looking();
+            return Task.FromResult<Outcome<string>>("blank again");
+        }
+    }
+
     private sealed class AnEraserThatFallsOver : IEraseDiscs
     {
         public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct) =>
@@ -1659,6 +1737,15 @@ public class TheMainWindowWithoutAWindow
         public bool FolderExists(string path) => true;
 
         public FolderListing List(string path) => new(path, [new ListedFile("setup_a_game.exe", 1000)]);
+    }
+
+    /// <summary>An output folder with a built image already in it.</summary>
+    private sealed class ADiskWithAnImageOnIt : IFileSystem
+    {
+        public bool FolderExists(string path) => true;
+
+        public FolderListing List(string path) =>
+            new(path, [new ListedFile("AN OLD DISC.iso", 4_000_000)]);
     }
 
     private sealed class NoHashing : IHasher

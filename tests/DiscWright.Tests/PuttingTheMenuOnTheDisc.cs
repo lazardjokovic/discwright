@@ -19,6 +19,45 @@ public class PuttingTheMenuOnTheDisc
     }
 
     [Fact]
+    public async Task Lets_what_is_behind_the_buttons_through()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote);
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // An HTA is IE5 in quirks mode unless it is told otherwise, and IE5
+        // has no rgba: every see-through colour below would be dropped and
+        // the menu would come out looking exactly as it always did. Measured
+        // on the real thing by rendering it and asking: documentMode 5 and
+        // BackCompat without this line, 11 and CSS1Compat with it.
+        Assert.Contains(@"http-equiv=""X-UA-Compatible"" content=""IE=edge""", page, StringComparison.Ordinal);
+
+        // Standards mode counts padding outside the width, so without this
+        // the panel would grow from 240 to 284 and push itself off the edge.
+        // Measured at 240 both before and after.
+        Assert.Contains("padding: 28px 22px; box-sizing: border-box;", page, StringComparison.Ordinal);
+
+        // The panel, which is what the game's own picture sits behind.
+        Assert.Contains("background: #060E11; background: rgba(6, 14, 17, 0.58)", page, StringComparison.Ordinal);
+
+        // Almost transparent, so what is behind shows through the buttons
+        // instead of them sitting on it as solid blocks.
+        Assert.Contains("background: rgba(18, 32, 38, 0.22)", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("color: #CBD6DB; background: #0C1519", page, StringComparison.Ordinal);
+
+        // A hex before each one. An HTA renders as an old IE unless it is
+        // told otherwise, and an old IE throws rgba away: without a plain
+        // colour to fall back on, those buttons would have no background at
+        // all on the machine the disc is most likely to be played on.
+        Assert.Contains("background: #080F12; background: rgba", page, StringComparison.Ordinal);
+        Assert.Contains("background: #070D10; background: rgba", page, StringComparison.Ordinal);
+        Assert.Contains("background: #0C2B2E; background: rgba", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Wears_our_own_icon_when_the_disc_chose_none()
     {
         RecordingWriter wrote = new();

@@ -818,6 +818,16 @@ There was a setting and the usual answer was no, because **the usual answer to a
 
 `ArtworkOnDisc` is gone from `DiscOptions` and from the window. It is still **written to the project file as true**, because v1 reads that field and a file saying false would open there as a disc without artwork.
 
+#### An HTA is IE5 unless you tell it otherwise
+
+Rendered the menu and asked it: `documentMode: 5`, `compatMode: BackCompat`. An HTA with no doctype and no compatibility meta runs the **IE5 quirks** engine, which has no `rgba`, no `box-sizing`, and no modern anything. A see-through colour written in that file is simply dropped, and the menu comes out looking exactly as it always did.
+
+So `<meta http-equiv="X-UA-Compatible" content="IE=edge" />` is what makes any of it work: `documentMode: 11`, `compatMode: CSS1Compat`.
+
+That switch moves the box model from quirks to standards, where padding sits outside the declared width. `#panel` is 240px wide with 22px of padding each side, so it would have grown to 284 and pushed itself off the edge of a 760px window. `box-sizing: border-box` holds it, measured at **240 both before and after**, with the buttons at 196 both times.
+
+The menu's own script survives the switch because it never used `attachEvent`, `document.all` or `window.event`, and `ActiveXObject` is an HTA host privilege rather than a DOM-mode feature. Checked against the old build rendered the same way: same seven buttons, same labels, same widths.
+
 #### InvalidComObjectException is not a COMException
 
 The burning code catches `COMException` around every call into IMAPI. **`InvalidComObjectException` does not derive from it**, so it walks straight past, out of the burner, out of the view model, and into the window's catch-all, where it is shown as raw exception text in a message box. It reads as a crash and is not one.
