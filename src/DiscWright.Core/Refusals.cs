@@ -264,6 +264,18 @@ public static class Refusals
                 + " could each be erased and used again. Which one goes is yours to decide, so nothing "
                 + "has been erased.");
 
+    /// <remarks>
+    /// Said when somebody asks to erase and there is nothing an erase would
+    /// help. A pressed disc and an empty tray are both ordinary, and neither
+    /// is a fault worth more than a sentence.
+    /// </remarks>
+    public static Refusal ThereIsNothingToErase(IReadOnlyList<string> drives) =>
+        new("There is no disc here that erasing would help",
+            drives.Count == 0
+                ? "There is no disc writer on this machine."
+                : "A disc has to be rewritable and have something on it. Put one in "
+                    + string.Join(" or ", drives) + " and try again.");
+
     public static Refusal ThatDiscCannotBeWrittenTo(string drive, string what) =>
         new($"The {what} in {drive} cannot be written to",
             "It is either a pressed disc or one that has already been written and cannot be erased. A blank "

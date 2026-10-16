@@ -664,6 +664,72 @@ public sealed class MakeADisc : INotifyPropertyChanged
     [SuppressMessage("Performance", "CA1822", Justification = "A binding cannot reach a static property.")]
     public string WhyTheTrayMatters => TheDiscsThatAreIn.WhyTheTrayMatters;
 
+    /// <summary>
+    /// Whether there is a disc that erasing would make usable, and nothing
+    /// else going on.
+    /// </summary>
+    /// <remarks>
+    /// Nothing to do with having a disc to write. Somebody with a drawer of
+    /// used rewritables wants them blank again, and until now the only way to
+    /// erase one was to be half way through a burn and be asked.
+    /// </remarks>
+    public bool CanErase => !IsWorking && Drives.Any(each => each.ErasingWouldHelp);
+
+    /// <summary>
+    /// Erases a disc, and nothing else. No image, no burn, no set.
+    /// </summary>
+    /// <remarks>
+    /// The disc is named by whoever asks, because which disc gets wiped is
+    /// never a choice to make on somebody's behalf.
+    /// </remarks>
+    public async Task EraseADisc(
+        Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
+        CancellationToken ct = default)
+    {
+        ItWentWrong = null;
+        Tell(nameof(ItWentWrong));
+
+        IReadOnlyList<Recorder> all = await WaitForTheDriveToSaySomething(_machine.Drives.All(), null, ct);
+
+        Recorder[] could = [.. all.Where(each => each.ErasingWouldHelp)];
+
+        if (could.Length == 0)
+        {
+            ItWentWrong = Refusals.ThereIsNothingToErase(
+                [.. all.Select(each => each.Drive)]);
+            Tell(nameof(ItWentWrong));
+            return;
+        }
+
+        if (await whichToErase(could) is not Recorder chosen)
+        {
+            return;
+        }
+
+        try
+        {
+            IsWorking = true;
+            Tell(nameof(IsWorking));
+            Say($"erasing the {chosen.Holding} in {chosen.Drive}", 0);
+
+            if (await _machine.Eraser.BlankIt(chosen, new Progress<string>(line => Say(line, 0)), ct)
+                is Outcome<string>.No stopped)
+            {
+                ItWentWrong = stopped.Refusal;
+                Tell(nameof(ItWentWrong));
+                return;
+            }
+
+            Say($"{chosen.Drive} is blank again", 1);
+        }
+        finally
+        {
+            IsWorking = false;
+            Tell(nameof(IsWorking));
+            await LookAtTheDrives();
+        }
+    }
+
     /// <summary>Whether a build is running right now.</summary>
     public bool IsWorking { get; private set; }
 

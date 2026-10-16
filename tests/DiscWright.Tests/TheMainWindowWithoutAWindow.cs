@@ -1904,4 +1904,87 @@ public class TheMainWindowWithoutAWindow
         Assert.DoesNotContain("would not say", window.ItWentWrong?.Headline ?? string.Empty, StringComparison.Ordinal);
     }
 
+
+    // --------------------------------------------- erasing a disc on its own
+
+    [Fact]
+    public async Task Can_erase_only_when_there_is_a_disc_erasing_would_help()
+    {
+        ADriveHolding drive = new(3, true, 359_847);
+        MakeADisc window = New(drives: drive);
+        await window.LookAtTheDrives();
+
+        // A blank one needs no erasing.
+        Assert.False(window.CanErase);
+
+        drive.NowHolds(3, false, 0);
+        await window.LookAtTheDrives();
+        Assert.True(window.CanErase);
+
+        // A pressed disc cannot be erased however much somebody wants it to.
+        drive.NowHolds(1, false, 0);
+        await window.LookAtTheDrives();
+        Assert.False(window.CanErase);
+    }
+
+    [Fact]
+    public async Task Erases_the_disc_that_was_chosen_and_nothing_else()
+    {
+        AnEraserThatWorks eraser = new();
+        MakeADisc window = New(drives: new ADriveHolding(3, false, 0), eraser: eraser);
+        await window.LookAtTheDrives();
+
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        Assert.Equal("D:", eraser.Erased);
+        Assert.Null(window.ItWentWrong);
+    }
+
+    [Fact]
+    public async Task Erases_nothing_when_the_question_is_answered_no()
+    {
+        AnEraserThatWorks eraser = new();
+        MakeADisc window = New(drives: new ADriveHolding(3, false, 0), eraser: eraser);
+        await window.LookAtTheDrives();
+
+        await window.EraseADisc(_ => Task.FromResult<Recorder?>(null));
+
+        // Which disc gets wiped is never a choice to make on somebody's
+        // behalf, and saying no has to mean nothing happened at all.
+        Assert.Null(eraser.Erased);
+        Assert.Null(window.ItWentWrong);
+    }
+
+    [Fact]
+    public async Task Says_so_rather_than_throwing_when_there_is_nothing_to_erase()
+    {
+        AnEraserThatWorks eraser = new();
+        MakeADisc window = New(drives: new ADriveHolding(1, false, 0), eraser: eraser);
+        await window.LookAtTheDrives();
+
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could.Count > 0 ? could[0] : null));
+
+        // A pressed disc and an empty tray are ordinary. Neither is a fault,
+        // and neither may reach somebody as an exception shown raw.
+        Assert.NotNull(window.ItWentWrong);
+        Assert.Contains("erasing would help", window.ItWentWrong!.Headline, StringComparison.Ordinal);
+        Assert.Null(eraser.Erased);
+    }
+
+    [Fact]
+    public async Task Waits_for_a_drive_still_reading_before_saying_there_is_nothing_to_erase()
+    {
+        ADriveStillThinking slow = new(quietTimes: 2, mediaType: 3, blank: false, freeSectors: 0);
+        AnEraserThatWorks eraser = new();
+        MakeADisc window = New(drives: slow, eraser: eraser);
+
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        // The same fault as the one that ended a set a disc short: a drive
+        // that has not answered yet has no media type, so nothing looks
+        // erasable and the honest answer would be wrong.
+        Assert.Equal("D:", eraser.Erased);
+        Assert.Null(window.ItWentWrong);
+    }
+
 }

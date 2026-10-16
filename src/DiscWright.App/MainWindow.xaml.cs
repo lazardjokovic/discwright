@@ -234,6 +234,33 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Erases a disc and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// Its own button rather than something only reachable half way through a
+    /// burn. Everything it can go wrong with is a refusal with a sentence,
+    /// never an exception shown raw, which is what an error box full of
+    /// machine words reads as.
+    /// </remarks>
+    private async void EraseADisc(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _screen.EraseADisc(WhichToErase);
+        }
+        catch (Exception wrong)
+        {
+            MessageBox.Show(this, wrong.Message, "DiscWright", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        if (_screen.ItWentWrong is Refusal refusal)
+        {
+            Explain(refusal);
+        }
+    }
+
+    /// <summary>
     /// Opens the window for everything that is not a game.
     /// </summary>
     private void WhatElseGoesOnIt(object sender, RoutedEventArgs e) =>

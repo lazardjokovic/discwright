@@ -534,6 +534,17 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Nothing to do with the disc being made. Somebody
+                         with a drawer of used rewritables wants them blank
+                         again, and the only way to erase one used to be to be
+                         half way through a burn and be asked. -->
+                    <Button Content="Erase a disc..."
+                            Style="{StaticResource Ordinary}"
+                            Margin="0,0,10,0"
+                            IsEnabled="{Binding CanErase}"
+                            Click="EraseADisc"
+                            AutomationProperties.AutomationId="EraseADisc" />
+
                     <Button Content="Burn to a disc..."
                             Style="{StaticResource Ordinary}"
                             Margin="0,0,10,0"

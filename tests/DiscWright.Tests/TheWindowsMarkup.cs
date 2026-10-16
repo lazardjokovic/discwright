@@ -440,6 +440,23 @@ public class TheWindowsMarkup
         Assert.Equal("{StaticResource WorryInk}", (string?)matters.Attribute("Foreground"));
     }
 
+    [Theory]
+    [InlineData("EraseADisc", "{Binding CanErase}")]
+    [InlineData("BurnIt", "{Binding CanBurn}")]
+    [InlineData("PreviewTheMenu", "{Binding CanPreview}")]
+    public void A_button_that_touches_a_disc_is_dead_when_it_cannot_be_pressed(string id, string bound)
+    {
+        XElement button = Window()
+            .Descendants(Xaml + "Button")
+            .Single(each => IdOf(each) == id);
+
+        // Hard-enabled, these invite somebody to press them when there is
+        // nothing to press them for, and the answer arrives as an error
+        // afterwards instead of a button that was never offered.
+        Assert.Equal(bound, (string?)button.Attribute("IsEnabled"));
+        Assert.Null(button.Attribute("Visibility"));
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static XElement Window() => Markup("MainWindow.xaml");
