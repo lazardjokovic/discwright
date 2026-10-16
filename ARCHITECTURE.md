@@ -762,6 +762,18 @@ The menu window wears the disc's own icon where one was chosen, and **DiscWright
 
 That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
 
+#### One file, because of Smart App Control
+
+The app ships as **one self-contained file** and that is not a packaging preference.
+
+Smart App Control is on and enforcing on a current Windows 11. A freshly built unsigned DLL has no reputation, so Code Integrity refuses it by name, ids 3033 and 3077 in `Microsoft-Windows-CodeIntegrity/Operational`. The exe is allowed to start and then dies with `0xE0434352` a second later, which looks like a crash rather than a block.
+
+Inside a single-file bundle the managed assemblies load from memory, so there is no file to check and nothing is refused. 62.5 MB, first run about 2.4 s, later runs under a second.
+
+**This is not signing.** It removes one class of block on one machine. An unsigned exe has no reputation anywhere else either, so the certificate is still what stands between this and anybody else running it.
+
+`packaging\Build-TheInstaller.ps1` refuses to wrap a payload with a loose DLL in it, and that check sits **outside** the publish, because the case it guards is `-SkipPublish` reusing a payload from an ordinary publish.
+
 #### A dropdown's open list is somewhere else
 
 The sizes are worded in `MakeADisc` and not in the markup, because a `ComboBox`'s open list lives in a visual tree of its own. A binding inside a row that reaches out to ask the window a question is a well known way to end up with rows that quietly show nothing, and nothing in the build would say so.
