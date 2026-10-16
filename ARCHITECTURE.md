@@ -818,6 +818,16 @@ There was a setting and the usual answer was no, because **the usual answer to a
 
 `ArtworkOnDisc` is gone from `DiscOptions` and from the window. It is still **written to the project file as true**, because v1 reads that field and a file saying false would open there as a disc without artwork.
 
+#### An erase has no unit of work but seconds
+
+The drive hands the eraser **elapsed and expected seconds** and the eraser threw both away into a sentence, so the bar sat at nothing for the whole half minute while the words counted up beside it, which reads as a program that has stopped.
+
+`EraseProgress` carries a fraction as well as the words. It is seconds over seconds, which is an honest guess rather than a measurement: erasing is the one job here with no byte count. It is held below one, so the bar never claims to be finished while the disc is still spinning and an estimate that turns out short does not make it go backwards.
+
+**A test watching `HowFar` must look for a value strictly between nought and one.** `EraseADisc` ends by saying "blank again" at one, so "greater than nought" passes with the plumbing cut, which is how the first version of that test passed.
+
+And `Progress<T>` **posts** its callbacks rather than calling them. A fake that reports and returns instantly has them arrive after the window has stopped working, which throws them away. A real erase takes half a minute and never notices.
+
 #### A tick and Remove mean different things
 
 **Unticked** is *not on this disc*, still listed, one click from coming back. **Removed** is *gone*, and comes back only by adding the folder again.

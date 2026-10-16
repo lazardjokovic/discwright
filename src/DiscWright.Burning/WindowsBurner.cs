@@ -37,7 +37,7 @@ public sealed class WindowsBurner : IBurnDiscs, IEraseDiscs, IWorkTheTray
     /// minute, rather than a full one, which rewrites the whole surface and
     /// takes twenty minutes on a CD-RW. The disc is usable either way.
     /// </remarks>
-    public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<string>? progress, CancellationToken ct) =>
+    public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct) =>
         Task.Run(() => DoTheErase(disc, progress), ct);
 
     private static Outcome<BurnedDisc> Write(
@@ -128,7 +128,7 @@ public sealed class WindowsBurner : IBurnDiscs, IEraseDiscs, IWorkTheTray
         }
     }
 
-    private static Outcome<string> DoTheErase(Recorder disc, IProgress<string>? progress)
+    private static Outcome<string> DoTheErase(Recorder disc, IProgress<EraseProgress>? progress)
     {
         if (!OpticalMedia.CanBeErased(disc.MediaType))
         {
@@ -152,7 +152,7 @@ public sealed class WindowsBurner : IBurnDiscs, IEraseDiscs, IWorkTheTray
 
             using Listening listening = Listening.To(eraser, new TheEraseSoFar(progress));
 
-            progress?.Report("erasing the disc");
+            progress?.Report(new EraseProgress("erasing the disc", 0));
             erasing.EraseMedia();
 
             return $"The {disc.Holding} in {disc.Drive} is blank again.";
@@ -389,10 +389,17 @@ public sealed class TheWriteSoFar(Action<BurnProgress> say) : IHearAboutTheWrite
 /// <summary>What the drive says while it erases.</summary>
 [ClassInterface(ClassInterfaceType.None)]
 [ComVisible(true)]
-public sealed class TheEraseSoFar(IProgress<string>? say) : IHearAboutTheErase
+public sealed class TheEraseSoFar(IProgress<EraseProgress>? say) : IHearAboutTheErase
 {
     public void Update(object sender, int elapsedSeconds, int estimatedTotalSeconds) =>
         say?.Report(estimatedTotalSeconds > 0
-            ? $"erasing the disc, {elapsedSeconds} of about {estimatedTotalSeconds} seconds"
-            : $"erasing the disc, {elapsedSeconds} seconds so far");
+            ? new EraseProgress(
+                $"erasing the disc, {elapsedSeconds} of about {estimatedTotalSeconds} seconds",
+
+                // Seconds over seconds, which is the only measure the drive
+                // offers. Held below one so the bar never claims to be
+                // finished while the disc is still spinning, and an estimate
+                // that turns out short does not make it go backwards.
+                Math.Min(0.99, (double)elapsedSeconds / estimatedTotalSeconds))
+            : new EraseProgress($"erasing the disc, {elapsedSeconds} seconds so far", null));
 }

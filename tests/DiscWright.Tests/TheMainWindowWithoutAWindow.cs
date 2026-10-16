@@ -1606,14 +1606,36 @@ public class TheMainWindowWithoutAWindow
         }
     }
 
+    /// <summary>An eraser that counts its way along, as a drive does.</summary>
+    private sealed class AnEraserThatCounts : IEraseDiscs
+    {
+        public async Task<Outcome<string>> BlankIt(
+            Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct)
+        {
+            for (int second = 0; second <= 30; second += 10)
+            {
+                progress?.Report(new EraseProgress($"erasing the disc, {second} of about 30 seconds", second / 30.0));
+
+                // Progress<T> posts its callbacks rather than calling them,
+                // so without a moment here they arrive after this returns,
+                // by which time the window has stopped working and throws
+                // them away. A real erase takes half a minute and has no such
+                // problem; a fake that finishes instantly does.
+                await Task.Delay(20, ct);
+            }
+
+            return "done";
+        }
+    }
+
     private sealed class AnEraserThatWorks : IEraseDiscs
     {
         internal string? Erased { get; private set; }
 
-        public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<string>? progress, CancellationToken ct)
+        public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct)
         {
             Erased = disc.Drive;
-            progress?.Report("erasing the disc");
+            progress?.Report(new EraseProgress("erasing the disc", 0));
 
             return Task.FromResult<Outcome<string>>("blank again");
         }
@@ -2050,6 +2072,29 @@ public class TheMainWindowWithoutAWindow
 
         Assert.Equal("D:", eraser.Erased);
         Assert.Null(window.ItWentWrong);
+    }
+
+    [Fact]
+    public async Task Says_how_far_along_an_erase_is_and_not_only_how_long()
+    {
+        AnEraserThatCounts eraser = new();
+        MakeADisc window = New(drives: new ADriveHolding(3, false, 0), eraser: eraser);
+        await window.LookAtTheDrives();
+
+        List<double> bar = [];
+        window.PropertyChanged += (_, what) =>
+        {
+            if (what.PropertyName == nameof(MakeADisc.HowFar)) { bar.Add(window.HowFar); }
+        };
+
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        // Strictly between nought and one, which is the only thing that
+        // shows the bar moving WHILE it erases. "Greater than nought" was
+        // satisfied by the "blank again" at the end, which sets it to one
+        // whether or not a single step along the way was ever passed on, so
+        // the first version of this test passed with the plumbing cut.
+        Assert.Contains(bar, far => far > 0 && far < 1);
     }
 
     [Fact]

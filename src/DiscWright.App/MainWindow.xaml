@@ -121,7 +121,7 @@
                      taller than the words beside it, and the row took its
                      height, which left a band of nothing between the header
                      and the list it heads. -->
-                <Grid DockPanel.Dock="Top" Margin="0,-2,0,-9">
+                <Grid DockPanel.Dock="Top" Margin="0,-2,0,-4">
                     <TextBlock Style="{StaticResource Step}"
                                VerticalAlignment="Center"
                                Text="WHAT GOES ON IT" />
@@ -132,8 +132,8 @@
                     <Button Content="See what it will look like"
                             Style="{StaticResource Ordinary}"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            Margin="0,0,0,6"
+                            VerticalAlignment="Top"
+                            Margin="0,0,0,8"
                             IsEnabled="{Binding CanPreview}"
                             Click="PreviewTheMenu"
                             AutomationProperties.AutomationId="PreviewTheMenu" />

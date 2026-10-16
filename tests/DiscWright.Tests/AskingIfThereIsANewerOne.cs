@@ -250,7 +250,7 @@ public class AskingIfThereIsANewerOne
 
     private sealed class AnEraserThatDoesNothing : IEraseDiscs
     {
-        public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<string>? progress, CancellationToken ct) =>
+        public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct) =>
             Task.FromResult<Outcome<string>>("blank");
     }
 

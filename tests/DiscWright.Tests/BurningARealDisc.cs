@@ -91,7 +91,7 @@ public class BurningARealDisc(Xunit.Abstractions.ITestOutputHelper says)
             says.WriteLine("  erasing it, which takes under a minute...");
 
             Outcome<string> erased = await burner.BlankIt(
-                drive, new Progress<string>(line => says.WriteLine("    " + line)), default);
+                drive, new Progress<EraseProgress>(step => says.WriteLine("    " + step.Doing)), default);
 
             says.WriteLine("  " + Assert.IsType<Outcome<string>.Ok>(erased).Value);
 

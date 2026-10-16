@@ -769,7 +769,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(IsWorking));
             Say($"erasing the {chosen.Holding} in {chosen.Drive}", 0);
 
-            if (await _machine.Eraser.BlankIt(chosen, new Progress<string>(line => Say(line, 0)), ct)
+            if (await _machine.Eraser.BlankIt(chosen, new Progress<EraseProgress>(step => Say(step.Doing, step.HowFar ?? 0)), ct)
                 is Outcome<string>.No stopped)
             {
                 ItWentWrong = stopped.Refusal;
@@ -1476,7 +1476,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                         Say($"erasing the {chosen.Holding} in {chosen.Drive}", 0);
 
                         Outcome<string> erased = await _machine.Eraser.BlankIt(
-                            chosen, new Progress<string>(line => Say(line, 0)), ct);
+                            chosen, new Progress<EraseProgress>(step => Say(step.Doing, step.HowFar ?? 0)), ct);
 
                         if (erased is Outcome<string>.No stopped)
                         {
@@ -1620,7 +1620,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                         Say("erasing the " + chosen.Holding + " in " + chosen.Drive, 0);
 
                         Outcome<string> erased = await _machine.Eraser.BlankIt(
-                            chosen, new Progress<string>(line => Say(line, 0)), ct);
+                            chosen, new Progress<EraseProgress>(step => Say(step.Doing, step.HowFar ?? 0)), ct);
 
                         if (erased is Outcome<string>.No stopped)
                         {

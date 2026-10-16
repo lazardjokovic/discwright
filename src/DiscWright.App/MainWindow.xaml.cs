@@ -716,7 +716,11 @@ public partial class MainWindow : Window
     /// </remarks>
     private Task<Recorder?> WhichToErase(IReadOnlyList<Recorder> could)
     {
-        if (could.Count == 1)
+        // The yes-or-no form only on a machine with one writer, where there
+        // is no "which" to answer. With two, naming the drive in a sentence
+        // is not the same as being asked to choose one: Lazar pressed Erase a
+        // second time and it went to E: without him feeling he had picked it.
+        if (could.Count == 1 && _screen.Drives.Count <= 1)
         {
             Recorder only = could[0];
 
@@ -734,8 +738,11 @@ public partial class MainWindow : Window
         return Task.FromResult(PickOne.From(
             this,
             "Which disc should be erased?",
-            "There is no blank disc, and either of these could be erased and used again. Everything on the "
-                + "one you choose goes, and it cannot be got back.",
+            could.Count == 1
+                ? "Everything on it goes, and it cannot be got back. A quick erase takes under a minute, and "
+                    + "then the disc can be written to again."
+                : "Everything on the one you choose goes, and it cannot be got back. A quick erase takes "
+                    + "under a minute, and then the disc can be written to again.",
             could,
             disc => $"{disc.Drive}  the {disc.Holding} in the {disc.Name}"));
     }

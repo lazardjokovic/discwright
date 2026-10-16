@@ -36,7 +36,7 @@ public interface IBurnDiscs
 /// </remarks>
 public interface IEraseDiscs
 {
-    Task<Outcome<string>> BlankIt(Recorder disc, IProgress<string>? progress, CancellationToken ct);
+    Task<Outcome<string>> BlankIt(Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct);
 }
 
 /// <summary>Opening and shutting the tray.</summary>
@@ -147,6 +147,26 @@ public sealed record BurnedDisc(string Drive, int Seconds, int Reports, bool Wat
 /// <param name="Doing">What the drive says it is doing.</param>
 /// <param name="HowFar">From nothing to one, or null when the drive will not say.</param>
 /// <param name="SecondsLeft">What the drive thinks is left, or null.</param>
+/// <summary>How an erase is getting on.</summary>
+/// <remarks>
+/// A fraction as well as a sentence, because the eraser is handed both by the
+/// drive and threw the numbers away into a string. The bar then sat at nothing
+/// for the whole half minute while the words counted up beside it, which reads
+/// as a program that has stopped.
+/// </remarks>
+/// <param name="Doing">What to say.</param>
+/// <param name="HowFar">
+/// Nought to one, or nothing when the drive will not estimate. Erasing a disc
+/// is the one job here with no sensible unit of work: there is no byte count,
+/// only seconds, so this is seconds elapsed over seconds expected and is an
+/// honest guess rather than a measurement.
+/// </param>
+public sealed record EraseProgress(string Doing, double? HowFar)
+{
+    /// <inheritdoc/>
+    public override string ToString() => Doing;
+}
+
 public sealed record BurnProgress(string Doing, double? HowFar, int? SecondsLeft)
 {
     public override string ToString() =>
