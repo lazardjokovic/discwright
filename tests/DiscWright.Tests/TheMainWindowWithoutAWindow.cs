@@ -907,7 +907,8 @@ public class TheMainWindowWithoutAWindow
         // splits a file across two discs, which is only ever a last resort.
         Assert.True(window.Menu);
         Assert.True(window.Checksums);
-        Assert.True(window.ArtworkOnDisc);
+        // The cover art always goes on now, so there is no setting left to
+        // read back.
         Assert.False(window.LegacyFileSystems);
         Assert.False(window.CutFiles);
     }

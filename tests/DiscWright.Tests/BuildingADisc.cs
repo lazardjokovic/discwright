@@ -386,7 +386,7 @@ public sealed class BuildingADisc : IDisposable
     }
 
     [Fact]
-    public async Task Leaves_the_printable_artwork_off_when_it_was_not_asked_for()
+    public async Task Puts_the_printable_artwork_on_without_being_asked()
     {
         GameFolder game = AGogDownload("Hollow Knight", 500);
         DiscArtwork artwork = new(IconPath: APicture("icon", 256, 256), BackgroundPath: APicture("bg", 1920, 1080),
@@ -395,12 +395,15 @@ public sealed class BuildingADisc : IDisposable
         BuiltDisc disc = Assert.Single((await Build(Project(game) with
         {
             Artwork = artwork,
-            Options = new DiscOptions(ArtworkOnDisc: false)
+            Options = new DiscOptions()
         })).Discs);
 
-        // The option is about the cover and the disc face, which are there to
-        // be PRINTED. Saying no means do not also carry them on the disc.
-        Assert.False(Directory.Exists(On(disc, "ARTWORK")));
+        // The cover and the disc face are there to be PRINTED, and they are
+        // carried on the disc as well, always. There used to be a setting for
+        // it and the usual answer was no, because the usual answer to a
+        // setting nobody understands is to leave it alone. A disc that has
+        // them is one somebody can reprint the sleeve from in ten years.
+        Assert.True(Directory.Exists(On(disc, "ARTWORK")));
 
         // The icon and the background are not that. They are what the disc
         // wears and what the menu is drawn on, so they go on regardless.

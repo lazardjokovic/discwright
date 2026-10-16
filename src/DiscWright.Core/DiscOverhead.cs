@@ -65,7 +65,7 @@ public static class DiscOverhead
         // once and at its own size. v1 left these out of the sum, which is fine
         // until somebody picks a 60 MB scan of a sleeve and the last disc of a
         // set comes up short.
-        if (project.Options.ArtworkOnDisc)
+        // Counted always, because it is copied always.
         {
             if (artwork.CoverPath is not null)
             {

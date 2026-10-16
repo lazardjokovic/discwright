@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Builds the DiscWright 2.0 installer.
+    Builds the DiscWright installer.
 
 .DESCRIPTION
     Publishes the app as one self-contained file, then wraps it.

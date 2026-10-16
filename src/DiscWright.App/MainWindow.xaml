@@ -52,7 +52,7 @@
                     <TextBlock Text="DiscWright" Style="{StaticResource Title}" />
 
                     <TextBlock Style="{StaticResource Aside}"
-                               Margin="8,0,0,3"
+                               Margin="8,0,0,4"
                                VerticalAlignment="Bottom"
                                Text="{Binding ThisBuild}"
                                AutomationProperties.AutomationId="ThisBuild" />
@@ -60,9 +60,13 @@
                     <!-- Beside the version it is about, because a version and
                          a way to check it are one thought and were two rows.
                          Barely an action, and it should not look like one. -->
+                    <!-- On the same line as the version rather than a few
+                         pixels below it, looking like it slipped. The size
+                         comes from the style, because a button that decides
+                         its own is one the window cannot restyle later. -->
                     <Button Content="Check for a new version"
                             Style="{StaticResource Quietly}"
-                            Margin="12,0,0,2"
+                            Margin="10,0,0,4"
                             VerticalAlignment="Bottom"
                             Click="CheckForANewVersion"
                             AutomationProperties.AutomationId="CheckForANewVersion" />
@@ -113,8 +117,14 @@
                      found it. It is still dead unless there is a menu to
                      preview, so it cannot show something that is not going
                      to be on the disc. -->
-                <Grid DockPanel.Dock="Top">
-                    <TextBlock Style="{StaticResource Step}" Text="WHAT GOES ON IT" />
+                <!-- No bottom margin on this row. The preview button is
+                     taller than the words beside it, and the row took its
+                     height, which left a band of nothing between the header
+                     and the list it heads. -->
+                <Grid DockPanel.Dock="Top" Margin="0,-2,0,-9">
+                    <TextBlock Style="{StaticResource Step}"
+                               VerticalAlignment="Center"
+                               Text="WHAT GOES ON IT" />
                     <!-- A real button, not something that looks like a link.
                          Pressing it opens a window, which is what a button
                          does, and it was quiet enough to be missed even after
@@ -123,7 +133,7 @@
                             Style="{StaticResource Ordinary}"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
-                            Margin="0,0,0,4"
+                            Margin="0,0,0,6"
                             IsEnabled="{Binding CanPreview}"
                             Click="PreviewTheMenu"
                             AutomationProperties.AutomationId="PreviewTheMenu" />
@@ -463,9 +473,6 @@
                         <CheckBox Content="A list of what every file should be"
                                   IsChecked="{Binding Checksums}"
                                   AutomationProperties.AutomationId="Checksums" />
-                        <CheckBox Content="The cover art on the disc as well"
-                                  IsChecked="{Binding ArtworkOnDisc}"
-                                  AutomationProperties.AutomationId="ArtworkOnDisc" />
                         <CheckBox Content="Readable by Windows 98 and Mac OS 9"
                                   IsChecked="{Binding LegacyFileSystems}"
                                   AutomationProperties.AutomationId="LegacyFileSystems" />

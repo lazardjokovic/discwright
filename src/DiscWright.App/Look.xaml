@@ -96,7 +96,10 @@
     -->
     <Style x:Key="Quietly" TargetType="Button">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
-        <Setter Property="FontSize" Value="12" />
+
+        <!-- Smaller than the words it sits beside. It is barely an action and
+             should not compete with the name of the program. -->
+        <Setter Property="FontSize" Value="11" />
         <Setter Property="Foreground" Value="{StaticResource Quiet}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="0" />

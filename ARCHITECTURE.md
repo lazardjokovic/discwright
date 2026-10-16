@@ -806,6 +806,18 @@ Taking that as an answer is worse than it sounds, because **`ErasingWouldHelp` i
 
 Both ways in now give the drive fifteen seconds to wake up before its silence counts, and the one that is waiting on a named drive waits only on that one.
 
+#### 0.12.0, not 2.0.0
+
+The rewrite carries on from the PowerShell app's numbering rather than starting again. That one goes to 0.11.0, so this picks up at **0.12.0** and the two read as one project at different stages, which is what they are. A round 2.0.0 claimed a finished thing, and an app nobody can be given yet does not get one.
+
+The installer is named **DiscWright**, not "DiscWright 2.0", and installs to `DiscWright (rewrite)`: a folder named for what it is rather than for a version it will outgrow. It keeps its own AppId so it sits beside the PowerShell install instead of taking over a working one.
+
+#### The cover art always goes on the disc
+
+There was a setting and the usual answer was no, because **the usual answer to a setting nobody understands is to leave it alone**. A cover and a label are small, and a disc that carries them is one somebody can reprint the sleeve from in ten years without still having the folder it was built from.
+
+`ArtworkOnDisc` is gone from `DiscOptions` and from the window. It is still **written to the project file as true**, because v1 reads that field and a file saying false would open there as a disc without artwork.
+
 #### A tick and Remove mean different things
 
 **Unticked** is *not on this disc*, still listed, one click from coming back. **Removed** is *gone*, and comes back only by adding the folder again.

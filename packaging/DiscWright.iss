@@ -1,4 +1,4 @@
-﻿; DiscWright 2.0 - Inno Setup script
+﻿; DiscWright, the rewrite - Inno Setup script
 ;
 ; What goes in is ONE FILE. The app is published self-contained and single
 ; file, and that is not a packaging preference, it is the only thing that runs
@@ -18,16 +18,20 @@
 ;
 ; Built by packaging/Build-TheInstaller.ps1, which publishes first and passes
 ; the version in:
-;     ISCC.exe /DAppVersion=2.0.0 packaging\DiscWright.iss
+;     ISCC.exe /DAppVersion=0.12.0 packaging\DiscWright.iss
 
 #ifndef AppVersion
   #error AppVersion must be passed in with /DAppVersion=x.y.z
 #endif
 
-; "DiscWright 2.0" while it is being tested beside v1, so the two are tellable
-; apart in the Start Menu. The release that actually replaces v1 goes back to
-; plain "DiscWright" and takes v1's AppId, so an existing install upgrades.
-#define AppName      "DiscWright 2.0"
+; Plain "DiscWright", because this is not a second product. It is the same
+; program rewritten, carrying on from where the PowerShell one leaves off, and
+; calling it 2.0 claimed a finished thing that does not exist yet.
+;
+; It still has its own AppId, so it installs beside the PowerShell one rather
+; than taking over a working install while it is unfinished. The release that
+; genuinely replaces that one takes its AppId.
+#define AppName      "DiscWright"
 #define AppPublisher "DiscWright"
 #define AppUrl       "https://discwright.com"
 
@@ -47,9 +51,8 @@
 AppId={{14016040-B21A-4EA6-844E-FF7AE4E18176}
 AppName={#AppName}
 AppVersion={#AppVersion}
-; Not "{#AppName} {#AppVersion}", which reads "DiscWright 2.0 2.0.0" because
-; the name already carries the 2.0. Add/Remove Programs shows the version in a
-; column of its own anyway, from AppVersion above.
+; Add/Remove Programs shows the version in a column of its own, from
+; AppVersion above, so repeating it in the name says it twice.
 AppVerName={#AppName}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppUrl}
@@ -66,9 +69,11 @@ VersionInfoVersion={#AppVersion}
 ; simply the friendlier of two paths that both work.
 PrivilegesRequired=lowest
 
-; Its own folder, not v1's. Two products installed at once must not write into
-; one directory, or removing either takes pieces of the other with it.
-DefaultDirName={autopf}\DiscWright 2.0
+; Its own folder, not the PowerShell one's. Two installs at once must not
+; write into one directory, or removing either takes pieces of the other with
+; it. The folder is named for the rewrite rather than for a version, so it
+; does not have to be renamed on the way to 1.0.
+DefaultDirName={autopf}\DiscWright (rewrite)
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 ; Nothing here needs a decision, so the wizard opens on the one page that does:

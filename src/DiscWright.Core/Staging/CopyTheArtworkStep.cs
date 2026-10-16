@@ -59,7 +59,14 @@ public sealed class CopyTheArtworkStep(IImages images) : IBuildStep
 
         ct.ThrowIfCancellationRequested();
 
-        if (artwork.HasSomethingToPrint && context.Project.Options.ArtworkOnDisc)
+        // Always, with no option to turn it off.
+        //
+        // A cover and a label are small, and a disc that has them is a disc
+        // somebody can reprint the sleeve from in ten years without still
+        // having the folder they built it out of. Making that a setting meant
+        // the usual answer was no, because the usual answer to a setting
+        // nobody understands is to leave it alone.
+        if (artwork.HasSomethingToPrint)
         {
             PutThePrintableArtworkOn(context, artwork);
         }

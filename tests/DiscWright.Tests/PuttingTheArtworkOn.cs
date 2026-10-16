@@ -87,14 +87,18 @@ public class PuttingTheArtworkOn
     }
 
     [Fact]
-    public async Task Leaves_the_printable_folder_off_when_it_was_not_asked_for()
+    public async Task Puts_the_printable_folder_on_without_being_asked()
     {
         RecordingWriter wrote = new();
 
-        await Run(new RecordingImages(), wrote, new DiscArtwork(CoverPath: @"C:\art\sleeve.png"), artworkOnDisc: false);
+        await Run(new RecordingImages(), wrote, new DiscArtwork(CoverPath: @"C:\art\sleeve.png"));
 
-        Assert.Empty(wrote.Copies);
-        Assert.Empty(wrote.Texts);
+        // There is no asking any more. A cover and a label are small, and a
+        // disc carrying them is one somebody can reprint the sleeve from in
+        // ten years without still having the folder it was built from.
+        // Making it a setting meant the usual answer was no, because the
+        // usual answer to a setting nobody understands is to leave it alone.
+        Assert.NotEmpty(wrote.Copies);
     }
 
     [Fact]
@@ -110,16 +114,14 @@ public class PuttingTheArtworkOn
         IImages images,
         IStageWriter writer,
         DiscArtwork artwork,
-        bool menu = true,
-        bool artworkOnDisc = true) =>
+        bool menu = true) =>
         new CopyTheArtworkStep(images).Run(
-            Context(writer, artwork, menu, artworkOnDisc), CancellationToken.None);
+            Context(writer, artwork, menu), CancellationToken.None);
 
     private static BuildContext Context(
         IStageWriter writer,
         DiscArtwork? artwork,
-        bool menu = true,
-        bool artworkOnDisc = true)
+        bool menu = true)
     {
         PlannedDisc disc = new(1, [], 0);
 
@@ -127,7 +129,7 @@ public class PuttingTheArtworkOn
             new DiscProject(
                 "HOLLOW KNIGHT",
                 [],
-                new DiscOptions(Menu: menu, ArtworkOnDisc: artworkOnDisc),
+                new DiscOptions(Menu: menu),
                 artwork),
             new DiscLayout([disc], 1_000_000, 0),
             disc,

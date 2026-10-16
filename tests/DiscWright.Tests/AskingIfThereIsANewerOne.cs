@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using DiscWright.Core;
 using DiscWright.Staging;
 using DiscWright.ViewModels;
@@ -303,5 +304,24 @@ public class AskingIfThereIsANewerOne
         public void WriteBackground(string source, string destination, int width, int height, bool asIs)
         {
         }
+    }
+
+    [Fact]
+    public void This_build_says_a_version_of_its_own()
+    {
+        string props = File.ReadAllText(Repository.File("Directory.Build.props"));
+        Match said = Regex.Match(props, @"<Version>([^<]+)</Version>");
+
+        Assert.True(said.Success, "Directory.Build.props sets no version at all.");
+
+        string version = said.Groups[1].Value;
+
+        // With none set, .NET stamps 1.0.0 on everything, and a program that
+        // cannot say which version it is cannot tell whether a newer one
+        // exists. That is the failure worth guarding, not the number itself:
+        // the number changes every release and a test asserting it would be
+        // churn rather than a guard.
+        Assert.Matches(@"^\d+\.\d+\.\d+$", version);
+        Assert.NotEqual("1.0.0", version);
     }
 }

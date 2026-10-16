@@ -70,9 +70,10 @@ public static class AProjectFile
                     Menu: Yes(root, "Menu"),
                     Checksums: Yes(root, "Checksums"),
 
-                    // Version 14. Older files predate the option, and what they
-                    // described is a disc without it.
-                    ArtworkOnDisc: Yes(root, "ArtworkOnDisc"),
+                    // ArtworkOnDisc was read here until the option went. It
+                    // is still written, because v1 reads it and a file this
+                    // writes has to open there, but nothing here branches on
+                    // it any more: the artwork goes on the disc either way.
                     LegacyFileSystems: Yes(root, "LegacyFs"),
                     CutFiles: Yes(root, "CutFiles")),
 

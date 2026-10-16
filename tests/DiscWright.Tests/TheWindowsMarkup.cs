@@ -342,16 +342,16 @@ public class TheWindowsMarkup
     {
         // It does reach it, the moment somebody ticks "The cover art on the
         // disc as well", which writes cover and label into an ARTWORK folder.
-        // The sentence was true of the default and false of the option, and a
-        // window that says something false about its own behaviour is worse
-        // than one that says nothing.
+        // It was true of the default and false of the option when there was
+        // one. The option is gone and the artwork always goes on, so the
+        // sentence is now simply false, and a window that says something
+        // untrue about its own behaviour is worse than one that says nothing.
         Assert.DoesNotContain(
             "These never go on the disc. Choosing them now is not printing them.",
             Markup("WhatElseGoesOnIt.xaml").Descendants().Select(each => (string?)each.Attribute("Text")));
 
-        Assert.Contains(
-            "ArtworkOnDisc",
-            Window().Descendants(Xaml + "CheckBox").Select(IdOf));
+        // And there is no setting left to make it conditional on.
+        Assert.DoesNotContain("ArtworkOnDisc", Window().Descendants().Select(IdOf));
     }
 
     [Fact]

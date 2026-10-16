@@ -154,7 +154,10 @@ public static class TheProjectAsJson
             writing.WriteBoolean("LinuxInfo", false);
             writing.WriteBoolean("LegacyFs", project.Options.LegacyFileSystems);
             writing.WriteBoolean("Checksums", project.Options.Checksums);
-            writing.WriteBoolean("ArtworkOnDisc", project.Options.ArtworkOnDisc);
+            // Always true. The option is gone and the behaviour it named is
+            // now what always happens, but v1 still reads this field and a
+            // file saying false would open there as a disc without artwork.
+            writing.WriteBoolean("ArtworkOnDisc", true);
             writing.WriteBoolean("DiscSet", false);
             writing.WriteBoolean("CutFiles", project.Options.CutFiles);
             writing.WriteString("OutDir", outputFolder);

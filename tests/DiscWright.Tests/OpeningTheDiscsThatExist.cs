@@ -146,7 +146,10 @@ public class OpeningTheDiscsThatExist(Xunit.Abstractions.ITestOutputHelper says)
         // It is in the kit precisely because it predates four of the options,
         // and what it describes is a disc built without them.
         Assert.Equal(11, opened.Version);
-        Assert.False(opened.Options.ArtworkOnDisc);
+        // ArtworkOnDisc was read here until the option went. The artwork
+        // goes on the disc either way now, so an old project saying no is
+        // opened as the disc it would be built as today rather than as the
+        // disc it was.
         Assert.False(opened.Options.CutFiles);
         Assert.False(opened.WantsTheSetFile);
 

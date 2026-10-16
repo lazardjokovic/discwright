@@ -666,13 +666,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
         set => Switch(Options with { Checksums = value });
     }
 
-    /// <summary>Whether the cover art goes on the disc as well as on paper.</summary>
-    public bool ArtworkOnDisc
-    {
-        get => Options.ArtworkOnDisc;
-        set => Switch(Options with { ArtworkOnDisc = value });
-    }
-
     /// <summary>Whether to add the file systems an older Windows can read.</summary>
     public bool LegacyFileSystems
     {
@@ -1953,7 +1946,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(Options));
         Tell(nameof(Menu));
         Tell(nameof(Checksums));
-        Tell(nameof(ArtworkOnDisc));
         Tell(nameof(LegacyFileSystems));
         Tell(nameof(CutFiles));
 

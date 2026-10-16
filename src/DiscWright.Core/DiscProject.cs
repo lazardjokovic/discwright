@@ -62,6 +62,5 @@ public sealed record DiscProject(
 public sealed record DiscOptions(
     bool Menu = true,
     bool Checksums = true,
-    bool ArtworkOnDisc = true,
     bool LegacyFileSystems = false,
     bool CutFiles = false);

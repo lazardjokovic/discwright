@@ -37,7 +37,6 @@ public class TheProjectFileComesBack
             Options = new DiscOptions(
                 Menu: true,
                 Checksums: false,
-                ArtworkOnDisc: true,
                 LegacyFileSystems: true,
                 CutFiles: true)
         };
@@ -50,9 +49,19 @@ public class TheProjectFileComesBack
         // means something else.
         Assert.True(back.Menu);
         Assert.False(back.Checksums);
-        Assert.True(back.ArtworkOnDisc);
         Assert.True(back.LegacyFileSystems);
         Assert.True(back.CutFiles);
+    }
+
+    [Fact]
+    public void Still_tells_v1_the_artwork_goes_on_the_disc()
+    {
+        string json = TheProjectAsJson.Of(AProject(), "0.12.0", "CD", @"F:\out", DateTimeOffset.UnixEpoch);
+
+        // The option is gone here and the artwork always goes on, but v1
+        // still reads this field, and a file saying false would open there as
+        // a disc without artwork.
+        Assert.Contains("\"ArtworkOnDisc\": true", json, StringComparison.Ordinal);
     }
 
     [Fact]
