@@ -389,6 +389,33 @@ public class WalkingThroughASet
     private static Task<bool> NeverAsksToCarryOn(int number, int of) =>
         throw new InvalidOperationException("It should not have had to ask about carrying on.");
 
+    /// <summary>
+    /// One drive that says nothing for the first few asks after the disc is
+    /// swapped, the way a real one does while it is still reading what was
+    /// just pushed in.
+    /// </summary>
+    private sealed class ADriveSlowToReadTheNextDisc(int quietAfter, bool blankWhenRead) : IFindRecorders
+    {
+        internal int Asked { get; private set; }
+
+        internal void TheDiscWasJustSwapped() => _quiet = quietAfter;
+
+        private int _quiet;
+
+        public IReadOnlyList<Recorder> All()
+        {
+            Asked++;
+
+            if (_quiet > 0)
+            {
+                _quiet--;
+                return [new("id-D", "D:", "A Drive", 0, false, 0, [], "the device is not ready")];
+            }
+
+            return [new("id-D", "D:", "A Drive", 3, blankWhenRead, blankWhenRead ? 359_847 : 0, [750])];
+        }
+    }
+
     private static async Task<MakeADisc> ASetOf(
         int discs,
         IBurnDiscs burner,
@@ -578,4 +605,58 @@ public class WalkingThroughASet
         {
         }
     }
+
+    // ----------------------------------- a drive still reading the next disc
+
+    [Fact]
+    public async Task Waits_for_the_drive_to_read_the_disc_that_was_just_put_in()
+    {
+        ADriveSlowToReadTheNextDisc slow = new(quietAfter: 3, blankWhenRead: true);
+        ABurnerThatRemembers burner = new();
+        MakeADisc window = await ASetOf(2, burner, drives: slow);
+
+        await window.BurnTheSet(
+            [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"],
+            OnlyOneDrive,
+            NeverErases,
+            Closes,
+            (number, of, drive) => { slow.TheDiscWasJustSwapped(); return Task.FromResult(true); },
+            NeverAsksToCarryOn);
+
+        // The second disc is asked for the moment somebody says they have put
+        // it in, and a drive takes seconds to read it. Taking the first
+        // silence as an answer ends the set one disc short.
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+        Assert.True(went.Whole, $"the set stopped: {window.ItWentWrong?.Headline}");
+        Assert.Equal([@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"], burner.Wrote);
+    }
+
+    [Fact]
+    public async Task Still_offers_to_erase_the_next_disc_when_the_drive_was_slow_to_read_it()
+    {
+        ADriveSlowToReadTheNextDisc slow = new(quietAfter: 3, blankWhenRead: false);
+        MakeADisc window = await ASetOf(2, new ABurnerThatRemembers(), drives: slow);
+
+        bool offered = false;
+
+        await window.BurnTheSet(
+            [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"],
+            OnlyOneDrive,
+            could => { offered = true; return Task.FromResult<Recorder?>(null); },
+            Closes,
+            (number, of, drive) => { slow.TheDiscWasJustSwapped(); return Task.FromResult(true); },
+            NeverAsksToCarryOn);
+
+        // This is the one Lazar hit: a used disc put in for disc 2 on purpose.
+        // A drive that has not answered yet has no media type, so
+        // ErasingWouldHelp is false, the offer to erase never appears, and the
+        // answer is "the drive would not say what is in it" with nothing to do
+        // about it.
+        Assert.True(offered, "it never offered to erase the disc");
+        Assert.DoesNotContain(
+            "would not say",
+            window.ItWentWrong?.Headline ?? string.Empty,
+            StringComparison.Ordinal);
+    }
+
 }

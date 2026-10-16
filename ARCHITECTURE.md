@@ -762,6 +762,14 @@ The menu window wears the disc's own icon where one was chosen, and **DiscWright
 
 That wanted one new thing on `IStageWriter`: a way to write a file that is not text. `Copy` needs a file to copy from and there is not one, because this icon lives inside the program.
 
+#### A drive that has not finished thinking is not a drive that refused
+
+Asked the moment a tray shuts, a writer can take **ten seconds** to say what is in it, measured on the ASUS here. Until then, IMAPI throws rather than answering, and `WindowsRecorders` turns that into `Recorder.WhyNot`.
+
+Taking that as an answer is worse than it sounds, because **`ErasingWouldHelp` is false whenever `WhyNot` is set**. So a used disc put in for the next disc of a set never gets as far as the offer to erase it: the erasable list comes back empty, the question is skipped, and the answer is "the drive would not say what is in it" with nothing to do about it.
+
+Both ways in now give the drive fifteen seconds to wake up before its silence counts, and the one that is waiting on a named drive waits only on that one.
+
 #### A tree, because a game is not one thing
 
 A game is an installer, its parts, whatever folders came with it, and the patches taken on beside it. Shown as one row, the only way to leave any of that off was to not add the game at all.

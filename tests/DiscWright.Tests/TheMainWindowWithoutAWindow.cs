@@ -1166,6 +1166,25 @@ public class TheMainWindowWithoutAWindow
             _gone ? [] : [new("id-D", "D:", "A Drive", _mediaType, _blank, _freeSectors, [750])];
     }
 
+    /// <summary>
+    /// A drive that says nothing the first few times it is asked, the way one
+    /// does while it is still reading a disc somebody just pushed in.
+    /// </summary>
+    private sealed class ADriveStillThinking(int quietTimes, int mediaType, bool blank, long freeSectors)
+        : IFindRecorders
+    {
+        internal int Asked { get; private set; }
+
+        public IReadOnlyList<Recorder> All()
+        {
+            Asked++;
+
+            return Asked <= quietTimes
+                ? [new("id-D", "D:", "A Drive", 0, false, 0, [], "the device is not ready")]
+                : [new("id-D", "D:", "A Drive", mediaType, blank, freeSectors, [750])];
+        }
+    }
+
     /// <summary>Two writers, which is the only time there is a question.</summary>
     private sealed class TwoDrives : IFindRecorders
     {
@@ -1829,4 +1848,60 @@ public class TheMainWindowWithoutAWindow
         Assert.Empty(window.Games);
         Assert.Empty(window.WhatGoesOnIt);
     }
+
+    // ------------------------------------------- a drive that is still reading
+
+    [Fact]
+    public async Task Waits_for_a_drive_that_has_not_finished_reading_the_disc()
+    {
+        ADriveStillThinking slow = new(quietTimes: 2, mediaType: 3, blank: true, freeSectors: 359_847);
+        BuilderThatWorks builder = new();
+        ABurnerThatWorks burner = new();
+        MakeADisc window = New(builder: builder, drives: slow, burner: burner);
+
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("One", 500));
+        await window.MakeIt();
+
+        await window.BurnIt(
+            @"C:\out\ONE.iso",
+            _ => Task.FromResult<Recorder?>(null),
+            _ => Task.FromResult<Recorder?>(null),
+            _ => Task.FromResult(true));
+
+        // Asked the moment a tray shuts, a drive can take ten seconds to say
+        // what is in it. Taking the first silence as an answer turns a disc
+        // that is merely still spinning up into a refusal.
+        Assert.True(slow.Asked > 2, $"it gave up after {slow.Asked} ask(s)");
+        Assert.Null(window.ItWentWrong);
+        Assert.Equal("D:", burner.WroteTo);
+    }
+
+    [Fact]
+    public async Task Still_offers_to_erase_a_used_disc_that_was_slow_to_be_read()
+    {
+        ADriveStillThinking slow = new(quietTimes: 2, mediaType: 3, blank: false, freeSectors: 0);
+        MakeADisc window = New(drives: slow, builder: new BuilderThatWorks());
+
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("One", 500));
+        await window.MakeIt();
+
+        bool asked = false;
+
+        await window.BurnIt(
+            @"C:\out\ONE.iso",
+            _ => Task.FromResult<Recorder?>(null),
+            _ => { asked = true; return Task.FromResult<Recorder?>(null); },
+            _ => Task.FromResult(true));
+
+        // This is the whole point of waiting. A drive that has not answered
+        // yet has no media type, so ErasingWouldHelp is false, so the offer to
+        // erase never appears and somebody who deliberately put a used disc in
+        // is told the drive would not say what is in it, with nothing to do
+        // about it. Found exactly that way.
+        Assert.True(asked, "it never offered to erase the disc");
+        Assert.DoesNotContain("would not say", window.ItWentWrong?.Headline ?? string.Empty, StringComparison.Ordinal);
+    }
+
 }

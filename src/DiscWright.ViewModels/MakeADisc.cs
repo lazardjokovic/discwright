@@ -1330,7 +1330,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
         CancellationToken ct)
     {
-        IReadOnlyList<Recorder> all = _machine.Drives.All();
+        IReadOnlyList<Recorder> all = await WaitForTheDriveToSaySomething(
+            _machine.Drives.All(), drive, ct);
 
         for (int attempt = 0; attempt < 2; attempt++)
         {
@@ -1402,13 +1403,75 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// <summary>
     /// Which drive, asking only where there is something to ask.
     /// </summary>
+    /// <summary>
+    /// How long to let a drive think before taking its silence as an answer.
+    /// </summary>
+    /// <remarks>
+    /// A drive asked the moment a tray shuts can take ten seconds to say what
+    /// is in it, measured on the ASUS writer here. Fifteen is that with room
+    /// to spare, and it only ever costs anything when something is wrong.
+    /// </remarks>
+    private static readonly TimeSpan LongEnoughForADriveToWakeUp = TimeSpan.FromSeconds(15);
+
+    /// <summary>
+    /// Reads the drives again until the one being waited on has something to
+    /// say, or until it has had long enough.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A disc that has just been pushed in is still being read, and asking
+    /// then throws rather than answering, which becomes
+    /// <see cref="Recorder.WhyNot"/>.
+    /// </para>
+    /// <para>
+    /// That is not a refusal, it is a drive that has not finished thinking,
+    /// and treating it as one is worse than it sounds: WhyNot also makes
+    /// <see cref="Recorder.ErasingWouldHelp"/> false, so the offer to erase
+    /// the disc never appears and somebody who put a used disc in is told the
+    /// drive would not say what is in it, with nothing to do about it.
+    ///
+    /// Found by Lazar putting a used disc in for the second disc of a set on
+    /// purpose, and getting a dead end instead of the question.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<Recorder>> WaitForTheDriveToSaySomething(
+        IReadOnlyList<Recorder> all, string? onlyThisOne, CancellationToken ct)
+    {
+        bool StillThinking(IReadOnlyList<Recorder> drives) => drives.Any(each =>
+            each.WhyNot is not null
+            && (onlyThisOne is null || string.Equals(each.Drive, onlyThisOne, StringComparison.OrdinalIgnoreCase)));
+
+        if (!StillThinking(all))
+        {
+            return all;
+        }
+
+        Say("waiting for the drive", 0);
+
+        for (DateTimeOffset until = DateTimeOffset.UtcNow + LongEnoughForADriveToWakeUp;
+             DateTimeOffset.UtcNow < until;)
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1), ct);
+
+            all = _machine.Drives.All();
+
+            if (!StillThinking(all))
+            {
+                return all;
+            }
+        }
+
+        return all;
+    }
+
     private async Task<Recorder?> Settle(
         long bytes,
         Func<IReadOnlyList<Recorder>, Task<Recorder?>> chooseADrive,
         Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
         CancellationToken ct)
     {
-        IReadOnlyList<Recorder> all = _machine.Drives.All();
+        IReadOnlyList<Recorder> all = await WaitForTheDriveToSaySomething(
+            _machine.Drives.All(), null, ct);
 
         // Twice at most: once as it stands, and once more after an erase,
         // because erasing changes the answer.
