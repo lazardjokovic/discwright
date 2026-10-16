@@ -770,6 +770,16 @@ That wanted one new thing on `IStageWriter`: a way to write a file that is not t
 
 The package comes out **unsigned on purpose**. The Store signs what it accepts, and installing one locally needs a certificate of your own trusted on the machine, which is a different job from building it.
 
+#### The background is drawn, not merely carried
+
+For the whole of the rewrite the background was resized, written to `AUTORUN\background.png` on every disc, and **never referred to by the page**. `CopyTheArtworkStep` even carries a comment about a disc "carrying a file nothing ever opens", about a different case.
+
+The rule goes on `#stage`, which is the whole 760 by 480 window with the panel drawn over it, and it is written **only when there is a picture**: a `background-image` that does not resolve leaves the panel floating on whatever the browser decides, so the disc looks broken rather than plain.
+
+A CSS url resolves against the page, unlike [[an HTA's icon attribute]], so a bare file name beside `menu.hta` is enough.
+
+**The test that let this ship checked the file arrived.** That is not the same as the page showing it, and the difference is the whole bug. There is now a test that the page names the picture, and the rendering was confirmed by photographing a preview the app generated.
+
 #### A preview does not pretend it is a disc
 
 A preview stages the menu, the artwork and the music, and **nothing else**. No installer, no manual, no extras. So every button on it points at a file that is not there, and pressing one produced whatever Windows says about a missing path, which reads as the disc being broken rather than as the preview doing its job.

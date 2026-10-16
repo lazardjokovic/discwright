@@ -18,6 +18,46 @@ namespace DiscWright.Tests;
 public class SeeingTheMenuFirst
 {
     [Fact]
+    public void Draws_the_background_it_carries_rather_than_only_carrying_it()
+    {
+        RecordingWriter wrote = new();
+
+        DiscProject withArt = AProject() with
+        {
+            Artwork = new DiscArtwork(BackgroundPath: @"C:\art\bg.png")
+        };
+
+        new APreviewOfTheMenu(wrote, new PicturesThatRead())
+            .Write(withArt, Media.Dvd5, _ => 1000, @"C:\temp\look");
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // The background was copied onto every disc and the page never
+        // referred to it, so a picture somebody chose was written, carried
+        // and never once shown. The file arriving is not the thing worth
+        // testing; the page naming it is.
+        Assert.Contains("url(\"background.png\")", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Names_no_picture_when_there_is_none_to_name()
+    {
+        RecordingWriter wrote = new();
+
+        new APreviewOfTheMenu(wrote, new PicturesThatRead())
+            .Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // A background-image that does not resolve leaves the panel floating
+        // on whatever the browser decides, and the disc looks broken rather
+        // than plain.
+        Assert.DoesNotContain("background-image", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_preview_tells_the_script_it_is_one_before_drawing_anything()
     {
         RecordingWriter previewed = new();

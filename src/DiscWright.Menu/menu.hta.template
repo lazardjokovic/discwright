@@ -441,7 +441,8 @@ body {
     overflow: hidden;
     cursor: default;
 }
-#stage { position: absolute; left: 0; top: 0; width: 760px; height: 480px; }
+#stage { position: absolute; left: 0; top: 0; width: 760px; height: 480px;
+         %%BACKDROP%% }
 #panel { position: absolute; right: 0; top: 0; width: 240px; height: 480px;
          background: #060E11; padding: 28px 22px; }
 h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5px;

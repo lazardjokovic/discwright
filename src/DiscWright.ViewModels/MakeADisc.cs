@@ -393,6 +393,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Drives = drives;
         Tell(nameof(Drives));
 
+        // Whether there is anything to erase changes with them, and a button
+        // nobody tells about is judged once at startup, when there are no
+        // drives yet, and stays dead for the rest of the run.
+        Tell(nameof(CanErase));
+
         // A drive that has been unplugged is not a choice any more. The slim
         // one here lives on a USB cable.
         if (_theDrive is not null
@@ -1995,6 +2000,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
     private void Started()
     {
+        Tell(nameof(CanErase));
         LookForImages();
 
         Tell(nameof(IsWorking));

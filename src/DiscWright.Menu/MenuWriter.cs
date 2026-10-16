@@ -102,6 +102,18 @@ public static class MenuWriter
         return Template
             .Replace("%%TITLE%%", Markup(facts.GameName), StringComparison.Ordinal)
             .Replace("%%APPNAME%%", Markup(facts.ApplicationName), StringComparison.Ordinal)
+            // The picture the menu is drawn on, or nothing at all.
+            //
+            // Written as a rule rather than always present and sometimes
+            // pointing at a missing file, because a background-image that
+            // does not resolve leaves the panel floating on whatever the
+            // browser decides, and the disc looks broken rather than plain.
+            .Replace(
+                "%%BACKDROP%%",
+                facts.BackdropFile is string picture
+                    ? "background-image: url(\"" + picture + "\"); background-repeat: no-repeat;"
+                    : string.Empty,
+                StringComparison.Ordinal)
             .Replace("%%SINGLE%%", facts.OnlyOneAtATime ? "yes" : "no", StringComparison.Ordinal)
             .Replace("%%ICON%%", Markup(facts.Icon), StringComparison.Ordinal)
             .Replace("%%PRIMARY%%", Markup(facts.PrimaryButton), StringComparison.Ordinal)
@@ -185,6 +197,14 @@ public static class MenuWriter
 /// when one was chosen, and DiscWright's otherwise, because the alternative is
 /// the blank default and a menu that looks like nobody finished it.
 /// </param>
+/// <param name="BackdropFile">
+/// The picture the menu is drawn on, named relative to the page, or nothing
+/// when there is none. It sits beside menu.hta, so it is a bare file name.
+///
+/// Until this existed the background was copied onto every disc and the page
+/// never referred to it, so a picture somebody chose was written, carried and
+/// never once shown.
+/// </param>
 /// <param name="IconOnTheDisc">
 /// The same icon, written from the root of the disc with forward slashes, for
 /// the script to turn into a path. An HTA's icon attribute does not resolve a
@@ -202,6 +222,7 @@ public sealed record MenuFacts(
     IReadOnlyList<string> Buttons,
     bool OnlyOneAtATime,
     IReadOnlyList<MenuGame>? Games = null,
+    string? BackdropFile = null,
     string Icon = "menu.ico",
     string IconOnTheDisc = "AUTORUN/menu.ico",
     string? Manual = null,

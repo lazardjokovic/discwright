@@ -1956,6 +1956,30 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task Tells_the_window_when_erasing_becomes_possible()
+    {
+        ADriveHolding drive = new(3, true, 359_847);
+        MakeADisc window = New(drives: drive);
+        await window.LookAtTheDrives();
+
+        Assert.False(window.CanErase);
+
+        List<string> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        drive.NowHolds(3, false, 0);
+        await window.LookAtTheDrives();
+
+        // The property alone was already right. Nothing announced it, so the
+        // button was judged once at startup with no drives yet and stayed
+        // dead for the rest of the run, with a disc sitting in the drive that
+        // it could have erased. Reading the property in a test works without
+        // any notification at all, which is why that test passed.
+        Assert.True(window.CanErase);
+        Assert.Contains(nameof(MakeADisc.CanErase), told);
+    }
+
+    [Fact]
     public async Task Erases_the_disc_that_was_chosen_and_nothing_else()
     {
         AnEraserThatWorks eraser = new();

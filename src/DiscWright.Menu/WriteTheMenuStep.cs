@@ -27,6 +27,11 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
     private const string Folder = "AUTORUN";
 
     /// <summary>
+    /// What the background is called, beside the page that draws it.
+    /// </summary>
+    private const string TheBackdrop = "background.png";
+
+    /// <summary>
     /// The one file at the top of the disc that starts the menu by hand.
     /// </summary>
     /// <remarks>
@@ -231,6 +236,10 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
 
             // The disc's own icon sits at the root and the menu sits in
             // AUTORUN, so it is one folder up from here.
+            // The same condition the artwork step copies it under, so the
+            // page never names a file that was not written.
+            context.Project.Artwork?.BackgroundPath is not null ? TheBackdrop : null,
+
             context.Project.Artwork?.IconPath is not null
                 ? "../" + WriteTheAutorunStep.IconFileName
                 : OurOwnIcon,
