@@ -11,12 +11,6 @@ namespace DiscWright.Core.Staging;
 /// </remarks>
 public sealed class WriteTheAutorunStep : IBuildStep
 {
-    /// <summary>
-    /// The icon file at the disc's root. A fixed name, so autorun.inf can name
-    /// it without knowing where the picture came from.
-    /// </summary>
-    public const string IconFileName = "disc.ico";
-
     public string Says => "naming the disc";
 
     /// <summary>
@@ -29,13 +23,13 @@ public sealed class WriteTheAutorunStep : IBuildStep
     {
         ct.ThrowIfCancellationRequested();
 
-        string label = context.IsPartOfASet
-            ? $"{context.Project.Label} {context.Disc.Number}"
-            : context.Project.Label;
-
+        // Both from the context, so the name in icon= and the name of the
+        // file that gets written cannot drift apart. They used to be a const
+        // here and a const read from here, which was the same thing said
+        // twice and worked only because neither ever changed.
         context.Writer.WriteAutorunText(
             context.On("autorun.inf"),
-            AutorunFile.For(label, IconFileName, context.Project.Options.Menu));
+            AutorunFile.For(context.WhatThisDiscIsCalled, context.IconFileName, context.Project.Options.Menu));
 
         return Task.CompletedTask;
     }

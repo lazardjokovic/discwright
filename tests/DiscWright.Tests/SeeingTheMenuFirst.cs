@@ -149,7 +149,7 @@ public class SeeingTheMenuFirst
         // The icon and the background go through the pictures port rather than
         // the writer, because turning a photograph into an .ico is the
         // operating system's job and not this program's.
-        Assert.Contains(pictures.Icons, path => path.EndsWith("disc.ico", StringComparison.Ordinal));
+        Assert.Contains(pictures.Icons, path => path.EndsWith("HOLLOWKNIGHT.ico", StringComparison.Ordinal));
         Assert.Contains(
             pictures.Backgrounds, path => path.EndsWith(@"AUTORUN\background.png", StringComparison.Ordinal));
 

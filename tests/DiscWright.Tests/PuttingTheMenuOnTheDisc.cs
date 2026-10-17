@@ -28,12 +28,23 @@ public class PuttingTheMenuOnTheDisc
         string page = wrote.Texts.Single(
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
-        // An HTA is IE5 in quirks mode unless it is told otherwise, and IE5
-        // has no rgba: every see-through colour below would be dropped and
-        // the menu would come out looking exactly as it always did. Measured
-        // on the real thing by rendering it and asking: documentMode 5 and
-        // BackCompat without this line, 11 and CSS1Compat with it.
-        Assert.Contains(@"http-equiv=""X-UA-Compatible"" content=""IE=edge""", page, StringComparison.Ordinal);
+        // An HTA is IE5 in quirks mode unless it is told otherwise, and
+        // IE5 has no rgba: every see-through colour below would be
+        // dropped and the menu would come out looking exactly as it
+        // always did.
+        //
+        // IE=9 RATHER THAN IE=edge, AND THE DIFFERENCE IS THE ICON. From
+        // document mode 10 upwards the HTA host stops applying the icon=
+        // attribute on the hta:application tag, so the menu wears
+        // Windows' blank default and the disc's own picture never
+        // appears. Mode 9 applies it and still has rgba, and it is the
+        // only mode with both. Found by rendering a page in each mode in
+        // turn and photographing its title bar; the template says which.
+        Assert.Contains(@"http-equiv=""X-UA-Compatible"" content=""IE=9""", page, StringComparison.Ordinal);
+
+        // The attribute, not the word: the template explains the choice
+        // in a comment that has to be allowed to name what it rejected.
+        Assert.DoesNotContain(@"content=""IE=edge""", page, StringComparison.Ordinal);
 
         // Standards mode counts padding outside the width, so without this
         // the panel would grow from 240 to 284 and push itself off the edge.
@@ -84,10 +95,56 @@ public class PuttingTheMenuOnTheDisc
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
         // At the root of the disc, and the menu is in AUTORUN, so one up.
-        Assert.Contains(@"icon=""../disc.ico""", page, StringComparison.Ordinal);
+        // That it can reach one up was checked by rendering such a page:
+        // v1 says an HTA cannot and writes a second copy beside the menu,
+        // and on this engine it can.
+        //
+        // Named after the disc rather than disc.ico, because Explorer and
+        // the taskbar cache an icon by its path, so one fixed name means
+        // the second disc into a drive letter wears the first one's.
+        Assert.Contains(@"icon=""../HOLLOWKNIGHT.ico""", page, StringComparison.Ordinal);
+
+        // And the same file spelled from the root of the disc, which the
+        // script turns into an absolute path at run time.
+        Assert.Contains(@"icon: ""HOLLOWKNIGHT.ico""", page, StringComparison.Ordinal);
 
         // And ours is not carried for nothing.
         Assert.DoesNotContain(wrote.Binaries, path => path.EndsWith("menu.ico", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Gives_each_disc_of_a_set_a_menu_wearing_its_own_icon()
+    {
+        // Two discs of one set go into the same drive letter one after the
+        // other, and the taskbar caches an icon by its path exactly as
+        // Explorer does. One shared name and the second disc's menu wears the
+        // first disc's picture.
+        string one = PageFor(disc: 1, ofDiscs: 2);
+        string two = PageFor(disc: 2, ofDiscs: 2);
+
+        Assert.Contains(@"icon=""../HOLLOWKNIGHT1.ico""", one, StringComparison.Ordinal);
+        Assert.Contains(@"icon=""../HOLLOWKNIGHT2.ico""", two, StringComparison.Ordinal);
+    }
+
+    private static string PageFor(int disc, int ofDiscs)
+    {
+        RecordingWriter wrote = new();
+        GameFolder found = new(@"C:\games\x", GameKind.GogInstaller, "Hollow Knight", "Hollow Knight", null, [], [], null);
+        PlannedDisc[] discs = [.. Enumerable.Range(1, ofDiscs).Select(number => new PlannedDisc(number, [], 0))];
+
+        BuildContext context = new(
+            new DiscProject("HOLLOW KNIGHT", [found], new DiscOptions())
+            {
+                Artwork = new DiscArtwork(IconPath: @"C:\pictures\cover.png")
+            },
+            new DiscLayout(discs, 1_000_000, 1),
+            discs[disc - 1],
+            @"C:\stage",
+            wrote);
+
+        new WriteTheMenuStep().Run(context, CancellationToken.None).GetAwaiter().GetResult();
+
+        return wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
     }
 
     [Fact]

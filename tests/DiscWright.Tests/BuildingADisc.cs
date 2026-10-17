@@ -150,6 +150,49 @@ public sealed class BuildingADisc : IDisposable
     }
 
     [Fact]
+    public async Task Names_an_icon_in_autorun_inf_that_is_really_on_the_disc()
+    {
+        // The name in icon= and the name of the file used to be the same
+        // constant said twice, so they could not disagree. They are worked
+        // out now, by two different steps, and a disc whose autorun.inf
+        // points at a file that is not there shows nothing and says nothing.
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+
+        BuiltDisc disc = Assert.Single((await Build(Project(game) with
+        {
+            Artwork = new DiscArtwork(IconPath: APicture("icon", 256, 256))
+        })).Discs);
+
+        Assert.Contains(
+            "icon=HOLLOWKNIGHT.ico", File.ReadAllText(On(disc, "autorun.inf")), StringComparison.Ordinal);
+
+        Assert.True(File.Exists(On(disc, "HOLLOWKNIGHT.ico")));
+    }
+
+    [Fact]
+    public async Task Gives_each_disc_of_a_set_an_icon_of_its_own()
+    {
+        // Two discs of one set go into the same drive letter one after the
+        // other, and Explorer caches an icon by its path. Share the name and
+        // the second disc wears the first disc's picture until somebody
+        // clears a cache they have never heard of.
+        GameFolder game = AGogDownload("Big Game", 4000, parts: 3);
+
+        BuiltDiscs built = await Build(
+            Project(game) with { Artwork = new DiscArtwork(IconPath: APicture("icon", 256, 256)) },
+            capacity: Overhead + 6000);
+
+        Assert.True(File.Exists(On(built.Discs[0], "HOLLOWKNIGHT1.ico")));
+        Assert.True(File.Exists(On(built.Discs[1], "HOLLOWKNIGHT2.ico")));
+
+        Assert.Contains(
+            "icon=HOLLOWKNIGHT1.ico", File.ReadAllText(On(built.Discs[0], "autorun.inf")), StringComparison.Ordinal);
+
+        Assert.Contains(
+            "icon=HOLLOWKNIGHT2.ico", File.ReadAllText(On(built.Discs[1], "autorun.inf")), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Gives_every_disc_of_a_set_the_same_file_describing_the_whole_set()
     {
         GameFolder game = AGogDownload("Big Game", 4000, parts: 3);
@@ -407,7 +450,12 @@ public sealed class BuildingADisc : IDisposable
 
         // The icon and the background are not that. They are what the disc
         // wears and what the menu is drawn on, so they go on regardless.
-        Assert.True(File.Exists(On(disc, "disc.ico")));
+        //
+        // Named after the disc, and written twice: once at the root for
+        // autorun.inf and once beside the menu, which cannot reach out of
+        // its own folder for it.
+        Assert.True(File.Exists(On(disc, "HOLLOWKNIGHT.ico")));
+        Assert.False(File.Exists(On(disc, "disc.ico")));
         Assert.True(File.Exists(On(disc, @"AUTORUN\background.png")));
     }
 
@@ -420,7 +468,7 @@ public sealed class BuildingADisc : IDisposable
 
         BuiltDisc disc = Assert.Single((await Build(Project(game) with { Artwork = artwork })).Discs);
 
-        Assert.True(File.Exists(On(disc, "disc.ico")));
+        Assert.True(File.Exists(On(disc, "HOLLOWKNIGHT.ico")));
         Assert.True(File.Exists(On(disc, @"AUTORUN\background.png")));
         Assert.True(File.Exists(On(disc, @"ARTWORK\cover.png")));
         Assert.True(File.Exists(On(disc, @"ARTWORK\READ ME.txt")));

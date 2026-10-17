@@ -38,6 +38,35 @@ public sealed record BuildContext(
     /// <summary>Whether this disc is one of several.</summary>
     public bool IsPartOfASet => Layout.Discs.Count > 1;
 
+    /// <summary>
+    /// What this one disc is called, which is the project's label with the
+    /// disc's own number after it when there is more than one.
+    /// </summary>
+    /// <remarks>
+    /// Here rather than in the step that writes autorun.inf, because the icon
+    /// file is named after it and the two must not be able to disagree about
+    /// which disc this is.
+    ///
+    /// Not called DiscLabel, which is already a class in this namespace's
+    /// parent: a property of that name shadows the type inside this record,
+    /// and the first person to want DiscLabel.WhatWindowsWillMakeOfIt in here
+    /// would get an error they have to read twice.
+    /// </remarks>
+    public string WhatThisDiscIsCalled => IsPartOfASet
+        ? Project.Label + " " + Disc.Number.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        : Project.Label;
+
+    /// <summary>
+    /// What this disc's icon file is called, at the root and beside the menu.
+    /// </summary>
+    /// <remarks>
+    /// Named after the disc rather than a fixed <c>disc.ico</c>, because
+    /// Explorer and the taskbar cache icons by path and a shared name means a
+    /// new disc in an old drive letter wears the old disc's icon. See
+    /// <see cref="DiscIconName"/>, which is where that is explained properly.
+    /// </remarks>
+    public string IconFileName => DiscIconName.For(Project.Label, Disc.Number, Layout.Discs.Count);
+
     /// <summary>Where a file on this disc goes, as a full path.</summary>
     public string On(string relativePath) =>
         System.IO.Path.Combine(StageFolder, relativePath);

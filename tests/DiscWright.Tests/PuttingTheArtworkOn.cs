@@ -12,7 +12,27 @@ public class PuttingTheArtworkOn
 
         await Run(drew, new RecordingWriter(), new DiscArtwork(IconPath: @"C:\art\icon.png"));
 
-        Assert.Equal((@"C:\art\icon.png", @"C:\stage\disc.ico"), Assert.Single(drew.Icons));
+        // Named after the disc, not "disc.ico". Explorer caches an icon by
+        // its path, so one fixed name means the second disc into a drive
+        // letter wears the first one's picture.
+        Assert.Equal((@"C:\art\icon.png", @"C:\stage\HOLLOWKNIGHT.ico"), Assert.Single(drew.Icons));
+    }
+
+    [Fact]
+    public async Task Writes_the_icon_once_and_leaves_no_second_copy()
+    {
+        RecordingImages drew = new();
+        RecordingWriter wrote = new();
+
+        await Run(drew, wrote, new DiscArtwork(IconPath: @"C:\art\icon.png"));
+
+        // v1 writes a second copy beside the menu, on the grounds that an
+        // HTA will not resolve an icon path climbing out of the page's own
+        // folder. That was checked by rendering such a page and it is not
+        // true here: it wears it. A second copy would be another third of
+        // a megabyte on every disc for nothing.
+        Assert.Single(drew.Icons);
+        Assert.Empty(wrote.Copies);
     }
 
     [Fact]

@@ -86,6 +86,16 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
     }
 
     /// <summary>
+    /// What the menu wears, named relative to the page: the disc's own icon
+    /// at the root when it has one, and ours beside the page when it does
+    /// not.
+    /// </summary>
+    private static string TheIconFor(BuildContext context) =>
+        context.Project.Artwork?.IconPath is not null
+            ? "../" + context.IconFileName
+            : OurOwnIcon;
+
+    /// <summary>
     /// The buttons this disc should have, which is only ever the ones it can
     /// honour.
     /// </summary>
@@ -234,18 +244,19 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
 
             GamesOn(context),
 
-            // The disc's own icon sits at the root and the menu sits in
-            // AUTORUN, so it is one folder up from here.
             // The same condition the artwork step copies it under, so the
             // page never names a file that was not written.
             context.Project.Artwork?.BackgroundPath is not null ? TheBackdrop : null,
 
-            context.Project.Artwork?.IconPath is not null
-                ? "../" + WriteTheAutorunStep.IconFileName
-                : OurOwnIcon,
+            // The disc's own icon sits at the root and the menu sits in
+            // AUTORUN, so it is one folder up from here. Checked by
+            // rendering a page that asks for one that way: it wears it.
+            TheIconFor(context),
 
+            // The same file again, spelled from the root of the disc with
+            // forward slashes, for the script to turn into an absolute path.
             context.Project.Artwork?.IconPath is not null
-                ? WriteTheAutorunStep.IconFileName
+                ? context.IconFileName
                 : Folder + "/" + OurOwnIcon,
 
             TheManualOn(context),

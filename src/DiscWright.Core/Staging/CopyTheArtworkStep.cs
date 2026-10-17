@@ -23,6 +23,16 @@ public sealed class CopyTheArtworkStep(IImages images) : IBuildStep
     /// </remarks>
     public const string ArtworkFolder = "ARTWORK";
 
+    /// <summary>Where the menu lives on a disc, and so where its icon lives too.</summary>
+    private const string MenuFolder = "AUTORUN";
+
+    /// <summary>
+    /// What separates a folder from a file on the disc. Written as a code
+    /// rather than typed, because a lone backslash is the one character that
+    /// does not survive being generated.
+    /// </summary>
+    private const char Separator = (char)92;
+
     /// <summary>The menu's own size, which is what the background is made to fit.</summary>
     private const int MenuWidth = 760;
 
@@ -40,18 +50,26 @@ public sealed class CopyTheArtworkStep(IImages images) : IBuildStep
 
         if (artwork.IconPath is not null)
         {
-            images.WriteIcon(artwork.IconPath, context.On(WriteTheAutorunStep.IconFileName));
+            // Once, at the root, and the menu in AUTORUN points up at it.
+            //
+            // v1 writes a second copy beside the menu as well, on the grounds
+            // that an HTA will not resolve an icon path that climbs out of
+            // the page's own folder. That was checked here and it is not
+            // true: a page in AUTORUN asking for "../" and the icon's name
+            // wears it correctly. A second copy would be another third of a
+            // megabyte on every disc for nothing.
+            images.WriteIcon(artwork.IconPath, context.On(context.IconFileName));
         }
 
         // Only when there is a menu to put it behind. A disc with no menu that
         // carried a background would be carrying a file nothing ever opens.
         if (artwork.BackgroundPath is not null && context.Project.Options.Menu)
         {
-            context.Writer.MakeFolder(context.On("AUTORUN"));
+            context.Writer.MakeFolder(context.On(MenuFolder));
 
             images.WriteBackground(
                 artwork.BackgroundPath,
-                context.On(@"AUTORUN\background.png"),
+                context.On(MenuFolder + Separator + "background.png"),
                 MenuWidth,
                 MenuHeight,
                 artwork.BackgroundAsIs);

@@ -74,7 +74,14 @@ public static class ReservedDiscNames
         return slash < 0 ? path : path[..slash];
     }
 
-    public static bool Claims(string name) =>
+    /// <param name="discIcon">
+    /// The label the disc will carry, when the caller knows it. The disc's
+    /// icon is named after it, so a loose extra of that name would be written
+    /// over by the icon and nobody would be told. Left out, only the fixed
+    /// names above are refused.
+    /// </param>
+    public static bool Claims(string name, string? discIcon = null) =>
         name.StartsWith("setup_", StringComparison.OrdinalIgnoreCase)
-        || All.Any(reserved => string.Equals(reserved, name, StringComparison.OrdinalIgnoreCase));
+        || All.Any(reserved => string.Equals(reserved, name, StringComparison.OrdinalIgnoreCase))
+        || (discIcon is not null && DiscIconName.Claims(name, discIcon));
 }

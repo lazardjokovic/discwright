@@ -36,7 +36,7 @@ public static class WhatWouldBeMade
             string name = System.IO.Path.GetFileName(item.TrimEnd(
                 System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
 
-            if (ReservedDiscNames.Claims(name))
+            if (ReservedDiscNames.Claims(name, project.Label))
             {
                 return Refusals.ThatNameBelongsToTheDisc(name);
             }
