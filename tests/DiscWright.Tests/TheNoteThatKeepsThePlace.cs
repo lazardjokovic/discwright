@@ -142,6 +142,85 @@ public class TheNoteThatKeepsThePlace
         Assert.Contains("carry on from the first disc that is not done", text, StringComparison.Ordinal);
     }
 
+    // ------------------------------------- a disc burned on its own
+
+    [Fact]
+    public void Counts_the_next_disc_when_it_is_burned_on_its_own()
+    {
+        // Finishing a set over two evenings is the ordinary way to make one:
+        // build it, burn disc 1, come back tomorrow, open the project and
+        // burn disc 2. Only walking a set through from the beginning ever
+        // moved this note on, so the second evening left it saying disc 2 was
+        // to do however well disc 2 read back. Lazar hit exactly that.
+        TheNoteBesideTheDiscs note = new("THE WITCHER", ThreeImages, 1);
+
+        TheNoteBesideTheDiscs moved = Assert.IsType<TheNoteBesideTheDiscs>(
+            note.WithThatOneDone("THE WITCHER D2.iso"));
+
+        Assert.Equal(2, moved.Written);
+        Assert.Contains("disc 2 of 3  done", moved.AsText(), StringComparison.Ordinal);
+        Assert.Contains("disc 3 of 3  to do", moved.AsText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_not_care_what_case_the_image_was_named_in()
+    {
+        Assert.NotNull(new TheNoteBesideTheDiscs("THE WITCHER", ThreeImages, 1)
+            .WithThatOneDone("the witcher d2.iso"));
+    }
+
+    [Fact]
+    public void Will_not_jump_a_disc_that_was_never_read_back()
+    {
+        // Three discs, one done, and disc 3 comes out good. There is no way
+        // to record that here: what is kept is how many are done counting
+        // from disc 1, so saying 3 would be claiming disc 2 was read back
+        // when it never was. Leaving it alone costs the offer to carry on
+        // and nothing else.
+        Assert.Null(new TheNoteBesideTheDiscs("THE WITCHER", ThreeImages, 1)
+            .WithThatOneDone("THE WITCHER D3.iso"));
+    }
+
+    [Fact]
+    public void Leaves_a_disc_that_was_already_counted_alone()
+    {
+        // Burning disc 1 again, to replace one that was scratched. It is
+        // already counted and the note does not go backwards or forwards.
+        Assert.Null(new TheNoteBesideTheDiscs("THE WITCHER", ThreeImages, 2)
+            .WithThatOneDone("THE WITCHER D1.iso"));
+    }
+
+    [Fact]
+    public void Says_nothing_about_an_image_that_is_not_in_the_set()
+    {
+        Assert.Null(new TheNoteBesideTheDiscs("THE WITCHER", ThreeImages, 1)
+            .WithThatOneDone("SOMETHING ELSE.iso"));
+    }
+
+    [Fact]
+    public void Finishes_a_set_off_with_its_last_disc()
+    {
+        TheNoteBesideTheDiscs moved = Assert.IsType<TheNoteBesideTheDiscs>(
+            new TheNoteBesideTheDiscs("THE WITCHER", ThreeImages, 2)
+                .WithThatOneDone("THE WITCHER D3.iso"));
+
+        Assert.Equal(3, moved.Written);
+
+        // And a finished set is not part way through, so nobody is asked
+        // whether to carry on from disc 4 of 3.
+        Assert.False(moved.PartWayThrough);
+    }
+
+    [Fact]
+    public void Counts_the_very_first_disc_of_a_set_nobody_has_started()
+    {
+        TheNoteBesideTheDiscs moved = Assert.IsType<TheNoteBesideTheDiscs>(
+            new TheNoteBesideTheDiscs("THE WITCHER", ThreeImages, 0)
+                .WithThatOneDone("THE WITCHER D1.iso"));
+
+        Assert.Equal(1, moved.Written);
+    }
+
     private static readonly NotedImage[] ThreeImages =
     [
         new("THE WITCHER D1.iso", 4_600_000_000),

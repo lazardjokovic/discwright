@@ -711,6 +711,97 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task Ticks_the_set_note_off_for_a_disc_burned_on_its_own()
+    {
+        ANoteInMemory note = new(
+            new TheNoteBesideTheDiscs(
+                "A GAME",
+                [new NotedImage("A GAME D1.iso", 1000), new NotedImage("A GAME D2.iso", 1000)],
+                1).AsText());
+
+        MakeADisc window = New(
+            drives: new TheseDrives(ABlankIn("E:")),
+            disk: new ASetOfTwoWithADiscInTheDrive(),
+            hasher: new AHasherThatAgrees(),
+            note: note);
+
+        window.OutputFolder = @"C:\out";
+        window.Label = "A GAME";
+
+        await window.BurnIt(@"C:\out\A GAME D2.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        Assert.True(window.HowTheDiscCameOut?.Good);
+
+        // Only walking a set through from the beginning ever moved this note
+        // on. Finishing one over two evenings, which is how anybody finishes
+        // one, left it saying the last disc was still to do however well that
+        // disc read back. Lazar had exactly this: disc 2 verified against its
+        // own checksums and the note beside it went on saying "to do".
+        TheNoteBesideTheDiscs moved = Assert.IsType<TheNoteBesideTheDiscs>(
+            TheNoteBesideTheDiscs.Read(note.Note));
+
+        Assert.Equal(2, moved.Written);
+        Assert.False(moved.PartWayThrough);
+    }
+
+    [Fact]
+    public async Task Leaves_the_note_alone_when_the_disc_did_not_read_back()
+    {
+        ANoteInMemory note = new(
+            new TheNoteBesideTheDiscs(
+                "A GAME",
+                [new NotedImage("A GAME D1.iso", 1000), new NotedImage("A GAME D2.iso", 1000)],
+                1).AsText());
+
+        MakeADisc window = New(
+            drives: new TheseDrives(ABlankIn("E:")),
+            disk: new ASetOfTwoWithADiscInTheDrive(),
+
+            // Agrees with nothing, so every file on the disc comes back wrong.
+            hasher: new NoHashing(),
+            note: note);
+
+        window.OutputFolder = @"C:\out";
+        window.Label = "A GAME";
+
+        await window.BurnIt(@"C:\out\A GAME D2.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        Assert.False(window.HowTheDiscCameOut?.Good);
+
+        // The whole point of the note is that it is believed later. One
+        // written for a disc that did not read back would send somebody away
+        // with a coaster in the set.
+        Assert.Equal(1, TheNoteBesideTheDiscs.Read(note.Note)!.Written);
+    }
+
+    [Fact]
+    public async Task Leaves_a_note_about_some_other_build_alone()
+    {
+        // The sizes do not match what is in the folder now, which is how a
+        // note is already told to be stale when deciding whether to carry on
+        // from it. Writing to it would make an old note look current.
+        ANoteInMemory note = new(
+            new TheNoteBesideTheDiscs(
+                "A GAME",
+                [new NotedImage("A GAME D1.iso", 999), new NotedImage("A GAME D2.iso", 999)],
+                1).AsText());
+
+        MakeADisc window = New(
+            drives: new TheseDrives(ABlankIn("E:")),
+            disk: new ASetOfTwoWithADiscInTheDrive(),
+            hasher: new AHasherThatAgrees(),
+            note: note);
+
+        window.OutputFolder = @"C:\out";
+        window.Label = "A GAME";
+
+        await window.BurnIt(@"C:\out\A GAME D2.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        Assert.True(window.HowTheDiscCameOut?.Good);
+        Assert.Equal(1, TheNoteBesideTheDiscs.Read(note.Note)!.Written);
+    }
+
+    [Fact]
     public async Task Checks_a_disc_against_its_own_list_when_nothing_was_built_here()
     {
         MakeADisc window = New(
@@ -1450,7 +1541,8 @@ public class TheMainWindowWithoutAWindow
         IShowTheMenu? preview = null,
         IImages? pictures = null,
         IFileSystem? disk = null,
-        IHasher? hasher = null) =>
+        IHasher? hasher = null,
+        IKeepTheSetsPlace? note = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -1460,7 +1552,7 @@ public class TheMainWindowWithoutAWindow
             eraser ?? new AnEraserThatWorks(),
             disk ?? new ADiskWithADiscOnIt(),
             hasher ?? new NoHashing(),
-            new NothingIsRemembered(),
+            note ?? new NothingIsRemembered(),
             tray ?? new ATrayThatShuts(),
             releases ?? new NothingIsReleased(),
             preview ?? new NoPreview(),
@@ -1468,9 +1560,63 @@ public class TheMainWindowWithoutAWindow
             "2.0.0",
             _ => 1000));
 
+    /// <summary>The note beside the discs, kept in memory.</summary>
+    private sealed class ANoteInMemory(string? says = null) : IKeepTheSetsPlace
+    {
+        internal string? Note { get; private set; } = says;
+
+        public string? WhatItSays(string folder) => Note;
+
+        public void Leave(string folder, string text) => Note = text;
+    }
+
     /// <summary>
-    /// A machine with nowhere to keep a set's place, which is every test here:
-    /// none of them walks a set.
+    /// Two images in the output folder, and a disc in the drive carrying the
+    /// checksum list every disc carries.
+    /// </summary>
+    private sealed class ASetOfTwoWithADiscInTheDrive : IFileSystem
+    {
+        private static readonly string[] OnTheDisc = ["autorun.inf", "game.exe"];
+
+        public bool FolderExists(string path) => true;
+
+        public FolderListing List(string path) =>
+            path.StartsWith("C:", StringComparison.OrdinalIgnoreCase)
+                ? new FolderListing(path,
+                [
+                    new ListedFile("A GAME D1.iso", 1000),
+                    new ListedFile("A GAME D2.iso", 1000)
+                ])
+                : new FolderListing(path,
+                [
+                    .. OnTheDisc.Select(file => new ListedFile(file, 10)),
+                    new ListedFile(ChecksumList.FileName, 90)
+                ]);
+
+        public string? ReadText(string path)
+        {
+            if (!path.EndsWith(ChecksumList.FileName, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            System.Text.StringBuilder list = new();
+            list.Append("# DiscWright checksum list for A GAME\n");
+            list.Append("# ").Append(OnTheDisc.Length).Append(" files, 20 bytes, SHA-256, sha256sum format.\n");
+            list.Append("#\n");
+
+            foreach (string file in OnTheDisc)
+            {
+                list.Append(AHasherThatAgrees.TheAnswer).Append(" *").Append(file).Append('\n');
+            }
+
+            return list.ToString();
+        }
+    }
+
+    /// <summary>
+    /// A machine with nowhere to keep a set's place, which is most tests here:
+    /// hardly any of them walks a set.
     /// </summary>
     private sealed class NothingIsRemembered : IKeepTheSetsPlace
     {

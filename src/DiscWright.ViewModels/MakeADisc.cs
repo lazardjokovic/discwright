@@ -1052,6 +1052,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
                     }
 
                     await CheckIt(onto, image, ct);
+
+                    // A disc burned on its own counts towards the set too.
+                    //
+                    // Only walking a set from the beginning ever moved the
+                    // note on, so finishing one over two evenings left it
+                    // saying the last disc was still to do however well that
+                    // disc read back. Lazar hit exactly that: disc 2 verified
+                    // against its own checksums and the note beside it went
+                    // on saying "to do".
+                    if (HowTheDiscCameOut is { Good: true })
+                    {
+                        TickThatDiscOff(image);
+                    }
+
                     break;
             }
         }
@@ -1483,6 +1497,43 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
             Tell(nameof(HowTheSetWent));
             Started();
+        }
+    }
+
+    /// <summary>
+    /// Moves the note beside the discs on by one, after a disc burned on its
+    /// own read back clean.
+    /// </summary>
+    /// <remarks>
+    /// Only a note that still describes the images sitting there now, by the
+    /// same rule the walk through uses to decide whether to believe one. A
+    /// note about some earlier build of the set is already ignored for
+    /// carrying on, and writing to it would make it look current.
+    /// </remarks>
+    private void TickThatDiscOff(string image)
+    {
+        if (OutputFolder.Length == 0)
+        {
+            return;
+        }
+
+        NotedImage[] now =
+        [
+            .. TheImages.Select(each => new NotedImage(
+                System.IO.Path.GetFileName(each), _machine.HowBigIs(each)))
+        ];
+
+        TheNoteBesideTheDiscs? note = TheNoteBesideTheDiscs.Read(
+            _machine.SetsPlace.WhatItSays(OutputFolder));
+
+        if (note is null || !note.Matches(Label, now))
+        {
+            return;
+        }
+
+        if (note.WithThatOneDone(System.IO.Path.GetFileName(image)) is TheNoteBesideTheDiscs moved)
+        {
+            _machine.SetsPlace.Leave(OutputFolder, moved.AsText());
         }
     }
 

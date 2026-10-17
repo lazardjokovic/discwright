@@ -92,6 +92,44 @@ public sealed record TheNoteBesideTheDiscs(string Label, IReadOnlyList<NotedImag
         return true;
     }
 
+    /// <summary>
+    /// The note after one more disc has been written and read back clean, or
+    /// nothing when this disc does not move it on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the disc burned on its own, rather than as part of walking a set
+    /// through from the beginning. Finishing a set over two evenings is the
+    /// ordinary way to make one: build it, burn disc 1, come back tomorrow,
+    /// open the project and burn disc 2. Only the walk through ever moved
+    /// this note on, so the disc burned on its own was checked, found good,
+    /// and still left the note saying it was to do.
+    /// </para>
+    /// <para>
+    /// <strong>Nothing when the disc is not the next one due.</strong> What
+    /// is recorded is how many are done counting from disc 1, so there is no
+    /// way to say that disc 3 is good and disc 2 is not, and guessing would
+    /// mean claiming a disc was read back when it never was. Leaving the note
+    /// alone costs the offer to carry on and nothing else.
+    /// </para>
+    /// </remarks>
+    /// <param name="imageName">The image's file name, without its folder.</param>
+    public TheNoteBesideTheDiscs? WithThatOneDone(string imageName)
+    {
+        for (int at = 0; at < Images.Count; at++)
+        {
+            if (!string.Equals(Images[at].Name, imageName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // Already counted, or out of order. Both leave it as it is.
+            return at == Written ? this with { Written = at + 1 } : null;
+        }
+
+        return null;
+    }
+
     /// <summary>The note as it goes on disk.</summary>
     public string AsText()
     {
