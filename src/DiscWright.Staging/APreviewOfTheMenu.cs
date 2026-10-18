@@ -28,6 +28,18 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : I
     /// <inheritdoc />
     public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into)
     {
+        // Emptied first, and before the plan is even attempted.
+        //
+        // This folder belongs to this project and is written to again every
+        // time somebody looks, so last time's files are sitting in it. A
+        // background that has since been cleared would still be there, and a
+        // preview that refuses would leave the previous menu behind looking
+        // like the answer to the question just asked.
+        //
+        // Safe here because the folder is one this program named, which is
+        // the only thing EmptyTheFolder is for.
+        writer.EmptyTheFolder(into);
+
         // Planned the way building plans, because which games land on disc one
         // is part of what somebody is previewing. Asked once: planning walks
         // every file in the project, and a refusal is an answer rather than a
@@ -56,7 +68,6 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : I
             into,
             writer);
 
-        writer.MakeFolder(into);
 
         // The artwork and the music first, and not only the menu.
         //

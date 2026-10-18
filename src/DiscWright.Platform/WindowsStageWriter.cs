@@ -37,12 +37,14 @@ public sealed class WindowsStageWriter : IStageWriter
     /// </remarks>
     public void EmptyTheFolder(string path)
     {
-        string name = new DirectoryInfo(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)).Name;
-
-        if (!name.StartsWith("disc", StringComparison.OrdinalIgnoreCase))
+        // The rule itself is in Core, so the fake the tests use obeys the
+        // same one. It did not once, and a preview that wrote nothing at
+        // all passed eighteen tests.
+        if (!WhatMayBeEmptied.Allows(path, Path.GetTempPath()))
         {
             throw new ArgumentException(
-                $"Refusing to empty {path}: only a staging folder called \"disc\" or \"disc DN\" may be emptied.",
+                $"Refusing to empty {path}: only a staging folder called \"disc\" or \"disc DN\", or a preview "
+                    + "folder under the temporary folder, may be emptied.",
                 nameof(path));
         }
 

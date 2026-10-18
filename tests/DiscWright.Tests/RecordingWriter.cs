@@ -36,8 +36,24 @@ public sealed class RecordingWriter : IStageWriter
 
     public void MakeFolder(string path) => Folders.Add(path);
 
+    /// <summary>
+    /// Refuses exactly what the real writer refuses.
+    /// </summary>
+    /// <remarks>
+    /// This used to empty whatever it was handed, which made it kinder than
+    /// the thing it stands in for. A preview folder named after the project
+    /// was refused outright by the real writer and the preview wrote nothing
+    /// at all, while eighteen tests went green through this.
+    /// </remarks>
     public void EmptyTheFolder(string path)
     {
+        if (!WhatMayBeEmptied.Allows(path, System.IO.Path.GetTempPath()))
+        {
+            throw new ArgumentException(
+                $"Refusing to empty {path}: the real writer would refuse this too.",
+                nameof(path));
+        }
+
         Emptied.Add(path);
         Folders.Add(path);
     }

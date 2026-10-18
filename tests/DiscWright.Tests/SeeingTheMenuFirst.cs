@@ -28,7 +28,7 @@ public class SeeingTheMenuFirst
         };
 
         new APreviewOfTheMenu(wrote, new PicturesThatRead())
-            .Write(withArt, Media.Dvd5, _ => 1000, @"C:\temp\look");
+            .Write(withArt, Media.Dvd5, _ => 1000, Look);
 
         string page = wrote.Texts.Single(
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
@@ -46,7 +46,7 @@ public class SeeingTheMenuFirst
         RecordingWriter wrote = new();
 
         new APreviewOfTheMenu(wrote, new PicturesThatRead())
-            .Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+            .Write(AProject(), Media.Dvd5, _ => 1000, Look);
 
         string page = wrote.Texts.Single(
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
@@ -63,7 +63,7 @@ public class SeeingTheMenuFirst
         RecordingWriter previewed = new();
 
         new APreviewOfTheMenu(previewed, new PicturesThatRead())
-            .Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+            .Write(AProject(), Media.Dvd5, _ => 1000, Look);
 
         string page = previewed.Texts.Single(
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
@@ -88,7 +88,7 @@ public class SeeingTheMenuFirst
         RecordingWriter burned = new();
 
         APreviewOfTheMenu preview = new(previewed, new PicturesThatRead());
-        preview.Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+        preview.Write(AProject(), Media.Dvd5, _ => 1000, Look);
 
         await new WriteTheMenuStep().Run(ADiscBeingMade(burned), CancellationToken.None);
 
@@ -116,7 +116,7 @@ public class SeeingTheMenuFirst
     {
         RecordingWriter wrote = new();
 
-        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(AProject(), Media.Dvd5, _ => 1000, Look);
 
         string page = wrote.Texts.Single(
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
@@ -140,7 +140,7 @@ public class SeeingTheMenuFirst
             Extras = new DiscExtras(MusicPath: @"C:\sound\theme.mp3")
         };
 
-        new APreviewOfTheMenu(wrote, pictures).Write(withArt, Media.Dvd5, _ => 1000, @"C:\temp\look");
+        new APreviewOfTheMenu(wrote, pictures).Write(withArt, Media.Dvd5, _ => 1000, Look);
 
         // A preview that leaves the artwork out shows a menu drawn on
         // nothing, which is the one thing somebody choosing a background most
@@ -161,11 +161,11 @@ public class SeeingTheMenuFirst
     public void Says_where_it_put_it()
     {
         Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
-            .Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+            .Write(AProject(), Media.Dvd5, _ => 1000, Look);
 
         string where = Assert.IsType<Outcome<string>.Ok>(went).Value;
 
-        Assert.Equal(@"C:\temp\look\AUTORUN\menu.hta", where);
+        Assert.Equal(System.IO.Path.Combine(Look, "AUTORUN", "menu.hta"), where);
     }
 
     [Fact]
@@ -173,7 +173,7 @@ public class SeeingTheMenuFirst
     {
         RecordingWriter wrote = new();
 
-        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(AProject(), Media.Dvd5, _ => 1000, @"C:\temp\look");
+        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(AProject(), Media.Dvd5, _ => 1000, Look);
 
         // The page is a shell around menu.js. Without it the preview opens to
         // an empty window, which is a worse lie than no preview at all.
@@ -193,7 +193,7 @@ public class SeeingTheMenuFirst
             Games = [AGame("Hollow Knight"), AGame("Grim Fandango")]
         };
 
-        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(big, Media.Cd, _ => 600L * 1024 * 1024, @"C:\temp\look");
+        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(big, Media.Cd, _ => 600L * 1024 * 1024, Look);
 
         string page = wrote.Texts.Single(
             text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
@@ -208,7 +208,7 @@ public class SeeingTheMenuFirst
     public void Refuses_rather_than_previewing_nothing()
     {
         Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
-            .Write(new DiscProject("EMPTY", [], new DiscOptions()), Media.Dvd5, _ => 1000, @"C:\temp\look");
+            .Write(new DiscProject("EMPTY", [], new DiscOptions()), Media.Dvd5, _ => 1000, Look);
 
         Refusal refused = Assert.IsType<Outcome<string>.No>(went).Refusal;
 
@@ -229,7 +229,7 @@ public class SeeingTheMenuFirst
         };
 
         Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
-            .Write(enormous, Media.Dvd5, _ => huge.Bytes, @"C:\temp\look");
+            .Write(enormous, Media.Dvd5, _ => huge.Bytes, Look);
 
         Assert.IsType<Outcome<string>.No>(went);
     }
@@ -252,7 +252,42 @@ public class SeeingTheMenuFirst
         Assert.Contains(nameof(MakeADisc.CanPreview), changed, StringComparer.Ordinal);
     }
 
+    [Fact]
+    public void Asks_for_the_same_preview_folder_until_the_project_changes()
+    {
+        // The window hands this to the preview as the folder to write in, so
+        // a name that wandered between presses would put the old behaviour
+        // back without anybody noticing: a folder per press, and none of
+        // them ever removed.
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Hollow Knight"));
+        screen.OutputFolder = @"F:\sets\hk";
+
+        string first = screen.WhereAPreviewWouldGo;
+
+        Assert.Equal(first, screen.WhereAPreviewWouldGo);
+
+        screen.OutputFolder = @"F:\sets\somewhere else";
+        Assert.NotEqual(first, screen.WhereAPreviewWouldGo);
+
+        // And back, because a folder that depended on the order things were
+        // typed in would be a folder per press wearing a different hat.
+        screen.OutputFolder = @"F:\sets\hk";
+        Assert.Equal(first, screen.WhereAPreviewWouldGo);
+    }
+
     // ------------------------------------------------------------- helpers
+
+    /// <summary>
+    /// Where a preview really goes.
+    /// </summary>
+    /// <remarks>
+    /// An invented path was used here, and the writer these tests stand on
+    /// would refuse to empty it, which is how a preview that wrote nothing
+    /// at all went green through every one of them.
+    /// </remarks>
+    private static readonly string Look = WhereAPreviewGoes.Under(
+        System.IO.Path.GetTempPath(), "HOLLOW KNIGHT", @"F:\sets\hk", null);
 
     private static DiscProject AProject() =>
         new("HOLLOW KNIGHT", [AGame("Hollow Knight")], new DiscOptions());
@@ -270,7 +305,7 @@ public class SeeingTheMenuFirst
         DiscProject project = AProject();
         PlannedDisc disc = new(1, [], 0);
 
-        return new BuildContext(project, new DiscLayout([disc], Media.Dvd5.Capacity, 1), disc, @"C:\temp\look", writer);
+        return new BuildContext(project, new DiscLayout([disc], Media.Dvd5.Capacity, 1), disc, Look, writer);
     }
 
     private static MakeADisc TheScreen() =>

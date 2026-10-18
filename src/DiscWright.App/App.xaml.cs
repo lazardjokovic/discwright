@@ -72,6 +72,12 @@ public partial class App : Application
             WhatThisBuildIs(),
             HowBigIs(disk)));
 
+        // Previews nobody has looked at in a week. One folder per project
+        // keeps them from multiplying; this is what stops them collecting
+        // for ever. It cannot throw and its answer is not worth waiting
+        // for, so nothing here is checked.
+        TidyingOldPreviews.In(Path.GetTempPath(), DateTime.Now);
+
         MainWindow window = new(screen, reader, disk, burner);
         window.Show();
 

@@ -151,6 +151,17 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     public bool CanPreview => !IsWorking && _games.Count > 0;
 
+    /// <summary>
+    /// What to call the folder this project's preview goes in.
+    /// </summary>
+    /// <remarks>
+    /// One per project, so previewing the same thing six times leaves one
+    /// folder rather than six. The name is worked out here because this is
+    /// what knows the label, where it builds to and what is on it.
+    /// </remarks>
+    public string WhereAPreviewWouldGo =>
+        WhereAPreviewGoes.For(Label, OutputFolder, _games.Count > 0 ? _games[0].Path : null);
+
     /// <summary>Where the last preview was written, or nothing.</summary>
     public string? ThePreview { get; private set; }
 

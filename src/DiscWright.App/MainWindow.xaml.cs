@@ -524,10 +524,18 @@ public partial class MainWindow : Window
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Somewhere temporary, and a fresh folder each time. A preview left in
-    /// somebody's output folder is a file they have to wonder about later,
-    /// and reusing one folder means a menu that quietly shows the last
-    /// project's games when this one refuses to plan.
+    /// Somewhere temporary, and one folder per project rather than one per
+    /// press. A preview left in somebody's output folder is a file they
+    /// have to wonder about later, and a folder stamped with the time is a
+    /// new one every press that nothing ever removes: twenty eight of them
+    /// had collected in three days before this was changed.
+    /// </para>
+    /// <para>
+    /// The objection to reusing one was that a preview which refuses to plan
+    /// would leave the last one sitting there looking like an answer. That is
+    /// why the folder is emptied before the plan is attempted rather than
+    /// after it succeeds, so a refusal leaves nothing behind to be mistaken
+    /// for this one.
     /// </para>
     /// <para>
     /// Opened with mshta, which is what the disc itself uses, so what is on
@@ -539,8 +547,8 @@ public partial class MainWindow : Window
     {
         string into = Path.Combine(
             Path.GetTempPath(),
-            "DiscWright preview",
-            DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+            WhereAPreviewGoes.TheFolderTheyAllGoIn,
+            _screen.WhereAPreviewWouldGo);
 
         _screen.PreviewTheMenu(into);
 
