@@ -426,6 +426,29 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void No_tick_box_promises_a_number_it_does_not_decide()
+    {
+        // "Split a file across two discs" was a promise about two, and the
+        // planner has never worked that way: it cuts a file into as many
+        // pieces as the file and the chosen disc come to between them. How
+        // many is a fact about this project, so it is said under the box by
+        // something that can count, not written into the label.
+        XElement box = Window()
+            .Descendants(Xaml + "CheckBox")
+            .Single(each => IdOf(each) == "CutFiles");
+
+        string label = (string?)box.Attribute("Content") ?? string.Empty;
+
+        Assert.DoesNotContain("two", label, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("2", label, StringComparison.Ordinal);
+
+        // And the counting line is really there, right under it.
+        Assert.Contains(
+            "WhatSplittingWouldDo",
+            Window().Descendants(Xaml + "TextBlock").Select(IdOf));
+    }
+
+    [Fact]
     public void No_label_on_a_tick_box_is_long_enough_to_wrap()
     {
         // A label that wraps makes a row twice as tall as the box in it, and

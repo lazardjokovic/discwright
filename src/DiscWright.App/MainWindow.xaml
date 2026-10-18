@@ -386,9 +386,31 @@
                      whose job is to offer sizes. The fact belongs here, where
                      the box is. -->
                 <CheckBox Margin="0,8,0,0"
-                          Content="Split a file across two discs"
+                          Content="Split a file too big for one disc"
                           IsChecked="{Binding CutFiles}"
                           AutomationProperties.AutomationId="CutFiles" />
+
+                <!-- What it will actually do, with these files and this size
+                     of disc, rather than a number written into a label.
+
+                     The box said "across two discs" and the planner has never
+                     worked that way: it cuts a file into however many pieces
+                     the file and the disc come to between them, which for a
+                     DVD image on CDs is seven. The promise of two was the
+                     whole of the bug. -->
+                <TextBlock Margin="22,2,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding WhatSplittingWouldDo}"
+                           Visibility="{Binding WhatSplittingWouldDo, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhatSplittingWouldDo">
+                    <!-- The style goes here rather than as an attribute, the
+                         same way as the line under the size above it: an
+                         implicit style in an element's own Resources applies
+                         to its children and never to itself. -->
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Aside}" />
+                    </TextBlock.Style>
+                </TextBlock>
 
                 <!-- Chosen before anything is written, because being asked
                      in the middle of a burn is being asked at the worst

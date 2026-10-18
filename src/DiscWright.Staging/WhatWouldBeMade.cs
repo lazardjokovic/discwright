@@ -198,6 +198,61 @@ public sealed record PlannedBuild(IReadOnlyList<PlannedOutput> Outputs)
             return discs == 1 ? "one disc" : $"a set of {discs} discs";
         }
     }
+
+    /// <summary>
+    /// What cutting files is actually going to do here, or nothing when it
+    /// would do nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The option used to be called "Split a file across two discs", which is
+    /// a promise about two and was never what the planner does: it cuts a file
+    /// into as many pieces as the file and the chosen disc between them come
+    /// to, and ten is as ordinary as two. The wording said otherwise and that
+    /// is all that was wrong, so this says the real number for the real
+    /// project instead of a number baked into a label.
+    /// </para>
+    /// <para>
+    /// A piece is found by being the first of its file. Every piece of one
+    /// file carries the same part count and the same source, so the first of
+    /// each is one per cut file and nothing has to be counted twice.
+    /// </para>
+    /// </remarks>
+    public string WhatGetsCut
+    {
+        get
+        {
+            PlannedFile[] cut =
+            [
+                .. Outputs
+                    .SelectMany(output => output.Layout.Discs)
+                    .SelectMany(disc => disc.Files)
+                    .Where(file => file.Part is { Index: 1 })
+            ];
+
+            if (cut.Length == 0)
+            {
+                return string.Empty;
+            }
+
+            if (cut.Length == 1)
+            {
+                FilePart part = cut[0].Part!;
+
+                // Named, because which file is about to be cut in half is the
+                // thing somebody wants to know, and the name is taken from
+                // where it came from rather than from the piece, which is
+                // called something with dwpart01 on the end.
+                return $"{System.IO.Path.GetFileName(cut[0].Source)} is "
+                    + $"{ByteSize.Describe(part.WholeBytes)} and will be cut into "
+                    + $"{part.Count} pieces, a disc each.";
+            }
+
+            int pieces = cut.Sum(file => file.Part!.Count);
+
+            return $"{cut.Length} files will be cut, into {pieces} pieces between them.";
+        }
+    }
 }
 
 /// <summary>One independent thing a build would produce: a disc, or a set.</summary>

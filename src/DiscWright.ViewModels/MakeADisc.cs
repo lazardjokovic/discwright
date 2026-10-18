@@ -482,6 +482,24 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string WhatItWillMake { get; private set; } = string.Empty;
 
     /// <summary>
+    /// What splitting a file is going to do to this project, or nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The box used to say "Split a file across two discs", which is a promise
+    /// about two. The planner has never worked that way: it cuts a file into
+    /// however many pieces the file and the chosen disc come to between them,
+    /// and a DVD image on CDs is seven of them.
+    /// </para>
+    /// <para>
+    /// So the box says what it does and this says what it will do, here, with
+    /// these files and this size of disc. It is worked out from the same plan
+    /// the disc count comes from, so the two cannot disagree.
+    /// </para>
+    /// </remarks>
+    public string WhatSplittingWouldDo { get; private set; } = string.Empty;
+
+    /// <summary>
     /// Why the button is dead, or null when it is not.
     /// </summary>
     /// <remarks>
@@ -2170,6 +2188,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             // program complaining about its own starting state.
             WhyNot = null;
             WhatItWillMake = string.Empty;
+            WhatSplittingWouldDo = string.Empty;
             Told();
             return;
         }
@@ -2178,6 +2197,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             WhyNot = Refusals.ADiscNeedsAName();
             WhatItWillMake = string.Empty;
+            WhatSplittingWouldDo = string.Empty;
             Told();
             return;
         }
@@ -2194,11 +2214,22 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 // nowhere to put it" are both true and both worth reading.
                 WhyNot = OutputFolder.Length == 0 ? Refusals.ThereIsNowhereToPutIt() : null;
                 WhatItWillMake = planned.InWords;
+
+                // Only while the box is ticked. Unticked, a file too big for
+                // a disc is a refusal with its own words and this would be a
+                // second sentence about the same thing.
+                WhatSplittingWouldDo = Options.CutFiles
+                    ? planned.WhatGetsCut.Length > 0
+                        ? planned.WhatGetsCut
+                        : "Nothing here is bigger than one disc, so nothing will be cut."
+                    : string.Empty;
+
                 break;
 
             case Outcome<PlannedBuild>.No refused:
                 WhyNot = refused.Refusal;
                 WhatItWillMake = string.Empty;
+                WhatSplittingWouldDo = string.Empty;
                 break;
         }
 
@@ -2331,6 +2362,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private void Told()
     {
         Tell(nameof(WhatItWillMake));
+        Tell(nameof(WhatSplittingWouldDo));
         Tell(nameof(WhyNot));
         Tell(nameof(Worry));
         Tell(nameof(CanMakeIt));

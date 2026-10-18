@@ -2168,6 +2168,136 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(Media.Dvd9, screen.Medium);
     }
 
+    // ----------------------------------------- what splitting actually does
+
+    [Fact]
+    public void Says_how_many_pieces_a_file_will_really_be_cut_into()
+    {
+        MakeADisc screen = Split(ADiscHolding(1000), 2500);
+
+        // The box used to say "across two discs" and this file needs three.
+        // The planner has always cut into as many pieces as the file and the
+        // disc come to between them; only the label said two.
+        Assert.Contains("3 pieces", screen.WhatSplittingWouldDo, StringComparison.Ordinal);
+
+        // Named and measured, because which file is about to be cut in half
+        // is the thing somebody wants to know.
+        Assert.Contains("setup_Big.exe", screen.WhatSplittingWouldDo, StringComparison.Ordinal);
+        Assert.Contains("a disc each", screen.WhatSplittingWouldDo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_number_of_pieces_follows_the_size_of_disc_that_was_chosen()
+    {
+        MakeADisc screen = Split(ADiscHolding(1000), 6000);
+
+        Assert.Contains("6 pieces", screen.WhatSplittingWouldDo, StringComparison.Ordinal);
+
+        // The same file, a bigger disc. Nothing about this is fixed at two,
+        // and the thing that decides it is the size somebody chose.
+        screen.Medium = ADiscHolding(3000);
+        Assert.Contains("2 pieces", screen.WhatSplittingWouldDo, StringComparison.Ordinal);
+
+        // Bigger again, and now it fits whole.
+        screen.Medium = ADiscHolding(9000);
+        Assert.Equal(
+            "Nothing here is bigger than one disc, so nothing will be cut.",
+            screen.WhatSplittingWouldDo);
+    }
+
+    [Fact]
+    public void Counts_several_files_that_will_be_cut()
+    {
+        MakeADisc screen = New();
+        screen.OutputFolder = @"C:\out";
+        screen.Medium = ADiscHolding(1000);
+        screen.CutFiles = true;
+        screen.Add(AGame("Big", 2500));
+        screen.Add(AGame("Huge", 2500));
+
+        Assert.Equal("2 files will be cut, into 6 pieces between them.", screen.WhatSplittingWouldDo);
+    }
+
+    [Fact]
+    public void Says_nothing_about_splitting_while_the_box_is_off()
+    {
+        MakeADisc screen = Split(ADiscHolding(1000), 2500);
+        Assert.NotEqual(string.Empty, screen.WhatSplittingWouldDo);
+
+        screen.CutFiles = false;
+
+        // Unticked, a file too big for a disc is a refusal with its own
+        // words, and this would be a second sentence about the same thing.
+        Assert.Equal(string.Empty, screen.WhatSplittingWouldDo);
+        Assert.NotNull(screen.WhyNot);
+    }
+
+    [Fact]
+    public void Says_nothing_about_splitting_when_the_box_is_off_and_all_is_well()
+    {
+        // The case above cannot prove this on its own: with the box off, a
+        // file too big for a disc is REFUSED, and the refusal clears this
+        // line whatever the rule says. A planted fault that showed the line
+        // whether the box was ticked or not walked straight through it.
+        //
+        // So: a project that plans perfectly well, with the box off. The
+        // line has to stay quiet because nobody asked about splitting.
+        MakeADisc screen = New();
+        screen.OutputFolder = @"C:\out";
+        screen.Medium = ADiscHolding(1000);
+        screen.Add(AGame("Small", 100));
+
+        Assert.Null(screen.WhyNot);
+        Assert.False(screen.CutFiles);
+        Assert.Equal(string.Empty, screen.WhatSplittingWouldDo);
+
+        // And it speaks up the moment somebody does ask.
+        screen.CutFiles = true;
+        Assert.Equal(
+            "Nothing here is bigger than one disc, so nothing will be cut.",
+            screen.WhatSplittingWouldDo);
+    }
+
+    [Fact]
+    public void Says_nothing_about_splitting_with_nothing_on_the_window()
+    {
+        MakeADisc screen = New();
+        screen.CutFiles = true;
+
+        // Somebody who has not added a game yet has done nothing wrong, and
+        // an empty window saying anything at all is the program complaining
+        // about its own starting state.
+        Assert.Equal(string.Empty, screen.WhatSplittingWouldDo);
+    }
+
+    [Fact]
+    public void Tells_the_window_when_what_splitting_would_do_changes()
+    {
+        MakeADisc screen = Split(ADiscHolding(1000), 2500);
+
+        List<string> told = [];
+        screen.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        screen.Medium = ADiscHolding(3000);
+
+        // A line nobody is told about keeps whatever the window read out of
+        // it the first time, which here is a count of pieces that is no
+        // longer true.
+        Assert.Contains(nameof(MakeADisc.WhatSplittingWouldDo), told);
+    }
+
+    /// <summary>A window with one game too big for the disc, and the box on.</summary>
+    private static MakeADisc Split(Medium medium, int bytes)
+    {
+        MakeADisc screen = New();
+        screen.OutputFolder = @"C:\out";
+        screen.Medium = medium;
+        screen.CutFiles = true;
+        screen.Add(AGame("Big", bytes));
+
+        return screen;
+    }
+
     [Fact]
     public void Tells_the_window_what_ticking_the_split_box_changed()
     {
