@@ -248,7 +248,13 @@ public partial class MainWindow : Window
         }
         catch (Exception wrong)
         {
-            MessageBox.Show(this, wrong.Message, "DiscWright", MessageBoxButton.OK, MessageBoxImage.Error);
+            // A sentence, never the exception's own words on their own. Raw
+            // machine text in a box with a red cross reads as the program
+            // falling over, and that is how "Attempt has been made to use a
+            // COM object that does not have a backing class factory" reached
+            // Lazar. The refusal says what was happening and that nothing is
+            // lost, and still carries what Windows said.
+            Explain(Refusals.SomethingNobodyExpected("erasing the disc", wrong.Message));
             return;
         }
 
@@ -367,7 +373,13 @@ public partial class MainWindow : Window
         }
         catch (Exception wrong)
         {
-            MessageBox.Show(this, wrong.Message, "DiscWright", MessageBoxButton.OK, MessageBoxImage.Error);
+            // A sentence, never the exception's own words on their own. Raw
+            // machine text in a box with a red cross reads as the program
+            // falling over, and that is how "Attempt has been made to use a
+            // COM object that does not have a backing class factory" reached
+            // Lazar. The refusal says what was happening and that nothing is
+            // lost, and still carries what Windows said.
+            Explain(Refusals.SomethingNobodyExpected("building the discs", wrong.Message));
             return;
         }
 
@@ -419,7 +431,13 @@ public partial class MainWindow : Window
         }
         catch (Exception wrong)
         {
-            MessageBox.Show(this, wrong.Message, "DiscWright", MessageBoxButton.OK, MessageBoxImage.Error);
+            // A sentence, never the exception's own words on their own. Raw
+            // machine text in a box with a red cross reads as the program
+            // falling over, and that is how "Attempt has been made to use a
+            // COM object that does not have a backing class factory" reached
+            // Lazar. The refusal says what was happening and that nothing is
+            // lost, and still carries what Windows said.
+            Explain(Refusals.SomethingNobodyExpected("burning the disc", wrong.Message));
             return;
         }
 
@@ -558,24 +576,35 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_screen.ThePreview is not string where || !File.Exists(where))
+        string[] menus = [.. _screen.ThePreviews.Where(File.Exists)];
+
+        if (menus.Length == 0)
         {
             return;
         }
 
-        try
+        // A window per disc. The manual and the extras ride one disc of a set
+        // and the planner puts them last, so opening disc one alone showed a
+        // menu with no Manual button to somebody who had chosen a manual.
+        foreach (string where in menus)
         {
-            Process.Start(new ProcessStartInfo("mshta.exe", $"\"{where}\"") { UseShellExecute = false });
-        }
-        catch (Exception wrong) when (wrong is System.ComponentModel.Win32Exception or InvalidOperationException)
-        {
-            MessageBox.Show(
-                this,
-                "The menu was written but nothing would open it. It is at:"
-                    + Environment.NewLine + Environment.NewLine + where,
-                "DiscWright",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            try
+            {
+                Process.Start(new ProcessStartInfo("mshta.exe", $"\"{where}\"") { UseShellExecute = false });
+            }
+            catch (Exception wrong) when (wrong is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                MessageBox.Show(
+                    this,
+                    (menus.Length == 1 ? "The menu was written" : "The menus were written")
+                        + " but nothing would open them. They are in:"
+                        + Environment.NewLine + Environment.NewLine + into,
+                    "DiscWright",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+
+                return;
+            }
         }
     }
 

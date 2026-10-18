@@ -30,6 +30,51 @@ public class ReadingTheDiscBack : IDisposable
     }
 
     [Fact]
+    public void Says_what_went_wrong_in_words_somebody_can_act_on()
+    {
+        // What Lazar was told after burning disc one of two, word for word:
+        //
+        //     This disc is not the disc: 2 could not be read off the disc.
+        //
+        // The reading was right. Two files on that CD-RW really had gone
+        // bad, and he could not tell from this which two, or 2 of what: the
+        // figure reads as a disc number sitting where a disc number would be.
+        DiscCheck check = new(
+            7,
+            [@"setup_hollow_knight.exe.dwpart01", @"AUTORUN\background.png"],
+            [],
+            [],
+            [],
+            null);
+
+        Assert.Equal(
+            "This disc is not the disc it was meant to be: 2 files could not be read off it. "
+                + @"setup_hollow_knight.exe.dwpart01, AUTORUN\background.png.",
+            check.InWords);
+    }
+
+    [Fact]
+    public void Names_the_first_few_and_counts_the_rest()
+    {
+        // A disc that has gone wrong has usually gone wrong in hundreds of
+        // files at once, and this goes in a box somebody reads rather than a
+        // log somebody searches.
+        DiscCheck check = new(0, [], ["a", "b", "c", "d", "e"], [], [], null);
+
+        Assert.Equal(
+            "This disc is not the disc it was meant to be: 5 files did not reach it. a, b, c, and 2 more.",
+            check.InWords);
+    }
+
+    [Fact]
+    public void Counts_one_file_as_one_file()
+    {
+        DiscCheck check = new(3, [], [], [], ["one.bin"], null);
+
+        Assert.Contains("1 file came back different", check.InWords, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Says_a_good_disc_is_good()
     {
         string built = Folder("built", ("setup_a_game.exe", "one"), (@"AUTORUN\menu.hta", "two"));
@@ -52,7 +97,10 @@ public class ReadingTheDiscBack : IDisposable
 
         Assert.False(check.Good);
         Assert.Equal(["two.bin"], check.Missing);
-        Assert.Contains("did not reach the disc", check.InWords, StringComparison.Ordinal);
+        // Counted with the word on it and named, because "1" on its own
+        // says nothing, not even 1 of what.
+        Assert.Contains("1 file did not reach it", check.InWords, StringComparison.Ordinal);
+        Assert.Contains("two.bin", check.InWords, StringComparison.Ordinal);
     }
 
     [Fact]

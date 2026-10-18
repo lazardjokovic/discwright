@@ -289,6 +289,128 @@ public class PuttingTheMenuOnTheDisc
         Assert.False(new WriteTheMenuStep().AppliesTo(context));
     }
 
+    // ------------------------------------------------------------------- music
+
+    [Fact]
+    public async Task Plays_the_music_the_disc_carries()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote, extras: new DiscExtras(MusicPath: @"C:\stuff\Hornet's Theme.MP3"));
+
+        string page = TheMenu(wrote);
+
+        // The picker that asks for this file is called "What plays behind the
+        // menu". Nothing played it: it was copied onto every disc of every
+        // set, and no menu ever named it.
+        Assert.Contains("music: \"AUTORUN/music.mp3\"", page, StringComparison.Ordinal);
+
+        // Named by the step that copies it, so the two cannot drift. Lower
+        // case, because the file somebody chose was called .MP3.
+        Assert.Equal(
+            "music.mp3",
+            CopyTheMusicStep.NameOnTheDisc(
+                new DiscProject("D", [], new DiscOptions()) with
+                {
+                    Extras = new DiscExtras(MusicPath: @"C:\stuff\Hornet's Theme.MP3")
+                }));
+    }
+
+    [Fact]
+    public async Task Says_there_is_no_music_when_there_is_none()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote);
+
+        // Empty rather than absent, so the script can ask without checking
+        // whether the field is there, and so a disc with no tune never hands
+        // the player a path to nothing.
+        Assert.Contains("music: \"\"", TheMenu(wrote), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Keeps_quiet_when_a_preview_is_not_the_first_window()
+    {
+        RecordingWriter wrote = new();
+
+        await new WriteTheMenuStep(forADisc: false, playsMusic: false).Run(
+            Context(wrote, extras: new DiscExtras(MusicPath: @"C:\stuff\the tune.mp3")),
+            CancellationToken.None);
+
+        // Every disc of a set carries the tune and every disc's menu plays
+        // it. Previewing a set opens a window per disc, and three of them
+        // playing the same bar over each other is not a preview of anything.
+        Assert.Contains("music: \"\"", TheMenu(wrote), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Carries_a_player_that_works_in_what_opens_it()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote, extras: new DiscExtras(MusicPath: @"C:\stuff\the tune.mp3"));
+
+        string page = TheMenu(wrote);
+
+        // Measured in mshta on this machine, one at a time, against a real
+        // MP3 at document mode 9:
+        //
+        //     <bgsound>   nothing at all, silently
+        //     <audio>     error 4, src not supported
+        //     WMPlayer    playState 3, position moving, and it loops
+        //
+        // So the control, and the control is what v1 settled on too.
+        Assert.Contains("new ActiveXObject(\"WMPlayer.OCX\")", page, StringComparison.Ordinal);
+        Assert.Contains("setMode(\"loop\", true)", page, StringComparison.Ordinal);
+
+        // And a way to turn it off, which is the first thing anybody wants
+        // from a disc that starts playing music at them.
+        Assert.Contains("id=\"mute\"", page, StringComparison.Ordinal);
+        Assert.Contains("toggleMusic()", page, StringComparison.Ordinal);
+
+        // Started when the page opens. The player can be in the file and
+        // never asked to do anything, which is a menu that silently does
+        // nothing: the state this whole thing was already in.
+        Assert.Contains("startTheMusic();", page, StringComparison.Ordinal);
+
+        // Measured from the TOP of the stage. The stage is as tall as the
+        // whole window and the window has a title bar, so the stage runs off
+        // the bottom of what can be seen by the height of that bar. Anchored
+        // to the bottom this control sat below the edge: the page reported it
+        // displayed and a photograph of the window showed nothing there.
+        string style = page
+            .Split("#mute {", StringSplitOptions.None)[1]
+            .Split('}', StringSplitOptions.None)[0];
+
+        Assert.Contains("top:", style, StringComparison.Ordinal);
+        Assert.DoesNotContain("bottom:", style, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_music_lands_where_the_menu_looks_for_it()
+    {
+        RecordingWriter wrote = new();
+        BuildContext context = Context(wrote, extras: new DiscExtras(MusicPath: @"C:\stuff\the tune.ogg"));
+
+        await new CopyTheMusicStep().Run(context, CancellationToken.None);
+        await new WriteTheMenuStep().Run(context, CancellationToken.None);
+
+        // The one that matters, and the one no test watched: the file the
+        // step writes and the file the menu names have to be the same file.
+        string named = TheMenu(wrote)
+            .Split("music: \"", StringSplitOptions.None)[1]
+            .Split('"', StringSplitOptions.None)[0];
+
+        Assert.Equal(@"AUTORUN/music.ogg", named);
+        Assert.Contains(
+            @"C:\stage\" + named.Replace('/', (char)92),
+            wrote.Copies.Select(copy => copy.To));
+    }
+
+    private static string TheMenu(RecordingWriter wrote) =>
+        wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
     // ------------------------------------------------------------------ helpers
 
     private static Task Write(

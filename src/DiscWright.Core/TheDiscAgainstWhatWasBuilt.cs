@@ -170,22 +170,51 @@ public sealed record DiscCheck(
 
             if (Unreadable.Count > 0)
             {
-                wrong.Add($"{Unreadable.Count} could not be read off the disc");
+                wrong.Add($"{Files(Unreadable.Count)} could not be read off it");
             }
 
             if (Missing.Count > 0)
             {
-                wrong.Add($"{Missing.Count} did not reach the disc");
+                wrong.Add($"{Files(Missing.Count)} did not reach it");
             }
 
             if (Wrong.Count > 0)
             {
-                wrong.Add($"{Wrong.Count} came back different");
+                wrong.Add($"{Files(Wrong.Count)} came back different");
             }
 
-            return "This disc is not the disc: " + string.Join(", ", wrong) + ".";
+            // Named, and not only counted. "2 could not be read off the disc"
+            // is a figure somebody can do nothing with: it does not even say
+            // 2 of what, and it reads as a disc number. Which files they are
+            // is the difference between a disc to throw away and a game that
+            // was going to fail to install.
+            return "This disc is not the disc it was meant to be: "
+                + string.Join(", ", wrong) + "." + Naming();
         }
     }
+
+    /// <summary>Which files, up to a few of them.</summary>
+    /// <remarks>
+    /// Three, because this goes in a box somebody reads rather than a log
+    /// somebody searches, and a disc that went wrong usually went wrong in
+    /// hundreds of files at once.
+    /// </remarks>
+    private string Naming()
+    {
+        string[] named = [.. Unreadable.Concat(Missing).Concat(Wrong).Take(3)];
+
+        if (named.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        int more = Unreadable.Count + Missing.Count + Wrong.Count - named.Length;
+
+        return " " + string.Join(", ", named) + (more > 0 ? $", and {more} more." : ".");
+    }
+
+    /// <summary>A count of files, with the word on it.</summary>
+    private static string Files(int how) => how == 1 ? "1 file" : $"{how} files";
 }
 
 /// <summary>How far through reading the disc back.</summary>

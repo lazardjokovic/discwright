@@ -160,12 +160,13 @@ public class SeeingTheMenuFirst
     [Fact]
     public void Says_where_it_put_it()
     {
-        Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
+        Outcome<IReadOnlyList<string>> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
             .Write(AProject(), Media.Dvd5, _ => 1000, Look);
 
-        string where = Assert.IsType<Outcome<string>.Ok>(went).Value;
+        IReadOnlyList<string> where = Assert.IsType<Outcome<IReadOnlyList<string>>.Ok>(went).Value;
 
-        Assert.Equal(System.IO.Path.Combine(Look, "AUTORUN", "menu.hta"), where);
+        // One disc, one menu, and it sits where it always did.
+        Assert.Equal([System.IO.Path.Combine(Look, "AUTORUN", "menu.hta")], where);
     }
 
     [Fact]
@@ -207,10 +208,10 @@ public class SeeingTheMenuFirst
     [Fact]
     public void Refuses_rather_than_previewing_nothing()
     {
-        Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
+        Outcome<IReadOnlyList<string>> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
             .Write(new DiscProject("EMPTY", [], new DiscOptions()), Media.Dvd5, _ => 1000, Look);
 
-        Refusal refused = Assert.IsType<Outcome<string>.No>(went).Refusal;
+        Refusal refused = Assert.IsType<Outcome<IReadOnlyList<string>>.No>(went).Refusal;
 
         Assert.Contains("nothing", refused.Headline, StringComparison.OrdinalIgnoreCase);
     }
@@ -228,11 +229,252 @@ public class SeeingTheMenuFirst
             Games = [new GameFolder(@"C:\games\x", GameKind.GogInstaller, "Enormous", "Enormous", huge, [huge], [], null)]
         };
 
-        Outcome<string> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
+        Outcome<IReadOnlyList<string>> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())
             .Write(enormous, Media.Dvd5, _ => huge.Bytes, Look);
 
-        Assert.IsType<Outcome<string>.No>(went);
+        Assert.IsType<Outcome<IReadOnlyList<string>>.No>(went);
     }
+
+    [Fact]
+    public void The_screen_hands_the_window_every_menu_that_was_written()
+    {
+        MakeADisc screen = TheScreen(new TwoMenus());
+        screen.Add(AGame("Hollow Knight"));
+
+        List<string> told = [];
+        screen.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        screen.PreviewTheMenu(Look);
+
+        Assert.Equal([@"X:\one\menu.hta", @"X:\two\menu.hta"], screen.ThePreviews);
+        Assert.Contains(nameof(MakeADisc.ThePreviews), told);
+    }
+
+    [Fact]
+    public void The_window_opens_all_of_them_rather_than_the_first()
+    {
+        // A set is previewed a disc at a time, in a window each, and the
+        // manual and the extras are on the last of them. Opening only the
+        // first is the bug with the fix in place.
+        //
+        // Read off disk, because nothing here may reference the window.
+        string code = System.IO.File.ReadAllText(
+            Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("foreach (string where in menus)", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_tune_that_has_been_moved_since_it_was_chosen_is_a_sentence()
+    {
+        // Found by previewing a real project whose music file had gone. A
+        // preview writes real files, so the artwork and the music are copied
+        // and either can have been moved or renamed since it was chosen. The
+        // FileNotFoundException went straight out of the screen, past a
+        // window that catches nothing around this, and took the program down
+        // with a stack trace in a box.
+        MakeADisc screen = TheScreen(new APreviewThatCannotFindTheTune());
+        screen.Add(AGame("Hollow Knight"));
+
+        screen.PreviewTheMenu(Look);
+
+        Refusal said = Assert.IsType<Refusal>(screen.ItWentWrong);
+        Assert.Contains("writing the preview", said.Headline, StringComparison.Ordinal);
+        Assert.Empty(screen.ThePreviews);
+    }
+
+    /// <summary>A preview whose music went missing between choosing and looking.</summary>
+    private sealed class APreviewThatCannotFindTheTune : IShowTheMenu
+    {
+        public Outcome<IReadOnlyList<string>> Write(
+            DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
+            throw new System.IO.FileNotFoundException(
+                @"Could not find file 'C:\stuff\the tune.mp3'.");
+    }
+
+    /// <summary>A preview that wrote two menus, as a set's would.</summary>
+    private sealed class TwoMenus : IShowTheMenu
+    {
+        public Outcome<IReadOnlyList<string>> Write(
+            DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
+            new List<string> { @"X:\one\menu.hta", @"X:\two\menu.hta" };
+    }
+
+    // ------------------------------------------------ a preview of the whole set
+
+    [Fact]
+    public void Previews_every_disc_of_a_set_and_not_only_the_first()
+    {
+        RecordingWriter wrote = new();
+
+        IReadOnlyList<string> menus = Previewing(wrote, ASetOfTwo());
+
+        // Two discs, two menus. Disc one stays where it always was, so the
+        // ordinary one-disc case is untouched; the rest get a folder each,
+        // named so somebody opening their temporary folder can tell which is
+        // which.
+        Assert.Equal(
+            [
+                System.IO.Path.Combine(Look, "AUTORUN", "menu.hta"),
+                System.IO.Path.Combine(Look, "HOLLOW KNIGHT D2", "AUTORUN", "menu.hta")
+            ],
+            menus);
+    }
+
+    [Fact]
+    public void Shows_the_manual_and_the_extras_on_the_disc_that_has_them()
+    {
+        RecordingWriter wrote = new();
+
+        Previewing(wrote, ASetOfTwo());
+
+        // THE BUG. The extras ride one disc of a set and the planner puts
+        // them on the last one, because that is where the slack is. Previewing
+        // disc one alone could therefore never show a Manual or an Extras
+        // button, however many of them somebody had chosen, which is exactly
+        // what it looked like to the person who had chosen them.
+        Assert.DoesNotContain("manual: \"Extras/", PageOf(wrote, 1), StringComparison.Ordinal);
+
+        string second = PageOf(wrote, 2);
+        Assert.Contains("manual: \"Extras/How to play.pdf\"", second, StringComparison.Ordinal);
+        Assert.Contains("extras: \"Extras\"", second, StringComparison.Ordinal);
+        Assert.Contains("\"Manual\"", second, StringComparison.Ordinal);
+        Assert.Contains("\"Extras\"", second, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Only_the_first_window_of_a_preview_plays_the_tune()
+    {
+        RecordingWriter wrote = new();
+
+        Previewing(wrote, ASetOfTwo());
+
+        // Every disc of a set carries the tune and every disc's menu plays
+        // it, so a faithful preview of two discs would open two windows
+        // playing the same bar over each other.
+        Assert.Contains("music: \"AUTORUN/music.mp3\"", PageOf(wrote, 1), StringComparison.Ordinal);
+        Assert.Contains("music: \"\"", PageOf(wrote, 2), StringComparison.Ordinal);
+
+        // And the file is written once rather than copied into every folder
+        // for nobody to play.
+        Assert.Single(wrote.Copies, copy => copy.To.EndsWith("music.mp3", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Numbers_each_disc_as_the_disc_it_is()
+    {
+        RecordingWriter wrote = new();
+
+        Previewing(wrote, ASetOfTwo());
+
+        Assert.Contains("discNumber: 1", PageOf(wrote, 1), StringComparison.Ordinal);
+        Assert.Contains("discNumber: 2", PageOf(wrote, 2), StringComparison.Ordinal);
+        Assert.Contains("discsInSet: 2", PageOf(wrote, 2), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Gives_two_games_that_will_not_share_a_disc_a_menu_each()
+    {
+        RecordingWriter wrote = new();
+
+        DiscProject two = AProject() with
+        {
+            Games = [ABigGame("Hollow Knight"), ABigGame("Grim Fandango")]
+        };
+
+        IReadOnlyList<string> menus = new APreviewOfTheMenu(wrote, new PicturesThatRead())
+            .Write(two, Media.Cd, TheSizeOf, Look) is Outcome<IReadOnlyList<string>>.Ok(var where)
+                ? where
+                : throw new Xunit.Sdk.XunitException("the preview refused");
+
+        // Neither of these continues the other, so each is named after its
+        // own game rather than numbered.
+        Assert.Equal(
+            [
+                System.IO.Path.Combine(Look, "AUTORUN", "menu.hta"),
+                System.IO.Path.Combine(Look, "Grim Fandango", "AUTORUN", "menu.hta")
+            ],
+            menus);
+    }
+
+    [Fact]
+    public void Two_games_of_the_same_name_do_not_land_on_each_other()
+    {
+        RecordingWriter wrote = new();
+
+        // Folders are named by people, and three of them called Setup is
+        // not a strange thing to have. Named from the game alone, the third
+        // preview would be written over the second and one of the menus
+        // would be the wrong menu.
+        //
+        // THREE, not two. With two, the first disc goes in the preview
+        // folder itself and only one name is ever worked out, so there is
+        // nothing for it to collide with: taking the uniqueness out broke
+        // nothing and a planted fault walked straight through.
+        DiscProject thrice = AProject() with
+        {
+            Games = [ABigGame("Setup"), ABigGame("Setup"), ABigGame("Setup")]
+        };
+
+        IReadOnlyList<string> menus = new APreviewOfTheMenu(wrote, new PicturesThatRead())
+            .Write(thrice, Media.Cd, TheSizeOf, Look) is Outcome<IReadOnlyList<string>>.Ok(var where)
+                ? where
+                : throw new Xunit.Sdk.XunitException("the preview refused");
+
+        Assert.Equal(3, menus.Count);
+        Assert.Equal(3, menus.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+
+        // And the menus really are three separate files, not one written
+        // over twice.
+        Assert.Equal(
+            3,
+            wrote.Texts.Count(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)));
+    }
+
+    /// <summary>A game too big to share a CD with another.</summary>
+    private static GameFolder ABigGame(string name)
+    {
+        ListedFile only = new($"setup_{name}.exe", 600L * 1024 * 1024);
+
+        return new GameFolder(
+            @"C:\games\" + name, GameKind.GogInstaller, name, name, only, [only], [], null);
+    }
+
+    /// <summary>A project whose one game needs two CDs, with extras on it.</summary>
+    private static DiscProject ASetOfTwo()
+    {
+        ListedFile big = new("setup_hollow_knight.exe", 900L * 1024 * 1024);
+
+        return new DiscProject(
+            "HOLLOW KNIGHT",
+            [new GameFolder(@"C:\games\hk", GameKind.GogInstaller, "Hollow Knight", "Hollow Knight", big, [big], [], null)],
+            new DiscOptions(CutFiles: true))
+        {
+            Extras = new DiscExtras(
+                ManualPath: @"C:\stuff\How to play.pdf",
+                ExtrasFolderPath: @"C:\stuff\wallpapers",
+                MusicPath: @"C:\stuff\the tune.mp3")
+        };
+    }
+
+    private static IReadOnlyList<string> Previewing(RecordingWriter wrote, DiscProject project) =>
+        new APreviewOfTheMenu(wrote, new PicturesThatRead())
+            .Write(project, Media.Cd, TheSizeOf, Look) is Outcome<IReadOnlyList<string>>.Ok(var where)
+            ? where
+            : throw new Xunit.Sdk.XunitException("the preview refused");
+
+    /// <summary>
+    /// The manual, the music and the extras are small. Nothing else is asked
+    /// about: a game's size comes off its own file list.
+    /// </summary>
+    private static long TheSizeOf(string path) => 1024 * 1024;
+
+    /// <summary>The page written for one disc, counting from one.</summary>
+    private static string PageOf(RecordingWriter wrote, int disc) =>
+        wrote.Texts
+            .Where(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal))
+            .ElementAt(disc - 1)
+            .Text;
 
     [Fact]
     public void Tells_the_window_when_previewing_becomes_possible()
@@ -308,7 +550,7 @@ public class SeeingTheMenuFirst
         return new BuildContext(project, new DiscLayout([disc], Media.Dvd5.Capacity, 1), disc, Look, writer);
     }
 
-    private static MakeADisc TheScreen() =>
+    private static MakeADisc TheScreen(IShowTheMenu? preview = null) =>
         new(new TheMachine(
             new NoEncoding(),
             new ABuilderThatDoesNothing(),
@@ -321,7 +563,7 @@ public class SeeingTheMenuFirst
             new NothingIsRemembered(),
             new ATrayThatShuts(),
             new NothingIsReleased(),
-            new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead()),
+            preview ?? new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead()),
             new PicturesThatRead(),
             "2.0.0",
             _ => 1000));

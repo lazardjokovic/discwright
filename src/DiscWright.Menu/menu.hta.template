@@ -57,6 +57,10 @@ var showing = 0;
 // AutoRun can start a disc file with no drive letter at all.
 var WHERE = null;
 
+// The Media Player control, once there is one, and whether it is sounding.
+var player = null;
+var playing = false;
+
 function theDisc() {
     if (WHERE === null) {
         WHERE = theDiscIsAbove(document.URL);
@@ -98,6 +102,7 @@ function start() {
     }
 
     wearTheRightIcon();
+    startTheMusic();
 
     document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);
 
@@ -448,7 +453,74 @@ function runTheAddOn(which) {
     }
 }
 
+// The music, behind everything, and a way to turn it off.
+//
+// The Windows Media Player control rather than <audio> or <bgsound>, and
+// neither of those is an oversight:
+//
+//     <bgsound>   does nothing at all with an MP3 in current MSHTML. Silent,
+//                 with no error, which is the worst way for it to fail.
+//     <audio>     loads and then reports error 4, src not supported, in this
+//                 document mode. Measured here on a real MP3 under mshta.
+//     WMPlayer    plays it, loops it, and reports its position moving.
+//
+// v1 reached the same answer and left the same note. This is the player v1
+// used, down to the volume.
+function startTheMusic() {
+    var where = onTheDisc(theDisc(), DISC.music);
+    var button = document.getElementById("mute");
+
+    if (!where) {
+        return;
+    }
+
+    try {
+        player = new ActiveXObject("WMPlayer.OCX");
+        player.settings.setMode("loop", true);
+        player.settings.volume = 55;
+        player.URL = where;
+        player.controls.play();
+        playing = true;
+    } catch (noPlayer) {
+        // No Media Player on this machine. The menu is silent and everything
+        // else about it works, which is better than a disc that will not open
+        // because it could not find a tune.
+        player = null;
+        return;
+    }
+
+    button.style.display = "block";
+}
+
+function toggleMusic() {
+    if (!player) {
+        return;
+    }
+
+    try {
+        if (playing) {
+            player.controls.pause();
+        } else {
+            player.controls.play();
+        }
+
+        playing = !playing;
+        document.getElementById("mute").className = playing ? "" : "off";
+    } catch (wentWrong) {
+        // Pausing a tune is not worth a message.
+    }
+}
+
 function doExit() {
+    // Stopped by hand, because the control outlives the window often enough
+    // to leave music playing in an empty room.
+    try {
+        if (player) {
+            player.controls.stop();
+        }
+    } catch (wentWrong) {
+    }
+
     window.close();
 }
 </script>
@@ -491,6 +563,19 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 .btn.dead { color: #5E727A; border-color: #1A2429;
             background: #070D10; background: rgba(10, 17, 20, 0.18); cursor: default; }
 #addOnNote { margin: -4px 0 12px 0; font-size: 10px; line-height: 14px; color: #8FA3AA; }
+/* Top left, away from the panel, because it is about the window rather than
+   about the game. Hidden until there is a tune to turn off.
+
+   TOP, NOT BOTTOM. The stage is 480 tall and so is the window, and the window
+   has a title bar, so the stage runs off the bottom of the client area by the
+   height of that bar. Anchored to the bottom this sat below the edge and was
+   invisible: the page reported it displayed and nothing was on screen, which
+   is how it passed a reading of the DOM and failed a photograph. */
+#mute { position: absolute; left: 16px; top: 16px; width: 28px; height: 28px;
+        line-height: 28px; text-align: center; font-size: 15px; cursor: default;
+        color: #CBD6DB; border: 1px solid #27353B;
+        background: #080F12; background: rgba(18, 32, 38, 0.22); }
+#mute.off { color: #5E727A; border-color: #1A2429; }
 </style>
 </head>
 
@@ -517,6 +602,9 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 
         <div id="stillWanted"></div>
     </div>
+
+    <div id="mute" style="display: none" title="Music on or off"
+         onclick="toggleMusic(); return false;">&#9835;</div>
 </div>
 </body>
 </html>

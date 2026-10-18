@@ -279,23 +279,17 @@ public class TheWindowsMarkup
     }
 
     [Fact]
-    public void The_two_column_headings_start_on_the_same_line()
+    public void The_heading_over_the_list_sits_on_the_list_it_heads()
     {
-        // WHAT GOES ON IT sat nine pixels below WHAT IT IS CALLED, measured
-        // off a photograph of the window. It was centred inside a row whose
-        // height comes from the preview button beside it, while the heading
-        // in the next column sits at the top of its own column.
-        XElement[] headings =
-        [
-            .. Window().Descendants(Xaml + "TextBlock")
-                .Where(each => (string?)each.Attribute("Style") == "{StaticResource Step}")
-                .Where(each => (string?)each.Attribute("VerticalAlignment") == "Center")
-        ];
+        // It shares a row with the preview button, which is taller than the
+        // words are. Aligned anywhere but the bottom of that row, the button's
+        // height ends up between WHAT GOES ON IT and the tree it names, and
+        // the heading reads as belonging to the row rather than to the list.
+        XElement heading = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => (string?)each.Attribute("Text") == "WHAT GOES ON IT");
 
-        Assert.True(
-            headings.Length == 0,
-            "A column heading centred in its row starts on a different line from the heading beside it: "
-                + string.Join(", ", headings.Select(each => (string?)each.Attribute("Text"))));
+        Assert.Equal("Bottom", (string?)heading.Attribute("VerticalAlignment"));
     }
 
     [Fact]

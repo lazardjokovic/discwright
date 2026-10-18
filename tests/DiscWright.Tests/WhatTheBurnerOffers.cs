@@ -16,6 +16,39 @@ namespace DiscWright.Tests;
 public class WhatTheBurnerOffers(Xunit.Abstractions.ITestOutputHelper says)
 {
     [Fact]
+    public void Nothing_in_the_burning_code_catches_only_half_of_COM()
+    {
+        // InvalidComObjectException is NOT a COMException. It comes from the
+        // same place and means the same kind of thing, and catching one
+        // without the other is how "Attempt has been made to use a COM object
+        // that does not have a backing class factory" got out of the drive
+        // listing, out of the view model, and into a box with a red cross in
+        // front of Lazar.
+        //
+        // Read off disk, because what matters is the shape of the source
+        // rather than anything a running test can provoke: making real COM
+        // come apart on demand is not something a test can arrange.
+        List<string> half = [];
+
+        foreach (string file in Directory.EnumerateFiles(
+            Repository.File("src", "DiscWright.Burning"), "*.cs"))
+        {
+            string code = File.ReadAllText(file);
+
+            if (code.Contains("catch (COMException", StringComparison.Ordinal)
+                && !code.Contains("catch (InvalidComObjectException", StringComparison.Ordinal))
+            {
+                half.Add(Path.GetFileName(file));
+            }
+        }
+
+        Assert.True(
+            half.Count == 0,
+            "These catch COMException and not InvalidComObjectException, so the second kind walks out: "
+                + string.Join(", ", half));
+    }
+
+    [Fact]
     public void Tells_us_which_interface_it_reports_progress_through()
     {
         foreach (string progId in (string[])["IMAPI2.MsftDiscFormat2Data", "IMAPI2.MsftDiscFormat2Erase"])

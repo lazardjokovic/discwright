@@ -285,7 +285,8 @@ public class AskingIfThereIsANewerOne
     /// <summary>A preview nobody looks at.</summary>
     private sealed class NoPreview : IShowTheMenu
     {
-        public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
+        public Outcome<IReadOnlyList<string>> Write(
+            DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
             Refusals.ThereIsNothingToPutOnADisc();
     }
 

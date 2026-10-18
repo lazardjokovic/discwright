@@ -162,8 +162,16 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string WhereAPreviewWouldGo =>
         WhereAPreviewGoes.For(Label, OutputFolder, _games.Count > 0 ? _games[0].Path : null);
 
-    /// <summary>Where the last preview was written, or nothing.</summary>
-    public string? ThePreview { get; private set; }
+    /// <summary>
+    /// The menus the last preview wrote, in the order the discs would be
+    /// burned, or nothing at all.
+    /// </summary>
+    /// <remarks>
+    /// All of them, not the first. The manual and the extras ride one disc of
+    /// a set and the planner puts them on the last one, so a preview of disc
+    /// one can never show the buttons for them however many somebody chose.
+    /// </remarks>
+    public IReadOnlyList<string> ThePreviews { get; private set; } = [];
 
     /// <summary>
     /// Writes the menu this project would get, for somebody to look at.
@@ -172,8 +180,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// <para>
     /// <strong>Before anything is built</strong>, which is the whole point:
     /// seeing the menu after burning a disc is seeing it too late. So the
-    /// discs are planned exactly as building would plan them, and the menu for
-    /// the first one is written out.
+    /// discs are planned exactly as building would plan them, and every one of
+    /// their menus is written out.
     /// </para>
     /// <para>
     /// It goes somewhere temporary. A preview is not an output and has no
@@ -187,21 +195,35 @@ public sealed class MakeADisc : INotifyPropertyChanged
             return;
         }
 
-        ThePreview = null;
+        ThePreviews = [];
         ItWentWrong = null;
 
-        switch (_machine.Preview.Write(AsAProject(), Medium, _machine.HowBigIs, into))
+        try
         {
-            case Outcome<string>.Ok(string where):
-                ThePreview = where;
-                break;
+            switch (_machine.Preview.Write(AsAProject(), Medium, _machine.HowBigIs, into))
+            {
+                case Outcome<IReadOnlyList<string>>.Ok(IReadOnlyList<string> where):
+                    ThePreviews = where;
+                    break;
 
-            case Outcome<string>.No refused:
-                ItWentWrong = refused.Refusal;
-                break;
+                case Outcome<IReadOnlyList<string>>.No refused:
+                    ItWentWrong = refused.Refusal;
+                    break;
+            }
+        }
+        catch (Exception nobodyExpected) when (nobodyExpected is not OperationCanceledException)
+        {
+            // A preview writes real files: the artwork and the music are
+            // copied, and either of them can have been moved or renamed since
+            // somebody chose it. Found by previewing a project whose tune was
+            // not where it said: the FileNotFoundException went straight out
+            // of here, past a window that catches nothing around this, and
+            // took the program down with a stack trace in a box.
+            ItWentWrong = Refusals.SomethingNobodyExpected(
+                "writing the preview", nobodyExpected.Message);
         }
 
-        Tell(nameof(ThePreview));
+        Tell(nameof(ThePreviews));
         Tell(nameof(ItWentWrong));
     }
 
@@ -500,13 +522,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// end up with rows that quietly show nothing.
     /// </para>
     /// <para>
-    /// They change with the option to split a file: a size that will be split
-    /// across discs is a different answer from the same size that will not,
-    /// and saying so where the size is chosen beats a refusal further down the
-    /// window that somebody has to work backwards from.
+    /// <strong>The rows never change, and that is the point.</strong> They used
+    /// to be reworded whenever the option to split a file was ticked, so every
+    /// row read "CD-R 700 MB, split across discs" and the plain sizes were gone
+    /// from a list whose whole job is to offer sizes. Whether a file gets split
+    /// is the checkbox's business, and it is said at the checkbox.
+    /// </para>
+    /// <para>
+    /// Rewording them also handed WPF a list whose rows were all new objects,
+    /// which is the standard way to make a dropdown lose its selection: the row
+    /// that was chosen is not in the list it is then looked for in. Built once,
+    /// that cannot happen.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<ASizeToAimAt> DiscSizes { get; private set; } =
+    public IReadOnlyList<ASizeToAimAt> DiscSizes { get; } =
         [.. Media.All.Select(each => new ASizeToAimAt(each, each.Name))];
 
     /// <summary>
@@ -649,19 +678,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
             ? "Without its installer, the disc will not install the game."
             : null;
 
-    /// <summary>
-    /// Words the sizes again, because what they mean has changed.
-    /// </summary>
-    private void SayTheSizesAgain()
-    {
-        string also = Options.CutFiles ? ", split across discs" : string.Empty;
-
-        DiscSizes = [.. Media.All.Select(each => new ASizeToAimAt(each, each.Name + also))];
-
-        Tell(nameof(DiscSizes));
-        Tell(nameof(TheSizeChosen));
-    }
-
     /// <summary>Whether the disc gets a menu that opens when it goes in.</summary>
     public bool Menu
     {
@@ -756,25 +772,33 @@ public sealed class MakeADisc : INotifyPropertyChanged
         ItWentWrong = null;
         Tell(nameof(ItWentWrong));
 
-        IReadOnlyList<Recorder> all = await WaitForTheDriveToSaySomething(_machine.Drives.All(), null, ct);
-
-        Recorder[] could = [.. all.Where(each => each.ErasingWouldHelp)];
-
-        if (could.Length == 0)
-        {
-            ItWentWrong = Refusals.ThereIsNothingToErase(
-                [.. all.Select(each => each.Drive)]);
-            Tell(nameof(ItWentWrong));
-            return;
-        }
-
-        if (await whichToErase(could) is not Recorder chosen)
-        {
-            return;
-        }
-
         try
         {
+            // Inside the catch-all, and that is the fix rather than a tidy-up.
+            //
+            // Asking the drives what they are holding is a pile of COM calls,
+            // and it sat out here where nothing caught anything. So the box
+            // reading "Attempt has been made to use a COM object that does not
+            // have a backing class factory" arrived before a single thing had
+            // been erased, from the sentence below rather than from the erase
+            // the catch-all was written for.
+            IReadOnlyList<Recorder> all = await WaitForTheDriveToSaySomething(_machine.Drives.All(), null, ct);
+
+            Recorder[] could = [.. all.Where(each => each.ErasingWouldHelp)];
+
+            if (could.Length == 0)
+            {
+                ItWentWrong = Refusals.ThereIsNothingToErase(
+                    [.. all.Select(each => each.Drive)]);
+                Tell(nameof(ItWentWrong));
+                return;
+            }
+
+            if (await whichToErase(could) is not Recorder chosen)
+            {
+                return;
+            }
+
             IsWorking = true;
             Tell(nameof(IsWorking));
             Tell(nameof(NothingIsRunning));
@@ -798,7 +822,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             // answer. Letting it out turns into raw exception text in a
             // message box, which reads as a crash: that is how
             // "Attempt has been made to use a COM object that does not have
-            // a backing class factory" reached Lazar at the end of an erase.
+            // a backing class factory" reached Lazar.
             ItWentWrong = Refusals.SomethingNobodyExpected("erasing the disc", nobodyExpected.Message);
             Tell(nameof(ItWentWrong));
         }
@@ -2196,10 +2220,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _options = to;
         Tell(name);
         Tell(nameof(Options));
-
-        // A size that will be split across discs is a different answer from
-        // the same size that will not, and the list says which.
-        SayTheSizesAgain();
 
         // Splitting a file changes what would be made, so the line saying so
         // has to be worked out again.

@@ -73,6 +73,12 @@ public static class MenuWriter
         data.Append("    buttons: ").Append(JScript.ListOf(facts.Buttons)).Append(",\n");
         data.Append("    manual: ").Append(JScript.Literal(facts.Manual ?? string.Empty)).Append(",\n");
         data.Append("    extras: ").Append(JScript.Literal(facts.Extras ?? string.Empty)).Append(",\n");
+
+        // What the menu plays behind itself, or nothing at all. The
+        // picker that asks for it is called "What plays behind the menu",
+        // and until this line existed the file was copied onto every disc
+        // of every set and nothing ever played a note of it.
+        data.Append("    music: ").Append(JScript.Literal(facts.Music ?? string.Empty)).Append(",\n");
         data.Append("    icon: ").Append(JScript.Literal(facts.IconOnTheDisc)).Append(",\n");
 
         // So the script can refuse to start things that are not there. A
@@ -226,7 +232,8 @@ public sealed record MenuFacts(
     string Icon = "menu.ico",
     string IconOnTheDisc = "AUTORUN/menu.ico",
     string? Manual = null,
-    string? Extras = null)
+    string? Extras = null,
+    string? Music = null)
 {
     /// <summary>The games, or one standing for the disc when none were given.</summary>
     public IReadOnlyList<MenuGame> GamesOrTheOne => Games ?? [new MenuGame(GameName, string.Empty, string.Empty)];

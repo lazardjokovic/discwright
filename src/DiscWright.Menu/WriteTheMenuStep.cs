@@ -21,7 +21,12 @@ namespace DiscWright.Menu;
 /// preview must not refocus the stale window left from previewing something
 /// else a minute ago.
 /// </param>
-public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
+/// <param name="playsMusic">
+/// Whether this menu plays the tune. Always true on a disc. A preview of a
+/// set opens a window for every disc, and every disc of a set carries the
+/// tune, so without this they all start playing it over one another.
+/// </param>
+public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = true) : IBuildStep
 {
     /// <summary>Where the menu lives on a disc. Uppercase, as v1 writes it.</summary>
     private const string Folder = "AUTORUN";
@@ -145,6 +150,19 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
             : null;
     }
 
+    /// <summary>
+    /// What this disc plays behind its menu, or nothing.
+    /// </summary>
+    /// <remarks>
+    /// Every disc of a set, unlike the manual and the extras. Music belongs to
+    /// the menu rather than to the content, every disc has a menu of its own,
+    /// and that is why the planner counts it as overhead on all of them.
+    /// </remarks>
+    private string? TheMusicOn(BuildContext context) =>
+        playsMusic && CopyTheMusicStep.NameOnTheDisc(context.Project) is string tune
+            ? Folder + "/" + tune
+            : null;
+
     /// <summary>Where the extras are on this disc, or nothing.</summary>
     private static string? TheExtrasOn(BuildContext context)
     {
@@ -260,6 +278,11 @@ public sealed class WriteTheMenuStep(bool forADisc = true) : IBuildStep
                 : Folder + "/" + OurOwnIcon,
 
             TheManualOn(context),
-            TheExtrasOn(context));
+            TheExtrasOn(context),
+
+            // Named from the step that copies it rather than spelled out
+            // again here. The one thing worse than a menu that plays nothing
+            // is a menu that asks the player for a file nobody wrote.
+            TheMusicOn(context));
     }
 }

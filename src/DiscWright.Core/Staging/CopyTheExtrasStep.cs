@@ -106,10 +106,35 @@ public sealed class CopyTheExtrasStep(IFileSystem files) : IBuildStep
 /// </remarks>
 public sealed class CopyTheMusicStep : IBuildStep
 {
+    /// <summary>Where the music lands, beside the menu that plays it.</summary>
+    public const string MenuFolder = "AUTORUN";
+
     public string Says => "adding the music";
 
     public bool AppliesTo(BuildContext context) =>
         context.Project.Extras?.MusicPath is not null && context.Project.Options.Menu;
+
+    /// <summary>
+    /// What the music is called once it is on the disc, or null when the disc
+    /// has none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Renamed to "music", keeping its extension. The menu then names one file
+    /// whatever somebody's download was called, and a name with a quote or a
+    /// bracket in it never reaches the menu's script at all.
+    /// </para>
+    /// <para>
+    /// Asked here by both the step that copies it and the menu that plays it,
+    /// rather than spelled out twice. Spelled twice they agree until one of
+    /// them changes, and then the menu asks the player for a file that is not
+    /// there and the disc is silent with nothing to say why.
+    /// </para>
+    /// </remarks>
+    public static string? NameOnTheDisc(DiscProject project) =>
+        project.Extras?.MusicPath is string music && project.Options.Menu
+            ? "music" + System.IO.Path.GetExtension(music).ToLowerInvariant()
+            : null;
 
     public Task Run(BuildContext context, CancellationToken ct)
     {
@@ -117,14 +142,11 @@ public sealed class CopyTheMusicStep : IBuildStep
 
         string music = context.Project.Extras!.MusicPath!;
 
-        context.Writer.MakeFolder(context.On("AUTORUN"));
+        context.Writer.MakeFolder(context.On(MenuFolder));
 
-        // Renamed to "music", keeping its extension. The menu then names one
-        // file whatever somebody's download was called, and a name with a
-        // quote or a bracket in it never reaches the menu's script at all.
         context.Writer.Copy(
             music,
-            context.On(@"AUTORUN\music" + System.IO.Path.GetExtension(music).ToLowerInvariant()));
+            context.On(MenuFolder + (char)92 + NameOnTheDisc(context.Project)!));
 
         return Task.CompletedTask;
     }

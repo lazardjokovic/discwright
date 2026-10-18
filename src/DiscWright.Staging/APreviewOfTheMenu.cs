@@ -26,7 +26,8 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : I
     private const string Folder = "AUTORUN";
 
     /// <inheritdoc />
-    public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into)
+    public Outcome<IReadOnlyList<string>> Write(
+        DiscProject project, Medium medium, Func<string, long> sizeOf, string into)
     {
         // Emptied first, and before the plan is even attempted.
         //
@@ -37,13 +38,15 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : I
         // like the answer to the question just asked.
         //
         // Safe here because the folder is one this program named, which is
-        // the only thing EmptyTheFolder is for.
+        // the only thing EmptyTheFolder is for. The discs below go in folders
+        // of their own underneath it, made fresh, so this is still the one
+        // call that removes anything.
         writer.EmptyTheFolder(into);
 
-        // Planned the way building plans, because which games land on disc one
-        // is part of what somebody is previewing. Asked once: planning walks
-        // every file in the project, and a refusal is an answer rather than a
-        // reason to go round again.
+        // Planned the way building plans, because which games land on which
+        // disc is part of what somebody is previewing. Asked once: planning
+        // walks every file in the project, and a refusal is an answer rather
+        // than a reason to go round again.
         PlannedBuild planned;
 
         switch (WhatWouldBeMade.For(project, medium, sizeOf))
@@ -59,43 +62,89 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : I
                 return Refusals.ThereIsNothingToPutOnADisc();
         }
 
-        PlannedOutput first = planned.Outputs[0];
+        List<string> written = [];
+        HashSet<string> taken = new(StringComparer.OrdinalIgnoreCase);
 
-        BuildContext context = new(
-            project with { Label = first.Label, Games = first.Games },
-            first.Layout,
-            first.Layout.Discs[0],
-            into,
-            writer);
-
-
-        // The artwork and the music first, and not only the menu.
-        //
-        // A preview that leaves them out shows a menu drawn on nothing, which
-        // is the one thing somebody choosing a background most wants to look
-        // at. The point of a preview is the disc as it will be.
-        //
-        // The same steps the build runs, in the order the build runs them:
-        // the menu names a background file that has to already be there.
-        foreach (IBuildStep step in new IBuildStep[]
+        foreach (PlannedOutput output in planned.Outputs)
         {
-            new CopyTheArtworkStep(pictures),
-            new CopyTheMusicStep(),
-            new WriteTheMenuStep(forADisc: false)
-        })
-        {
-            if (step.AppliesTo(context))
+            DiscProject forThisOne = project with { Label = output.Label, Games = output.Games };
+
+            foreach (PlannedDisc disc in output.Layout.Discs)
             {
-                step.Run(context, CancellationToken.None).GetAwaiter().GetResult();
+                bool theFirst = written.Count == 0;
+
+                string folder = theFirst
+                    ? into
+                    : System.IO.Path.Combine(into, Named(output, disc, taken));
+
+                BuildContext context = new(forThisOne, output.Layout, disc, folder, writer);
+
+                // The artwork and the music first, and not only the menu.
+                //
+                // A preview that leaves them out shows a menu drawn on
+                // nothing, which is the one thing somebody choosing a
+                // background most wants to look at. The point of a preview is
+                // the disc as it will be.
+                //
+                // The same steps the build runs, in the order the build runs
+                // them: the menu names a background file that has to already
+                // be there.
+                //
+                // The music only on the first, which is this preview's third
+                // deliberate difference from a disc. Every disc of a set
+                // carries the tune and every disc's menu plays it, and three
+                // windows opening at once and playing the same bar over each
+                // other is not a preview of anything.
+                foreach (IBuildStep step in TheSteps(theFirst))
+                {
+                    if (step.AppliesTo(context))
+                    {
+                        step.Run(context, CancellationToken.None).GetAwaiter().GetResult();
+                    }
+                }
+
+                written.Add(System.IO.Path.Combine(folder, Folder, "menu.hta"));
             }
         }
 
-        return System.IO.Path.Combine(into, Folder, "menu.hta");
+        return written;
+    }
+
+    private IBuildStep[] TheSteps(bool theFirst) =>
+    [
+        new CopyTheArtworkStep(pictures),
+        .. theFirst ? new IBuildStep[] { new CopyTheMusicStep() } : [],
+        new WriteTheMenuStep(forADisc: false, playsMusic: theFirst)
+    ];
+
+    /// <summary>
+    /// What to call the folder a disc after the first goes in.
+    /// </summary>
+    /// <remarks>
+    /// Readable, because somebody opening their temporary folder should be
+    /// able to tell which disc is which, and unique, because two games can be
+    /// called the same thing and the second one must not land on top of the
+    /// first.
+    /// </remarks>
+    private static string Named(PlannedOutput output, PlannedDisc disc, HashSet<string> taken)
+    {
+        string wanted = output.Layout.Discs.Count > 1
+            ? $"{output.Label} D{disc.Number}"
+            : output.Label;
+
+        string name = wanted;
+
+        for (int again = 2; !taken.Add(name); again++)
+        {
+            name = $"{wanted} ({again})";
+        }
+
+        return name;
     }
 }
 
 /// <summary>
-/// Writing out a menu somebody can look at without making a disc.
+/// Writing out the menus somebody can look at without making a disc.
 /// </summary>
 /// <remarks>
 /// A port, so that the screen can offer a preview without knowing what opens
@@ -105,8 +154,17 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : I
 public interface IShowTheMenu
 {
     /// <summary>
-    /// Writes the menu for the first disc this project would make, and says
-    /// where it put it, or why it could not.
+    /// Writes the menu for every disc this project would make, in the order
+    /// they would be burned, and says where it put them, or why it could not.
     /// </summary>
-    Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into);
+    /// <remarks>
+    /// <strong>Every disc, not only the first.</strong> The manual and the
+    /// extras go on one disc of a set, which the planner puts last because
+    /// that is where the slack is. A preview of disc one alone can therefore
+    /// never show the Manual or Extras buttons on a set, however many of them
+    /// somebody has chosen, which is exactly how it looked to the person who
+    /// had chosen them.
+    /// </remarks>
+    Outcome<IReadOnlyList<string>> Write(
+        DiscProject project, Medium medium, Func<string, long> sizeOf, string into);
 }

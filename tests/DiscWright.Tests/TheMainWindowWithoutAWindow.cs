@@ -215,8 +215,11 @@ public class TheMainWindowWithoutAWindow
         Assert.Null(window.WhyNot);
         Assert.True(window.CanMakeIt);
 
-        // And the size says what it is now going to do.
-        Assert.EndsWith(", split across discs", window.TheSizeChosen!.InWords, StringComparison.Ordinal);
+        // And the size that was chosen is still chosen. Ticking the box used
+        // to reword every row of the dropdown, which both hid the plain sizes
+        // and handed WPF a list the chosen row was no longer in.
+        Assert.Equal(Media.Cd.Key, window.TheSizeChosen!.Medium.Key);
+        Assert.Equal(Media.Cd.Name, window.TheSizeChosen.InWords);
     }
 
     [Fact]
@@ -1892,6 +1895,21 @@ public class TheMainWindowWithoutAWindow
         public IReadOnlyList<Recorder> All() => [];
     }
 
+    /// <summary>
+    /// A drive whose COM object has been pulled out from under the question.
+    /// </summary>
+    /// <remarks>
+    /// Not a COMException. That is the point: everything in the burning code
+    /// caught COMException, this is not one, and so it walked out of the
+    /// listing, out of the view model and into a message box.
+    /// </remarks>
+    private sealed class ADriveThatComesApart : IFindRecorders
+    {
+        public IReadOnlyList<Recorder> All() =>
+            throw new System.Runtime.InteropServices.InvalidComObjectException(
+                "Attempt has been made to use a COM object that does not have a backing class factory.");
+    }
+
     private sealed class TheseDrives(params Recorder[] drives) : IFindRecorders
     {
         private int _asked;
@@ -2060,7 +2078,8 @@ public class TheMainWindowWithoutAWindow
     /// <summary>A preview nobody looks at.</summary>
     private sealed class NoPreview : IShowTheMenu
     {
-        public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
+        public Outcome<IReadOnlyList<string>> Write(
+            DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
             Refusals.ThereIsNothingToPutOnADisc();
     }
 
@@ -2082,23 +2101,37 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
-    public void Says_in_the_list_of_sizes_that_files_will_be_split()
+    public void The_list_of_sizes_offers_sizes_and_goes_on_offering_them()
     {
         MakeADisc screen = New();
 
-        Assert.All(screen.DiscSizes, size => Assert.DoesNotContain("split", size.InWords, StringComparison.Ordinal));
+        ASizeToAimAt[] before = [.. screen.DiscSizes];
 
         screen.CutFiles = true;
+        screen.CutFiles = false;
+        screen.CutFiles = true;
 
-        // Somebody choosing a size is the person who wants to know a file is
-        // about to be cut in half. Saying it there beats a refusal further
-        // down the window that has to be worked backwards from.
-        Assert.All(screen.DiscSizes, size => Assert.EndsWith(", split across discs", size.InWords, StringComparison.Ordinal));
-        Assert.StartsWith("CD-R", screen.DiscSizes[0].InWords, StringComparison.Ordinal);
+        // Ticking the box used to reword every row, so the list read
+        // "CD-R 700 MB, split across discs" throughout and the plain sizes
+        // were gone from the one list whose job is to offer sizes. Whether a
+        // file is split is the checkbox's business and is said at the
+        // checkbox.
+        Assert.All(screen.DiscSizes, size => Assert.DoesNotContain("split", size.InWords, StringComparison.Ordinal));
+        Assert.Equal(Media.Cd.Name, screen.DiscSizes[0].InWords);
+
+        // The same rows, and not merely rows that read the same. A dropdown
+        // handed a list of new objects drops its selection, because the row
+        // it is holding is not in the list it looks in.
+        Assert.Equal(before.Length, screen.DiscSizes.Count);
+
+        for (int at = 0; at < before.Length; at++)
+        {
+            Assert.Same(before[at], screen.DiscSizes[at]);
+        }
     }
 
     [Fact]
-    public void Keeps_the_size_that_was_chosen_when_the_words_change()
+    public void Keeps_the_size_that_was_chosen_when_the_split_box_is_tried()
     {
         MakeADisc screen = New();
 
@@ -2115,12 +2148,13 @@ public class TheMainWindowWithoutAWindow
         Assert.False(ReferenceEquals(stranger, Media.Dvd9), "the premise of this test");
 
         screen.CutFiles = true;
+        screen.CutFiles = false;
 
-        // The rows are built again, so a chosen row that was compared by
-        // identity would come back empty and the dropdown would look blank.
+        // A chosen row compared by identity would come back empty here and
+        // the dropdown would show a blank where the choice used to be.
         Assert.NotNull(screen.TheSizeChosen);
         Assert.Equal(Media.Dvd9.Key, screen.TheSizeChosen!.Medium.Key);
-        Assert.EndsWith(", split across discs", screen.TheSizeChosen.InWords, StringComparison.Ordinal);
+        Assert.Equal(Media.Dvd9.Name, screen.TheSizeChosen.InWords);
     }
 
     [Fact]
@@ -2135,18 +2169,29 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
-    public void Tells_the_window_the_list_of_sizes_changed()
+    public void Tells_the_window_what_ticking_the_split_box_changed()
     {
         MakeADisc screen = New();
+        screen.OutputFolder = @"C:\out";
+        screen.Medium = Media.Cd;
+        screen.Add(AGame("Too Big", 800_000_000));
+
         List<string> told = [];
         screen.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
 
         screen.CutFiles = true;
 
-        // Without both of these the dropdown goes on showing the old words,
-        // or shows nothing at all where the choice used to be.
-        Assert.Contains(nameof(MakeADisc.DiscSizes), told);
-        Assert.Contains(nameof(MakeADisc.TheSizeChosen), told);
+        // The box itself, the options it belongs to, and the line that says
+        // what the project will now make, which is the thing ticking it
+        // actually changes.
+        Assert.Contains(nameof(MakeADisc.CutFiles), told);
+        Assert.Contains(nameof(MakeADisc.Options), told);
+        Assert.Contains(nameof(MakeADisc.WhatItWillMake), told);
+
+        // And NOT the list of sizes, which no longer has anything to say.
+        // It used to be reworded here, which both hid the plain sizes and
+        // made the dropdown drop its selection.
+        Assert.DoesNotContain(nameof(MakeADisc.DiscSizes), told);
     }
 
     // ------------------------------------------------- the tree of what goes on
@@ -2458,6 +2503,45 @@ public class TheMainWindowWithoutAWindow
         // any notification at all, which is why that test passed.
         Assert.True(window.CanErase);
         Assert.Contains(nameof(MakeADisc.CanErase), told);
+    }
+
+    [Fact]
+    public async Task A_drive_that_throws_while_being_asked_is_still_an_answer()
+    {
+        // The box reading "Attempt has been made to use a COM object that
+        // does not have a backing class factory" that Lazar got on pressing
+        // Erase a disc. It came from asking the drives what they were
+        // holding, which happens before anything is erased and which sat
+        // outside the catch-all written for exactly this.
+        //
+        // InvalidComObjectException on purpose, and not any old exception:
+        // it is not a COMException, which is what everything in the burning
+        // code was catching, and that is the whole reason it got out.
+        MakeADisc window = New(drives: new ADriveThatComesApart());
+
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could.Count > 0 ? could[0] : null));
+
+        Refusal said = Assert.IsType<Refusal>(window.ItWentWrong);
+        Assert.Contains("erasing the disc", said.Headline, StringComparison.Ordinal);
+
+        // And the window is not left looking busy for the rest of the run.
+        Assert.False(window.IsWorking);
+    }
+
+    [Fact]
+    public void No_handler_in_the_window_shows_an_exception_on_its_own()
+    {
+        // Raw machine words in a box with a red cross read as the program
+        // falling over. Every one of them is a refusal now: a sentence that
+        // says what was happening and that nothing is lost, with whatever
+        // Windows said carried inside it.
+        //
+        // Read off disk, like the markup guards, because nothing in this
+        // project can reference the window's code behind.
+        string code = System.IO.File.ReadAllText(
+            Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        Assert.DoesNotContain("MessageBox.Show(this, wrong.Message", code, StringComparison.Ordinal);
     }
 
     [Fact]

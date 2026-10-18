@@ -42,9 +42,14 @@ public sealed record TheSetSoFar(int Written, int OfDiscs, string? WhyItStopped,
                     + $"and {Of(1, BroughtForward, false)} earlier.";
             }
 
+            // "Nothing was written" for none of them, which was false in the
+            // case that matters: a disc that was burned and then failed its
+            // check is a disc that was written, and somebody who has just
+            // spent one should not be told nothing happened. What is true
+            // either way is that no disc of the set is finished.
             string got = Written switch
             {
-                0 => "Nothing was written.",
+                0 => "No disc of the set is finished.",
                 1 => "Disc 1 is written and checked.",
                 _ => $"Discs 1 to {Written} are written and checked."
             };

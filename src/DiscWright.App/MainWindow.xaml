@@ -123,15 +123,15 @@
                      taller than the words beside it, and the row took its
                      height, which left a band of nothing between the header
                      and the list it heads. -->
-                <!-- Top, not Center, and no negative top margin to go with
-                     it. Centred inside a row whose height comes from the
-                     button beside it, this heading sat 9 pixels below WHAT IT
-                     IS CALLED in the next column, measured off a photograph.
-                     Two headings of the same kind on the same row of the same
-                     window should start on the same line. -->
+                <!-- Bottom, so the heading sits on the list it heads.
+                     It was aligned to the top instead, level with WHAT IT IS
+                     CALLED in the next column, which put the height of the
+                     preview button between the words and the thing they name.
+                     A heading belongs to what is under it, not to whatever
+                     happens to be beside it. -->
                 <Grid DockPanel.Dock="Top" Margin="0,0,0,-4">
                     <TextBlock Style="{StaticResource Step}"
-                               VerticalAlignment="Top"
+                               VerticalAlignment="Bottom"
                                Text="WHAT GOES ON IT" />
                     <!-- A real button, not something that looks like a link.
                          Pressing it opens a window, which is what a button
@@ -376,11 +376,15 @@
                      afterwards it is said to an empty chair, and the burn
                      itself stops and asks when a tray needs a push. -->
 
-                <!-- Beside the size, because it is about the size: it is
-                     the answer to "that will not fit", and it changes what
-                     every row of the dropdown above now says. In More options
-                     it was a setting somebody had to already know about to go
-                     looking for. -->
+                <!-- Beside the size, because it is the answer to "that will
+                     not fit". In More options it was a setting somebody had to
+                     already know about to go looking for.
+
+                     It used to reword every row of the dropdown above, so that
+                     ticking it left a list reading "CD-R 700 MB, split across
+                     discs" six times over and no plain sizes in the one list
+                     whose job is to offer sizes. The fact belongs here, where
+                     the box is. -->
                 <CheckBox Margin="0,8,0,0"
                           Content="Split a file across two discs"
                           IsChecked="{Binding CutFiles}"

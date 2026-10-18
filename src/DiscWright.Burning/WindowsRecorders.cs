@@ -54,6 +54,19 @@ public sealed class WindowsRecorders : IFindRecorders
             // burn it.
             return [];
         }
+        catch (InvalidComObjectException)
+        {
+            // NOT a COMException, which is the whole reason this line exists.
+            // "Attempt has been made to use a COM object that does not have a
+            // backing class factory" walked past the catch above, out of here,
+            // out of the view model, and into the window's catch-all, where it
+            // was shown as raw exception text in a box with a red cross.
+            //
+            // It reached Lazar by pressing Erase a disc: the drives are asked
+            // about before anything is erased, and this is where that asking
+            // happens. Nothing had gone wrong with his disc.
+            return [];
+        }
         catch (TypeLoadException)
         {
             return [];
@@ -118,6 +131,13 @@ public sealed class WindowsRecorders : IFindRecorders
         }
         catch (COMException wrong)
         {
+            return new Recorder(id, string.Empty, "a drive", 0, false, 0, [], FirstLineOf(wrong.Message));
+        }
+        catch (InvalidComObjectException wrong)
+        {
+            // The same hole as in All, one drive down. A drive that will not
+            // answer is an answer and never a throw, whichever kind of COM
+            // failure it is: everything above this expects a Recorder back.
             return new Recorder(id, string.Empty, "a drive", 0, false, 0, [], FirstLineOf(wrong.Message));
         }
         finally

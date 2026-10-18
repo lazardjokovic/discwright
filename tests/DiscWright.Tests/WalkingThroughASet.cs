@@ -89,7 +89,12 @@ public class WalkingThroughASet
 
         TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
         Assert.Equal(0, went.Written);
-        Assert.Contains("Nothing was written", went.InWords, StringComparison.Ordinal);
+
+        // Not "nothing was written", which is what it used to say and is
+        // false here: a disc was written and then failed its check, and the
+        // blank is spent whatever the sentence says.
+        Assert.Contains("No disc of the set is finished", went.InWords, StringComparison.Ordinal);
+        Assert.DoesNotContain("Nothing was written", went.InWords, StringComparison.Ordinal);
         Assert.Contains("stopped at disc 1 of 3", went.InWords, StringComparison.Ordinal);
     }
 
@@ -585,7 +590,8 @@ public class WalkingThroughASet
     /// <summary>A preview nobody looks at.</summary>
     private sealed class NoPreview : IShowTheMenu
     {
-        public Outcome<string> Write(DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
+        public Outcome<IReadOnlyList<string>> Write(
+            DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
             Refusals.ThereIsNothingToPutOnADisc();
     }
 

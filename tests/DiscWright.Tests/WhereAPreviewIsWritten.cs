@@ -143,10 +143,10 @@ public class WhereAPreviewIsWritten
                 @"C:\games\x", GameKind.GogInstaller, "Enormous", "Enormous", huge, [huge], [], null)]
         };
 
-        Outcome<string> went = new APreviewOfTheMenu(wrote, new PicturesThatRead())
+        Outcome<IReadOnlyList<string>> went = new APreviewOfTheMenu(wrote, new PicturesThatRead())
             .Write(enormous, Media.Dvd5, _ => huge.Bytes, Look);
 
-        Assert.IsType<Outcome<string>.No>(went);
+        Assert.IsType<Outcome<IReadOnlyList<string>>.No>(went);
 
         // The reason the time stamp was there. Left alone, the last preview of
         // this project would still be sitting in the folder, and the next
