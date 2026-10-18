@@ -252,6 +252,83 @@ public class TheWindowsMarkup
         Assert.Equal(2, lines.Select(line => (string?)line.Attribute("Foreground")).Distinct().Count());
     }
 
+    [Theory]
+    [InlineData("WhyNot")]
+    [InlineData("Worry")]
+    public void Shows_everything_a_refusal_knows_and_not_just_its_headline(string which)
+    {
+        // A Refusal has always carried a headline, a sentence saying why, and
+        // its figures. This window drew the headline and threw the rest away:
+        // "One file is bigger than a whole disc" with no name of the file, no
+        // size, and nothing to compare it against. Thirty one refusals, ten of
+        // them carrying figures, and not one figure reached the screen.
+        XElement line = Assert.Single(Window().Descendants(Xaml + "TextBlock"), each => IdOf(each) == which);
+
+        Assert.Equal($"{{Binding {which}.Because}}", (string?)line.Attribute("ToolTip"));
+
+        XElement figures = Assert.Single(
+            Window().Descendants(Xaml + "ItemsControl"), each => IdOf(each) == which + "Figures");
+
+        Assert.Equal($"{{Binding {which}.Figures}}", (string?)figures.Attribute("ItemsSource"));
+
+        // Gone entirely when there are none, because a row of nothing still
+        // takes its margin at the bottom of a window drawn to the pixel.
+        Assert.Equal(
+            $"{{Binding {which}.Figures.Count, Converter={{StaticResource WhenSome}}}}",
+            (string?)figures.Attribute("Visibility"));
+    }
+
+    [Fact]
+    public void The_two_column_headings_start_on_the_same_line()
+    {
+        // WHAT GOES ON IT sat nine pixels below WHAT IT IS CALLED, measured
+        // off a photograph of the window. It was centred inside a row whose
+        // height comes from the preview button beside it, while the heading
+        // in the next column sits at the top of its own column.
+        XElement[] headings =
+        [
+            .. Window().Descendants(Xaml + "TextBlock")
+                .Where(each => (string?)each.Attribute("Style") == "{StaticResource Step}")
+                .Where(each => (string?)each.Attribute("VerticalAlignment") == "Center")
+        ];
+
+        Assert.True(
+            headings.Length == 0,
+            "A column heading centred in its row starts on a different line from the heading beside it: "
+                + string.Join(", ", headings.Select(each => (string?)each.Attribute("Text"))));
+    }
+
+    [Fact]
+    public void Every_converter_a_window_asks_for_has_been_declared()
+    {
+        // A converter named in a binding and missing from App.xaml is not a
+        // compile error. It is a window that throws the moment that binding is
+        // evaluated, which for a refusal is the moment somebody is already
+        // being told something has gone wrong.
+        string[] declared =
+        [
+            .. XDocument.Load(Repository.File("src", "DiscWright.App", "App.xaml"))
+                .Descendants()
+                .Select(each => (string?)each.Attribute(Named + "Key"))
+                .Where(key => key is not null)
+                .Select(key => key!)
+        ];
+
+        string[] asked =
+        [
+            .. Directory.GetFiles(Repository.File("src", "DiscWright.App"), "*.xaml")
+                .SelectMany(file => XDocument.Load(file).Descendants().SelectMany(each => each.Attributes()))
+                .SelectMany(attribute => System.Text.RegularExpressions.Regex.Matches(
+                    attribute.Value, @"Converter=\{StaticResource (\w+)\}"))
+                .Select(found => found.Groups[1].Value)
+                .Distinct(StringComparer.Ordinal)
+        ];
+
+        string[] missing = [.. asked.Where(each => !declared.Contains(each, StringComparer.Ordinal))];
+
+        Assert.True(missing.Length == 0, "Asked for and never declared: " + string.Join(", ", missing));
+    }
+
     [Fact]
     public void The_button_that_makes_it_is_dead_rather_than_hidden_when_it_cannot_be_pressed()
     {
@@ -476,6 +553,372 @@ public class TheWindowsMarkup
 
     private static XElement Markup(string window) =>
         XDocument.Load(Repository.File("src", "DiscWright.App", window)).Root!;
+
+    [Fact]
+    public void No_trigger_inside_a_template_is_beaten_by_the_style_holding_it()
+    {
+        // A Setter inside ControlTemplate.Triggers with no TargetName on it
+        // loses to the style's own Setter for the same property. It compiles,
+        // it reads exactly as though it works, and it does nothing at all.
+        //
+        // Ordinary set Foreground to the ink colour and then greyed it on
+        // IsEnabled=False from inside the template, so Remove and Burn to a
+        // disc were disabled and still drew their words in #16191C, the same
+        // ink as the live button beside them. Measured off a photograph of
+        // the window, because nothing else could tell the two apart. The
+        // accent button had the same hole in it for its cursor.
+        XElement look = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!;
+
+        List<string> dead = [];
+
+        foreach (XElement style in look.Descendants(Xaml + "Style"))
+        {
+            string[] setByTheStyle =
+            [
+                .. style.Elements(Xaml + "Setter")
+                    .Select(setter => (string?)setter.Attribute("Property"))
+                    .Where(property => property is not null)
+                    .Select(property => property!)
+            ];
+
+            IEnumerable<XElement> inTheTemplate = style
+                .Descendants(Xaml + "ControlTemplate")
+                .Elements(Xaml + "ControlTemplate.Triggers")
+                .Descendants(Xaml + "Setter");
+
+            foreach (XElement setter in inTheTemplate)
+            {
+                if (setter.Attribute("TargetName") is not null)
+                {
+                    continue;
+                }
+
+                string? property = (string?)setter.Attribute("Property");
+
+                if (property is not null && setByTheStyle.Contains(property, StringComparer.Ordinal))
+                {
+                    dead.Add($"{(string?)style.Attribute(Named + "Key")} sets {property} itself "
+                        + "and then tries to change it from inside its own template");
+                }
+            }
+        }
+
+        Assert.True(dead.Count == 0, "Markup that reads as though it works and does nothing: "
+            + string.Join("; ", dead));
+    }
+
+    [Fact]
+    public void A_button_that_can_be_disabled_looks_it()
+    {
+        // The guard above closes one half of this, a setter that cannot take
+        // effect. This closes the other, which is no setter at all. A trigger
+        // deleted outright leaves perfectly valid markup and a button that
+        // goes dead without looking any different, and that is the fault
+        // itself rather than the shape it happened to arrive in. A mutation
+        // run found this hole by walking straight through it.
+        //
+        // Either place will do. Ordinary greys from its own Style.Triggers,
+        // where a trigger beats the style's own setter. TheButton greys from
+        // inside its template, which takes because the setter names the
+        // Border it paints. Neither place is what this refuses.
+        XElement look = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!;
+
+        Dictionary<string, XElement> styles = look
+            .Descendants(Xaml + "Style")
+            .Where(style => style.Attribute(Named + "Key") is not null)
+            .ToDictionary(style => (string)style.Attribute(Named + "Key")!);
+
+        List<string> silent = [];
+
+        foreach (string file in Directory.GetFiles(Repository.File("src", "DiscWright.App"), "*.xaml"))
+        {
+            foreach (XElement button in XDocument.Load(file).Descendants(Xaml + "Button"))
+            {
+                if (button.Attribute("IsEnabled") is null
+                    || StyleWornBy(button) is not string wearing
+                    || !styles.TryGetValue(wearing, out XElement? style)
+                    || ChangesWhenDisabled(style))
+                {
+                    continue;
+                }
+
+                silent.Add($"{IdOf(button) ?? "a button"}, wearing {wearing}");
+            }
+        }
+
+        Assert.True(silent.Count == 0, "Buttons that can be dead and never look it: "
+            + string.Join("; ", silent.Distinct(StringComparer.Ordinal)));
+    }
+
+    [Fact]
+    public void A_buttons_own_colour_can_reach_its_own_words()
+    {
+        // The third guard on the same fault, and the one that matters most,
+        // because the other two were satisfied by markup that did nothing.
+        //
+        // This file declares an implicit TextBlock style that sets
+        // Foreground. A bare ContentPresenter makes its own TextBlock for
+        // string content, that TextBlock takes the implicit style, and a
+        // style setter beats an inherited value. So the button's Foreground
+        // never arrives: the greying was correct, in the right place, and
+        // invisible.
+        //
+        // Proved by painting Ordinary bright red and photographing the
+        // window. Not one pixel changed. Quietly had always drawn its own
+        // TextBlock and was the only button whose colour ever worked.
+        XElement look = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!;
+
+        bool textIsColouredForUs = look
+            .Elements(Xaml + "Style")
+            .Where(style => (string?)style.Attribute("TargetType") == "TextBlock"
+                && style.Attribute(Named + "Key") is null)
+            .SelectMany(style => style.Elements(Xaml + "Setter"))
+            .Any(setter => (string?)setter.Attribute("Property") == "Foreground");
+
+        if (!textIsColouredForUs)
+        {
+            // No implicit style, no clash, and a ContentPresenter is then
+            // the ordinary thing to write.
+            return;
+        }
+
+        List<string> unreachable = [];
+
+        foreach (XElement style in look.Elements(Xaml + "Style"))
+        {
+            if ((string?)style.Attribute("TargetType") != "Button")
+            {
+                continue;
+            }
+
+            string named = (string?)style.Attribute(Named + "Key") ?? "a button style";
+
+            foreach (XElement template in style.Descendants(Xaml + "ControlTemplate"))
+            {
+                if (template.Descendants(Xaml + "ContentPresenter").Any())
+                {
+                    unreachable.Add($"{named} shows its words with a ContentPresenter");
+                }
+            }
+        }
+
+        Assert.True(unreachable.Count == 0,
+            "An implicit TextBlock style sets Foreground, so these cannot colour their own text: "
+                + string.Join("; ", unreachable.Distinct(StringComparer.Ordinal)));
+    }
+
+    [Fact]
+    public void Nothing_wears_the_accent_colour_when_it_cannot_be_pressed()
+    {
+        // The accent is spoken for. Look.xaml says so in as many words:
+        // there is exactly one button on the window wearing it, and it is
+        // the one that makes the thing. A button painted press-me and
+        // unable to be pressed is the same lie as a black word on a dead
+        // button, wearing different clothes.
+        //
+        // Needed as well as the guard above, not instead of it. Giving the
+        // accent button a readable colour for its words satisfied that one
+        // on its own, and the background greying could then be deleted
+        // without a single test objecting. A mutant walked through the gap
+        // the same afternoon it was opened.
+        XElement look = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!;
+
+        List<string> stillAccented = [];
+
+        foreach (XElement style in look.Elements(Xaml + "Style"))
+        {
+            bool wearsIt = style.Elements(Xaml + "Setter").Any(setter =>
+                (string?)setter.Attribute("Property") == "Background"
+                && (string?)setter.Attribute("Value") == "{StaticResource Accent}");
+
+            if (!wearsIt || TakesOffItsBackground(style))
+            {
+                continue;
+            }
+
+            stillAccented.Add((string?)style.Attribute(Named + "Key") ?? "a style");
+        }
+
+        Assert.True(stillAccented.Count == 0,
+            "Still painted press-me while disabled: " + string.Join("; ", stillAccented));
+    }
+
+    /// <summary>
+    /// Whether a style stops painting its own background when the control
+    /// is disabled, from a place where the change actually takes.
+    /// </summary>
+    private static bool TakesOffItsBackground(XElement style) =>
+        WhenDisabled(style.Elements(Xaml + "Style.Triggers"))
+            .SelectMany(trigger => trigger.Elements(Xaml + "Setter"))
+            .Any(setter => (string?)setter.Attribute("Property") == "Background")
+        || WhenDisabled(style
+                .Descendants(Xaml + "ControlTemplate")
+                .Elements(Xaml + "ControlTemplate.Triggers"))
+            .SelectMany(trigger => trigger.Elements(Xaml + "Setter"))
+            .Any(setter => (string?)setter.Attribute("Property") == "Background"
+                && setter.Attribute("TargetName") is not null);
+
+    [Fact]
+    public void A_dead_button_still_has_words_on_it()
+    {
+        // Not a contrast threshold. Disabled controls are low contrast on
+        // purpose, and Ordinary greyed on white is about 1.8 to 1, which is
+        // exactly what greyed out is supposed to look like.
+        //
+        // The rule is the one this window is built on: it is a light theme,
+        // so words are darker than the paper they sit on. Once the accent
+        // button could colour its own text at all, its disabled state put
+        // White on the dead grey and the label all but vanished. Nothing had
+        // ever objected, because for years the colour never arrived and the
+        // label came out in full ink by accident.
+        XElement look = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!;
+
+        Dictionary<string, string> palette = look
+            .Elements(Xaml + "SolidColorBrush")
+            .Where(brush => brush.Attribute(Named + "Key") is not null
+                && ((string?)brush.Attribute("Color"))?.Length == 7)
+            .ToDictionary(
+                brush => (string)brush.Attribute(Named + "Key")!,
+                brush => (string)brush.Attribute("Color")!);
+
+        List<string> vanished = [];
+
+        foreach (XElement style in look.Elements(Xaml + "Style"))
+        {
+            if ((string?)style.Attribute("TargetType") != "Button")
+            {
+                continue;
+            }
+
+            string? ink = AColour(SetterFor(style, "Foreground"), palette);
+            string? paper = AColour(SetterFor(style, "Background"), palette);
+
+            foreach (XElement trigger in WhenDisabled(style.Elements(Xaml + "Style.Triggers")))
+            {
+                ink = AColour(SetterFor(trigger, "Foreground"), palette) ?? ink;
+                paper = AColour(SetterFor(trigger, "Background"), palette) ?? paper;
+            }
+
+            foreach (XElement trigger in WhenDisabled(style
+                .Descendants(Xaml + "ControlTemplate")
+                .Elements(Xaml + "ControlTemplate.Triggers")))
+            {
+                // Only a named setter reaches the Border it paints.
+                paper = AColour(trigger.Elements(Xaml + "Setter")
+                    .Where(setter => setter.Attribute("TargetName") is not null
+                        && (string?)setter.Attribute("Property") == "Background")
+                    .Select(setter => (string?)setter.Attribute("Value"))
+                    .FirstOrDefault(), palette) ?? paper;
+            }
+
+            if (ink is null || paper is null)
+            {
+                // Transparent, or a colour nothing here can resolve. A guard
+                // that cannot see should not shout.
+                continue;
+            }
+
+            if (Lightness(ink) >= Lightness(paper))
+            {
+                vanished.Add($"{(string?)style.Attribute(Named + "Key")} goes dead with {ink} "
+                    + $"on {paper}, which is no darker than what it sits on");
+            }
+        }
+
+        Assert.True(vanished.Count == 0, "Dead buttons nobody can read: "
+            + string.Join("; ", vanished));
+    }
+
+    /// <summary>A hex colour for a markup value, or null when it is not one.</summary>
+    private static string? AColour(string? value, Dictionary<string, string> palette)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        if (value.StartsWith('#') && value.Length == 7)
+        {
+            return value;
+        }
+
+        if (string.Equals(value, "White", StringComparison.Ordinal))
+        {
+            return "#FFFFFF";
+        }
+
+        System.Text.RegularExpressions.Match found =
+            System.Text.RegularExpressions.Regex.Match(value, @"^\{StaticResource (\w+)\}$");
+
+        return found.Success && palette.TryGetValue(found.Groups[1].Value, out string? hex)
+            ? hex
+            : null;
+    }
+
+    /// <summary>How light a colour is, the way an eye weighs it.</summary>
+    private static double Lightness(string hex)
+    {
+        double Channel(int at)
+        {
+            double v = Convert.ToInt32(hex.Substring(at, 2), 16) / 255.0;
+
+            return v <= 0.03928 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
+        }
+
+        return (0.2126 * Channel(1)) + (0.7152 * Channel(3)) + (0.0722 * Channel(5));
+    }
+
+    /// <summary>What a style or a trigger sets a property to, if it does.</summary>
+    private static string? SetterFor(XElement holder, string property) =>
+        holder.Elements(Xaml + "Setter")
+            .Where(setter => (string?)setter.Attribute("Property") == property)
+            .Select(setter => (string?)setter.Attribute("Value"))
+            .FirstOrDefault();
+
+    /// <summary>The key of the style a control wears, when it names one.</summary>
+    private static string? StyleWornBy(XElement control)
+    {
+        System.Text.RegularExpressions.Match found =
+            System.Text.RegularExpressions.Regex.Match(
+                (string?)control.Attribute("Style") ?? string.Empty,
+                @"^\{StaticResource (\w+)\}$");
+
+        return found.Success ? found.Groups[1].Value : null;
+    }
+
+    /// <summary>
+    /// Whether this style changes something a person can see when the control
+    /// is disabled, from a place where the change actually takes.
+    /// </summary>
+    private static bool ChangesWhenDisabled(XElement style) =>
+        WhenDisabled(style.Elements(Xaml + "Style.Triggers"))
+            .Any(trigger => Visibly(trigger).Any())
+        || WhenDisabled(style
+                .Descendants(Xaml + "ControlTemplate")
+                .Elements(Xaml + "ControlTemplate.Triggers"))
+            .Any(trigger => Visibly(trigger).Any()
+                && Visibly(trigger).All(setter => setter.Attribute("TargetName") is not null));
+
+    /// <summary>
+    /// The setters in a trigger that change something a person can see
+    /// without first moving the mouse onto it.
+    /// </summary>
+    /// <remarks>
+    /// The cursor does not count. A button that goes dead and answers only
+    /// by changing the pointer still looks exactly like one that works, and
+    /// nobody puts the pointer on a button to find out whether it is worth
+    /// putting the pointer on.
+    /// </remarks>
+    private static IEnumerable<XElement> Visibly(XElement trigger) =>
+        trigger.Elements(Xaml + "Setter")
+            .Where(setter => (string?)setter.Attribute("Property") != "Cursor");
+
+    private static IEnumerable<XElement> WhenDisabled(IEnumerable<XElement> holders) =>
+        holders.Elements(Xaml + "Trigger").Where(trigger =>
+            (string?)trigger.Attribute("Property") == "IsEnabled"
+            && (string?)trigger.Attribute("Value") == "False");
+
+    private static readonly XNamespace Named = "http://schemas.microsoft.com/winfx/2006/xaml";
 
     private static string? IdOf(XElement element) =>
         (string?)element.Attribute("AutomationProperties.AutomationId");

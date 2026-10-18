@@ -20,6 +20,17 @@ The fix is to refuse to draw a conclusion without evidence that the suite
 actually ran. xUnit prints "Passed!" or "Failed!" with a count when it does.
 Anything else is INCONCLUSIVE, which is retried, and said out loud if it never
 resolves, rather than being quietly counted as bad news or good.
+
+Two more, both learned the same way, by a run that sat for nineteen hours.
+
+A fault need not make a test fail. It can stop one finishing, and a wait with
+no bound on it looks exactly like a machine nobody is using. The suite now has
+a deadline and a run past it is HUNG, which is a verdict rather than a silence.
+
+And planting a fault must not change anything else about the file. Reading with
+universal newlines and writing back plain ones quietly turned every file it
+touched from CRLF to LF, against the eol=crlf this repository declares. The
+ending a file arrived with is the ending it leaves with.
 """
 
 import io
@@ -37,17 +48,41 @@ OBJECTED = ("[FAIL]", ": error")
 
 BLOCKED = ("0x800711C7", "Application Control policy")
 
+# How long the suite may take before the run is called hung. It takes about a
+# minute on this machine, so ten is generous and, unlike no limit at all, is a
+# number.
+HUNG_AFTER = 600
+
+
+def run_once(env):
+    """Runs the suite once. Returns what it said, or None when it hung."""
+    started = subprocess.Popen(
+        ["dotnet", "test", "--nologo", "-v", "q"],
+        cwd=REPO, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True, errors="replace")
+
+    try:
+        return started.communicate(timeout=HUNG_AFTER)[0]
+    except subprocess.TimeoutExpired:
+        # Killing the child on its own leaves testhost holding the test
+        # assembly, and the next build then fails on a locked file for a
+        # reason that looks nothing like the real one.
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(started.pid)],
+                       capture_output=True)
+        started.wait()
+
+        return None
+
 
 def run_the_suite(tries=4):
-    """Runs the suite. Returns 'caught', 'survived', or 'inconclusive'."""
+    """Runs the suite. 'caught', 'survived', 'hung' or 'inconclusive'."""
     env = dict(os.environ, DOTNET_NOLOGO="1", DOTNET_CLI_TELEMETRY_OPTOUT="1")
 
     for attempt in range(tries):
-        done = subprocess.run(
-            ["dotnet", "test", "--nologo", "-v", "q"],
-            cwd=REPO, env=env, capture_output=True, text=True, errors="replace")
+        out = run_once(env)
 
-        out = done.stdout + done.stderr
+        if out is None:
+            return "hung"
 
         if any(word in out for word in OBJECTED):
             return "caught"
@@ -64,36 +99,75 @@ def run_the_suite(tries=4):
     return "inconclusive"
 
 
+def read_source(path):
+    """The file as text, and the line ending it is written with.
+
+    Read with universal newlines so a fault spanning two lines can be
+    written with plain ones and still match, and the real ending handed
+    back so putting the file down does not change it.
+    """
+    ending = "\r\n" if b"\r\n" in io.open(path, "rb").read() else "\n"
+
+    return io.open(path, encoding="utf-8").read(), ending
+
+
+def write_source(path, text, ending):
+    """Puts the file back exactly as it was found, ending and all."""
+    io.open(path, "w", encoding="utf-8", newline=ending).write(text)
+
+
+# Written while a fault is in the tree and deleted the moment it is taken
+# back out. The finally below handles Ctrl-C, but nothing in the process
+# survives being killed outright, and a run stopped from outside has twice
+# now left a deliberate fault behind in a file nobody was watching.
+PLANTED = os.path.join(REPO, "tools", ".a-fault-is-planted")
+
+
 def mutate(mutants):
     """Plants each fault in turn and says whether a test objected.
 
     Each mutant is (name, path, old, new).
     """
+    if os.path.exists(PLANTED):
+        print("A fault from an earlier run may still be in the tree:")
+        print("  " + io.open(PLANTED, encoding="utf-8").read().strip())
+        print("Put it back, delete " + PLANTED + ", and start again.")
+
+        return 1
+
     survived = []
     unknown = []
 
     for name, path, old, new in mutants:
-        was = io.open(path, encoding="utf-8").read()
+        was, ending = read_source(path)
 
         if old not in was:
             print("  ?? could not plant: " + name)
             unknown.append(name + " (could not plant)")
             continue
 
-        io.open(path, "w", encoding="utf-8", newline="\n").write(was.replace(old, new, 1))
+        io.open(PLANTED, "w", encoding="utf-8").write(path + nl_note(name))
+        write_source(path, was.replace(old, new, 1), ending)
 
         try:
             verdict = run_the_suite()
         finally:
             # Always put it back, including on Ctrl-C. A mutant left in the
             # working tree is a deliberate fault nobody remembers planting.
-            io.open(path, "w", encoding="utf-8", newline="\n").write(was)
+            write_source(path, was, ending)
+            if os.path.exists(PLANTED):
+                os.remove(PLANTED)
 
         if verdict == "caught":
             print("  caught: " + name)
         elif verdict == "survived":
             print("  SURVIVED: " + name)
             survived.append(name)
+        elif verdict == "hung":
+            # Not a survivor and not a catch. A test that waits instead of
+            # failing has to be fixed before this mutant means anything.
+            print("  HUNG, no verdict: " + name)
+            unknown.append(name + " (hung)")
         else:
             print("  INCONCLUSIVE, never ran: " + name)
             unknown.append(name)
@@ -108,6 +182,11 @@ def mutate(mutants):
             print("NO ANSWER FOR: " + "; ".join(unknown))
 
     return 0 if not survived and not unknown else 1
+
+
+def nl_note(name):
+    """The fault, written where a reader will meet the file first."""
+    return "\n  " + name + "\n"
 
 
 if __name__ == "__main__":

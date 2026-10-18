@@ -144,21 +144,57 @@
                              almost every button here, and a button that is as
                              wide as a column reads better with its words at
                              the edge the labels start at. -->
-                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="Center"
-                                          Margin="{TemplateBinding Padding}" />
+                        <!-- A TextBlock of our own, not a bare
+                             ContentPresenter, and this is not a style
+                             preference.
+
+                             ContentPresenter makes its own TextBlock for
+                             string content, and that TextBlock picks up the
+                             implicit TextBlock style at the top of this
+                             file, which sets Foreground to Ink. A style
+                             setter beats an inherited value, so the
+                             button's own Foreground never reached its own
+                             words: setting it to Red changed nothing on
+                             screen, which is how this was found. Quietly
+                             below has always done it this way. -->
+                        <TextBlock x:Name="Words"
+                                   Text="{TemplateBinding Content}"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   FontSize="{TemplateBinding FontSize}"
+                                   FontFamily="{TemplateBinding FontFamily}"
+                                   FontWeight="{TemplateBinding FontWeight}"
+                                   TextWrapping="NoWrap"
+                                   HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                   VerticalAlignment="Center"
+                                   Margin="{TemplateBinding Padding}" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Shape" Property="Background" Value="{StaticResource Page}" />
                         </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Foreground" Value="{StaticResource Dead}" />
-                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+
+        <!-- Out here, not in the template above, and this is the whole point
+             of it.
+
+             A template trigger loses to the style's own Foreground setter
+             nine lines up, so the greying was dead markup that read as if it
+             worked. Remove and Burn to a disc were disabled and drew their
+             words in #16191C, the same ink as the live button beside them,
+             measured off a photograph of the window. A style trigger beats a
+             style setter and this one takes.
+
+             The cursor goes with it. A hand over a button that cannot be
+             pressed is the same lie told a second way. -->
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource Dead}" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- The one button that makes the thing. There is exactly one on the
@@ -182,24 +218,62 @@
                              almost every button here, and a button that is as
                              wide as a column reads better with its words at
                              the edge the labels start at. -->
-                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                          VerticalAlignment="Center"
-                                          Margin="{TemplateBinding Padding}" />
+                        <!-- A TextBlock of our own, not a bare
+                             ContentPresenter, and this is not a style
+                             preference.
+
+                             ContentPresenter makes its own TextBlock for
+                             string content, and that TextBlock picks up the
+                             implicit TextBlock style at the top of this
+                             file, which sets Foreground to Ink. A style
+                             setter beats an inherited value, so the
+                             button's own Foreground never reached its own
+                             words: setting it to Red changed nothing on
+                             screen, which is how this was found. Quietly
+                             below has always done it this way. -->
+                        <TextBlock x:Name="Words"
+                                   Text="{TemplateBinding Content}"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   FontSize="{TemplateBinding FontSize}"
+                                   FontFamily="{TemplateBinding FontFamily}"
+                                   FontWeight="{TemplateBinding FontWeight}"
+                                   TextWrapping="NoWrap"
+                                   HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                   VerticalAlignment="Center"
+                                   Margin="{TemplateBinding Padding}" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Shape" Property="Background" Value="{StaticResource AccentPressed}" />
                         </Trigger>
                         <!-- Dead rather than hidden, so somebody can see what
-                             they are working towards. -->
+                             they are working towards.
+
+                             The background is named, so it reaches the Border
+                             and takes. The cursor used to sit here too, with
+                             no name on it, which put it up against this
+                             style's own Cursor setter and lost: the one
+                             button that greys properly still offered a hand
+                             to press it with. It is below now. -->
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Shape" Property="Background" Value="{StaticResource Dead}" />
-                            <Setter Property="Cursor" Value="Arrow" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <!-- The words as well as the background. White on the dead
+                     grey is barely there, and it only looked right before
+                     because the colour was never reaching the text and it
+                     came out in full ink by accident. Quiet is muted enough
+                     to read as dead and dark enough to still be read. -->
+                <Setter Property="Foreground" Value="{StaticResource Quiet}" />
+                <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
 </ResourceDictionary>

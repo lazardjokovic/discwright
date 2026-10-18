@@ -51,3 +51,7 @@ packages/
 local.settings.json
 .env
 secrets/
+
+# Left behind only when a mutation run is killed before it can put a
+# deliberate fault back. It names what is still in the tree.
+tools/.a-fault-is-planted

@@ -35,6 +35,18 @@ public sealed record BuildContext(
     string StageFolder,
     IStageWriter Writer)
 {
+    /// <summary>Where the menu lives, and so where the fallback icon lives.</summary>
+    private const string MenuFolder = "AUTORUN";
+
+    /// <summary>DiscWright's own icon, which the menu step writes beside the page.</summary>
+    private const string OurOwnIcon = "menu.ico";
+
+    /// <summary>
+    /// A backslash. Written as a character code because a typed one arrives
+    /// halved in generated code and the file still parses.
+    /// </summary>
+    private const char Separator = (char)92;
+
     /// <summary>Whether this disc is one of several.</summary>
     public bool IsPartOfASet => Layout.Discs.Count > 1;
 
@@ -66,6 +78,31 @@ public sealed record BuildContext(
     /// <see cref="DiscIconName"/>, which is where that is explained properly.
     /// </remarks>
     public string IconFileName => DiscIconName.For(Project.Label, Disc.Number, Layout.Discs.Count);
+
+    /// <summary>
+    /// The icon this disc really carries, spelled the way <c>autorun.inf</c>
+    /// needs it, or <c>null</c> when it carries none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These are the three things a build actually writes, and nothing else.
+    /// A chosen icon goes to the root under <see cref="IconFileName"/>. With
+    /// none chosen the menu step writes ours beside the page, but only when
+    /// there is a menu to put it beside. With neither, no icon is written at
+    /// all and the honest answer is to say nothing.
+    /// </para>
+    /// <para>
+    /// It was the first of those three for every disc, whether or not anybody
+    /// had chosen an icon, so every disc built without artwork named a file
+    /// that was not on it. The menu had the fallback right and the two
+    /// disagreed, which is how it was found: seventeen discs out of seventeen
+    /// in the kit sweep, each pointing Windows at nothing.
+    /// </para>
+    /// </remarks>
+    public string? TheIconOnTheDisc =>
+        Project.Artwork?.IconPath is not null ? IconFileName
+        : Project.Options.Menu ? MenuFolder + Separator + OurOwnIcon
+        : null;
 
     /// <summary>Where a file on this disc goes, as a full path.</summary>
     public string On(string relativePath) =>

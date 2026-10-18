@@ -1,4 +1,4 @@
-# Puts every folder in the testing kit through the real window, one at a time,
+﻿# Puts every folder in the testing kit through the real window, one at a time,
 # and writes down what happened to each.
 #
 # This is the regression run the rewrite has not had. Everything so far was
@@ -208,6 +208,13 @@ foreach ($folder in $folders) {
         Set-TheSize $window $Size | Out-Null
         Start-Sleep -Milliseconds 400
 
+        # Where it goes, before asking what it objects to. The window
+        # now says "There is nowhere to put it" while no folder has
+        # been chosen, which is correct and which made this sweep
+        # read every one of the twenty as refused and build nothing.
+        SetText (ById $window 'OutputFolder' 5) $where
+        Start-Sleep -Milliseconds 400
+
         # Anything it refused outright shows up here instead.
         $refusal = TextOf (ById $window 'WhyNot' 3)
 
@@ -235,9 +242,6 @@ foreach ($folder in $folders) {
             Write-Host "    says '$($row.Says)', not built here"
             continue
         }
-
-        SetText (ById $window 'OutputFolder' 5) $where
-        Start-Sleep -Milliseconds 400
 
         $button = ById $window 'MakeTheDisc' 5
         if (-not $button.Current.IsEnabled) {

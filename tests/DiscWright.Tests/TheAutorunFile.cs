@@ -39,6 +39,34 @@ public class TheAutorunFile
         Assert.Contains("label=HOLLOW KNIGHT", file, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void Leaves_the_icon_out_when_the_disc_carries_none(string? icon)
+    {
+        // icon= used to be written whatever it was handed, so a disc with no
+        // icon on it got a line pointing Windows at a file that was not
+        // there. A directive naming nothing is worse than no directive: the
+        // file reads as though somebody meant it.
+        string file = AutorunFile.For("HOLLOW KNIGHT", icon, hasMenu: true);
+
+        Assert.DoesNotContain("icon=", file, StringComparison.Ordinal);
+
+        // Everything else about the disc is unchanged.
+        Assert.Contains("label=HOLLOW KNIGHT", file, StringComparison.Ordinal);
+        Assert.Contains(@"shellexecute=AUTORUN\menu.hta", file, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Names_an_icon_that_sits_in_a_folder()
+    {
+        // Ours lives beside the menu rather than at the root, so the path
+        // has a separator in it and autorun.inf has to carry it whole.
+        string file = AutorunFile.For("X", @"AUTORUN\menu.ico", hasMenu: true);
+
+        Assert.Contains(@"icon=AUTORUN\menu.ico", file, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Turns_off_the_prompts_about_the_wrong_thing()
     {

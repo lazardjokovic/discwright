@@ -27,9 +27,14 @@ public sealed class WriteTheAutorunStep : IBuildStep
         // file that gets written cannot drift apart. They used to be a const
         // here and a const read from here, which was the same thing said
         // twice and worked only because neither ever changed.
+        //
+        // TheIconOnTheDisc rather than IconFileName, because the second is
+        // what a chosen icon WOULD be called and the first is what is really
+        // on the disc. Naming the second wrote icon= for discs nobody had
+        // chosen an icon for, and pointed Windows at a file no step wrote.
         context.Writer.WriteAutorunText(
             context.On("autorun.inf"),
-            AutorunFile.For(context.WhatThisDiscIsCalled, context.IconFileName, context.Project.Options.Menu));
+            AutorunFile.For(context.WhatThisDiscIsCalled, context.TheIconOnTheDisc, context.Project.Options.Menu));
 
         return Task.CompletedTask;
     }

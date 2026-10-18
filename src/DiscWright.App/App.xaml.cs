@@ -278,3 +278,20 @@ public sealed class WhenNone : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException("Nothing sets a count by changing a label.");
 }
+
+/// <summary>
+/// Visible when a count is more than zero, collapsed otherwise.
+/// </summary>
+/// <remarks>
+/// The mirror of <see cref="WhenNone"/>, for the figures under a refusal. Most
+/// refusals carry some and a few carry none, and a row of nothing still takes
+/// its margin.
+/// </remarks>
+public sealed class WhenSome : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is int count && count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("Nothing sets a count by changing a label.");
+}

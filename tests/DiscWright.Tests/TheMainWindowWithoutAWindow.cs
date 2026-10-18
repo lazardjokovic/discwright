@@ -129,6 +129,55 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = New();
         window.Add(AGame("Hollow Knight", 1000));
 
+        // Saying nothing used to be the expected answer here, written down
+        // as Assert.Null. A sound plan, a named disc, and the one button on
+        // the window dead with no sentence anywhere explaining why: every
+        // other missing thing says so, and this one read as a broken button.
+        Assert.NotNull(window.WhyNot);
+        Assert.Contains("nowhere to put it", window.WhyNot.Headline, StringComparison.OrdinalIgnoreCase);
+        Assert.False(window.CanMakeIt);
+
+        // What it would make is still said. Only the destination is missing,
+        // and hiding the plan too would answer a question nobody asked.
+        Assert.Equal("one disc", window.WhatItWillMake);
+    }
+
+    [Fact]
+    public void Stops_saying_there_is_nowhere_to_put_it_once_there_is()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        Assert.NotNull(window.WhyNot);
+
+        window.OutputFolder = @"C:\out";
+
+        Assert.Null(window.WhyNot);
+        Assert.True(window.CanMakeIt);
+    }
+
+    [Fact]
+    public void Complains_about_the_disc_before_it_complains_about_the_folder()
+    {
+        // Both are wrong and only one is worth saying. Choosing a folder
+        // would not make a file fit on a disc, so the refusal on the window
+        // has to be the one somebody can actually act on.
+        MakeADisc window = New();
+        window.Medium = ADiscHolding(500);
+        window.Add(AGame("Too Big", 4000));
+
+        Assert.NotNull(window.WhyNot);
+        Assert.Contains("bigger than a whole disc", window.WhyNot.Headline, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Says_nothing_about_a_folder_before_there_is_anything_to_put_in_one()
+    {
+        // An empty window has not done anything wrong. Telling somebody off
+        // about a folder they have had no reason to choose yet is the program
+        // complaining about its own starting state.
+        MakeADisc window = New();
+
         Assert.Null(window.WhyNot);
         Assert.False(window.CanMakeIt);
     }
@@ -376,7 +425,7 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = Ready(builder);
 
         Task first = window.MakeIt();
-        await builder.Started.Task;
+        await builder.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.True(window.IsWorking);
         Assert.False(window.CanMakeIt);
@@ -482,7 +531,7 @@ public class TheMainWindowWithoutAWindow
 
         using CancellationTokenSource stop = new();
         Task building = window.MakeIt(stop.Token);
-        await builder.Started.Task;
+        await builder.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
         stop.Cancel();
         builder.LetItFinish();
         await building;
@@ -1509,7 +1558,12 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = Ready(builder);
 
         Task building = window.MakeIt();
-        await builder.Started.Task;
+
+        // Bounded on purpose. Nothing completes this when the build never
+        // starts, and a fault that left CanMakeIt false did exactly that:
+        // sixteen tests objected to it and this one waited, so the run was
+        // taken down instead of failed and the harness never got a verdict.
+        await builder.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         window.StartAgain();
 
@@ -2236,6 +2290,12 @@ public class TheMainWindowWithoutAWindow
     public void Says_when_a_patch_is_left_with_nothing_to_patch()
     {
         MakeADisc window = New();
+
+        // Somewhere to put it, so that the refusal this test is about is the
+        // only one that could be on the window. Without it the answer at the
+        // end is "there is nowhere to put it", which is true and is not what
+        // is being asked.
+        window.OutputFolder = @"C:\out";
         window.Add(AGame("One", 900), [AnExtra("patch.exe", 70)]);
 
         Assert.Null(window.APatchWithNothingToPatch);

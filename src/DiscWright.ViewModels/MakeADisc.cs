@@ -112,7 +112,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
     }
 
-    /// <summary>The size of disc being aimed at.</summary>
     /// <summary>
     /// The size of disc being aimed at.
     /// </summary>
@@ -2151,7 +2150,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
         switch (WhatWouldBeMade.For(AsAProject(), Medium, _machine.HowBigIs))
         {
             case Outcome<PlannedBuild>.Ok(PlannedBuild planned):
-                WhyNot = null;
+                // Last, and only once the plan itself is sound. Somewhere to
+                // put it cannot be the complaint while a file is too big for
+                // any disc, because choosing a folder would not help.
+                //
+                // What it will make is still said. The plan is good and only
+                // the destination is missing, so "one disc" and "there is
+                // nowhere to put it" are both true and both worth reading.
+                WhyNot = OutputFolder.Length == 0 ? Refusals.ThereIsNowhereToPutIt() : null;
                 WhatItWillMake = planned.InWords;
                 break;
 

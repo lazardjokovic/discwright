@@ -169,6 +169,72 @@ public sealed class BuildingADisc : IDisposable
         Assert.True(File.Exists(On(disc, "HOLLOWKNIGHT.ico")));
     }
 
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task Never_names_an_icon_that_is_not_on_the_disc(bool chosen, bool menu)
+    {
+        // The guard the one above was missing. It checks the case where
+        // somebody chose an icon, which is the case that worked. Nothing
+        // checked the other three, and in two of them autorun.inf named a
+        // file no step ever wrote: a kit sweep found it on seventeen discs
+        // out of seventeen, every one pointing Windows at nothing.
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+
+        BuiltDisc disc = Assert.Single((await Build(Project(game) with
+        {
+            Options = new DiscOptions(Menu: menu),
+            Artwork = chosen ? new DiscArtwork(IconPath: APicture("icon", 256, 256)) : null
+        })).Discs);
+
+        string named = IconNamedIn(File.ReadAllText(On(disc, "autorun.inf")));
+
+        if (named.Length == 0)
+        {
+            // Saying nothing is allowed in exactly one case: no artwork and
+            // no menu, which is the only disc with no icon on it anywhere.
+            Assert.False(chosen || menu, "autorun.inf named no icon and the disc is carrying one.");
+            return;
+        }
+
+        Assert.True(
+            File.Exists(On(disc, named)),
+            $"autorun.inf says icon={named} and there is no such file on the disc.");
+    }
+
+    [Fact]
+    public async Task Wears_our_own_icon_when_nobody_chose_one()
+    {
+        // The menu already fell back to ours and autorun.inf did not, so the
+        // two disagreed about what the disc wears. They are both ours now.
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+
+        BuiltDisc disc = Assert.Single((await Build(Project(game))).Discs);
+
+        Assert.Contains(
+            @"icon=AUTORUN\menu.ico", File.ReadAllText(On(disc, "autorun.inf")), StringComparison.Ordinal);
+
+        Assert.True(File.Exists(On(disc, @"AUTORUN\menu.ico")));
+    }
+
+    [Fact]
+    public async Task Says_nothing_about_an_icon_when_the_disc_carries_none()
+    {
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+
+        BuiltDisc disc = Assert.Single((await Build(Project(game) with
+        {
+            Options = new DiscOptions(Menu: false)
+        })).Discs);
+
+        // No menu and no chosen artwork is the one disc with no icon on it.
+        // Naming one anyway is a broken reference; naming none leaves This PC
+        // to draw the drive's own icon, which is what is actually true.
+        Assert.DoesNotContain("icon=", File.ReadAllText(On(disc, "autorun.inf")), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Gives_each_disc_of_a_set_an_icon_of_its_own()
     {
@@ -573,6 +639,17 @@ public sealed class BuildingADisc : IDisposable
         new(new WindowsFileSystem(), new WindowsStageWriter(), new WindowsImages(), new Sha256Hasher());
 
     private static string On(BuiltDisc disc, string relative) => Path.Combine(disc.Folder, relative);
+
+    /// <summary>
+    /// What <c>autorun.inf</c> says its icon is, or empty when it says
+    /// nothing. Read off the file rather than asked of the code that wrote
+    /// it, because the thing being checked is what ends up on the disc.
+    /// </summary>
+    private static string IconNamedIn(string autorun) =>
+        autorun.Split((char)10)
+            .Select(line => line.TrimEnd((char)13))
+            .FirstOrDefault(line => line.StartsWith("icon=", StringComparison.OrdinalIgnoreCase))
+            ?["icon=".Length..] ?? string.Empty;
 
     /// <summary>A GOG download: one installer, and its numbered parts.</summary>
     private GameFolder AGogDownload(string name, int bytes, int parts = 0)

@@ -86,7 +86,7 @@
 
                 <Button Grid.Column="0"
                         Content="Start a new disc"
-                            IsEnabled="{Binding NothingIsRunning}"
+                        IsEnabled="{Binding NothingIsRunning}"
                         Style="{StaticResource Ordinary}"
                         HorizontalAlignment="Stretch"
                         Margin="0,0,5,0"
@@ -95,7 +95,7 @@
 
                 <Button Grid.Column="1"
                         Content="Open one you built"
-                            IsEnabled="{Binding NothingIsRunning}"
+                        IsEnabled="{Binding NothingIsRunning}"
                         Style="{StaticResource Ordinary}"
                         HorizontalAlignment="Stretch"
                         Margin="5,0,0,0"
@@ -123,9 +123,15 @@
                      taller than the words beside it, and the row took its
                      height, which left a band of nothing between the header
                      and the list it heads. -->
-                <Grid DockPanel.Dock="Top" Margin="0,-2,0,-4">
+                <!-- Top, not Center, and no negative top margin to go with
+                     it. Centred inside a row whose height comes from the
+                     button beside it, this heading sat 9 pixels below WHAT IT
+                     IS CALLED in the next column, measured off a photograph.
+                     Two headings of the same kind on the same row of the same
+                     window should start on the same line. -->
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,-4">
                     <TextBlock Style="{StaticResource Step}"
-                               VerticalAlignment="Center"
+                               VerticalAlignment="Top"
                                Text="WHAT GOES ON IT" />
                     <!-- A real button, not something that looks like a link.
                          Pressing it opens a window, which is what a button
@@ -441,7 +447,7 @@
                      to them, quieter than anything else on the screen, for the
                      two things almost everybody sets. -->
                 <Button Content="Artwork, music and extras"
-                            IsEnabled="{Binding NothingIsRunning}"
+                        IsEnabled="{Binding NothingIsRunning}"
                         Style="{StaticResource Ordinary}"
                         HorizontalAlignment="Stretch"
                         Margin="0,18,0,0"
@@ -546,20 +552,91 @@
                     <!-- Collapsed when there is nothing to say. An empty line
                          still takes the height of a line, and two of them were
                          most of the gap at the bottom of this window. -->
+                    <!-- The reason is the tooltip, and the numbers are drawn.
+                         A Refusal has always carried a headline, a sentence
+                         saying why, and its figures, and this window showed
+                         the headline alone: "One file is bigger than a whole
+                         disc" with no name of the file, no size, and no room
+                         left on a disc to compare it against. The sentence
+                         wants about 930 pixels and there are 655, which is
+                         the whole reason the figures exist, so the figures go
+                         on the window and the sentence goes where hovering
+                         finds it. -->
                     <TextBlock Foreground="{StaticResource RefusalInk}"
                                Margin="0,6,0,0"
                                TextWrapping="Wrap"
                                Text="{Binding WhyNot.Headline}"
+                               ToolTip="{Binding WhyNot.Because}"
                                Visibility="{Binding WhyNot, Converter={StaticResource WhenAnything}}"
                                AutomationProperties.AutomationId="WhyNot" />
+
+                    <ItemsControl Margin="0,4,0,0"
+                                  ItemsSource="{Binding WhyNot.Figures}"
+                                  Visibility="{Binding WhyNot.Figures.Count, Converter={StaticResource WhenSome}}"
+                                  AutomationProperties.AutomationId="WhyNotFigures">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <!-- Wrapped, because two figures fit on this
+                                     line and a third would be drawn off the
+                                     end of a window nobody can widen. -->
+                                <WrapPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                                    <TextBlock Style="{StaticResource Aside}"
+                                               Text="{Binding Label}"
+                                               AutomationProperties.Name="{Binding Label}" />
+                                    <TextBlock Margin="6,0,0,0"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource Ink}"
+                                               Text="{Binding Value}"
+                                               AutomationProperties.Name="{Binding Value}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
 
                     <TextBlock Foreground="{StaticResource WorryInk}"
                                FontSize="12"
                                Margin="0,6,0,0"
                                TextWrapping="Wrap"
                                Text="{Binding Worry.Headline}"
+                               ToolTip="{Binding Worry.Because}"
                                Visibility="{Binding Worry, Converter={StaticResource WhenAnything}}"
                                AutomationProperties.AutomationId="Worry" />
+
+                    <!-- A worry carries figures too, and the one that has
+                         them is the one that needs them most: it shows the
+                         name you typed beside the name the disc will really
+                         show, which is what makes the decision obvious. -->
+                    <ItemsControl Margin="0,4,0,0"
+                                  ItemsSource="{Binding Worry.Figures}"
+                                  Visibility="{Binding Worry.Figures.Count, Converter={StaticResource WhenSome}}"
+                                  AutomationProperties.AutomationId="WorryFigures">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                                    <TextBlock Style="{StaticResource Aside}"
+                                               Text="{Binding Label}"
+                                               AutomationProperties.Name="{Binding Label}" />
+                                    <TextBlock Margin="6,0,0,0"
+                                               FontSize="12"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource Ink}"
+                                               Text="{Binding Value}"
+                                               AutomationProperties.Name="{Binding Value}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">

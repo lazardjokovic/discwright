@@ -82,6 +82,23 @@ public static class Refusals
             new Remedy("Name the disc", RemedyKind.FocusField));
 
     /// <summary>
+    /// There is a disc to build and nowhere on this PC to build it.
+    /// </summary>
+    /// <remarks>
+    /// The last of the things a build needs that said nothing when it was
+    /// missing. A disc with no name says so, an empty folder says so, a file
+    /// too big for any disc says so, and no output folder left the one button
+    /// on the window dead with the window silent about why. A dead button
+    /// nobody can explain reads as a broken button.
+    /// </remarks>
+    public static Refusal ThereIsNowhereToPutIt() =>
+        new("There is nowhere to put it",
+            "The discs are built into a folder on this PC first, with each one's ISO beside it, and no folder "
+                + "has been chosen. Nothing is written to a disc until you press Burn.",
+            [],
+            new Remedy("Choose a folder", RemedyKind.PickFolder));
+
+    /// <summary>
     /// The label holds characters the system codepage cannot carry, so AutoRun
     /// will show something else.
     /// </summary>

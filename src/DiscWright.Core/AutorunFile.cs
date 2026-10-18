@@ -41,10 +41,17 @@ public static class AutorunFile
     /// may carry, which is the path that actually reaches a build.
     /// </para>
     /// </remarks>
-    public static string For(string label, string iconFileName, bool hasMenu)
+    /// <param name="label">What This PC shows when the disc goes in.</param>
+    /// <param name="iconFileName">
+    /// The icon the disc really carries, or <c>null</c> when it carries none.
+    /// Null leaves the directive out altogether rather than naming a file that
+    /// is not there. <c>icon=</c> used to be written either way, and a disc
+    /// built with no chosen artwork pointed Windows at a file nothing wrote.
+    /// </param>
+    /// <param name="hasMenu">Whether this disc has a menu to open.</param>
+    public static string For(string label, string? iconFileName, bool hasMenu)
     {
         string safeLabel = WithoutControlCharacters(label);
-        string safeIcon = WithoutControlCharacters(iconFileName);
 
         List<string> lines = ["[autorun]"];
 
@@ -53,7 +60,11 @@ public static class AutorunFile
             lines.Add("shellexecute=" + MenuPath);
         }
 
-        lines.Add("icon=" + safeIcon);
+        if (!string.IsNullOrEmpty(iconFileName))
+        {
+            lines.Add("icon=" + WithoutControlCharacters(iconFileName));
+        }
+
         lines.Add("label=" + safeLabel);
 
         if (hasMenu)
