@@ -49,15 +49,34 @@ public static class TheDiscsThatAreIn
     /// is chosen, or nothing when there is nothing worth saying.
     /// </summary>
     /// <remarks>
-    /// Silent when a drive holds a disc of the size being aimed at, even if
-    /// another drive holds something else entirely: the disc that matters is in
-    /// the machine and the rest is not this sentence's business. Silent too
-    /// when there is no disc anywhere, because somebody who has not put one in
-    /// yet has done nothing wrong.
+    /// <para>
+    /// About the drive this would actually be written to, and no other. Once
+    /// somebody has chosen one it is that one. With none chosen it is the
+    /// ones that could be written to right now, and only if none of them can
+    /// does it fall back to whatever is in the machine, so that a drive
+    /// holding something unusable still gets mentioned rather than ignored.
+    /// </para>
+    /// <para>
+    /// It used to look at every drive at once and go quiet the moment any of
+    /// them held the right size. On a machine with a used CD-RW sitting in a
+    /// second drive, that silenced the warning about the blank DVD in the
+    /// drive being written to: the CD was the size being aimed at, so there
+    /// was said to be nothing worth saying, while the only disc that could
+    /// take the burn was the wrong one.
+    /// </para>
+    /// <para>
+    /// Silent when there is no disc anywhere, because somebody who has not
+    /// put one in yet has done nothing wrong.
+    /// </para>
     /// </remarks>
-    public static string? WhatIsWorthSaying(IReadOnlyList<Recorder> drives, Medium chosen)
+    public static string? WhatIsWorthSaying(
+        IReadOnlyList<Recorder> drives, Medium chosen, string? theDrive = null)
     {
-        Recorder[] holding = [.. drives.Where(drive => drive.WhyNot is null && drive.MediaType != 0)];
+        Recorder[] holding =
+        [
+            .. TheOnesThatMatter(drives, theDrive)
+                .Where(drive => drive.WhyNot is null && drive.MediaType != 0)
+        ];
 
         if (holding.Length == 0 || holding.Any(drive => TheSizeOf(drive) == chosen))
         {
@@ -70,6 +89,29 @@ public static class TheDiscsThatAreIn
             ?? holding[0];
 
         return $"The disc in {worth.Drive} is {AOrAn(worth.Holding)}, and this is being built for {chosen.Name}.";
+    }
+
+    /// <summary>
+    /// The drives this sentence is about: the chosen one, or the ones that
+    /// could be written to now, or failing both, all of them.
+    /// </summary>
+    private static IReadOnlyList<Recorder> TheOnesThatMatter(
+        IReadOnlyList<Recorder> drives, string? theDrive)
+    {
+        if (theDrive is not null)
+        {
+            return
+            [
+                .. drives.Where(drive =>
+                    string.Equals(drive.Drive, theDrive, StringComparison.OrdinalIgnoreCase))
+            ];
+        }
+
+        Recorder[] could = [.. drives.Where(drive => drive.Ready)];
+
+        // Nothing is ready anywhere, so there is nothing to narrow to and the
+        // old disc nobody can write to is still worth a word.
+        return could.Length > 0 ? could : drives;
     }
 
     /// <summary>

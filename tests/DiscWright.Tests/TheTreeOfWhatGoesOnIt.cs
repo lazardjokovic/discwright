@@ -26,6 +26,83 @@ public class TheTreeOfWhatGoesOnIt
         Assert.Equal(["skin.pak"], data.Inside.Single().Inside.Select(each => each.Name));
     }
 
+    // ------------------------------------------------- what hovering says
+
+    [Fact]
+    public void A_name_too_long_for_the_row_can_be_read_on_hover()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        // The row has a fixed width and trims what will not fit, so the only
+        // place a long name can be read in full is here.
+        AThingOnTheDisc installer = tree.Inside.Single(each => each.Name == "setup.exe");
+
+        // One line, because the path says nothing the name has not said.
+        Assert.Equal("setup.exe", installer.InFull);
+    }
+
+    [Fact]
+    public void Hovering_a_file_in_a_folder_says_where_in_the_game_it_is()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        AThingOnTheDisc skin = tree.Inside.Single(each => each.Name == "data")
+            .Inside.Single().Inside.Single();
+
+        Assert.Equal("skin.pak" + (char)10 + @"data\textures\skin.pak", skin.InFull);
+    }
+
+    [Fact]
+    public void Hovering_an_add_on_says_what_the_file_is_really_called()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), [APatch()]);
+
+        AThingOnTheDisc patch = tree.Inside
+            .Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder)
+            .Inside.Single();
+
+        // The case that needs this most. The row shows a tidy version of
+        // what the patch calls itself, and the file on disk is called
+        // something else entirely, which is the name somebody looking for
+        // it in the folder will see.
+        Assert.Equal(
+            "Update 1.5.12618" + (char)10 + @"C:\game\patch_a_game_1.5.12459_to_1.5.12618.exe",
+            patch.InFull);
+    }
+
+    [Fact]
+    public void Hovering_a_game_says_which_folder_it_came_from()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        Assert.Equal("A Game" + (char)10 + @"C:\game", tree.InFull);
+    }
+
+    [Fact]
+    public void A_folder_knows_where_it_is_rather_than_where_the_game_is()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        AThingOnTheDisc data = tree.Inside.Single(each => each.Name == "data");
+        AThingOnTheDisc textures = data.Inside.Single();
+
+        // Every folder used to be handed the whole game folder, so hovering
+        // "data" and hovering "textures" inside it said the same thing, and
+        // neither of them said where it was.
+        Assert.Equal("data", data.ItsPath);
+        Assert.Equal(@"data\textures", textures.ItsPath);
+
+        // And a folder whose path is its own name has nothing more to add.
+        Assert.Equal("data", data.InFull);
+    }
+
+    /// <summary>A patch found beside the game, as the window takes one on.</summary>
+    private static AddOn APatch() => new(
+        BelongsTo: 0,
+        Path: @"C:\game\patch_a_game_1.5.12459_to_1.5.12618.exe",
+        Name: "Update 1.5.12618",
+        Bytes: 500);
+
     [Fact]
     public void A_folder_is_as_big_as_everything_under_it()
     {

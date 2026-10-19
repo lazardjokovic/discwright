@@ -25,6 +25,8 @@ public class TheWindowsMarkup
 {
     private static readonly XNamespace Xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
 
+    private static readonly XNamespace X = "http://schemas.microsoft.com/winfx/2006/xaml";
+
     /// <summary>
     /// The controls somebody uses, as opposed to the ones that only arrange
     /// things. A Grid has no business carrying an id; a Button does.
@@ -365,16 +367,210 @@ public class TheWindowsMarkup
     }
 
     [Fact]
-    public void The_version_and_the_way_to_check_it_are_one_thought()
+    public void The_name_row_is_the_name_and_the_version_and_nothing_else()
     {
-        XElement check = Window()
+        // The link that used to sit beside the number is on its own line
+        // underneath now. Whether there is a newer one is a different thought
+        // from what this one is called, and the two were one row.
+        XElement row = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "ThisBuild")
+            .Parent!;
+
+        Assert.Equal(
+            ["TextBlock", "TextBlock"],
+            row.Elements().Select(each => each.Name.LocalName));
+    }
+
+    [Fact]
+    public void The_version_line_is_under_the_name_and_is_the_way_to_ask()
+    {
+        // It is the only way in. There is no menu, and a check reachable only
+        // from a package manager is no check at all for somebody who ran the
+        // installer.
+        XElement block = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "ThisBuild")
+            .Parent!
+            .Parent!;
+
+        Assert.Equal(
+            ["StackPanel", "TextBlock", "Button"],
+            block.Elements().Select(each => each.Name.LocalName));
+
+        Assert.Equal(
+            ["WhatTheVersionSays", "CheckForANewVersion"],
+            block.Elements().Skip(1).Select(IdOf));
+
+        // And it is there to be used. A link in the markup that the markup
+        // then hides or disables is the exact thing this change is undoing:
+        // a working, tested capability with no way in. The first round of
+        // faults walked straight through the assertions above by collapsing
+        // it, which is as good as deleting it and leaves no trace in a diff.
+        XElement link = block.Elements().Last();
+
+        Assert.Null(link.Attribute("Visibility"));
+        Assert.Null(link.Attribute("IsEnabled"));
+    }
+
+    [Fact]
+    public void The_version_line_is_worded_by_the_screen_and_not_by_the_window()
+    {
+        // Four states and one control. Spelling any of them here would put
+        // wording where no test can reach it.
+        XElement link = Window()
             .Descendants(Xaml + "Button")
             .Single(each => IdOf(each) == "CheckForANewVersion");
 
-        // Side by side rather than two rows apart, which is what they were.
-        Assert.Contains(
-            "ThisBuild",
-            check.Parent!.Elements().Select(IdOf));
+        Assert.Equal("{Binding WhatTheVersionLinkSays}", (string?)link.Attribute("Content"));
+    }
+
+    [Fact]
+    public void The_version_line_says_nothing_until_there_is_something_to_say()
+    {
+        // Left visible, an empty line still takes the height of a line, and
+        // the gap between the name and the link would read as a thing that
+        // had gone missing.
+        XElement said = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "WhatTheVersionSays");
+
+        Assert.Equal(
+            "{Binding WhatTheVersionSays, Converter={StaticResource WhenAnything}}",
+            (string?)said.Attribute("Visibility"));
+    }
+
+    [Theory]
+    [InlineData("MainWindow.xaml")]
+    [InlineData("PickOne.xaml")]
+    [InlineData("WhatElseGoesOnIt.xaml")]
+    [InlineData("WhatElseIsInThere.xaml")]
+    [InlineData("WorthAsking.xaml")]
+    public void Every_resource_a_window_asks_for_is_somewhere_to_be_found(string window)
+    {
+        // A style key that nothing defines compiles, and then takes the whole
+        // program down the moment the window is built. No other guard here
+        // would see it: these read the markup as XML, and XML does not care
+        // whether a name resolves.
+        //
+        // Nearly earned: Quietly was deleted as the only thing using it, and
+        // the version line that came back a day later asks for it again.
+        HashSet<string> known =
+        [
+            .. new[] { "Look.xaml", "App.xaml", window }
+                .SelectMany(each => Markup(each).DescendantsAndSelf())
+                .Select(each => (string?)each.Attribute(X + "Key"))
+                .OfType<string>()
+        ];
+
+        List<string> missing =
+        [
+            .. Markup(window).DescendantsAndSelf()
+                .SelectMany(each => each.Attributes())
+                .SelectMany(each => System.Text.RegularExpressions.Regex.Matches(
+                    each.Value, @"\{StaticResource (\w+)\}"))
+                .Select(each => each.Groups[1].Value)
+                .Where(each => !known.Contains(each))
+                .Distinct()
+        ];
+
+        Assert.True(
+            missing.Count == 0,
+            window + " asks for resources nothing defines: " + string.Join(", ", missing));
+    }
+
+    [Fact]
+    public void Start_a_new_disc_goes_grey_when_there_is_nothing_to_start_again_from()
+    {
+        // NothingIsRunning was not enough. On a window with nothing on it the
+        // button asked nothing and cleared nothing, which reads exactly like
+        // a button that does not work, and that is how it was reported.
+        XElement start = Window()
+            .Descendants(Xaml + "Button")
+            .Single(each => IdOf(each) == "StartANewDisc");
+
+        Assert.Equal("{Binding CanStartAgain}", (string?)start.Attribute("IsEnabled"));
+    }
+
+    [Fact]
+    public void No_property_element_sits_in_the_middle_of_an_elements_content()
+    {
+        // A XAML rule that XML knows nothing about: <Style.Triggers> and the
+        // like must come before everything else or after it, never with
+        // content on both sides. Put among the Setters it is valid XML, it
+        // reads perfectly well, every guard in this file passes it, and
+        // WPF refuses to compile it. The app simply does not open.
+        //
+        // This project's tests cannot reference DiscWright.App at all, by
+        // design, so nothing in a test run ever compiles this markup. A
+        // Style.Triggers block dropped into the middle of Quietly took the
+        // whole app out with all 956 tests green, and was found by looking
+        // at the window.
+        List<string> wrong = [];
+
+        foreach (string file in Directory.GetFiles(Repository.File("src", "DiscWright.App"), "*.xaml"))
+        {
+            foreach (XElement element in XDocument.Load(file).Descendants())
+            {
+                XElement[] children = [.. element.Elements()];
+
+                bool IsProperty(XElement each) => each.Name.LocalName.Contains('.');
+
+                int first = Array.FindIndex(children, each => !IsProperty(each));
+                int last = Array.FindLastIndex(children, each => !IsProperty(each));
+
+                if (first < 0)
+                {
+                    continue;
+                }
+
+                for (int at = first; at < last; at++)
+                {
+                    if (IsProperty(children[at]))
+                    {
+                        wrong.Add($"{System.IO.Path.GetFileName(file)}: "
+                            + $"<{children[at].Name.LocalName}> inside <{element.Name.LocalName}>");
+                    }
+                }
+            }
+        }
+
+        Assert.True(wrong.Count == 0, "Markup WPF will not compile: " + string.Join("; ", wrong));
+    }
+
+    [Fact]
+    public void The_way_out_of_a_refusal_sits_with_the_refusal()
+    {
+        // Under the red line and above the figures would read as one of the
+        // figures. Under the lot of it, where somebody who has read the line
+        // is looking next.
+        XElement found = Window()
+            .Descendants(Xaml + "Button")
+            .Single(each => IdOf(each) == "TheWayOut");
+
+        Assert.Equal("{Binding WhatTheWayOutIsCalled}", (string?)found.Attribute("Content"));
+
+        Assert.Equal(
+            "{Binding WhatTheWayOutIsCalled, Converter={StaticResource WhenAnything}}",
+            (string?)found.Attribute("Visibility"));
+
+        // The refusal it belongs to is the previous thing on the panel.
+        Assert.Equal("WhyNot", IdOf(found.ElementsBeforeSelf().Last()));
+    }
+
+    [Fact]
+    public void The_header_row_carries_a_rule_under_it()
+    {
+        // Whatever is in it, the header is a band the full width of the
+        // window with text at one end and buttons at the other. The rule is
+        // what makes the space between them read as a header bar rather than
+        // as somewhere a thing used to be.
+        XElement band = Window()
+            .Descendants(Xaml + "Border")
+            .Single(each => (string?)each.Attribute("Grid.Row") == "0");
+
+        Assert.Equal("0,0,0,1", (string?)band.Attribute("BorderThickness"));
+        Assert.Equal("{StaticResource Edge}", (string?)band.Attribute("BorderBrush"));
     }
 
     [Theory]
@@ -409,6 +605,34 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void The_line_under_FOR_PRINTING_says_what_choosing_them_does_do()
+    {
+        // It said only "Choosing them is not printing them.", which answers
+        // what this is NOT for and leaves what it IS for unsaid.
+        XElement said = Markup("WhatElseGoesOnIt.xaml")
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => ((string?)each.Attribute("Text"))?.StartsWith(
+                "Choosing them", StringComparison.Ordinal) == true);
+
+        string words = (string)said.Attribute("Text")!;
+
+        Assert.Equal(
+            "Choosing them is not printing them. They go on the disc in an ARTWORK folder to print later.",
+            words);
+
+        // One row, which is the whole constraint on it. Measured on the real
+        // dialog: 493px of text in a slot 591px wide, so the budget below is
+        // where it would start to be in danger rather than a guess. NoWrap
+        // with no trimming does not wrap when it runs out of room, it is
+        // simply cut off, and nothing on screen says it was.
+        Assert.Equal("NoWrap", (string?)said.Attribute("TextWrapping"));
+
+        Assert.True(
+            words.Length <= 105,
+            $"\"{words}\" is {words.Length} characters, and about 105 is as much as that row holds.");
+    }
+
+    [Fact]
     public void Does_not_claim_the_printing_artwork_never_reaches_the_disc()
     {
         // It does reach it, the moment somebody ticks "The cover art on the
@@ -423,6 +647,53 @@ public class TheWindowsMarkup
 
         // And there is no setting left to make it conditional on.
         Assert.DoesNotContain("ArtworkOnDisc", Window().Descendants().Select(IdOf));
+    }
+
+    [Fact]
+    public void A_row_that_had_to_be_trimmed_can_be_read_on_hover()
+    {
+        // The name is given a fixed width so a long one cannot push the row
+        // past the panel, which means it is trimmed and readable nowhere
+        // else. A row that trims without a tooltip loses what it trimmed.
+        XElement name = Window()
+            .Descendants(Xaml + "HierarchicalDataTemplate")
+            .Single()
+            .Descendants(Xaml + "TextBlock")
+            .First(each => (string?)each.Attribute("Text") == "{Binding Name}");
+
+        Assert.Equal("CharacterEllipsis", (string?)name.Attribute("TextTrimming"));
+        Assert.Equal("{Binding InFull}", (string?)name.Attribute("ToolTip"));
+
+        // And a screen reader gets the same thing, which a tooltip alone
+        // does not give it.
+        Assert.Equal(
+            "{Binding InFull}",
+            (string?)name.Attribute(AutomationHelpText));
+    }
+
+    private static readonly XName AutomationHelpText =
+        XName.Get("AutomationProperties.HelpText");
+
+    [Fact]
+    public void The_total_is_shown_inside_the_panel_it_adds_up()
+    {
+        // The screen can work the total out perfectly and the window can
+        // simply not show it, which is what a planted fault proved by taking
+        // the line off the markup while every test about the total stayed
+        // green.
+        XElement tree = Window()
+            .Descendants(Xaml + "TreeView")
+            .Single(each => IdOf(each) == "Games");
+
+        // In the panel the list is in, rather than floating underneath it
+        // among the lines about what was left off. It is about the list.
+        XElement panel = tree.Ancestors(Xaml + "Border").First();
+
+        XElement total = panel
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "WhatIsOnIt");
+
+        Assert.Equal("{Binding WhatIsOnIt}", (string?)total.Attribute("Text"));
     }
 
     [Fact]

@@ -90,16 +90,15 @@
          because a button that is both bigger and brighter than its neighbour
          looks like a different kind of thing rather than a louder one. -->
     <!--
-        For something that is barely an action: the version in the corner,
-        checked once in a blue moon. Pressable, and no heavier on the page
-        than the line of text beside it.
+        For the version line: pressable, and no heavier on the page than the
+        quiet sentence above it. The same size and the same grey as Aside,
+        because it sits directly under one and two greys a pixel apart look
+        like a mistake rather than a distinction. The hand and the underline
+        on hover are the whole of what says it can be pressed.
     -->
     <Style x:Key="Quietly" TargetType="Button">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
-
-        <!-- Smaller than the words it sits beside. It is barely an action and
-             should not compete with the name of the program. -->
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{StaticResource Quiet}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="0" />
@@ -118,10 +117,35 @@
                             <Setter TargetName="Words" Property="TextDecorations" Value="Underline" />
                             <Setter TargetName="Words" Property="Foreground" Value="{StaticResource Accent}" />
                         </Trigger>
+
+                        <!-- After the hover, so it wins: IsMouseOver stays
+                             true over a disabled button, and a dead link
+                             underlined in the accent colour is the loudest
+                             thing on the window.
+
+                             Inside the template and naming the TextBlock it
+                             paints, because a Setter here with no TargetName
+                             loses to the Style's own Foreground setter and
+                             reads exactly as though it works. -->
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Words" Property="Foreground" Value="{StaticResource Dead}" />
+                            <Setter TargetName="Words" Property="TextDecorations" Value="{x:Null}" />
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+
+        <!-- After the setters, not among them. A property element in the
+             middle of an element's content is not markup WPF will compile,
+             and no guard here would have seen it: these read the XAML as XML,
+             and XML is perfectly happy with it. The app simply would not
+             have opened. -->
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style x:Key="Ordinary" TargetType="Button">

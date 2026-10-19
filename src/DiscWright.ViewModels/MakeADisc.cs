@@ -57,9 +57,30 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private Medium _medium = Media.Dvd5;
     private bool _theSizeWasChosen;
     private bool _lookingAtTheDrives;
+
+    /// <summary>Whether the last look worked out a set of discs at all.</summary>
+    /// <remarks>
+    /// Kept rather than asked for again, because working it out is the
+    /// expensive half of Reconsider and this is read every time the window
+    /// redraws a button.
+    /// </remarks>
+    private bool _thePlanIsSound;
     private Recorder? _theDrive;
     private bool _asking;
     private IReadOnlyList<Recorder> _lastSeen = [];
+
+    /// <summary>
+    /// What each drive said about shutting its own tray, by letter.
+    /// </summary>
+    /// <remarks>
+    /// Remembered because the answer costs a call to the drive and belongs
+    /// nowhere near the thread the window is drawn on, and because it is
+    /// about the drive rather than about the disc in it: D: shuts its own
+    /// tray and the Blu-ray writer here never does, whatever is loaded.
+    /// Keeping it means choosing a different drive can narrow the warning
+    /// straight away instead of waiting for the next disc to go in.
+    /// </remarks>
+    private Dictionary<string, bool> _traysThatShut = new(StringComparer.OrdinalIgnoreCase);
     private DiscOptions _options = new();
     private ReadOnlyObservableCollection<GameFolder>? _view;
 
@@ -146,10 +167,25 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// Whether there is anything to preview.
     /// </summary>
     /// <remarks>
-    /// The same answer as whether there is anything to build. A preview of
-    /// nothing is an empty window somebody has to close.
+    /// <para>
+    /// A preview is a menu written for every disc of the set, so it needs a
+    /// set. With a file too big for the disc being aimed at there is no set
+    /// and nothing to write, and the button used to stay lit and answer with
+    /// a box saying so, word for word what the red line under the buttons
+    /// had been saying all along.
+    /// </para>
+    /// <para>
+    /// Build is already grey in that state and always has been, so the box
+    /// could only ever come from here. Grey is the answer the rest of this
+    /// window gives, and the red line is where the reason lives.
+    /// </para>
+    /// <para>
+    /// Somewhere to put the ISO is not part of it. A preview is written to a
+    /// temporary folder of its own and never goes near that one, so it is
+    /// the plan this waits on rather than the whole of CanMakeIt.
+    /// </para>
     /// </remarks>
-    public bool CanPreview => !IsWorking && _games.Count > 0;
+    public bool CanPreview => !IsWorking && _games.Count > 0 && _thePlanIsSound;
 
     /// <summary>
     /// What to call the folder this project's preview goes in.
@@ -243,6 +279,46 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public HowThisBuildCompares? AboutTheVersion { get; private set; }
 
     /// <summary>
+    /// What the header says about this build, once somebody has asked, or
+    /// nothing at all because nobody has.
+    /// </summary>
+    /// <remarks>
+    /// The answer belongs where the question was asked. It used to arrive in a
+    /// message box, which made it the only box in the program that was not
+    /// reporting a problem, and every other field in this window says what it
+    /// has to say in a quiet line under itself.
+    /// </remarks>
+    public string WhatTheVersionSays => AboutTheVersion?.InWords ?? string.Empty;
+
+    /// <summary>
+    /// What the one pressable thing on the version line is called.
+    /// </summary>
+    /// <remarks>
+    /// Never empty, because that line is the only way in and a link that
+    /// disappears once it has been used is a capability that works once.
+    /// While it is asking it says so: the ask crosses a network, it can take a
+    /// second or two, and a link that looks untouched after a press reads as
+    /// broken.
+    /// </remarks>
+    public string WhatTheVersionLinkSays =>
+        _asking ? "Asking GitHub"
+            : AboutTheVersion is null ? "Check for new version"
+            : AboutTheVersion.WorthGetting ? "Get it"
+            : "Check again";
+
+    /// <summary>
+    /// The page for a newer release, when there is one worth getting, and
+    /// nothing otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Whether a page is worth offering is a judgement, so it is made here
+    /// rather than in the window. The window asks for a page and either gets
+    /// one or asks again, and never sees <see cref="HowThisBuildCompares"/>.
+    /// </remarks>
+    public string? TheVersionPage =>
+        AboutTheVersion is { WorthGetting: true } how ? how.Where : null;
+
+    /// <summary>
     /// Asks what the newest released version is.
     /// </summary>
     /// <remarks>
@@ -266,6 +342,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         _asking = true;
+        TellAboutTheVersion();
 
         try
         {
@@ -287,7 +364,18 @@ public sealed class MakeADisc : INotifyPropertyChanged
             _asking = false;
         }
 
+        TellAboutTheVersion();
+    }
+
+    /// <summary>
+    /// Everything on the version line, which changes together or not at all.
+    /// </summary>
+    private void TellAboutTheVersion()
+    {
         Tell(nameof(AboutTheVersion));
+        Tell(nameof(WhatTheVersionSays));
+        Tell(nameof(WhatTheVersionLinkSays));
+        Tell(nameof(TheVersionPage));
     }
 
     /// <summary>
@@ -316,7 +404,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _theDrive = value;
             Tell(nameof(TheDrive));
-            Tell(nameof(AboutTheTray));
+            SayWhatTheTraysNeed();
+
+            // The sentence under the size is about the drive being written
+            // to, so choosing a different drive asks it again. Off what was
+            // last seen rather than off the drives themselves: this is the
+            // thread the window is drawn on, and asking a drive that has
+            // spun down costs seconds of a window that has stopped moving.
+            SayWhatIsInTheDrives();
         }
     }
 
@@ -375,27 +470,30 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _lookingAtTheDrives = true;
 
         IReadOnlyList<Recorder> drives;
-        string trays;
+        Dictionary<string, bool> shut;
 
         try
         {
             // The trays are asked about out here too. Each answer costs a
             // call to a drive, and doing it in front of the window is how the
             // window came to take thirteen seconds to open.
-            string? chosen = _theDrive?.Drive;
-
-            (drives, trays) = await Task.Run(() =>
+            //
+            // Every drive worth asking, not only the chosen one. Narrowing
+            // happens afterwards, where it is free, and asking about all of
+            // them is what lets choosing a different drive narrow to it
+            // without going near a drive again.
+            (drives, shut) = await Task.Run(() =>
             {
                 IReadOnlyList<Recorder> found = _machine.Drives.All();
 
-                // Once a drive is chosen, the warning is about THAT one. A
-                // sentence about the drive somebody is not using is noise.
-                IReadOnlyList<Recorder> asking = chosen is null
-                    ? found
-                    : [.. found.Where(each => string.Equals(each.Drive, chosen, StringComparison.OrdinalIgnoreCase))];
+                Dictionary<string, bool> said = new(StringComparer.OrdinalIgnoreCase);
 
-                return (found, TheDiscsThatAreIn.WhatToSayAboutTheTray(
-                    asking, _machine.Tray.CanShutItsOwnTray) ?? string.Empty);
+                foreach (Recorder drive in found.Where(each => each.Ready || each.ErasingWouldHelp))
+                {
+                    said[drive.Drive] = _machine.Tray.CanShutItsOwnTray(drive);
+                }
+
+                return (found, said);
             });
         }
         catch (Exception)
@@ -448,13 +546,60 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(TheDrive));
         }
 
-        AboutTheTray = trays;
+        _traysThatShut = shut;
+        SayWhatTheTraysNeed();
+
+        // Last, and the whole point of the ones above it. A disc swapped for
+        // a bigger one moves the size this is aiming at, and the size decides
+        // how many discs it will take, whether anything has to be cut and
+        // whether any of it fits at all. None of that was worked out again,
+        // so the window went on showing the answer to the question the
+        // previous disc had asked: "a set of 3 discs" over a drive now
+        // holding a DVD, and a refusal about a file too big for a disc it is
+        // no longer being written to.
+        //
+        // It is here rather than in the window because every path into this
+        // method is a drive changing, and a drive changing is exactly when
+        // all of it stops being true.
+        Reconsider();
+    }
+
+    /// <summary>
+    /// Works out the tray warning for the drive this would be written to.
+    /// </summary>
+    /// <remarks>
+    /// Off what the drives last said rather than off the drives, so it can
+    /// run on the thread the window is drawn on. Only drives that were asked
+    /// are in the question at all, so there is no drive to guess about: a
+    /// default either way would be a rule nothing could reach, and one of
+    /// them would have somebody standing by a drive that never wanted them.
+    /// </remarks>
+    private void SayWhatTheTraysNeed()
+    {
+        string? chosen = _theDrive?.Drive;
+
+        // Once a drive is chosen, the warning is about THAT one. A sentence
+        // about the drive somebody is not using is noise, and one left over
+        // from the drive they were using a moment ago is worse than noise.
+        IReadOnlyList<Recorder> asking =
+        [
+            .. _lastSeen
+                .Where(each => _traysThatShut.ContainsKey(each.Drive))
+                .Where(each => chosen is null
+                    || string.Equals(each.Drive, chosen, StringComparison.OrdinalIgnoreCase))
+        ];
+
+        AboutTheTray = TheDiscsThatAreIn.WhatToSayAboutTheTray(
+            asking, drive => _traysThatShut[drive.Drive]) ?? string.Empty;
+
         Tell(nameof(AboutTheTray));
+        Tell(nameof(WhatTheDrivesAreDoing));
     }
 
     private void SayWhatIsInTheDrives(IReadOnlyList<Recorder>? drives = null)
     {
-        string said = TheDiscsThatAreIn.WhatIsWorthSaying(drives ?? _lastSeen, _medium) ?? string.Empty;
+        string said = TheDiscsThatAreIn.WhatIsWorthSaying(
+            drives ?? _lastSeen, _medium, _theDrive?.Drive) ?? string.Empty;
 
         if (drives is not null)
         {
@@ -530,6 +675,35 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public bool CanMakeIt => WhyNot is null && Games.Count > 0 && OutputFolder.Length > 0 && !IsWorking;
 
     /// <summary>
+    /// What the window can do about the refusal it is showing, or nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every refusal in this program has carried a remedy since the day they
+    /// were written, and not one of them was ever shown. So a refusal that
+    /// was perfectly correct, said what was wrong, and knew exactly how to
+    /// put it right, arrived as a red line and nothing else, and read as the
+    /// program complaining. "There is nowhere to put it" was reported twice
+    /// as a stale message while the empty box it was about sat on the same
+    /// screen.
+    /// </para>
+    /// <para>
+    /// Only the kinds the window can really act on. RemedyKind is written as
+    /// what a window can DO rather than why a refusal happened, but a remedy
+    /// carries no subject with it: ChangeMedium does not say which size and
+    /// ChangeOption does not say which option, so there is nothing yet for
+    /// the window to act on. Offering a word that did nothing when pressed
+    /// would be worse than the red line on its own.
+    /// </para>
+    /// </remarks>
+    public RemedyKind? TheWayOut =>
+        WhyNot?.Remedy is { Kind: RemedyKind.PickFolder } ? RemedyKind.PickFolder : null;
+
+    /// <summary>What that way out is called, or nothing when there is none.</summary>
+    public string WhatTheWayOutIsCalled =>
+        TheWayOut is null ? string.Empty : WhyNot!.Remedy!.Label;
+
+    /// <summary>
     /// Every size of disc that can be aimed at, worded as the list shows them.
     /// </summary>
     /// <remarks>
@@ -602,6 +776,57 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(WhatIsLeftOff));
         Tell(nameof(WhyThatMatters));
         Tell(nameof(APatchWithNothingToPatch));
+    }
+
+    /// <summary>
+    /// What the whole list comes to, or nothing when the list is empty.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every row of the tree shows its own size and a game shows the sum of
+    /// what is under it, and there was nowhere at all that said what the lot
+    /// came to. With four games on the window somebody had to add them up by
+    /// eye to work out whether it would fit.
+    /// </para>
+    /// <para>
+    /// <strong>It follows the ticks.</strong> What goes on the disc is what is
+    /// ticked, and a total that counted rows somebody had just turned off
+    /// would be worse than no total at all.
+    /// </para>
+    /// <para>
+    /// The files alone, which is what the tree is a list of. The menu, the
+    /// artwork and the extras take their own room on top of this, and what
+    /// that comes to is already said where it matters: in the disc count, and
+    /// in the refusal when it will not fit.
+    /// </para>
+    /// </remarks>
+    public string WhatIsOnIt
+    {
+        get
+        {
+            int things = 0;
+            long bytes = 0;
+
+            foreach (AThingOnTheDisc game in _tree)
+            {
+                foreach (AThingOnTheDisc thing in game.EverythingOn())
+                {
+                    things++;
+                    bytes += thing.Bytes;
+                }
+            }
+
+            if (things == 0)
+            {
+                // Everything turned off is a thing somebody has just done on
+                // purpose, and the line under this one already says so.
+                return string.Empty;
+            }
+
+            return things == 1
+                ? $"{ByteSize.Describe(bytes)} in one file"
+                : $"{ByteSize.Describe(bytes)} in {things} files";
+        }
     }
 
     /// <summary>
@@ -748,7 +973,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
             const string leaveIt =
                 "Leave this alone and DiscWright works it out, and asks only if there is something to ask.";
 
-            return AboutTheTray is string tray
+            // Not "is string", which an empty one also is. With no tray to
+            // warn about, that joined a full stop and a space to nothing and
+            // hung a paragraph about a problem nobody had under a sentence
+            // that had already answered the question.
+            return AboutTheTray is { Length: > 0 } tray
                 ? leaveIt + "\n\n" + tray + ". " + WhyTheTrayMatters
                 : leaveIt;
         }
@@ -820,6 +1049,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             IsWorking = true;
             Tell(nameof(IsWorking));
             Tell(nameof(NothingIsRunning));
+            Tell(nameof(CanStartAgain));
             Tell(nameof(CanTakeSomethingOff));
             Say($"erasing the {chosen.Holding} in {chosen.Drive}", 0);
 
@@ -849,6 +1079,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             IsWorking = false;
             Tell(nameof(IsWorking));
             Tell(nameof(NothingIsRunning));
+            Tell(nameof(CanStartAgain));
             Tell(nameof(CanTakeSomethingOff));
             await LookAtTheDrives();
         }
@@ -1306,6 +1537,18 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public bool HasAnythingOnIt =>
         _games.Count > 0 || Label.Length > 0 || Made is not null || _artwork is not null
         || _manual is not null || _extrasFolder is not null || _music is not null;
+
+    /// <summary>
+    /// Whether starting again would change anything.
+    /// </summary>
+    /// <remarks>
+    /// Pressed on a window with nothing on it, Start a new disc asked nothing
+    /// and cleared nothing, which is correct and is indistinguishable from a
+    /// button that does not work. Every other button in this window goes grey
+    /// when it has nothing to do, and this was the one that stayed lit and
+    /// said nothing at all.
+    /// </remarks>
+    public bool CanStartAgain => NothingIsRunning && HasAnythingOnIt;
 
     /// <summary>
     /// Clears this disc and leaves the machine alone.
@@ -1936,6 +2179,23 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(Label));
         }
 
+        // And it names the folder, for the same reason.
+        //
+        // v1 did this, so nobody ever met "There is nowhere to put it".
+        // Leaving the box empty made a refusal out of a question that had
+        // not been asked yet, and it was reported three times as a stale
+        // message about the disc rather than about the box.
+        //
+        // The whole rule is that the box is empty, with no "only the first
+        // game" beside it as the name above has. A game called ":" leaves
+        // nothing worth suggesting, and the next one along should be allowed
+        // to fill in a box that first one left empty.
+        if (OutputFolder.Length == 0
+            && _machine.Places?.ForAGameCalled(game.Name) is string where)
+        {
+            OutputFolder = where;
+        }
+
         Reconsider();
     }
 
@@ -2189,6 +2449,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             WhyNot = null;
             WhatItWillMake = string.Empty;
             WhatSplittingWouldDo = string.Empty;
+            _thePlanIsSound = false;
             Told();
             return;
         }
@@ -2198,6 +2459,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
             WhyNot = Refusals.ADiscNeedsAName();
             WhatItWillMake = string.Empty;
             WhatSplittingWouldDo = string.Empty;
+
+            // Nothing was planned, because a disc with no name is refused
+            // before the planning. The menu carries the name, so there is
+            // nothing honest to show either.
+            _thePlanIsSound = false;
             Told();
             return;
         }
@@ -2215,6 +2481,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 WhyNot = OutputFolder.Length == 0 ? Refusals.ThereIsNowhereToPutIt() : null;
                 WhatItWillMake = planned.InWords;
 
+                // A plan, whether or not there is anywhere to put what it
+                // would make. A preview writes to a temporary folder of its
+                // own and has never needed that one.
+                _thePlanIsSound = true;
+
                 // Only while the box is ticked. Unticked, a file too big for
                 // a disc is a refusal with its own words and this would be a
                 // second sentence about the same thing.
@@ -2230,6 +2501,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 WhyNot = refused.Refusal;
                 WhatItWillMake = string.Empty;
                 WhatSplittingWouldDo = string.Empty;
+                _thePlanIsSound = false;
                 break;
         }
 
@@ -2349,6 +2621,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         Tell(nameof(IsWorking));
             Tell(nameof(NothingIsRunning));
+            Tell(nameof(CanStartAgain));
             Tell(nameof(CanTakeSomethingOff));
         Tell(nameof(Doing));
         Tell(nameof(HowFar));
@@ -2362,10 +2635,23 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private void Told()
     {
         Tell(nameof(WhatItWillMake));
+
+        // Here rather than beside the ticks, because adding a game changes
+        // the total too and adding ends at Reconsider rather than there.
+        Tell(nameof(WhatIsOnIt));
         Tell(nameof(WhatSplittingWouldDo));
         Tell(nameof(WhyNot));
         Tell(nameof(Worry));
         Tell(nameof(CanMakeIt));
+
+        // With the refusal, because it is part of the refusal.
+        Tell(nameof(TheWayOut));
+        Tell(nameof(WhatTheWayOutIsCalled));
+
+        // A name typed, a game added, a tune chosen: all of them end here,
+        // and every one of them is something to start again FROM.
+        Tell(nameof(HasAnythingOnIt));
+        Tell(nameof(CanStartAgain));
 
         // Adding a game is what makes previewing possible, and this is the
         // path adding takes. A property nobody is told about keeps whatever

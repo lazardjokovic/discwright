@@ -147,6 +147,127 @@ public class AskingIfThereIsANewerOne
         Assert.Contains("went wrong", how.InWords, StringComparison.Ordinal);
     }
 
+    // -------------------------------------------- the line in the header
+
+    [Fact]
+    public void Offers_the_asking_before_anybody_has_asked()
+    {
+        MakeADisc window = TheScreen(new ARecordingAsker(new WhatWasReleased("v2.1.0", "https://example.invalid/x")));
+
+        // Nothing to report yet, so nothing is said. An empty line would take
+        // the height of a line and look like something had gone missing.
+        Assert.Equal(string.Empty, window.WhatTheVersionSays);
+        Assert.Equal("Check for new version", window.WhatTheVersionLinkSays);
+        Assert.Null(window.TheVersionPage);
+    }
+
+    [Fact]
+    public async Task Offers_the_page_once_it_knows_there_is_a_newer_one()
+    {
+        MakeADisc window = TheScreen(
+            new ARecordingAsker(new WhatWasReleased("v2.1.0", "https://example.invalid/x")));
+
+        await window.CheckForANewVersion();
+
+        Assert.Equal("There is a newer DiscWright: 2.1.0. This one is 2.0.0.", window.WhatTheVersionSays);
+        Assert.Equal("Get it", window.WhatTheVersionLinkSays);
+        Assert.Equal("https://example.invalid/x", window.TheVersionPage);
+    }
+
+    [Fact]
+    public async Task Offers_to_ask_again_when_this_is_already_the_newest()
+    {
+        MakeADisc window = TheScreen(
+            new ARecordingAsker(new WhatWasReleased("v2.0.0", "https://example.invalid/x")));
+
+        await window.CheckForANewVersion();
+
+        Assert.Equal("This is the newest one, 2.0.0.", window.WhatTheVersionSays);
+
+        // The line is the only way in. One that went quiet after its first
+        // press would be a capability that works once a session.
+        Assert.Equal("Check again", window.WhatTheVersionLinkSays);
+
+        // There is a page, and it is this version's own. Offering it would be
+        // offering somebody what they are already running.
+        Assert.Null(window.TheVersionPage);
+    }
+
+    [Fact]
+    public async Task Offers_to_ask_again_when_it_could_not_ask()
+    {
+        MakeADisc window = TheScreen(new AnAskerThatThrows());
+
+        await window.CheckForANewVersion();
+
+        Assert.Contains("went wrong", window.WhatTheVersionSays, StringComparison.Ordinal);
+        Assert.Equal("Check again", window.WhatTheVersionLinkSays);
+        Assert.Null(window.TheVersionPage);
+    }
+
+    [Fact]
+    public async Task Says_that_it_is_asking_while_it_is_asking()
+    {
+        AnAskerThatWaits asker = new();
+        MakeADisc window = TheScreen(asker);
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        Task asking = window.CheckForANewVersion();
+        await asker.Started.Task;
+
+        // It crosses a network and can take a second or two. A link that
+        // looks untouched after a press reads as a link that did nothing.
+        Assert.Equal("Asking GitHub", window.WhatTheVersionLinkSays);
+
+        // And saying so to nobody is the same as not saying it. The binding
+        // only redraws when it is told, and the telling here happens before
+        // the answer rather than with it.
+        Assert.Contains(nameof(MakeADisc.WhatTheVersionLinkSays), told);
+
+        asker.Answer.SetResult(new WhatWasReleased("v2.1.0", "https://example.invalid/x"));
+        await asking;
+
+        Assert.Equal("Get it", window.WhatTheVersionLinkSays);
+    }
+
+    [Fact]
+    public async Task Tells_the_window_about_every_part_of_the_version_line()
+    {
+        MakeADisc window = TheScreen(
+            new ARecordingAsker(new WhatWasReleased("v2.1.0", "https://example.invalid/x")));
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        await window.CheckForANewVersion();
+
+        // All four change together, and a binding never told about one of
+        // them shows the answer to the question before last.
+        Assert.Contains(nameof(MakeADisc.AboutTheVersion), told);
+        Assert.Contains(nameof(MakeADisc.WhatTheVersionSays), told);
+        Assert.Contains(nameof(MakeADisc.WhatTheVersionLinkSays), told);
+        Assert.Contains(nameof(MakeADisc.TheVersionPage), told);
+    }
+
+    [Fact]
+    public void The_window_never_judges_a_version_itself()
+    {
+        // The wording and the judgement both live on the screen, where a test
+        // can reach them. The window asks for a page and either gets one or
+        // asks again.
+        //
+        // Read off disk, like the markup guards, because nothing in this
+        // project can reference the window's code behind.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        // Not InWords, which every refusal in the window also has.
+        Assert.DoesNotContain("HowThisBuildCompares", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("WorthGetting", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("AboutTheVersion", code, StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------- the real thing
 
     /// <summary>
@@ -213,6 +334,20 @@ public class AskingIfThereIsANewerOne
     {
         public Task<WhatWasReleased> TheLatest(CancellationToken ct) =>
             throw new InvalidOperationException("the internet fell over");
+    }
+
+    /// <summary>One that does not answer until it is told to.</summary>
+    private sealed class AnAskerThatWaits : IAskWhatIsReleased
+    {
+        internal TaskCompletionSource Started { get; } = new();
+
+        internal TaskCompletionSource<WhatWasReleased> Answer { get; } = new();
+
+        public Task<WhatWasReleased> TheLatest(CancellationToken ct)
+        {
+            Started.TrySetResult();
+            return Answer.Task;
+        }
     }
 
     private sealed class NoEncoding : IAutorunEncoding

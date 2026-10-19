@@ -46,6 +46,12 @@ $env:DISCWRIGHT_VM_PASSWORD = '...'
 
 Every run is stamped with the local commit and the time it was sent, and the VM echoes that stamp back. If the two disagree the run is refused rather than reported, because a result from a run that never fired reads exactly like a pass.
 
+### Testing by hand
+
+`tests/by-hand/test-matrix.html` is the pass somebody works through with the real program in front of them. Open it in a browser. It covers what no automated test can reach: whether the window changes when it should, whether every control is live when it should be, whether a sentence still reads right at none and at one as well as at many, and the menu on the disc, which is an HTA and so invisible to UI Automation.
+
+It is held to the windows by `TheTestMatrix`, so a control added to a window and not written down there breaks the build. `tests/by-hand/README.md` says how.
+
 That machine is deliberately left strict. It is the honest answer to the question that matters at release: what a careful stranger's Windows does with an unsigned build of this.
 
 The SDK is pinned in `global.json` to the 10.0.4xx band, because this machine has 10.0.401 and the test VM has 10.0.402 and the same solution should not quietly build differently in two places.

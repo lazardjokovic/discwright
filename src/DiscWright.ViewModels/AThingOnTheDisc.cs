@@ -71,6 +71,31 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// </summary>
     public string ItsPath { get; }
 
+    /// <summary>
+    /// What hovering the row says: its name in full, and where it came from.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The row has a fixed width and trims what will not fit, so a long name
+    /// is readable nowhere else. It goes first, because the name is what was
+    /// clipped and what somebody is hovering to read.
+    /// </para>
+    /// <para>
+    /// Then where it is, when that says something the name does not. An
+    /// add-on is the case that needs it most: the row shows a tidy version of
+    /// what the patch calls itself, and the file on disk is called something
+    /// else entirely, which is the name somebody looking for it will see.
+    /// </para>
+    /// <para>
+    /// Worked out here rather than by a converter in the window, so a test
+    /// with no window in it can ask what the row would say.
+    /// </para>
+    /// </remarks>
+    public string InFull =>
+        ItsPath.Length == 0 || string.Equals(ItsPath, Name, StringComparison.Ordinal)
+            ? Name
+            : Name + (char)10 + ItsPath;
+
     /// <summary>Everything directly under it.</summary>
     public ReadOnlyCollection<AThingOnTheDisc> Inside { get; }
 

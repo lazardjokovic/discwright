@@ -38,9 +38,16 @@ public static class TheTreeOfWhatGoesOn
             string[] steps = file.RelativePath.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
 
             AThingOnTheDisc under = root;
+            string sofar = string.Empty;
+
             for (int at = 0; at < steps.Length - 1; at++)
             {
-                under = FolderIn(under, steps[at], game.Path);
+                // The folder's OWN path, built up as the walk goes down.
+                // Every folder used to be handed the game's folder instead, so
+                // hovering "data" and hovering "textures" inside it said the
+                // same thing, and neither said where it was.
+                sofar = sofar.Length == 0 ? steps[at] : sofar + (char)92 + steps[at];
+                under = FolderIn(under, steps[at], sofar);
             }
 
             bool isTheInstaller = game.Installer is not null
@@ -59,7 +66,10 @@ public static class TheTreeOfWhatGoesOn
         AddOn[] its = [.. addOns];
         if (its.Length > 0)
         {
-            AThingOnTheDisc under = FolderIn(root, AddOnsAreUnder, game.Path);
+            // Named after where they land rather than where they came from.
+            // Add-ons are not in the game's listing at all: they were left
+            // beside it and taken on, and each one carries its own full path.
+            AThingOnTheDisc under = FolderIn(root, AddOnsAreUnder, AddOnsAreUnder);
             foreach (AddOn addOn in its)
             {
                 under.Holding(new AThingOnTheDisc(addOn.Name, addOn.Bytes, AnAddOn, addOn.Path));

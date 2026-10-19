@@ -352,6 +352,23 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Does whatever the refusal on the window says would put it right.
+    /// </summary>
+    /// <remarks>
+    /// Which remedies are worth offering is the screen's judgement, handed
+    /// over as a kind this window knows how to carry out. Anything else is
+    /// not offered at all, so there is nothing here that can be pressed and
+    /// do nothing.
+    /// </remarks>
+    private void TakeTheWayOut(object sender, RoutedEventArgs e)
+    {
+        if (_screen.TheWayOut is RemedyKind.PickFolder)
+        {
+            ChooseWhereItGoes(sender, e);
+        }
+    }
+
     private void ChooseWhereItGoes(object sender, RoutedEventArgs e)
     {
         OpenFolderDialog asking = new() { Title = "Where should the discs go?" };
@@ -609,51 +626,45 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Asks whether anything newer has been released, and says so.
+    /// Asks whether anything newer has been released, or opens the page for
+    /// the newer one that the last ask found.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// One link doing both, because they are one thought: it offers the ask,
+    /// and once it has an answer worth acting on it offers the page. Which of
+    /// the two it is doing is the screen's decision, handed over as a page or
+    /// as nothing, so nothing in this file judges a version.
+    /// </para>
+    /// <para>
     /// It offers the page and never fetches anything. Replacing a running
     /// program is a far bigger thing than reading a number, and doing it to an
     /// unsigned one Windows already distrusts would be worse than not
     /// offering it at all.
+    /// </para>
     /// </remarks>
     private async void CheckForANewVersion(object sender, RoutedEventArgs e)
     {
-        await _screen.CheckForANewVersion();
-
-        if (_screen.AboutTheVersion is not HowThisBuildCompares how)
+        if (_screen.TheVersionPage is not string page)
         {
+            await _screen.CheckForANewVersion();
             return;
         }
 
-        if (!how.WorthGetting)
+        try
         {
-            MessageBox.Show(this, how.InWords, "DiscWright", MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
+            Process.Start(new ProcessStartInfo(page) { UseShellExecute = true });
         }
-
-        bool stay = WorthAsking.Ask(
-            this,
-            how.InWords,
-            "The page opens in your browser. DiscWright does not download or install anything by itself.",
-            "Not now",
-            "Open the page");
-
-        if (!stay && how.Where is not null)
+        catch (Exception wrong) when (wrong is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            try
-            {
-                Process.Start(new ProcessStartInfo(how.Where) { UseShellExecute = true });
-            }
-            catch (Exception wrong) when (wrong is System.ComponentModel.Win32Exception or InvalidOperationException)
-            {
-                MessageBox.Show(
-                    this,
-                    "No browser would open. The page is:" + Environment.NewLine + Environment.NewLine + how.Where,
-                    "DiscWright",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Information);
-            }
+            // A browser that will not open is not worth losing the address
+            // over, so the address itself is the fallback.
+            MessageBox.Show(
+                this,
+                "No browser would open. The page is:" + Environment.NewLine + Environment.NewLine + page,
+                "DiscWright",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
     }
 

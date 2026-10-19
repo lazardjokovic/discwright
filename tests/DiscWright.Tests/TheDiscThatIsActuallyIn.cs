@@ -144,6 +144,72 @@ public class TheDiscThatIsActuallyIn
     }
 
     [Fact]
+    public void Is_about_the_drive_that_could_take_the_burn_not_one_that_could_not()
+    {
+        string? said = TheDiscsThatAreIn.WhatIsWorthSaying(
+        [
+            ADrive("D:", 9, true, 2_297_888),
+            ADrive("E:", 3, false, 0)
+        ],
+            Media.Cd);
+
+        // Measured on the real machine: a blank DVD-R in D: and a used CD-RW
+        // in E:, aiming at a CD. Looking at both at once, the CD-RW was the
+        // size being aimed at and the whole sentence went quiet, while the
+        // only disc that could take the burn was the wrong one.
+        Assert.Equal("The disc in D: is a DVD-R, and this is being built for CD-R 700 MB.", said);
+    }
+
+    [Fact]
+    public void Says_nothing_when_the_drive_that_could_take_the_burn_holds_the_right_disc()
+    {
+        string? said = TheDiscsThatAreIn.WhatIsWorthSaying(
+        [
+            ADrive("D:", 9, true, 2_297_888),
+            ADrive("E:", 3, false, 0)
+        ],
+            Media.Dvd5);
+
+        // The mirror of it. The used CD-RW is no more interesting the other
+        // way round, and silence here is still the right answer.
+        Assert.Null(said);
+    }
+
+    [Theory]
+    [InlineData("D:", "The disc in D: is a DVD-R, and this is being built for CD-R 700 MB.")]
+    [InlineData("E:", null)]
+    public void Is_about_the_drive_somebody_chose_once_one_is_chosen(string chosen, string? expected)
+    {
+        // Two blank discs, either of which could take a burn. Which of them
+        // this is about stops being a guess the moment somebody says.
+        string? said = TheDiscsThatAreIn.WhatIsWorthSaying(
+        [
+            ADrive("D:", 9, true, 2_297_888),
+            ADrive("E:", 3, true, 359_847)
+        ],
+            Media.Cd,
+            chosen);
+
+        Assert.Equal(expected, said);
+    }
+
+    [Fact]
+    public void Falls_back_to_every_drive_when_not_one_of_them_is_ready()
+    {
+        string? said = TheDiscsThatAreIn.WhatIsWorthSaying(
+        [
+            ADrive("D:", 4, false, 0),
+            ADrive("E:", 3, false, 0)
+        ],
+            Media.Dvd5);
+
+        // Narrowing to the ready ones would narrow to none at all here, and
+        // going quiet because nothing is ready is the opposite of useful:
+        // there are two discs in the machine and neither is the one wanted.
+        Assert.Equal("The disc in E: is a CD-RW, and this is being built for DVD5 4.7 GB.", said);
+    }
+
+    [Fact]
     public void Still_says_something_when_the_only_disc_is_one_nobody_can_write_to()
     {
         string? said = TheDiscsThatAreIn.WhatIsWorthSaying(

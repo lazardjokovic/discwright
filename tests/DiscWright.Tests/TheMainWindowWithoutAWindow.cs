@@ -33,6 +33,108 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void Will_not_offer_to_start_again_from_a_window_with_nothing_on_it()
+    {
+        MakeADisc window = New();
+
+        // It asked nothing and cleared nothing, which is right and is also
+        // exactly what a button that does not work looks like.
+        Assert.False(window.HasAnythingOnIt);
+        Assert.False(window.CanStartAgain);
+    }
+
+    [Theory]
+    [InlineData("a game")]
+    [InlineData("a name")]
+    [InlineData("a manual")]
+    [InlineData("a folder of extras")]
+    [InlineData("a tune")]
+    public void Offers_to_start_again_as_soon_as_there_is_anything_to_start_again_from(string put)
+    {
+        MakeADisc window = New();
+
+        switch (put)
+        {
+            case "a game": window.Add(AGame("A Game", 1000)); break;
+            case "a name": window.Label = "MY COMPILATION"; break;
+            case "a manual": window.Manual = @"C:\somewhere\how to play.txt"; break;
+            case "a folder of extras": window.ExtrasFolder = @"C:\somewhere\extras"; break;
+            case "a tune": window.Music = @"C:\somewhere\tune.mp3"; break;
+        }
+
+        // Every one of these is something somebody would lose, so every one
+        // of them has to light the button that would lose it. A property the
+        // window is never told about keeps whatever it read the first time,
+        // which for this one would be a button dead for the whole session.
+        Assert.True(window.HasAnythingOnIt, put + " is not counted as anything on it");
+        Assert.True(window.CanStartAgain, put + " does not light Start a new disc");
+    }
+
+    [Fact]
+    public void Stops_offering_to_start_again_once_it_has()
+    {
+        MakeADisc window = New();
+
+        // A tune and nothing else, so the name never changes. Adding a game
+        // names the disc, and clearing that name is its own announcement,
+        // which told this one for free and hid whether anything here does.
+        window.Music = @"C:\somewhere\tune.mp3";
+        Assert.True(window.CanStartAgain);
+        Assert.Equal(string.Empty, window.Label);
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.StartAgain();
+
+        Assert.False(window.CanStartAgain);
+
+        // And the window has to hear about it. A binding never told stays on
+        // whatever it read last, which here is a lit button over a window
+        // with nothing left on it.
+        Assert.Contains(nameof(MakeADisc.CanStartAgain), told);
+    }
+
+    [Fact]
+    public void Tells_the_window_the_moment_there_is_something_to_start_again_from()
+    {
+        MakeADisc window = New();
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.Add(AGame("A Game", 1000));
+
+        // Asking the property is not enough: nothing asks it twice. The
+        // button is drawn once and redrawn only when it is told, so a fault
+        // that stops the telling leaves it dead for the whole session and
+        // every assertion about the property still passes.
+        Assert.Contains(nameof(MakeADisc.CanStartAgain), told);
+    }
+
+    [Fact]
+    public async Task Will_not_offer_to_start_again_in_the_middle_of_being_made()
+    {
+        bool? couldStartAgainMidWay = null;
+        MakeADisc? window = null;
+        window = New(
+            drives: new ADriveHolding(3, false, 0),
+            eraser: new AnEraserThatAsks(() => couldStartAgainMidWay = window!.CanStartAgain));
+
+        window.Add(AGame("A Game", 1000));
+        Assert.True(window.CanStartAgain);
+
+        await window.LookAtTheDrives();
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        // StartAgain refuses while something is running, so a button left lit
+        // here is the exact complaint this came from: pressed, and nothing
+        // happens.
+        Assert.False(couldStartAgainMidWay);
+        Assert.True(window.CanStartAgain);
+    }
+
+    [Fact]
     public void Names_the_disc_after_the_first_game_and_then_leaves_it_alone()
     {
         MakeADisc window = New();
@@ -1313,6 +1415,61 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task A_different_disc_changes_everything_the_size_decides()
+    {
+        ADriveHolding drive = new(3, true, 359_847);
+        MakeADisc window = New(drives: drive);
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("Big", 1_000_000_000));
+
+        await window.LookAtTheDrives();
+        Assert.Equal("CD", window.Medium.Key);
+
+        // A gigabyte will not go on a CD at all, and the box that would cut
+        // it is not ticked, so this is a refusal rather than a longer set.
+        Assert.NotNull(window.WhyNot);
+        string onACd = window.WhatItWillMake;
+
+        drive.NowHolds(9, true, 2_298_496);
+        await window.LookAtTheDrives();
+
+        Assert.Equal("DVD5", window.Medium.Key);
+
+        // The size is only the half of it. How many discs it takes, whether
+        // anything has to be cut and whether it fits at all are all worked
+        // out FROM the size, and none of them were worked out again, so the
+        // window went on answering the question the old disc had asked.
+        Assert.NotEqual(onACd, window.WhatItWillMake);
+        Assert.Equal("one disc", window.WhatItWillMake);
+        Assert.Null(window.WhyNot);
+    }
+
+    [Fact]
+    public async Task A_disc_going_in_tells_the_window_about_the_plan_as_well()
+    {
+        ADriveHolding drive = new(3, true, 359_847);
+        MakeADisc window = New(drives: drive);
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("Big", 1_000_000_000));
+
+        await window.LookAtTheDrives();
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        drive.NowHolds(9, true, 2_298_496);
+        await window.LookAtTheDrives();
+
+        // Asking the properties is not enough. Nothing asks them twice: the
+        // red line and the count of discs are drawn once and redrawn only
+        // when they are told, so a swap that recomputes in silence leaves
+        // the old answer on the screen.
+        Assert.Contains(nameof(MakeADisc.WhatItWillMake), told);
+        Assert.Contains(nameof(MakeADisc.WhyNot), told);
+        Assert.Contains(nameof(MakeADisc.CanMakeIt), told);
+    }
+
+    [Fact]
     public async Task Leaves_a_size_alone_once_somebody_has_chosen_one()
     {
         MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
@@ -1400,6 +1557,85 @@ public class TheMainWindowWithoutAWindow
         }
     }
 
+    /// <summary>
+    /// One drive that shuts its own tray and one that does not, which is the
+    /// machine this was found on: D: shuts its own and the Blu-ray writer
+    /// never does.
+    /// </summary>
+    private sealed class OnlyOneOfThemShuts : IWorkTheTray
+    {
+        internal List<string> Asked { get; } = [];
+
+        public bool ShutIt(Recorder drive) => drive.Drive == "D:";
+
+        public bool CanShutItsOwnTray(Recorder drive)
+        {
+            Asked.Add(drive.Drive);
+            return drive.Drive == "D:";
+        }
+    }
+
+    [Fact]
+    public async Task Choosing_a_different_drive_moves_the_tray_warning_with_it()
+    {
+        OnlyOneOfThemShuts tray = new();
+        MakeADisc window = New(drives: new TwoDrives(), tray: tray);
+
+        await window.LookAtTheDrives();
+        Assert.Equal("E: needs the tray pushed in", window.AboutTheTray);
+
+        window.TheDrive = window.Drives.First(each => each.Drive == "D:");
+
+        // D: shuts its own tray, so there is nobody to keep in the room. Left
+        // over from the drive chosen a moment ago, this would have somebody
+        // standing by a drive that is never going to ask for them.
+        Assert.Equal(string.Empty, window.AboutTheTray);
+
+        window.TheDrive = window.Drives.First(each => each.Drive == "E:");
+
+        Assert.Equal("E: needs the tray pushed in", window.AboutTheTray);
+    }
+
+    [Fact]
+    public async Task Choosing_a_different_drive_goes_nowhere_near_a_drive()
+    {
+        OnlyOneOfThemShuts tray = new();
+        MakeADisc window = New(drives: new TwoDrives(), tray: tray);
+
+        await window.LookAtTheDrives();
+
+        // Every drive worth asking is asked once, while the window is not
+        // waiting on it.
+        Assert.Equal(["D:", "E:"], tray.Asked);
+
+        window.TheDrive = window.Drives.First(each => each.Drive == "D:");
+        window.TheDrive = window.Drives.First(each => each.Drive == "E:");
+
+        // Choosing is a click, and a drive that has spun down takes seconds
+        // to answer. Whether a drive can shut its own tray is about the
+        // drive and not about the disc, so the answer keeps.
+        Assert.Equal(["D:", "E:"], tray.Asked);
+    }
+
+    [Fact]
+    public async Task Tells_the_window_the_tray_warning_moved()
+    {
+        OnlyOneOfThemShuts tray = new();
+        MakeADisc window = New(drives: new TwoDrives(), tray: tray);
+
+        await window.LookAtTheDrives();
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.TheDrive = window.Drives.First(each => each.Drive == "D:");
+
+        // The warning and the tooltip that carries the reason both move, and
+        // a binding never told stays on the sentence before last.
+        Assert.Contains(nameof(MakeADisc.AboutTheTray), told);
+        Assert.Contains(nameof(MakeADisc.WhatTheDrivesAreDoing), told);
+    }
+
     /// <summary>One drive, with whatever is said to be in it at the moment.</summary>
     private sealed class ADriveHolding(int mediaType, bool blank, long freeSectors) : IFindRecorders
     {
@@ -1451,6 +1687,57 @@ public class TheMainWindowWithoutAWindow
         ];
     }
 
+    /// <summary>A blank DVD in D: and a used CD-RW in E:, as on the machine.</summary>
+    private sealed class ADvdAndAUsedCd : IFindRecorders
+    {
+        public IReadOnlyList<Recorder> All() =>
+        [
+            new("id-D", "D:", "A Drive", 9, true, 2_297_888, [750]),
+            new("id-E", "E:", "Another Drive", 3, false, 0, [750])
+        ];
+    }
+
+    [Fact]
+    public async Task Warns_about_the_disc_in_the_drive_that_would_take_the_burn()
+    {
+        MakeADisc window = New(drives: new ADvdAndAUsedCd());
+
+        await window.LookAtTheDrives();
+        window.Medium = Media.Cd;
+
+        // The reported case. A used CD-RW in the other drive was the size
+        // being aimed at, so nothing was said at all, while the drive that
+        // would actually take the burn held a DVD.
+        Assert.Equal(
+            "The disc in D: is a DVD-R, and this is being built for CD-R 700 MB.",
+            window.AboutTheDiscInTheDrive);
+
+        Assert.True(window.TheDiscIsADifferentSize);
+    }
+
+    [Fact]
+    public async Task Asks_about_the_disc_again_when_a_different_drive_is_chosen()
+    {
+        MakeADisc window = New(drives: new ADvdAndAUsedCd());
+
+        await window.LookAtTheDrives();
+        window.Medium = Media.Cd;
+        Assert.Contains("D:", window.AboutTheDiscInTheDrive, StringComparison.Ordinal);
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.TheDrive = window.Drives.First(each => each.Drive == "E:");
+
+        // E: holds a CD-RW and a CD is what is being built for, so there is
+        // nothing left to say. Said about the drive somebody is not using,
+        // this sentence is noise, and left over from the drive they were
+        // using a moment ago it is worse than noise.
+        Assert.Equal(string.Empty, window.AboutTheDiscInTheDrive);
+        Assert.False(window.TheDiscIsADifferentSize);
+        Assert.Contains(nameof(MakeADisc.AboutTheDiscInTheDrive), told);
+    }
+
     [Fact]
     public async Task Says_before_anything_is_written_that_a_tray_needs_a_push()
     {
@@ -1477,6 +1764,39 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task Hovering_the_picker_with_nothing_wrong_says_one_thing_once()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+
+        await window.LookAtTheDrives();
+
+        // It read ". Every disc has to come out to be checked..." under the
+        // answer: a full stop joined to nothing, a space after it, and a
+        // paragraph warning about a tray that is perfectly fine.
+        Assert.Equal(
+            "Leave this alone and DiscWright works it out, and asks only if there is something to ask.",
+            window.WhatTheDrivesAreDoing);
+    }
+
+    [Fact]
+    public async Task Hovering_the_picker_says_why_a_tray_matters_when_one_does()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847), tray: new ATrayThatNeedsAPush());
+
+        await window.LookAtTheDrives();
+
+        // Whole, and joined exactly as it is joined. Contains() let a fault
+        // that ran the two paragraphs into one line straight through: the
+        // warning is the part somebody has to read before walking away, and
+        // it only stands out because there is a blank line above it.
+        Assert.Equal(
+            "Leave this alone and DiscWright works it out, and asks only if there is something to ask."
+                + "\n\nD: needs the tray pushed in. Every disc has to come out to be checked after "
+                + "it is written, so this will stop and wait for you to push it back in.",
+            window.WhatTheDrivesAreDoing);
+    }
+
+    [Fact]
     public async Task Does_not_go_near_the_tray_of_an_empty_drive()
     {
         ATrayThatNeedsAPush tray = new();
@@ -1486,6 +1806,223 @@ public class TheMainWindowWithoutAWindow
 
         Assert.Empty(tray.Asked);
         Assert.Equal(string.Empty, window.AboutTheTray);
+    }
+
+    // ------------------------------------------------ somewhere to put it
+
+    [Fact]
+    public void The_first_game_names_the_folder_as_well_as_the_disc()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(@"C:\d", @"C:\h", []));
+
+        window.Add(AGame("Hollow Knight", 1000));
+
+        // v1 filled this in and so "There is nowhere to put it" never
+        // happened to anybody. Three reports of it as a stale message about
+        // the disc came out of leaving the box empty instead.
+        Assert.Equal(@"C:\d\Hollow Knight Disc", window.OutputFolder);
+        Assert.Null(window.WhyNot);
+        Assert.True(window.CanMakeIt);
+    }
+
+    [Fact]
+    public void Leaves_a_folder_somebody_chose_themselves_alone()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(@"C:\d", @"C:\h", []));
+        window.OutputFolder = @"D:\my discs";
+
+        window.Add(AGame("Hollow Knight", 1000));
+
+        // The same rule the name follows. They said where, so that is where.
+        Assert.Equal(@"D:\my discs", window.OutputFolder);
+    }
+
+    [Fact]
+    public void Only_the_first_game_names_the_folder()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(@"C:\d", @"C:\h", []));
+
+        window.Add(AGame("Hollow Knight", 1000));
+        window.Add(AGame("Gothic", 1000));
+
+        Assert.Equal(@"C:\d\Hollow Knight Disc", window.OutputFolder);
+    }
+
+    [Fact]
+    public void A_later_game_names_a_folder_the_first_one_could_not()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(@"C:\d", @"C:\h", []));
+
+        window.Add(AGame(":", 1000));
+        Assert.Equal(string.Empty, window.OutputFolder);
+
+        window.Add(AGame("Gothic", 1000));
+
+        // Nothing is left of a game called ":" once what Windows will not
+        // take in a folder name is out of it, so the box stayed empty and
+        // the next game along is entitled to fill it.
+        Assert.Equal(@"C:\d\Gothic Disc", window.OutputFolder);
+    }
+
+    [Fact]
+    public void Still_asks_when_there_is_nowhere_worth_suggesting()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(string.Empty, string.Empty, []));
+
+        window.Add(AGame("Hollow Knight", 1000));
+
+        // Better an empty box and a line saying to choose a folder than a
+        // guess at somewhere gigabytes should not go.
+        Assert.Equal(string.Empty, window.OutputFolder);
+        Assert.Equal("There is nowhere to put it", window.WhyNot?.Headline);
+        Assert.Equal(RemedyKind.PickFolder, window.TheWayOut);
+    }
+
+    [Fact]
+    public void Tells_the_window_the_folder_was_filled_in()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(@"C:\d", @"C:\h", []));
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.Add(AGame("Hollow Knight", 1000));
+
+        // The box is bound to it, and a box never told stays empty over a
+        // window that has already decided where the discs are going.
+        Assert.Contains(nameof(MakeADisc.OutputFolder), told);
+    }
+
+    // ------------------------------------------------- what to do about it
+
+    [Fact]
+    public void Offers_a_way_out_of_having_nowhere_to_put_it()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        // Correct, current and reported twice as a stale message, because a
+        // red line on its own reads as the program complaining. The refusal
+        // has known how to be put right since the day it was written and
+        // nothing had ever shown it.
+        Assert.Equal("There is nowhere to put it", window.WhyNot?.Headline);
+        Assert.Equal(RemedyKind.PickFolder, window.TheWayOut);
+        Assert.Equal("Choose a folder", window.WhatTheWayOutIsCalled);
+    }
+
+    [Fact]
+    public void Takes_the_way_out_away_once_it_has_been_taken()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.OutputFolder = @"C:\out";
+
+        Assert.Null(window.WhyNot);
+        Assert.Null(window.TheWayOut);
+        Assert.Equal(string.Empty, window.WhatTheWayOutIsCalled);
+
+        // Told with the refusal, because it is part of the refusal. A way
+        // out nobody is told about stays on the window under nothing.
+        Assert.Contains(nameof(MakeADisc.TheWayOut), told);
+        Assert.Contains(nameof(MakeADisc.WhatTheWayOutIsCalled), told);
+    }
+
+    [Fact]
+    public void Offers_nothing_at_all_when_there_is_no_refusal()
+    {
+        MakeADisc window = New();
+
+        Assert.Null(window.WhyNot);
+        Assert.Null(window.TheWayOut);
+        Assert.Equal(string.Empty, window.WhatTheWayOutIsCalled);
+    }
+
+    [Fact]
+    public void Offers_no_way_out_it_cannot_actually_carry_out()
+    {
+        MakeADisc window = New();
+        window.Medium = Media.Cd;
+        window.Add(AGame("Hollow Knight", 1_000_000_000));
+
+        // This one is put right by ticking the box or choosing a bigger
+        // disc, and a remedy carries no subject with it: ChangeOption does
+        // not say which option. A word that did nothing when pressed would
+        // be worse than the red line on its own.
+        Assert.Equal("One file is bigger than a whole disc", window.WhyNot?.Headline);
+        Assert.NotNull(window.WhyNot?.Remedy);
+        Assert.Null(window.TheWayOut);
+        Assert.Equal(string.Empty, window.WhatTheWayOutIsCalled);
+    }
+
+    // --------------------------------------------------- seeing it first
+
+    [Fact]
+    public void Will_not_offer_a_preview_of_a_set_that_cannot_be_planned()
+    {
+        MakeADisc window = New();
+        window.Medium = Media.Cd;
+        window.Add(AGame("Hollow Knight", 1_000_000_000));
+
+        // A preview is a menu written for every disc of the set, and with a
+        // file too big for the disc there is no set. The button stayed lit
+        // and answered with a box saying exactly what the red line under it
+        // was already saying.
+        Assert.NotNull(window.WhyNot);
+        Assert.False(window.CanPreview);
+
+        // Which is what Build has always done in this state, so the box
+        // could only ever have come from the preview.
+        Assert.False(window.CanMakeIt);
+    }
+
+    [Fact]
+    public void Offers_a_preview_even_with_nowhere_to_put_the_iso()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        Assert.Equal(string.Empty, window.OutputFolder);
+
+        // A preview is written to a temporary folder of its own and has
+        // never gone near that one. Waiting on the whole of CanMakeIt would
+        // have made somebody choose a folder to look at a menu.
+        Assert.False(window.CanMakeIt);
+        Assert.True(window.CanPreview);
+    }
+
+    [Fact]
+    public void Offers_the_preview_again_once_the_disc_is_big_enough()
+    {
+        MakeADisc window = New();
+        window.Medium = Media.Cd;
+        window.Add(AGame("Hollow Knight", 1_000_000_000));
+        Assert.False(window.CanPreview);
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.Medium = Media.Dvd5;
+
+        Assert.True(window.CanPreview);
+        Assert.Contains(nameof(MakeADisc.CanPreview), told);
+    }
+
+    [Fact]
+    public void Will_not_offer_a_preview_of_a_disc_with_no_name()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+        Assert.True(window.CanPreview);
+
+        window.Label = string.Empty;
+
+        // Nothing is planned at all without a name, and the menu is a page
+        // with the name of the disc across the top of it.
+        Assert.False(window.CanPreview);
     }
 
     // ------------------------------------------------------ starting over
@@ -1599,7 +2136,8 @@ public class TheMainWindowWithoutAWindow
         IImages? pictures = null,
         IFileSystem? disk = null,
         IHasher? hasher = null,
-        IKeepTheSetsPlace? note = null) =>
+        IKeepTheSetsPlace? note = null,
+        WhereDiscsWouldGo? places = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -1615,7 +2153,8 @@ public class TheMainWindowWithoutAWindow
             preview ?? new NoPreview(),
             pictures ?? new PicturesThatRead(),
             "2.0.0",
-            _ => 1000));
+            _ => 1000,
+            places));
 
     /// <summary>The note beside the discs, kept in memory.</summary>
     private sealed class ANoteInMemory(string? says = null) : IKeepTheSetsPlace
@@ -2168,6 +2707,72 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(Media.Dvd9, screen.Medium);
     }
 
+    // ------------------------------------------- what the whole list comes to
+
+    [Fact]
+    public void Adds_the_whole_list_up()
+    {
+        MakeADisc screen = New();
+        screen.Add(AGame("Hollow Knight", 1_000_000));
+        screen.Add(AGame("Gothic", 3_000_000));
+
+        // Every row showed its own size and a game showed the sum of what was
+        // under it. Nothing said what the lot came to, so with four games on
+        // the window it was an addition somebody had to do by eye.
+        Assert.Equal("3.8 MB in 2 files", screen.WhatIsOnIt);
+    }
+
+    [Fact]
+    public void The_total_follows_the_ticks()
+    {
+        MakeADisc screen = New();
+        screen.Add(AGame("Hollow Knight", 1_000_000, parts: 1));
+
+        Assert.Equal("1.9 MB in 2 files", screen.WhatIsOnIt);
+
+        // What goes on the disc is what is ticked. A total that counted rows
+        // somebody had just turned off would be worse than no total.
+        screen.WhatGoesOnIt[0].Inside[1].IsOn = false;
+
+        Assert.Equal("976.6 KB in one file", screen.WhatIsOnIt);
+    }
+
+    [Fact]
+    public void Says_nothing_about_a_total_with_nothing_to_total()
+    {
+        MakeADisc screen = New();
+
+        Assert.Equal(string.Empty, screen.WhatIsOnIt);
+
+        screen.Add(AGame("Hollow Knight", 1_000_000));
+        screen.WhatGoesOnIt[0].IsOn = false;
+
+        // Everything turned off is something somebody has just done on
+        // purpose, and the line under this one already says so.
+        Assert.Equal(string.Empty, screen.WhatIsOnIt);
+        Assert.NotNull(screen.WhatIsLeftOff);
+    }
+
+    [Fact]
+    public void Tells_the_window_the_total_changed()
+    {
+        MakeADisc screen = New();
+        List<string> told = [];
+        screen.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        screen.Add(AGame("Hollow Knight", 1_000_000));
+
+        // Adding a game ends at Reconsider rather than at the ticks, which is
+        // why this is told from there: a total nobody is told about keeps
+        // whatever the window read out of it the first time, which on an
+        // empty window is nothing at all.
+        Assert.Contains(nameof(MakeADisc.WhatIsOnIt), told);
+
+        told.Clear();
+        screen.WhatGoesOnIt[0].IsOn = false;
+        Assert.Contains(nameof(MakeADisc.WhatIsOnIt), told);
+    }
+
     // ----------------------------------------- what splitting actually does
 
     [Fact]
@@ -2656,6 +3261,50 @@ public class TheMainWindowWithoutAWindow
 
         // And the window is not left looking busy for the rest of the run.
         Assert.False(window.IsWorking);
+    }
+
+    [Fact]
+    public void The_window_really_carries_out_the_way_out_it_is_offering()
+    {
+        // The screen decides which remedies are worth offering and the
+        // window carries them out, and nothing in this project can reference
+        // the code behind, so cutting that wire left the whole suite green
+        // and a word on the window that did nothing when pressed. Read off
+        // disk, like the markup guards.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        int from = code.IndexOf("void TakeTheWayOut", StringComparison.Ordinal);
+        Assert.True(from >= 0, "The window no longer does anything about a refusal.");
+
+        string handler = code[from..];
+        handler = handler[..handler.IndexOf(Environment.NewLine + "    }", StringComparison.Ordinal)];
+
+        Assert.Contains("_screen.TheWayOut is RemedyKind.PickFolder", handler, StringComparison.Ordinal);
+        Assert.Contains("ChooseWhereItGoes(", handler, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_window_asks_the_drives_again_whenever_a_disc_goes_in_or_out()
+    {
+        // The hook is the only way any of the above is reached while the
+        // window is open. Nothing in this project can reference the code
+        // behind, so two faults that cut the wire, one by never matching the
+        // message and one by matching it and doing nothing, both went by with
+        // every test green. Read off disk, like the markup guards.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        // WM_DEVICECHANGE. A disc going into a drive is a device changing.
+        Assert.Contains("ADeviceChanged = 0x0219", code, StringComparison.Ordinal);
+        Assert.Contains("source.AddHook(WhenSomethingChanged)", code, StringComparison.Ordinal);
+
+        int from = code.IndexOf("IntPtr WhenSomethingChanged", StringComparison.Ordinal);
+        Assert.True(from >= 0, "The window no longer listens for anything at all.");
+
+        string hook = code[from..];
+        hook = hook[..hook.IndexOf("return IntPtr.Zero", StringComparison.Ordinal)];
+
+        Assert.Contains("if (message == ADeviceChanged)", hook, StringComparison.Ordinal);
+        Assert.Contains("_screen.LookAtTheDrives()", hook, StringComparison.Ordinal);
     }
 
     [Fact]

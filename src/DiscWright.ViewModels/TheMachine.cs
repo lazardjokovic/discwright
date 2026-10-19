@@ -52,4 +52,8 @@ public sealed record TheMachine(
     IShowTheMenu Preview,
     IImages Pictures,
     string ThisBuild,
-    Func<string, long> HowBigIs);
+    Func<string, long> HowBigIs,
+
+    // Last and optional, so every place that builds one of these for a test
+    // keeps working and the ones that care about a folder say so.
+    WhereDiscsWouldGo? Places = null);

@@ -70,7 +70,8 @@ public partial class App : Application
             new APreviewOfTheMenu(new WindowsStageWriter(), new WindowsImages()),
             new WindowsImages(),
             WhatThisBuildIs(),
-            HowBigIs(disk)));
+            HowBigIs(disk),
+            WhereADiscWouldGo()));
 
         // Previews nobody has looked at in a week. One folder per project
         // keeps them from multiplying; this is what stops them collecting
@@ -98,6 +99,31 @@ public partial class App : Application
     /// written down twice, because two places that both say what the version
     /// is will disagree eventually and the wrong one will be the one shown.
     /// </remarks>
+    /// <summary>
+    /// The environment variables a sync client sets to say where it watches.
+    /// </summary>
+    private static readonly string[] TheSyncedOnes =
+        ["OneDrive", "OneDriveCommercial", "OneDriveConsumer"];
+
+    /// <summary>
+    /// The folders to suggest a place to build in, as this machine has them.
+    /// </summary>
+    /// <remarks>
+    /// Asked here because this is the only place in the program allowed to
+    /// ask Windows anything. The rule about which of them to use is in Core,
+    /// where a test can get at it.
+    /// </remarks>
+    private static WhereDiscsWouldGo WhereADiscWouldGo() =>
+        new(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            [
+                .. TheSyncedOnes
+                    .Select(Environment.GetEnvironmentVariable)
+                    .OfType<string>()
+                    .Where(each => each.Length > 0)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+            ]);
+
     private static string WhatThisBuildIs()
     {
         Assembly? app = Assembly.GetEntryAssembly();

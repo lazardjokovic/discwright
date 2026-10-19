@@ -37,72 +37,94 @@
         </Grid.RowDefinitions>
 
         <!-- ================================================== the top line -->
-        <Grid Grid.Row="0" Margin="0,0,0,12">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="28" />
-                <ColumnDefinition Width="340" />
-            </Grid.ColumnDefinitions>
+        <!-- A rule under it, so the space to the right of the name reads as a
+             header bar rather than as somewhere a thing used to be. The same
+             hairline as the strip under the list of what goes on the disc. -->
+        <Border Grid.Row="0"
+                Margin="0,0,0,12"
+                Padding="0,0,0,10"
+                BorderBrush="{StaticResource Edge}"
+                BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="28" />
+                    <ColumnDefinition Width="340" />
+                </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                <!-- The version beside the name, not under the line about
-                     discs: on its own underneath, "2.0.0" could as easily
-                     have been about the disc being made. -->
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="DiscWright" Style="{StaticResource Title}" />
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <!-- The version beside the name, not under the line about
+                         discs: on its own underneath, "2.0.0" could as easily
+                         have been about the disc being made. -->
+                    <!-- The name, and which build it is. Nothing else on this
+                         row: whether there is a newer one is a different thought
+                         from what this one is called, and it has its own line. -->
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="DiscWright" Style="{StaticResource Title}" />
 
+                        <TextBlock Style="{StaticResource Aside}"
+                                   Margin="8,0,0,4"
+                                   VerticalAlignment="Bottom"
+                                   Text="{Binding ThisBuild}"
+                                   AutomationProperties.AutomationId="ThisBuild" />
+                    </StackPanel>
+
+                    <!-- The quiet line every other block in this window has. The
+                         answer lands here rather than in a message box, which was
+                         the only box in the program not reporting a problem.
+
+                         Stacked rather than side by side because the longest of
+                         these sentences is wider than the gap before the buttons,
+                         and a line that wraps under a link it is meant to sit
+                         beside looks worse than two lines that were always two. -->
                     <TextBlock Style="{StaticResource Aside}"
-                               Margin="8,0,0,4"
-                               VerticalAlignment="Bottom"
-                               Text="{Binding ThisBuild}"
-                               AutomationProperties.AutomationId="ThisBuild" />
+                               Margin="0,4,0,0"
+                               Text="{Binding WhatTheVersionSays}"
+                               Visibility="{Binding WhatTheVersionSays, Converter={StaticResource WhenAnything}}"
+                               AutomationProperties.AutomationId="WhatTheVersionSays" />
 
-                    <!-- Beside the version it is about, because a version and
-                         a way to check it are one thought and were two rows.
-                         Barely an action, and it should not look like one. -->
-                    <!-- On the same line as the version rather than a few
-                         pixels below it, looking like it slipped. The size
-                         comes from the style, because a button that decides
-                         its own is one the window cannot restyle later. -->
-                    <Button Content="Check for a new version"
+                    <!-- Never hidden and never disabled. It is the only way to
+                         ask, and one that vanished after its first press would be
+                         a capability that works once. What it says is the screen's
+                         decision, so the window cannot word it differently. -->
+                    <Button Content="{Binding WhatTheVersionLinkSays}"
                             Style="{StaticResource Quietly}"
-                            Margin="10,0,0,4"
-                            VerticalAlignment="Bottom"
+                            Margin="0,3,0,0"
                             Click="CheckForANewVersion"
                             AutomationProperties.AutomationId="CheckForANewVersion" />
                 </StackPanel>
-            </StackPanel>
 
-            <!-- About the whole window rather than about one more game, which
-                 is why it sits up here and not beside Add a game. -->
-            <!-- Side by side rather than stacked. Two of these one above the
-                 other was eighty pixels of button beside sixty of title, and
-                 the whole top of the window was the taller of them. -->
-            <Grid Grid.Column="2" VerticalAlignment="Center">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
+                <!-- About the whole window rather than about one more game, which
+                     is why it sits up here and not beside Add a game. -->
+                <!-- Side by side rather than stacked. Two of these one above the
+                     other was eighty pixels of button beside sixty of title, and
+                     the whole top of the window was the taller of them. -->
+                <Grid Grid.Column="2" VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
 
-                <Button Grid.Column="0"
-                        Content="Start a new disc"
-                        IsEnabled="{Binding NothingIsRunning}"
-                        Style="{StaticResource Ordinary}"
-                        HorizontalAlignment="Stretch"
-                        Margin="0,0,5,0"
-                        Click="StartANewDisc"
-                        AutomationProperties.AutomationId="StartANewDisc" />
+                    <Button Grid.Column="0"
+                            Content="Start a new disc"
+                            IsEnabled="{Binding CanStartAgain}"
+                            Style="{StaticResource Ordinary}"
+                            HorizontalAlignment="Stretch"
+                            Margin="0,0,5,0"
+                            Click="StartANewDisc"
+                            AutomationProperties.AutomationId="StartANewDisc" />
 
-                <Button Grid.Column="1"
-                        Content="Open one you built"
-                        IsEnabled="{Binding NothingIsRunning}"
-                        Style="{StaticResource Ordinary}"
-                        HorizontalAlignment="Stretch"
-                        Margin="5,0,0,0"
-                        Click="OpenADisc"
-                        AutomationProperties.AutomationId="OpenADisc" />
+                    <Button Grid.Column="1"
+                            Content="Open one you built"
+                            IsEnabled="{Binding NothingIsRunning}"
+                            Style="{StaticResource Ordinary}"
+                            HorizontalAlignment="Stretch"
+                            Margin="5,0,0,0"
+                            Click="OpenADisc"
+                            AutomationProperties.AutomationId="OpenADisc" />
+                </Grid>
             </Grid>
-        </Grid>
+        </Border>
 
         <!-- ===================================================== the middle -->
         <Grid Grid.Row="1">
@@ -203,6 +225,15 @@
                         BorderThickness="1"
                         CornerRadius="4">
                     <Grid>
+                        <!-- The list, and a line under it that adds the list
+                             up. Two rows rather than one, so the total sits
+                             inside the panel it is about rather than floating
+                             under it among the lines about what was left off. -->
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
                         <!-- Said once, on an empty list, and gone the moment
                              there is anything to show. -->
                         <TextBlock Style="{StaticResource Aside}"
@@ -277,7 +308,8 @@
                                                    Text="{Binding Name}"
                                                    TextWrapping="NoWrap"
                                                    TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding ItsPath}" />
+                                                   AutomationProperties.HelpText="{Binding InFull}"
+                                                   ToolTip="{Binding InFull}" />
 
                                         <!-- The installer and a patch are
                                              worth naming. An ordinary file is
@@ -296,6 +328,27 @@
                                 </HierarchicalDataTemplate>
                             </TreeView.ItemTemplate>
                         </TreeView>
+
+                        <!-- What the whole list comes to.
+                             Every row shows its own size and a game shows the
+                             sum of what is under it, and there was nowhere at
+                             all that said what the lot came to: with four
+                             games on the window somebody had to add them up
+                             by eye to know whether it would fit.
+
+                             It follows the ticks, because what is going on
+                             the disc is what is ticked, and a total that
+                             counted rows somebody had just turned off would
+                             be worse than no total. -->
+                        <Border Grid.Row="1"
+                                BorderBrush="{StaticResource Edge}"
+                                BorderThickness="0,1,0,0"
+                                Padding="10,6"
+                                Visibility="{Binding Games.Count, Converter={StaticResource WhenSome}}">
+                            <TextBlock Style="{StaticResource Aside}"
+                                       Text="{Binding WhatIsOnIt}"
+                                       AutomationProperties.AutomationId="WhatIsOnIt" />
+                        </Border>
                     </Grid>
                 </Border>
             </DockPanel>
@@ -595,6 +648,23 @@
                                ToolTip="{Binding WhyNot.Because}"
                                Visibility="{Binding WhyNot, Converter={StaticResource WhenAnything}}"
                                AutomationProperties.AutomationId="WhyNot" />
+
+                    <!-- What to do about it, when the window can do it.
+                         Every refusal has carried one of these since they
+                         were written and none of them was ever shown, so a
+                         refusal that knew exactly how to be put right
+                         arrived as a red line and nothing else.
+
+                         Quiet rather than a button: the red line above is
+                         the thing to read, and this is the thing to press
+                         once it has been read. -->
+                    <Button Content="{Binding WhatTheWayOutIsCalled}"
+                            Style="{StaticResource Quietly}"
+                            Margin="0,4,0,0"
+                            IsEnabled="{Binding NothingIsRunning}"
+                            Visibility="{Binding WhatTheWayOutIsCalled, Converter={StaticResource WhenAnything}}"
+                            Click="TakeTheWayOut"
+                            AutomationProperties.AutomationId="TheWayOut" />
 
                     <ItemsControl Margin="0,4,0,0"
                                   ItemsSource="{Binding WhyNot.Figures}"

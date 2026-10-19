@@ -230,9 +230,14 @@
 
                 <!-- =============================================== for printing -->
                 <TextBlock Style="{StaticResource Step}" Margin="0,22,0,0" Text="FOR PRINTING" />
+                <!-- One row, in a panel 680 wide. It said only the first
+                     sentence, which answers what this is NOT for and leaves
+                     what it IS for unsaid: the files are copied onto the
+                     disc so they can be found and printed later. -->
                 <TextBlock Style="{StaticResource Aside}"
                            Margin="0,2,0,6"
-                           Text="Choosing them is not printing them." />
+                           TextWrapping="NoWrap"
+                           Text="Choosing them is not printing them. They go on the disc in an ARTWORK folder to print later." />
 
                 <Grid>
                     <Grid.ColumnDefinitions>
