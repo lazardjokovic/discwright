@@ -345,10 +345,11 @@
           <tr><th>Kind of folder</th><td>A <b>GOG download</b> (one <code>setup_*.exe</code> and its numbered
             <code>.bin</code> parts), a <b>folder of files with something runnable</b>, or a <b>folder of files with
             nothing runnable</b>. You do not choose this; the recogniser does, GOG first.</td></tr>
-          <tr><th>What a folder of files runs</th><td><b>Nothing is ever linked by hand.</b> There is no picker.
-            The menu runs an executable only when the folder holds <b>exactly one</b> plausible one, after
-            <code>unins</code>, <code>vcredist</code>, <code>dxsetup</code>, <code>dotnetfx</code> and
-            <code>oalinst</code> are struck out. Two or more behaves exactly like none.</td></tr>
+          <tr><th>What a folder of files runs</th><td>The menu runs an executable only when the folder has
+            <b>exactly one</b> worth running, after <code>unins</code>, <code>vcredist</code>,
+            <code>dxsetup</code>, <code>dotnetfx</code> and <code>oalinst</code> are struck out. With more than
+            one <b>it asks</b>, and the answer narrows it to that one. With none, or with an answer of no, the
+            menu copies the folder and opens it, and the window says which games that will be.</td></tr>
           <tr><th>Games on it</th><td>None, one, two, several. Same name twice is its own case.</td></tr>
           <tr><th>Patches and add-ons</th><td><b>Only ever from a GOG folder.</b> The files recogniser takes
             everything in the folder, so nothing is left behind and there is nothing to offer as an add-on. This
@@ -563,12 +564,12 @@
         <span class="what">Put these on too</span>
         <span class="look">Always live, including with nothing ticked.</span></label>
 
-      <div class="sub">Pick one of these · 3 controls · used for drives and discs, never for a launcher</div>
+      <div class="sub">Pick one of these · 3 controls</div>
       <label class="case"><input type="checkbox" id="c37" data-controls="Choices"><span class="id">C37</span>
         <span class="what">The list, in its three uses</span>
-        <span class="look">Which drive, when more than one holds a blank. Which disc to erase, when more than
-        one could be. Which image of a set to burn, when the folder holds several. <b>Never which executable
-        starts a game</b>: nothing in this program asks that.</span></label>
+        <span class="look">Four uses. Which drive, when more than one holds a blank. Which disc to erase. Which
+        image of a set to burn. And which file starts a game, when a folder of files has more than one worth
+        running.</span></label>
       <label class="case"><input type="checkbox" id="c38" data-controls="TakeThatOne"><span class="id">C38</span>
         <span class="what">Use that one</span>
         <span class="look">Always live, <b>including with nothing picked</b>, where it closes as if you had
@@ -622,15 +623,15 @@
   <section>
     <div class="step"><span class="letter">D</span><h2>Trying what should not be available</h2><span class="of" data-of></span></div>
 
-    <div class="finding">
-      <h3>Found while writing this, and not yet fixed</h3>
-      <p>Only the <b>buttons</b> go dead during a build or a burn. Every input that changes the disc stays live:
-      the name box, the size of disc, the split box, every tick in the list, the drive, the ISO folder box, and
-      all three More options. There is no container holding them and no guard in the code behind them.</p>
-      <p>So D3 to D8 are not cases where you confirm it works. They are cases where you watch the window
-      describe something other than what is being written, and the ISO folder one is the worst of them: change
-      it mid-build and the build keeps writing where it started, while the window goes looking somewhere else
-      afterwards and leaves <b>Burn to a disc</b> dead over images that exist.</p>
+    <div class="finding" style="border-left-color: var(--accent)">
+      <h3 style="color: var(--accent)">Found here, and since fixed</h3>
+      <p>Only the <b>buttons</b> used to go dead during a run. Every input that changes the disc stayed live, so
+      the window could be made to describe a plan for something other than the thing being written. Nine of them
+      are held now: the list, the name, the size, the split box, the drive, where the ISO goes and all three
+      More options.</p>
+      <p>Half the work was making them <b>look</b> held. Bound and left alone they stayed in exactly the ink of
+      a live control, and a trigger setting the colour did not reach them either. So D3 to D8 are now cases
+      where you confirm it, and <b>D19 is the one that matters</b>: does a held control look held.</p>
     </div>
 
     <div class="panel" data-cases>
@@ -693,6 +694,11 @@
       <label class="case"><input type="checkbox" id="d17"><span class="id">D17</span>
         <span class="what">Open the tray, or pull the disc out, in the middle of a burn</span>
         <span class="look">Explained, not a stack trace, and the window alive afterwards.</span></label>
+      <label class="case"><input type="checkbox" id="d19"><span class="id">D19</span>
+        <span class="what">Start a build and look at every held control</span>
+        <span class="look">The list, the name, the size, the split box, the drive, the ISO box, all three More
+        options, and the words standing in for an empty drive picker. Every one dimmed. The headings, the
+        total, and the quiet lines under the fields all still readable.</span></label>
       <label class="case"><input type="checkbox" id="d18"><span class="id">D18</span>
         <span class="what">Erase, with the disc swapped for a blank between pressing it and answering</span>
         <span class="look">Nothing is erased without being chosen, and never a disc that was not the one
@@ -704,20 +710,18 @@
   <section>
     <div class="step"><span class="letter">E</span><h2>Games, patches and what actually runs</h2><span class="of" data-of></span></div>
 
-    <div class="finding">
-      <h3>There is no "link to the exe", and nothing says so</h3>
-      <p>The recogniser deliberately never picks a launcher, and <b>no part of the program ever asks you to</b>.
-      The menu runs one only when the folder holds <b>exactly one</b> plausible executable, after the five that
-      are never the game are struck out. With none, or with two or more, it runs nothing and opens the folder
-      instead.</p>
-      <p>So E12 and E14 are the same disc wearing two different folders, and nothing on the window tells them
-      apart. The menu's big button still says <b>Copy and play</b> in both, and in one of them it only copies.
-      Whether that wording is honest is E16.</p>
-      <p><b>And a second one.</b> The GOG recogniser works out whether a download is unfinished
-      (<i>INCOMPLETE: installer part(s) -3 are missing</i>) and whether a folder holds several installers. Both
-      are computed, both are tested, and <b>neither is ever shown to anybody</b>: nothing in the view model or
-      the markup reads that field. The disc builds and burns clean and fails when somebody runs the installer
-      off it, which the code's own comment calls the worst possible place to find out. E10a and E10b.</p>
+    <div class="finding" style="border-left-color: var(--accent)">
+      <h3 style="color: var(--accent)">Both of these are now fixed, and these are the cases that prove it</h3>
+      <p><b>It asks now.</b> A folder of game files with more than one executable worth running gets a question,
+      and the answer narrows it to that one. One candidate is not a choice and none is not a question, so
+      neither is asked about. Saying no is allowed.</p>
+      <p>And the window says which games it will only copy. E12 and E14 used to be the same disc wearing two
+      different folders with nothing to tell them apart; now E14 asks, and if you decline, the window says so
+      in ordinary ink beside the list.</p>
+      <p><b>The second one is on the window too.</b> An unfinished download
+      (<i>INCOMPLETE: installer part(s) -3 are missing</i>) and a folder holding several installers were both
+      worked out from the first day and shown to nobody. They are beside the list now, in amber, for as long as
+      the game is on it, rather than in a box that is dismissed an hour before the burn. E10a and E10b.</p>
     </div>
 
     <div class="panel" data-cases>
@@ -762,41 +766,39 @@
         it on anyway. On a disc of its own it becomes a game in the menu and running it does nothing.</span></label>
       <label class="case"><input type="checkbox" id="e10b"><span class="id">E10a</span>
         <span class="what">A GOG download with a gap in its numbered parts</span>
-        <span class="look">Delete <code>…-3.bin</code> from a folder that has 1 to 5. The recogniser works out
-        <i>INCOMPLETE: installer part(s) -3 are missing</i> and <b>nothing shows it</b>. The disc builds and
-        burns clean and fails only when the installer is run off it.</span></label>
+        <span class="look">Delete <code>…-3.bin</code> from a folder that has 1 to 5. <span class="amber">In
+        amber beside the list</span>, and it stays there for as long as the game is on it.</span></label>
       <label class="case"><input type="checkbox" id="e10c"><span class="id">E10b</span>
         <span class="what">A GOG folder holding two or more <code>setup_*.exe</code> files</span>
-        <span class="look">Normal, a base game beside its DLC. It takes the largest and works out
-        <i>N installers in this folder, using the largest, X</i>, and <b>nothing shows that either</b>. Check
-        which one it actually took.</span></label>
+        <span class="look">Normal, a base game beside its DLC. It takes the largest and says so in amber, so
+        which one it took is visible before the disc is burned.</span></label>
 
       <div class="sub">A folder of game files · what it runs, and whether it says so</div>
       <label class="case"><input type="checkbox" id="e11"><span class="id">E11</span>
         <span class="what">No executable in it at all</span>
-        <span class="look">Not a failure. The big button says <b>Copy and play</b>, copies the folder, finds
-        nothing to run and opens it instead.</span></label>
+        <span class="look">Not a failure, and nothing is asked, because there is nothing to choose. The window
+        says the menu will copy it and open the folder.</span></label>
       <label class="case"><input type="checkbox" id="e12"><span class="id">E12</span>
         <span class="what">Exactly one plausible executable</span>
-        <span class="look">The only shape that really plays. <b>Copy and play</b> copies it and runs
-        it.</span></label>
+        <span class="look">The only shape that needs no question. <b>Copy and play</b> copies it and runs it,
+        and the window says nothing about it.</span></label>
       <label class="case"><input type="checkbox" id="e13"><span class="id">E13</span>
         <span class="what">One plausible executable beside <code>unins000.exe</code> and
         <code>vcredist.exe</code></span>
-        <span class="look">Still exactly one, because those five are struck out, so it still plays. Try this one
-        straight after E14.</span></label>
+        <span class="look">Still exactly one, because those five are struck out, so nothing is asked and it
+        still plays. Try this one straight after E14.</span></label>
       <label class="case"><input type="checkbox" id="e14"><span class="id">E14</span>
         <span class="what">Two plausible executables, say <code>game.exe</code> and <code>config.exe</code></span>
-        <span class="look"><b>Behaves exactly like having none.</b> The menu will not guess, so it copies and
-        opens the folder. Nothing on the window says this disc will not start the game.</span></label>
+        <span class="look"><b>You are asked which one starts it.</b> Pick one and the disc runs it. Press
+        <i>Cancel</i> and the window says the menu will copy the folder and open it.</span></label>
       <label class="case"><input type="checkbox" id="e15"><span class="id">E15</span>
         <span class="what">E12 and E14 side by side, built and burned</span>
-        <span class="look">Two discs that look identical in the window and behave differently in the drive. This
-        is the case to form an opinion about.</span></label>
+        <span class="look">They used to look identical on the window and behave differently in the drive. Now
+        one is asked about and the other is not, and declining is said out loud.</span></label>
       <label class="case"><input type="checkbox" id="e16"><span class="id">E16</span>
         <span class="what">Does <i>Copy and play</i> read honestly when it will not play</span>
-        <span class="look">It copies and opens the folder, which is a reasonable thing to do. The button said it
-        would do something else.</span></label>
+        <span class="look">It copies and opens the folder, which is a reasonable thing to do, and the window
+        now warns you beforehand. The button on the disc still says it would do something else.</span></label>
       <label class="case"><input type="checkbox" id="e17"><span class="id">E17</span>
         <span class="what">Executables only inside subfolders, none at the top</span>
         <span class="look">Everything goes on the disc, subfolders and all. Count the candidates.</span></label>
@@ -1121,15 +1123,18 @@
   <!-- ====================================================================== -->
   <section>
     <div class="step"><span class="letter">J</span><h2>Refusals and awkward input</h2><span class="of" data-of></span></div>
-    <p class="note">A refusal should say what is wrong, show the figures, and offer the way out. Red is for a wall;
-    amber is for something true that is not a wall.</p>
+    <p class="note">A refusal should say what is wrong, show the figures, and offer the way out. Red is for a
+    wall; amber is for something true that is not a wall. Fewer things are refused than you would guess: a
+    folder is turned away only when it is empty.</p>
     <div class="panel" data-cases>
       <label class="case"><input type="checkbox" id="j1"><span class="id">J1</span>
         <span class="what">An empty folder</span>
         <span class="look">Named as empty rather than unrecognised.</span></label>
       <label class="case"><input type="checkbox" id="j2"><span class="id">J2</span>
-        <span class="what">A folder with nothing recognisable in it</span>
-        <span class="look">A different sentence from the one above.</span></label>
+        <span class="what">A folder with things in it and nothing to run</span>
+        <span class="look"><b>Not refused.</b> The files recogniser claims any folder that is not empty, so it
+        becomes a disc of files and the window says the menu will copy it. An empty folder is the only one
+        turned away.</span></label>
       <label class="case"><input type="checkbox" id="j3"><span class="id">J3</span>
         <span class="what">Point it at a disc rather than at a download</span>
         <span class="look">Recognised as what it is, and refused for that reason.</span></label>
@@ -1248,6 +1253,11 @@
       <label class="case"><input type="checkbox" id="k19"><span class="id">K19</span>
         <span class="what">Which discs of the set are still wanted, on the menu</span>
         <span class="look">Right at disc 1 of 2, at 2 of 2, and at 2 of 3.</span></label>
+      <label class="case"><input type="checkbox" id="k21"><span class="id">K21</span>
+        <span class="what">What a folder came out of, and what the disc will only copy</span>
+        <span class="look">The amber line at one game and at several, where the game is named only when there
+        is more than one. The ordinary line at one game, at two, and at three, where several are listed with
+        <i>and</i> before the last.</span></label>
       <label class="case"><input type="checkbox" id="k20"><span class="id">K20</span>
         <span class="what">Every sentence again, with a game whose name has an apostrophe in it</span>
         <span class="look">On the window, in the folder name, on the menu and in the project file.</span></label>
@@ -1261,14 +1271,6 @@
     <div class="panel">
       <div style="padding:12px">
         <ul class="tight">
-          <li><b>Nothing but the buttons goes dead during a run.</b> The boxes, ticks and dropdowns that change
-            the disc all stay live. Section D says what that looks like.</li>
-          <li><b>Nothing ever asks which executable starts a game.</b> The menu runs one only when a folder
-            holds exactly one plausible candidate. None and two-or-more behave identically, and the window does
-            not distinguish them. Section E.</li>
-          <li><b>An unfinished download is detected and never mentioned.</b> So is a folder holding several
-            installers. Both sentences are written, both are tested, and nothing reads the field they live
-            in. E10a and E10b.</li>
           <li><b>The menu window crops its own backdrop.</b> The stage is 480 tall and so is the whole window,
             title bar included, so the picture is cut by about 38 pixels at the bottom and anything placed at the
             bottom of the panel is invisible. The music control sits at the top for this reason.</li>

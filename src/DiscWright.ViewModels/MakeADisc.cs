@@ -507,7 +507,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
             _lookingAtTheDrives = false;
         }
 
+        // Not while something is running. A set being burned asks for its
+        // next blank, and a blank of a different kind going in would move the
+        // size the window is describing out from under a burn of the old one.
         if (!_theSizeWasChosen
+            && !IsWorking
             && TheDiscsThatAreIn.TheSizeToStartFrom(drives) is Medium found
             && found != _medium)
         {
@@ -913,6 +917,98 @@ public sealed class MakeADisc : INotifyPropertyChanged
             }
 
             return null;
+        }
+    }
+
+    /// <summary>
+    /// What the recogniser noticed about the folders these games came out of,
+    /// or nothing when it noticed nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two things reach this. A download that stopped early leaves a gap in
+    /// its numbered parts, which builds a clean looking ISO that fails only
+    /// when somebody runs the installer off the burned disc, by which time
+    /// the disc is spent. And a folder holding several installers, where
+    /// which one was taken is worth seeing before a disc is burned rather
+    /// than after.
+    /// </para>
+    /// <para>
+    /// Both were worked out from the first day and <strong>neither was ever
+    /// shown to anybody</strong>. The field they live on appeared in the
+    /// recogniser, in its tests, and in no other file in the program.
+    /// </para>
+    /// <para>
+    /// On the window rather than in a box at the moment of adding, because a
+    /// box is dismissed and the burn is an hour later. It belongs beside the
+    /// list for as long as the game is on it.
+    /// </para>
+    /// </remarks>
+    public string? WhatTheDownloadsSay
+    {
+        get
+        {
+            string[] said =
+            [
+                .. _games
+                    .Where(game => !string.IsNullOrWhiteSpace(game.Warning))
+                    .Select(game => _games.Count == 1
+                        ? game.Warning!
+                        : $"{game.Name}: {game.Warning}")
+            ];
+
+            return said.Length == 0 ? null : string.Join(" ", said);
+        }
+    }
+
+    /// <summary>
+    /// Which games the disc will copy rather than start, or nothing when it
+    /// will start all of them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The menu runs an executable only when a folder of game files has
+    /// exactly one worth running, because it will not guess between several.
+    /// With none, and with more than one that nobody picked, the big button
+    /// copies the folder and opens it instead.
+    /// </para>
+    /// <para>
+    /// That is a reasonable thing for it to do and it was completely silent.
+    /// Two folders that look identical on this window made two discs that
+    /// behave differently in the drive, and the only way to find out which
+    /// was to burn one and press the button.
+    /// </para>
+    /// <para>
+    /// Ordinary ink. A disc of files to copy is a thing somebody may well
+    /// mean to make, and a window where everything is amber is a window where
+    /// amber means nothing.
+    /// </para>
+    /// </remarks>
+    public string? WhatWillNotStartItself
+    {
+        get
+        {
+            string[] copied =
+            [
+                .. _games
+                    .Where(game => game.Installer is null && game.LauncherCandidates.Count != 1)
+                    .Select(game => game.Name)
+            ];
+
+            if (copied.Length == 0)
+            {
+                return null;
+            }
+
+            string which = copied.Length == 1
+                ? copied[0]
+                : string.Join(", ", copied[..^1]) + " and " + copied[^1];
+
+            return copied.Length == 1
+                ? $"The menu will copy {which} and open the folder, because nothing in it was picked to "
+                    + "start the game."
+                : $"The menu will copy {which} and open their folders, because nothing in them was picked "
+                    + "to start them.";
         }
     }
 
@@ -2652,6 +2748,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // and every one of them is something to start again FROM.
         Tell(nameof(HasAnythingOnIt));
         Tell(nameof(CanStartAgain));
+
+        // Said about the folders on the list, so it follows the list.
+        Tell(nameof(WhatTheDownloadsSay));
+        Tell(nameof(WhatWillNotStartItself));
 
         // Adding a game is what makes previewing possible, and this is the
         // path adding takes. A property nobody is told about keeps whatever

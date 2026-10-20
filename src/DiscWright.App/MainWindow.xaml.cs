@@ -208,7 +208,7 @@ public partial class MainWindow : Window
                     (GameFolder with, IReadOnlyList<LeftBehind> asAddOns) =
                         WhatElseIsInThere.Ask(this, game, WhatWasLeftBehind.In(listing, game));
 
-                    _screen.Add(with, asAddOns);
+                    _screen.Add(WhicheverStartsIt(with), asAddOns);
                     break;
 
                 // Said here and now, about the one folder it is about, rather
@@ -881,6 +881,46 @@ public partial class MainWindow : Window
         char quote = (char)34;
 
         return quote + path + quote;
+    }
+
+    /// <summary>
+    /// Which file starts a folder of game files, when more than one could.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Nothing used to ask.</strong> The recogniser deliberately
+    /// never picks one, and no part of the program asked either, so the menu
+    /// ran a game only when a folder happened to hold exactly one plausible
+    /// executable. Two behaved identically to none: it copied the folder and
+    /// opened it, and nothing anywhere said so.
+    /// </para>
+    /// <para>
+    /// The answer narrows the candidates to the one chosen, which is all the
+    /// menu has ever looked at, so nothing downstream had to change.
+    /// </para>
+    /// <para>
+    /// Not asked for one candidate, because there is nothing to choose
+    /// between, and not asked for none, because there is nothing to choose.
+    /// Saying no is allowed and leaves the disc copying the folder, which the
+    /// window then says out loud.
+    /// </para>
+    /// </remarks>
+    private GameFolder WhicheverStartsIt(GameFolder game)
+    {
+        if (game.LauncherCandidates.Count < 2)
+        {
+            return game;
+        }
+
+        return PickOne.From(
+            this,
+            $"Which file starts {game.Name}?",
+            "Nothing is guessed here. A disc whose only button runs the wrong file is worse than one that "
+                + "copies the folder and opens it, which is what this does if you would rather not say.",
+            game.LauncherCandidates,
+            file => file.RelativePath) is ListedFile chosen
+            ? game with { LauncherCandidates = [chosen] }
+            : game;
     }
 
     private bool AddingThemSeparately(string folder, IReadOnlyList<string> inside, int loose) =>

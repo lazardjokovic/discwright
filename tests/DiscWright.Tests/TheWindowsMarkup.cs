@@ -558,6 +558,116 @@ public class TheWindowsMarkup
         Assert.Equal("WhyNot", IdOf(found.ElementsBeforeSelf().Last()));
     }
 
+    [Theory]
+    [InlineData("Games")]
+    [InlineData("Label")]
+    [InlineData("DiscSize")]
+    [InlineData("CutFiles")]
+    [InlineData("WhichDrive")]
+    [InlineData("OutputFolder")]
+    [InlineData("Menu")]
+    [InlineData("Checksums")]
+    [InlineData("LegacyFileSystems")]
+    public void Nothing_that_changes_the_disc_can_be_touched_while_one_is_being_made(string which)
+    {
+        // Only the buttons went dead. Every box, tick and dropdown stayed
+        // live, so the window could be made to describe a plan for something
+        // other than the thing being written, and the worst of them retyped
+        // where the ISO goes while a build was already writing somewhere
+        // else.
+        XElement control = Window().Descendants().Single(each => IdOf(each) == which);
+
+        Assert.Equal("{Binding NothingIsRunning}", (string?)control.Attribute("IsEnabled"));
+    }
+
+    [Theory]
+    [InlineData("TextBox")]
+    [InlineData("CheckBox")]
+    [InlineData("ComboBox")]
+    [InlineData("TreeView")]
+    public void An_input_that_can_be_held_looks_held(string kind)
+    {
+        // The same fault as the buttons had, in the inputs. Measured off two
+        // renders of the real window: bound to IsEnabled and left alone, the
+        // words stayed in exactly the ink of a live control, and a trigger
+        // setting Foreground did not reach them either, because the theme
+        // draws the content through a brush of its own.
+        //
+        // Opacity is applied to the whole control and nothing inside it can
+        // set it back, which is why all four use it.
+        XElement look = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!;
+
+        XElement style = look
+            .Elements(Xaml + "Style")
+            .Single(each => (string?)each.Attribute("TargetType") == kind
+                && each.Attribute(Named + "Key") is null);
+
+        bool dims = style
+            .Elements(Xaml + "Style.Triggers")
+            .Elements(Xaml + "Trigger")
+            .Where(trigger => (string?)trigger.Attribute("Property") == "IsEnabled"
+                && (string?)trigger.Attribute("Value") == "False")
+            .Elements(Xaml + "Setter")
+            .Any(setter => (string?)setter.Attribute("Property") == "Opacity");
+
+        Assert.True(dims, $"A disabled {kind} looks exactly like a live one.");
+    }
+
+    [Fact]
+    public void The_words_standing_in_for_an_empty_drive_picker_are_held_too()
+    {
+        // A sibling of the picker rather than a child, so holding the picker
+        // left these the one live looking thing in a column of dead ones.
+        XElement said = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => (string?)each.Attribute("Text") == "Whichever one is ready");
+
+        Assert.Equal(
+            "{Binding NothingIsRunning, Converter={StaticResource HeldBack}}",
+            (string?)said.Attribute("Opacity"));
+    }
+
+    [Fact]
+    public void What_the_recogniser_noticed_is_on_the_window()
+    {
+        // It was worked out and dropped. Nothing but the recogniser and its
+        // own tests ever mentioned the field it lives on.
+        XElement said = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "WhatTheDownloadsSay");
+
+        Assert.Equal("{Binding WhatTheDownloadsSay}", (string?)said.Attribute("Text"));
+
+        // Amber. An unfinished download is not a refusal, because the disc
+        // builds, and it is not ordinary ink either, because the disc is
+        // spent by the time anybody finds out.
+        Assert.Equal("{StaticResource WorryInk}", (string?)said.Attribute("Foreground"));
+
+        Assert.Equal(
+            "{Binding WhatTheDownloadsSay, Converter={StaticResource WhenAnything}}",
+            (string?)said.Attribute("Visibility"));
+    }
+
+    [Fact]
+    public void What_the_disc_will_only_copy_is_on_the_window()
+    {
+        XElement said = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "WhatWillNotStartItself");
+
+        Assert.Equal("{Binding WhatWillNotStartItself}", (string?)said.Attribute("Text"));
+
+        // Ordinary ink. A disc of files to copy is a thing somebody may well
+        // mean to make, and a window where everything is amber is a window
+        // where amber means nothing.
+        Assert.Null(said.Attribute("Foreground"));
+        Assert.Equal("{StaticResource Aside}", (string?)said.Attribute("Style"));
+
+        Assert.Equal(
+            "{Binding WhatWillNotStartItself, Converter={StaticResource WhenAnything}}",
+            (string?)said.Attribute("Visibility"));
+    }
+
     [Fact]
     public void The_header_row_carries_a_rule_under_it()
     {

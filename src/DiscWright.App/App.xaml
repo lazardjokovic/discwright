@@ -20,6 +20,7 @@
             <local:WhenAnything x:Key="WhenAnything" />
             <local:APicture x:Key="APicture" />
             <local:WhenNothing x:Key="WhenNothing" />
+            <local:HeldBack x:Key="HeldBack" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

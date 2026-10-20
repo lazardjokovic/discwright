@@ -69,6 +69,20 @@
         <Setter Property="BorderBrush" Value="{StaticResource Edge}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Background" Value="{StaticResource Panel}" />
+        <!-- Measured, not assumed, and twice. Bound to IsEnabled with no
+             trigger here at all, the words stayed in #16191C, the same ink as
+             a live one. A trigger setting Foreground did not help either: the
+             theme draws the content through its own brush, so the colour on
+             the control never reaches the words inside it.
+
+             Opacity does, because it is applied to the whole control and
+             nothing within it can set it back. The same answer the list of
+             games needs, for the same reason. -->
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style TargetType="CheckBox">
@@ -76,12 +90,59 @@
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{StaticResource Ink}" />
         <Setter Property="Margin" Value="0,0,0,6" />
+        <!-- Measured, not assumed, and twice. Bound to IsEnabled with no
+             trigger here at all, the words stayed in #16191C, the same ink as
+             a live one. A trigger setting Foreground did not help either: the
+             theme draws the content through its own brush, so the colour on
+             the control never reaches the words inside it.
+
+             Opacity does, because it is applied to the whole control and
+             nothing within it can set it back. The same answer the list of
+             games needs, for the same reason. -->
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <Style TargetType="ComboBox">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Padding" Value="8,5" />
+        <!-- Measured, not assumed, and twice. Bound to IsEnabled with no
+             trigger here at all, the words stayed in #16191C, the same ink as
+             a live one. A trigger setting Foreground did not help either: the
+             theme draws the content through its own brush, so the colour on
+             the control never reaches the words inside it.
+
+             Opacity does, because it is applied to the whole control and
+             nothing within it can set it back. The same answer the list of
+             games needs, for the same reason. -->
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
+        The list of what goes on the disc, when nothing may be changed on it.
+
+        Opacity rather than a colour, because every row draws its own words in
+        its own ink: the name, the size and the kind each carry a Style of
+        their own, and a Foreground set here would lose to all three. Dimming
+        the whole control cannot be beaten by anything inside it.
+
+        The line under it that says what the lot comes to is a sibling rather
+        than a child, so it stays readable while the list is held.
+    -->
+    <Style TargetType="TreeView">
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+            </Trigger>
+        </Style.Triggers>
     </Style>
 
     <!-- An ordinary button: the things somebody does on the way. -->

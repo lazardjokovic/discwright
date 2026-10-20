@@ -319,6 +319,34 @@ public sealed class WhenNone : IValueConverter
 /// refusals carry some and a few carry none, and a row of nothing still takes
 /// its margin.
 /// </remarks>
+public sealed class HeldBack : IValueConverter
+{
+    /// <summary>
+    /// The same dimming the held inputs get, for a thing that cannot be held
+    /// itself.
+    /// </summary>
+    /// <remarks>
+    /// The words standing in for an empty drive picker are a sibling of it
+    /// rather than a child, so holding the picker during a run left them the
+    /// one live looking thing in a column of dead ones. The figure is the one
+    /// in Look.xaml and is here because a TextBlock has no disabled state of
+    /// its own to trigger on.
+    /// </remarks>
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is false ? 0.45 : 1.0;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("Nothing starts running by being faded.");
+}
+
+/// <summary>
+/// Visible when a count is more than zero, collapsed otherwise.
+/// </summary>
+/// <remarks>
+/// The mirror of <see cref="WhenNone"/>, for the figures under a refusal. Most
+/// refusals carry some and a few carry none, and a row of nothing still takes
+/// its margin.
+/// </remarks>
 public sealed class WhenSome : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>

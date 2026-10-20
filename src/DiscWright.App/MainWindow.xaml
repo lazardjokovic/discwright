@@ -182,6 +182,21 @@
                      somebody just deliberately did, so it is said in ordinary
                      ink. A window where everything is amber is a window where
                      amber means nothing, including on the tray line. -->
+                <!-- What the recogniser noticed about the folder a game came
+                     out of. An unfinished download is the one that matters:
+                     it builds an ISO that looks perfect and fails when the
+                     installer is run off the burned disc.
+
+                     Here rather than in a box when the game is added, because
+                     a box is dismissed and the burn is an hour later. -->
+                <TextBlock DockPanel.Dock="Bottom"
+                           Margin="0,2,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource WorryInk}"
+                           Text="{Binding WhatTheDownloadsSay}"
+                           Visibility="{Binding WhatTheDownloadsSay, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhatTheDownloadsSay" />
+
                 <TextBlock DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
                            TextWrapping="Wrap"
@@ -197,6 +212,18 @@
                            Text="{Binding WhyThatMatters}"
                            Visibility="{Binding WhyThatMatters, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhyThatMatters" />
+
+                <!-- A disc that copies a folder rather than starting it is a
+                     thing somebody may well mean to make, so this is ordinary
+                     ink beside the amber. What it is not is something to find
+                     out by burning the disc and pressing the button. -->
+                <TextBlock DockPanel.Dock="Bottom"
+                           Style="{StaticResource Aside}"
+                           Margin="0,8,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding WhatWillNotStartItself}"
+                           Visibility="{Binding WhatWillNotStartItself, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhatWillNotStartItself" />
 
                 <TextBlock DockPanel.Dock="Bottom"
                            Style="{StaticResource Aside}"
@@ -261,6 +288,7 @@
                                   Background="Transparent"
                                   Padding="4"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                  IsEnabled="{Binding NothingIsRunning}"
                                   AutomationProperties.AutomationId="Games">
                             <!-- Without this a row answers to whatever the
                                  thing in it prints as, which here is the whole
@@ -368,6 +396,7 @@
                 <TextBox Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
                          CharacterCasing="Upper"
                          MaxLength="32"
+                         IsEnabled="{Binding NothingIsRunning}"
                          AutomationProperties.AutomationId="Label" />
                 <TextBlock Style="{StaticResource Aside}"
                            Margin="0,5,0,0"
@@ -381,6 +410,7 @@
                 <ComboBox ItemsSource="{Binding DiscSizes}"
                           SelectedItem="{Binding TheSizeChosen}"
                           DisplayMemberPath="InWords"
+                          IsEnabled="{Binding NothingIsRunning}"
                           AutomationProperties.AutomationId="DiscSize">
                     <!-- DisplayMemberPath sets what is SHOWN, and nothing
                          else. Without this a row still answers to whatever
@@ -441,6 +471,7 @@
                 <CheckBox Margin="0,8,0,0"
                           Content="Split a file too big for one disc"
                           IsChecked="{Binding CutFiles}"
+                          IsEnabled="{Binding NothingIsRunning}"
                           AutomationProperties.AutomationId="CutFiles" />
 
                 <!-- What it will actually do, with these files and this size
@@ -475,6 +506,7 @@
                     <ComboBox ItemsSource="{Binding Drives}"
                               SelectedItem="{Binding TheDrive}"
                               ToolTip="{Binding WhatTheDrivesAreDoing}"
+                              IsEnabled="{Binding NothingIsRunning}"
                               AutomationProperties.AutomationId="WhichDrive">
                     <!-- A row answers to whatever is in it prints as, and a
                          Recorder prints as "D: ASUS DRW-24D5MT, holding
@@ -488,10 +520,15 @@
 
                     <!-- An empty box reads as broken. This says what it will
                          do instead, and gets out of the way of the pointer. -->
+                    <!-- Dimmed with the box it stands in for. It is a sibling
+                         rather than a child, so holding the picker during a
+                         run left these words the one live looking thing in a
+                         column of dead ones. -->
                     <TextBlock Style="{StaticResource Aside}"
                                Margin="10,0,0,0"
                                VerticalAlignment="Center"
                                IsHitTestVisible="False"
+                               Opacity="{Binding NothingIsRunning, Converter={StaticResource HeldBack}}"
                                Text="Whichever one is ready"
                                Visibility="{Binding TheDrive, Converter={StaticResource WhenNothing}}"
                                AutomationProperties.AutomationId="NoDriveChosen" />
@@ -509,6 +546,7 @@
                     <TextBox Grid.Column="0"
                              Text="{Binding OutputFolder, UpdateSourceTrigger=PropertyChanged}"
                              ToolTip="The disc is built into a folder here, with its ISO beside it."
+                             IsEnabled="{Binding NothingIsRunning}"
                              AutomationProperties.AutomationId="OutputFolder" />
                     <Button Grid.Column="1"
                             Content="Browse"
@@ -552,6 +590,7 @@
                              the other person's machine. -->
                         <CheckBox Content="A menu that opens when the disc goes in"
                                   IsChecked="{Binding Menu}"
+                                  IsEnabled="{Binding NothingIsRunning}"
                                   AutomationProperties.AutomationId="Menu">
                             <CheckBox.ToolTip>
                                 <TextBlock TextWrapping="Wrap" MaxWidth="360">
@@ -564,9 +603,11 @@
 
                         <CheckBox Content="A list of what every file should be"
                                   IsChecked="{Binding Checksums}"
+                                  IsEnabled="{Binding NothingIsRunning}"
                                   AutomationProperties.AutomationId="Checksums" />
                         <CheckBox Content="Readable by Windows 98 and Mac OS 9"
                                   IsChecked="{Binding LegacyFileSystems}"
+                                  IsEnabled="{Binding NothingIsRunning}"
                                   AutomationProperties.AutomationId="LegacyFileSystems" />
                     </StackPanel>
                 </Expander>

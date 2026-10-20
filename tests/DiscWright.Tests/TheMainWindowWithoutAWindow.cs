@@ -707,6 +707,56 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task The_drives_stop_moving_the_size_while_something_is_running()
+    {
+        ADriveHolding drive = new(3, true, 359_847);
+        ABuilderThatWaits waits = new();
+        MakeADisc window = New(drives: drive, builder: waits);
+
+        await window.LookAtTheDrives();
+        Assert.Equal("CD", window.Medium.Key);
+
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("A Game", 1000));
+
+        Task building = window.MakeIt();
+        await waits.Started.Task;
+        Assert.True(window.IsWorking);
+
+        // A set being burned asks for its next blank. One of a different kind
+        // going in would otherwise move the size the window is describing out
+        // from under a run of the old one.
+        drive.NowHolds(9, true, 2_297_888);
+        await window.LookAtTheDrives();
+
+        Assert.Equal("CD", window.Medium.Key);
+
+        waits.LetGo.SetResult();
+        await building;
+
+        // And the moment it is over, the drives decide again.
+        await window.LookAtTheDrives();
+        Assert.Equal("DVD5", window.Medium.Key);
+    }
+
+    /// <summary>A build that does not finish until it is let go.</summary>
+    private sealed class ABuilderThatWaits : IBuildDiscs
+    {
+        internal TaskCompletionSource Started { get; } = new();
+
+        internal TaskCompletionSource LetGo { get; } = new();
+
+        public async Task<Outcome<DiscWright.Staging.BuiltDiscs>> Build(
+            DiscProject project, Medium medium, string outputFolder,
+            IProgress<BuildProgress>? progress, CancellationToken ct)
+        {
+            Started.TrySetResult();
+            await LetGo.Task;
+            return new DiscWright.Staging.BuiltDiscs([]);
+        }
+    }
+
+    [Fact]
     public async Task Nothing_that_changes_the_disc_is_live_while_one_is_being_made()
     {
         bool? couldChangeItMidWay = null;
@@ -1808,6 +1858,167 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(string.Empty, window.AboutTheTray);
     }
 
+    // ------------------------------------------ what the disc will start
+
+    [Fact]
+    public void Says_so_when_a_folder_has_nothing_in_it_to_start()
+    {
+        MakeADisc window = New();
+        window.Add(AFolderOfFiles("Some Game", candidates: 0));
+
+        Assert.Equal(
+            "The menu will copy Some Game and open the folder, because nothing in it was picked to "
+                + "start the game.",
+            window.WhatWillNotStartItself);
+    }
+
+    [Fact]
+    public void Says_so_when_a_folder_has_more_than_one_and_nobody_picked()
+    {
+        MakeADisc window = New();
+        window.Add(AFolderOfFiles("Some Game", candidates: 3));
+
+        // Two behaved exactly like none, and nothing anywhere said so. Two
+        // folders that look identical on this window made two discs that
+        // behave differently in the drive.
+        Assert.NotNull(window.WhatWillNotStartItself);
+    }
+
+    [Fact]
+    public void Says_nothing_once_one_of_them_has_been_picked()
+    {
+        MakeADisc window = New();
+        GameFolder many = AFolderOfFiles("Some Game", candidates: 3);
+
+        // Which is what the window does with the answer: the candidates are
+        // narrowed to the one chosen, and that is all the menu looks at.
+        window.Add(many with { LauncherCandidates = [many.LauncherCandidates[1]] });
+
+        Assert.Null(window.WhatWillNotStartItself);
+    }
+
+    [Fact]
+    public void Says_nothing_about_a_folder_that_already_had_exactly_one()
+    {
+        MakeADisc window = New();
+        window.Add(AFolderOfFiles("Some Game", candidates: 1));
+
+        Assert.Null(window.WhatWillNotStartItself);
+    }
+
+    [Fact]
+    public void Says_nothing_about_an_installer()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        // A GOG download has an installer to run and no candidates at all,
+        // so counting candidates alone would have called it uncopyable.
+        Assert.Null(window.WhatWillNotStartItself);
+    }
+
+    [Fact]
+    public void Names_all_of_them_when_several_will_only_be_copied()
+    {
+        MakeADisc window = New();
+        window.Add(AFolderOfFiles("One", candidates: 0));
+        window.Add(AFolderOfFiles("Two", candidates: 2));
+        window.Add(AFolderOfFiles("Three", candidates: 0));
+
+        Assert.Equal(
+            "The menu will copy One, Two and Three and open their folders, because nothing in them "
+                + "was picked to start them.",
+            window.WhatWillNotStartItself);
+    }
+
+    [Fact]
+    public void Tells_the_window_when_that_changes()
+    {
+        MakeADisc window = New();
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.Add(AFolderOfFiles("Some Game", candidates: 0));
+
+        Assert.Contains(nameof(MakeADisc.WhatWillNotStartItself), told);
+    }
+
+    // ----------------------------------------- what the folder was really
+
+    [Fact]
+    public void Says_when_a_download_looks_unfinished()
+    {
+        MakeADisc window = New();
+
+        window.Add(AGame("Hollow Knight", 1000) with
+        {
+            Warning = "INCOMPLETE: installer part(s) -3 are missing, so the download looks unfinished."
+        });
+
+        // Worked out from the first day and never shown. It builds a clean
+        // looking ISO that fails only when the installer is run off the
+        // burned disc, which is the worst possible place to find out.
+        Assert.Equal(
+            "INCOMPLETE: installer part(s) -3 are missing, so the download looks unfinished.",
+            window.WhatTheDownloadsSay);
+    }
+
+    [Fact]
+    public void Says_nothing_about_a_folder_there_was_nothing_to_say_about()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        Assert.Null(window.WhatTheDownloadsSay);
+    }
+
+    [Fact]
+    public void Says_which_game_when_there_is_more_than_one()
+    {
+        MakeADisc window = New();
+
+        window.Add(AGame("Hollow Knight", 1000));
+        window.Add(AGame("Gothic", 1000) with { Warning = "2 installers in this folder, using the largest, a.exe." });
+
+        // One game needs no name in front of it. Two do, or the sentence is
+        // about whichever one the reader happens to be looking at.
+        Assert.Equal(
+            "Gothic: 2 installers in this folder, using the largest, a.exe.",
+            window.WhatTheDownloadsSay);
+    }
+
+    [Fact]
+    public void Says_all_of_them_when_more_than_one_folder_had_something_to_say()
+    {
+        MakeADisc window = New();
+
+        window.Add(AGame("Hollow Knight", 1000) with { Warning = "INCOMPLETE: one." });
+        window.Add(AGame("Gothic", 1000) with { Warning = "INCOMPLETE: two." });
+
+        Assert.Equal(
+            "Hollow Knight: INCOMPLETE: one. Gothic: INCOMPLETE: two.",
+            window.WhatTheDownloadsSay);
+    }
+
+    [Fact]
+    public void Stops_saying_it_once_the_game_comes_off()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000) with { Warning = "INCOMPLETE: something." });
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.StartAgain();
+
+        Assert.Null(window.WhatTheDownloadsSay);
+
+        // A line nobody is told about stays on the window under a list that
+        // no longer holds the game it was about.
+        Assert.Contains(nameof(MakeADisc.WhatTheDownloadsSay), told);
+    }
+
     // ------------------------------------------------ somewhere to put it
 
     [Fact]
@@ -2242,6 +2453,32 @@ public class TheMainWindowWithoutAWindow
         }
 
         return new GameFolder(@"C:\games\" + name, GameKind.GogInstaller, name, name, files[0], files, [], null);
+    }
+
+    /// <summary>
+    /// A folder of game files, with however many executables worth running.
+    /// </summary>
+    private static GameFolder AFolderOfFiles(string name, int candidates)
+    {
+        List<ListedFile> files = [new(@"data\things.pak", 1000)];
+        List<ListedFile> could = [];
+
+        for (int at = 1; at <= candidates; at++)
+        {
+            ListedFile exe = new($"{name}{at}.exe", 1000);
+            files.Add(exe);
+            could.Add(exe);
+        }
+
+        return new GameFolder(
+            @"C:\games\" + name,
+            could.Count > 0 ? GameKind.FilesWithLauncher : GameKind.FilesOnly,
+            name,
+            name,
+            null,
+            files,
+            could,
+            null);
     }
 
     private sealed class Codepage1252 : IAutorunEncoding
@@ -3284,6 +3521,30 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void The_window_really_asks_which_file_starts_a_game()
+    {
+        // Nothing asked at all, and the menu ran a game only when a folder
+        // happened to hold exactly one plausible executable. Nothing in this
+        // project can reference the code behind, so it is read off disk.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        int from = code.IndexOf("GameFolder WhicheverStartsIt", StringComparison.Ordinal);
+        Assert.True(from >= 0, "Nothing asks which file starts a folder of game files.");
+
+        string asking = code[from..];
+        asking = asking[..asking.IndexOf(Environment.NewLine + "    }", StringComparison.Ordinal)];
+
+        // Only with something to choose between, and the answer narrows the
+        // candidates to the one chosen, which is all the menu looks at.
+        Assert.Contains("game.LauncherCandidates.Count < 2", asking, StringComparison.Ordinal);
+        Assert.Contains("PickOne.From(", asking, StringComparison.Ordinal);
+        Assert.Contains("LauncherCandidates = [chosen]", asking, StringComparison.Ordinal);
+
+        // And it is on the path a game really takes.
+        Assert.Contains("_screen.Add(WhicheverStartsIt(with), asAddOns)", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_window_asks_the_drives_again_whenever_a_disc_goes_in_or_out()
     {
         // The hook is the only way any of the above is reached while the
@@ -3305,6 +3566,26 @@ public class TheMainWindowWithoutAWindow
 
         Assert.Contains("if (message == ADeviceChanged)", hook, StringComparison.Ordinal);
         Assert.Contains("_screen.LookAtTheDrives()", hook, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_words_standing_in_for_the_drive_picker_fade_the_right_way_round()
+    {
+        // Turning the two around leaves every markup guard passing: the
+        // binding is still there, the converter is still named, and the words
+        // are simply bright while everything around them is held and dim
+        // while everything around them is live. Nothing in this project can
+        // reference a converter in DiscWright.App, so it is read off disk.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "App.xaml.cs"));
+
+        int from = code.IndexOf("class HeldBack", StringComparison.Ordinal);
+        Assert.True(from >= 0, "Nothing fades the words that stand in for the picker any more.");
+
+        string converter = code[from..];
+        converter = converter[..converter.IndexOf("ConvertBack", StringComparison.Ordinal)];
+
+        // false is "something is running", which is when it fades.
+        Assert.Contains("value is false ? 0.45 : 1.0", converter, StringComparison.Ordinal);
     }
 
     [Fact]
