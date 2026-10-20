@@ -248,6 +248,59 @@
 
   .case input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+  /* A case the suite runs. Kept rather than deleted, because the list is a
+     map of everything this program can be asked to do, and a map with roads
+     missing is worse than a long one. Hidden by default, so a pass by hand is
+     only the part a person has to do. */
+  .case.run { display: none; }
+  body.showing-all .case.run { display: grid; opacity: 0.62; }
+
+  body.showing-all .case.run::after {
+    content: "run by " attr(data-by);
+    grid-column: 3;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+  }
+
+  label.alsoshow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--quiet);
+    cursor: pointer;
+  }
+
+  label.alsoshow input { accent-color: var(--accent); }
+
+  /* A case the suite runs. Kept rather than deleted, because the list is a
+     map of everything this program can be asked to do and a map with roads
+     missing is worse than a long one. Hidden by default, so a pass by hand
+     is only the part a person has to do. */
+  .case.run { display: none; }
+  body.showing-all .case.run { display: grid; opacity: 0.62; }
+
+  .case.run::after {
+    content: "run by " attr(data-by);
+    grid-column: 3;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+  }
+
+  label.alsoshow {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12px;
+    color: var(--quiet);
+    cursor: pointer;
+  }
+
+  label.alsoshow input { accent-color: var(--accent); }
+
   code {
     font-family: var(--mono);
     font-size: 0.88em;
@@ -321,7 +374,8 @@
     <h1>DiscWright Test Matrix</h1>
     <span class="build">0.12.0</span>
     <span class="tally">
-      <span class="count"><b id="done">0</b> of <span id="all">0</span> done</span>
+      <label class="alsoshow"><input type="checkbox" id="showall"> also show the <span id="automatic">0</span> the suite runs</label>
+      <span class="count"><b id="done">0</b> of <span id="all">0</span> by hand</span>
       <button class="reset" id="reset" type="button">Clear</button>
     </span>
   </header>
@@ -333,6 +387,11 @@
   happens when you try the thing that should not be there, and whether what it says still reads right at none
   and at one as well as at many.</p>
 
+  <p class="lede"><strong>Fifty six of these are now run by the suite and are hidden.</strong> They are still
+  here, because this is a map of everything the program can be asked to do and a map with roads missing is
+  worse than a long one, but a pass by hand should only be the part a person has to do. Turn them on with the
+  switch above and each says which test runs it.</p>
+
   <!-- ====================================================================== -->
   <section>
     <div class="step"><span class="letter">A</span><h2>What varies</h2></div>
@@ -342,6 +401,9 @@
       <table>
         <thead><tr><th>Axis</th><th>What it can be</th></tr></thead>
         <tbody>
+          <tr><th colspan="2" style="color: var(--ink); font-weight: 500">The ten axes are written down once, in
+            <code>tests/by-hand/a-disc.pict</code>, and PICT turns them into the forty rows that cover every pair
+            of values. <code>EveryKindOfDisc</code> runs all forty. This table is the reading of it.</td></tr>
           <tr><th>Kind of folder</th><td>A <b>GOG download</b> (one <code>setup_*.exe</code> and its numbered
             <code>.bin</code> parts), a <b>folder of files with something runnable</b>, or a <b>folder of files with
             nothing runnable</b>. You do not choose this; the recogniser does, GOG first.</td></tr>
@@ -642,25 +704,25 @@
       <label class="case"><input type="checkbox" id="d2"><span class="id">D2</span>
         <span class="what">Press Build it twice as fast as you can; the same with Burn to a disc</span>
         <span class="look">The second press must do nothing at all, not start a second run.</span></label>
-      <label class="case"><input type="checkbox" id="d3"><span class="id">D3</span>
+      <label class="case run" data-by="Nothing_that_changes_the_disc_can_be_touched"><input type="checkbox" id="d3"><span class="id">D3</span>
         <span class="what">Change WHAT SIZE OF DISC in the middle of a build</span>
         <span class="look">The window replans for the new size while the old one is being written. What it says
         it will make stops being what it is making.</span></label>
-      <label class="case"><input type="checkbox" id="d4"><span class="id">D4</span>
+      <label class="case run" data-by="Nothing_that_changes_the_disc_can_be_touched"><input type="checkbox" id="d4"><span class="id">D4</span>
         <span class="what">Untick a row in the middle of a build</span>
         <span class="look">The total and the disc count follow the tick; the disc being written does not.</span></label>
-      <label class="case"><input type="checkbox" id="d5"><span class="id">D5</span>
+      <label class="case run" data-by="Nothing_that_changes_the_disc_can_be_touched"><input type="checkbox" id="d5"><span class="id">D5</span>
         <span class="what">Toggle a More option in the middle of a build</span>
         <span class="look">Turn the menu off while a disc with a menu is being staged.</span></label>
-      <label class="case"><input type="checkbox" id="d6"><span class="id">D6</span>
+      <label class="case run" data-by="Nothing_that_changes_the_disc_can_be_touched"><input type="checkbox" id="d6"><span class="id">D6</span>
         <span class="what">Retype or clear the disc name in the middle of a build</span>
         <span class="look">Clearing it puts a red refusal on the window over a build that is running
         happily.</span></label>
-      <label class="case"><input type="checkbox" id="d7"><span class="id">D7</span>
+      <label class="case run" data-by="Nothing_that_changes_the_disc_can_be_touched"><input type="checkbox" id="d7"><span class="id">D7</span>
         <span class="what">Retype WHERE TO SAVE THE ISO in the middle of a build</span>
         <span class="look">The worst of the six. The build finishes into the old folder and the window then looks
         in the new one, so Burn stays dead over images that are really there.</span></label>
-      <label class="case"><input type="checkbox" id="d8"><span class="id">D8</span>
+      <label class="case run" data-by="Nothing_that_changes_the_disc_can_be_touched"><input type="checkbox" id="d8"><span class="id">D8</span>
         <span class="what">Change WHICH DRIVE in the middle of a burn</span>
         <span class="look">The burn stays on the drive it started on. The warnings move to the other one.</span></label>
       <label class="case"><input type="checkbox" id="d9"><span class="id">D9</span>
@@ -670,14 +732,14 @@
       <label class="case"><input type="checkbox" id="d10"><span class="id">D10</span>
         <span class="what">Minimise during a burn, come back near the end</span>
         <span class="look">Progress still right, and the question about the next disc not missed.</span></label>
-      <label class="case"><input type="checkbox" id="d11"><span class="id">D11</span>
+      <label class="case run" data-by="Will_not_do_anything_when_the_button_that_would_is_dead"><input type="checkbox" id="d11"><span class="id">D11</span>
         <span class="what">Press Clear on all seven slots when nothing is chosen in any of them</span>
         <span class="look">Live buttons with nothing to do. They must simply do nothing.</span></label>
       <label class="case"><input type="checkbox" id="d12"><span class="id">D12</span>
         <span class="what">Press <i>Use that one</i> with nothing picked in the list</span>
         <span class="look">It closes as if you had cancelled, which is at least not a crash, but it is not what
         the button says it does.</span></label>
-      <label class="case"><input type="checkbox" id="d13"><span class="id">D13</span>
+      <label class="case run" data-by="Will_not_do_anything_when_the_button_that_would_is_dead"><input type="checkbox" id="d13"><span class="id">D13</span>
         <span class="what">Press <i>Put these on too</i> with nothing ticked</span>
         <span class="look">Same shape: a live button with nothing to do.</span></label>
       <label class="case"><input type="checkbox" id="d14"><span class="id">D14</span>
@@ -688,7 +750,7 @@
         <span class="what">Press a dead add-on on the disc's menu before the game is installed</span>
         <span class="look">Dead in the page and refused in the code. A patch applied to nothing leaves no sign it
         happened.</span></label>
-      <label class="case"><input type="checkbox" id="d16"><span class="id">D16</span>
+      <label class="case run" data-by="Will_not_do_anything_when_the_button_that_would_is_dead"><input type="checkbox" id="d16"><span class="id">D16</span>
         <span class="what">Press Remove with everything ticked and no row picked</span>
         <span class="look">It should already be grey. If it is not, it must take nothing.</span></label>
       <label class="case"><input type="checkbox" id="d17"><span class="id">D17</span>
@@ -774,11 +836,11 @@
         which one it took is visible before the disc is burned.</span></label>
 
       <div class="sub">A folder of game files · what it runs, and whether it says so</div>
-      <label class="case"><input type="checkbox" id="e11"><span class="id">E11</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e11"><span class="id">E11</span>
         <span class="what">No executable in it at all</span>
         <span class="look">Not a failure, and nothing is asked, because there is nothing to choose. The window
         says the menu will copy it and open the folder.</span></label>
-      <label class="case"><input type="checkbox" id="e12"><span class="id">E12</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e12"><span class="id">E12</span>
         <span class="what">Exactly one plausible executable</span>
         <span class="look">The only shape that needs no question. <b>Copy and play</b> copies it and runs it,
         and the window says nothing about it.</span></label>
@@ -787,7 +849,7 @@
         <code>vcredist.exe</code></span>
         <span class="look">Still exactly one, because those five are struck out, so nothing is asked and it
         still plays. Try this one straight after E14.</span></label>
-      <label class="case"><input type="checkbox" id="e14"><span class="id">E14</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e14"><span class="id">E14</span>
         <span class="what">Two plausible executables, say <code>game.exe</code> and <code>config.exe</code></span>
         <span class="look"><b>You are asked which one starts it.</b> Pick one and the disc runs it. Press
         <i>Cancel</i> and the window says the menu will copy the folder and open it.</span></label>
@@ -840,50 +902,50 @@
         <span class="what">Open the program with folders on the command line</span>
         <span class="look">Anything that is not a folder is ignored rather than complained about.</span></label>
       <div class="sub">Two games · every pair there is, from the four kinds that behave differently</div>
-      <label class="case"><input type="checkbox" id="e27"><span class="id">E27</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e27"><span class="id">E27</span>
         <span class="what">GOG + GOG, neither with add-ons</span>
         <span class="look">The first names the disc and the folder; the second changes neither. The menu's
         title becomes the disc's name, not the first game's.</span></label>
-      <label class="case"><input type="checkbox" id="e28"><span class="id">E28</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e28"><span class="id">E28</span>
         <span class="what">GOG + GOG, one with add-ons</span>
         <span class="look">Only one branch gets an Add-ons folder, on the disc and in the tree.</span></label>
-      <label class="case"><input type="checkbox" id="e29"><span class="id">E29</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e29"><span class="id">E29</span>
         <span class="what">GOG + GOG, both with add-ons</span>
         <span class="look">Each game's add-ons stay with that game. Neither set is dead until its own game is
         installed.</span></label>
-      <label class="case"><input type="checkbox" id="e30"><span class="id">E30</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e30"><span class="id">E30</span>
         <span class="what">GOG without add-ons + files that will play</span>
         <span class="look">Two shapes on one disc, and two different big buttons: Install and Copy and
         play.</span></label>
-      <label class="case"><input type="checkbox" id="e31"><span class="id">E31</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e31"><span class="id">E31</span>
         <span class="what">GOG without add-ons + files that will not play</span>
         <span class="look">One entry installs, the other only copies. Both say Copy and play or Install as they
         should.</span></label>
-      <label class="case"><input type="checkbox" id="e32"><span class="id">E32</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e32"><span class="id">E32</span>
         <span class="what">GOG with add-ons + files that will play</span>
         <span class="look">Add-ons under one entry, a launcher under the other.</span></label>
-      <label class="case"><input type="checkbox" id="e33"><span class="id">E33</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e33"><span class="id">E33</span>
         <span class="what">GOG with add-ons + files that will not play</span>
         <span class="look">The two most different entries a disc can carry, side by side.</span></label>
-      <label class="case"><input type="checkbox" id="e34"><span class="id">E34</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e34"><span class="id">E34</span>
         <span class="what">Files that will play + files that will play</span>
         <span class="look">Two folders, two launchers, neither guessed.</span></label>
-      <label class="case"><input type="checkbox" id="e35"><span class="id">E35</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e35"><span class="id">E35</span>
         <span class="what">Files that will play + files that will not</span>
         <span class="look">Same button on both, different outcome. The pair that shows the gap most
         plainly.</span></label>
-      <label class="case"><input type="checkbox" id="e36"><span class="id">E36</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e36"><span class="id">E36</span>
         <span class="what">Files that will not play + files that will not play</span>
         <span class="look">A disc whose every button only copies.</span></label>
 
       <div class="sub">Three and more · nothing in the code counts past two except these</div>
-      <label class="case"><input type="checkbox" id="e37"><span class="id">E37</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="e37"><span class="id">E37</span>
         <span class="what">Three games, three different kinds at once</span>
         <span class="look">A GOG with add-ons, a folder that plays, a folder that does not.</span></label>
       <label class="case"><input type="checkbox" id="e38"><span class="id">E38</span>
         <span class="what">The chooser screen with three or more rows</span>
         <span class="look">Every row opens the right game, and Back returns from each of them.</span></label>
-      <label class="case"><input type="checkbox" id="e39"><span class="id">E39</span>
+      <label class="case run" data-by="ThePlanner"><input type="checkbox" id="e39"><span class="id">E39</span>
         <span class="what">Enough games that the extras no longer fit on the last disc</span>
         <span class="look">They take a disc of their own, and the menu on that disc is the one carrying Manual
         and Extras.</span></label>
@@ -912,7 +974,7 @@
     <p class="note">Four pictures and four extras, each independent. The ones worth trying are the empty case,
     each one alone, all of them together, and all of them with the menu turned off.</p>
     <div class="panel" data-cases>
-      <label class="case"><input type="checkbox" id="f1"><span class="id">F1</span>
+      <label class="case run" data-by="Choosing_it_and_putting_it_back"><input type="checkbox" id="f1"><span class="id">F1</span>
         <span class="what">Nothing chosen at all</span>
         <span class="look"><i>Nothing chosen. A disc with none of it is still a disc.</i> and a disc that builds
         perfectly well.</span></label>
@@ -950,7 +1012,7 @@
         <span class="what">All of them, then turn the menu off</span>
         <span class="look">No menu and <b>no music on the disc at all</b>. The icon, cover, disc face, manual and
         extras are still written.</span></label>
-      <label class="case"><input type="checkbox" id="f12"><span class="id">F12</span>
+      <label class="case run" data-by="Choosing_it_and_putting_it_back"><input type="checkbox" id="f12"><span class="id">F12</span>
         <span class="what">Choose something, then Clear it</span>
         <span class="look">Every one of the eight, cleared one at a time, back to <i>Nothing chosen</i>.</span></label>
       <label class="case"><input type="checkbox" id="f13"><span class="id">F13</span>
@@ -966,45 +1028,45 @@
   <section>
     <div class="step"><span class="letter">G</span><h2>Size and what fits</h2><span class="of" data-of></span></div>
     <div class="panel" data-cases>
-      <label class="case"><input type="checkbox" id="g1"><span class="id">G1</span>
+      <label class="case run" data-by="Says_the_right_things_for_what_is_chosen"><input type="checkbox" id="g1"><span class="id">G1</span>
         <span class="what">Comfortably one disc</span>
         <span class="look"><i>one disc</i>, and no refusal beyond a missing folder.</span></label>
-      <label class="case"><input type="checkbox" id="g2"><span class="id">G2</span>
+      <label class="case run" data-by="ThePlanner"><input type="checkbox" id="g2"><span class="id">G2</span>
         <span class="what">Almost exactly one disc</span>
         <span class="look">The edge where a menu or a checksum list tips it into two.</span></label>
-      <label class="case"><input type="checkbox" id="g3"><span class="id">G3</span>
+      <label class="case run" data-by="ThePlanner"><input type="checkbox" id="g3"><span class="id">G3</span>
         <span class="what">Two discs, then three or more</span>
         <span class="look"><i>a set of N discs</i>, and the set manifest written beside them.</span></label>
-      <label class="case"><input type="checkbox" id="g4"><span class="id">G4</span>
+      <label class="case run" data-by="Says_the_right_things_for_what_is_chosen"><input type="checkbox" id="g4"><span class="id">G4</span>
         <span class="what">One file bigger than the whole disc, with splitting off</span>
         <span class="look"><span class="red">One file is bigger than a whole disc</span>, and both <b>Build it</b>
         and <b>See what it will look like</b> grey.</span></label>
-      <label class="case"><input type="checkbox" id="g5"><span class="id">G5</span>
+      <label class="case run" data-by="Says_the_right_things_for_what_is_chosen"><input type="checkbox" id="g5"><span class="id">G5</span>
         <span class="what">The same, with splitting on</span>
         <span class="look">The refusal goes and a line under the box names the file, its size and how many pieces,
         a disc each.</span></label>
-      <label class="case"><input type="checkbox" id="g6"><span class="id">G6</span>
+      <label class="case run" data-by="ThePlanner"><input type="checkbox" id="g6"><span class="id">G6</span>
         <span class="what">Two oversized files, splitting on</span>
         <span class="look">Counted rather than listed: <i>2 files will be cut, into N pieces between
         them.</i></span></label>
-      <label class="case"><input type="checkbox" id="g7"><span class="id">G7</span>
+      <label class="case run" data-by="Says_the_right_things_for_what_is_chosen"><input type="checkbox" id="g7"><span class="id">G7</span>
         <span class="what">Splitting on with nothing big enough to cut</span>
         <span class="look"><i>Nothing here is bigger than one disc, so nothing will be cut.</i> A box doing nothing
         should say it is doing nothing.</span></label>
-      <label class="case"><input type="checkbox" id="g8"><span class="id">G8</span>
+      <label class="case run" data-by="EveryKindOfDisc"><input type="checkbox" id="g8"><span class="id">G8</span>
         <span class="what">Walk the same project through all six sizes</span>
         <span class="look">The disc count, the splitting line and the refusal all follow, every time, in both
         directions.</span></label>
-      <label class="case"><input type="checkbox" id="g9"><span class="id">G9</span>
+      <label class="case run" data-by="ThePlanner"><input type="checkbox" id="g9"><span class="id">G9</span>
         <span class="what">Extras too big for the last disc of a set</span>
         <span class="look">They get a disc of their own, and the count goes up by one.</span></label>
-      <label class="case"><input type="checkbox" id="g10"><span class="id">G10</span>
+      <label class="case run" data-by="ThePlanner"><input type="checkbox" id="g10"><span class="id">G10</span>
         <span class="what">Extras alone bigger than one disc</span>
         <span class="look">Refused, with the figures.</span></label>
-      <label class="case"><input type="checkbox" id="g11"><span class="id">G11</span>
+      <label class="case run" data-by="ThePlanner"><input type="checkbox" id="g11"><span class="id">G11</span>
         <span class="what">A menu with no room left for it</span>
         <span class="look">Refused, and turning the menu off is the way out.</span></label>
-      <label class="case"><input type="checkbox" id="g12"><span class="id">G12</span>
+      <label class="case run" data-by="ThePlanner"><input type="checkbox" id="g12"><span class="id">G12</span>
         <span class="what"><i>Readable by Windows 98 and Mac OS 9</i> with a file over 2 GiB</span>
         <span class="look">ISO9660 cannot describe it. This must be said, not discovered after 7 GB of
         copying.</span></label>
@@ -1023,10 +1085,10 @@
       <label class="case"><input type="checkbox" id="h2"><span class="id">H2</span>
         <span class="what">One writer, tray empty</span>
         <span class="look">Nothing amber. Somebody who has not put a disc in has done nothing wrong.</span></label>
-      <label class="case"><input type="checkbox" id="h3"><span class="id">H3</span>
+      <label class="case run" data-by="Says_the_right_thing_about_the_disc_in_the_drive"><input type="checkbox" id="h3"><span class="id">H3</span>
         <span class="what">A blank disc the same size as the one being aimed at</span>
         <span class="look">Silence, which is the right answer.</span></label>
-      <label class="case"><input type="checkbox" id="h4"><span class="id">H4</span>
+      <label class="case run" data-by="Says_the_right_thing_about_the_disc_in_the_drive"><input type="checkbox" id="h4"><span class="id">H4</span>
         <span class="what">A blank disc of a different size</span>
         <span class="look"><span class="amber">The disc in D: is a DVD-R, and this is being built for CD-R 700
         MB.</span> It names the drive, what is in it and what is being aimed at.</span></label>
@@ -1036,22 +1098,22 @@
       <label class="case"><input type="checkbox" id="h6"><span class="id">H6</span>
         <span class="what">A pressed film or a full disc</span>
         <span class="look">Nothing to write to, said plainly, and never offered as a blank.</span></label>
-      <label class="case"><input type="checkbox" id="h7"><span class="id">H7</span>
+      <label class="case run" data-by="TheDiscThatIsActuallyIn"><input type="checkbox" id="h7"><span class="id">H7</span>
         <span class="what">Two writers, different discs in each</span>
         <span class="look">The amber line follows the drive that could <b>take</b> the burn. A used CD-RW in the
         other drive must not silence a warning about the blank DVD in this one.</span></label>
-      <label class="case"><input type="checkbox" id="h8"><span class="id">H8</span>
+      <label class="case run" data-by="Asks_about_the_disc_again_when_a_different_drive_is_chosen"><input type="checkbox" id="h8"><span class="id">H8</span>
         <span class="what">Pick a drive by hand, then pick the other one</span>
         <span class="look">Both the amber line and the tray warning move to it straight away, without waiting for
         a disc to go in.</span></label>
-      <label class="case"><input type="checkbox" id="h9"><span class="id">H9</span>
+      <label class="case run" data-by="A_different_disc_changes_everything_the_size_decides"><input type="checkbox" id="h9"><span class="id">H9</span>
         <span class="what">Swap the disc while the window is open</span>
         <span class="look">The size, the amber line, the disc count, the splitting line, the red line and every
         button all re-work. This is section B in one action.</span></label>
-      <label class="case"><input type="checkbox" id="h10"><span class="id">H10</span>
+      <label class="case run" data-by="TheMainWindowWithoutAWindow"><input type="checkbox" id="h10"><span class="id">H10</span>
         <span class="what">Unplug a writer while the window is open</span>
         <span class="look">It leaves the list, and a drive that was chosen stops being chosen.</span></label>
-      <label class="case"><input type="checkbox" id="h11"><span class="id">H11</span>
+      <label class="case run" data-by="TheDiscThatIsActuallyIn"><input type="checkbox" id="h11"><span class="id">H11</span>
         <span class="what">A drive that cannot shut its own tray</span>
         <span class="look">Said <b>before</b> anything is written, with the reason on hover over the picker, so a
         run that needs hands is known about beforehand.</span></label>
@@ -1071,17 +1133,17 @@
       <label class="case"><input type="checkbox" id="i3"><span class="id">I3</span>
         <span class="what">Burn one disc</span>
         <span class="look">Written, then read back and checked file by file before it says it worked.</span></label>
-      <label class="case"><input type="checkbox" id="i4"><span class="id">I4</span>
+      <label class="case run" data-by="WalkingThroughASet"><input type="checkbox" id="i4"><span class="id">I4</span>
         <span class="what">Burn a set from the start</span>
         <span class="look">It stops and asks for the next blank, and says which disc it is on.</span></label>
-      <label class="case"><input type="checkbox" id="i5"><span class="id">I5</span>
+      <label class="case run" data-by="WalkingThroughASet"><input type="checkbox" id="i5"><span class="id">I5</span>
         <span class="what">Burn a set, then carry on from disc 2</span>
         <span class="look">Offered, never assumed. The discs it knows about are ones it checked, not ones it can
         see.</span></label>
-      <label class="case"><input type="checkbox" id="i6"><span class="id">I6</span>
+      <label class="case run" data-by="WalkingThroughASet"><input type="checkbox" id="i6"><span class="id">I6</span>
         <span class="what">Burn a set, then start again from disc 1</span>
         <span class="look">The other answer to the same question.</span></label>
-      <label class="case"><input type="checkbox" id="i7"><span class="id">I7</span>
+      <label class="case run" data-by="WalkingThroughASet"><input type="checkbox" id="i7"><span class="id">I7</span>
         <span class="what">A burn that fails its read-back</span>
         <span class="look">It names the files that could not be read and does <b>not</b> claim nothing was
         written. A spent blank is spent.</span></label>
@@ -1144,11 +1206,11 @@
       <label class="case"><input type="checkbox" id="j5"><span class="id">J5</span>
         <span class="what">A loose file called <code>setup_something.exe</code> at the root</span>
         <span class="look">It would be read back as a game next time the disc was opened.</span></label>
-      <label class="case"><input type="checkbox" id="j6"><span class="id">J6</span>
+      <label class="case run" data-by="TheMainWindowWithoutAWindow"><input type="checkbox" id="j6"><span class="id">J6</span>
         <span class="what">A disc name with characters the codepage cannot carry</span>
         <span class="look"><span class="amber">Amber, not red.</span> It shows what This PC will really show.
         The disc still builds.</span></label>
-      <label class="case"><input type="checkbox" id="j7"><span class="id">J7</span>
+      <label class="case run" data-by="TheMainWindowWithoutAWindow"><input type="checkbox" id="j7"><span class="id">J7</span>
         <span class="what">Clear the disc name completely</span>
         <span class="look">Red. A disc needs a name.</span></label>
       <label class="case"><input type="checkbox" id="j8"><span class="id">J8</span>
@@ -1178,18 +1240,18 @@
     three reads wrong at one. Drive each of these to all three states and read it out loud. Singular and plural
     are the whole of it, but so is a sentence that is still true and no longer the point.</p>
     <div class="panel" data-cases>
-      <label class="case"><input type="checkbox" id="k1"><span class="id">K1</span>
+      <label class="case run" data-by="TheWindowChecksItself"><input type="checkbox" id="k1"><span class="id">K1</span>
         <span class="what">The total under the list</span>
         <span class="look">Hidden with nothing on it · <i>1.16 GB in one file</i> · <i>1.8 GB in 5
         files</i>.</span></label>
-      <label class="case"><input type="checkbox" id="k2"><span class="id">K2</span>
+      <label class="case run" data-by="TheWindowChecksItself"><input type="checkbox" id="k2"><span class="id">K2</span>
         <span class="what">What is being left off</span>
         <span class="look">Hidden · <i>Leaving off 1 thing, 28.2 MB.</i> · <i>Leaving off 4 things,
         656.6 MB.</i></span></label>
-      <label class="case"><input type="checkbox" id="k3"><span class="id">K3</span>
+      <label class="case run" data-by="TheWindowChecksItself"><input type="checkbox" id="k3"><span class="id">K3</span>
         <span class="what">What it will make</span>
         <span class="look">Hidden · <i>one disc</i> · <i>a set of 3 discs</i>. Never "1 disc".</span></label>
-      <label class="case"><input type="checkbox" id="k4"><span class="id">K4</span>
+      <label class="case run" data-by="Says_the_right_things_for_what_is_chosen"><input type="checkbox" id="k4"><span class="id">K4</span>
         <span class="what">The line under <i>Split a file too big for one disc</i></span>
         <span class="look">Three forms: nothing to cut · one file named with its size and its pieces · <i>2 files
         will be cut, into 6 pieces between them.</i></span></label>
@@ -1228,7 +1290,7 @@
       <label class="case"><input type="checkbox" id="k13"><span class="id">K13</span>
         <span class="what">More than one drive ready, and more than one image in the folder</span>
         <span class="look">Two different questions, each saying why it is being asked.</span></label>
-      <label class="case"><input type="checkbox" id="k14"><span class="id">K14</span>
+      <label class="case run" data-by="Says_what_else_is_chosen_for_each_one_of_them"><input type="checkbox" id="k14"><span class="id">K14</span>
         <span class="what">What else is chosen, on the main window</span>
         <span class="look"><i>Nothing chosen. A disc with none of it is still a disc.</i> · one thing named ·
         several, and check the joining.</span></label>
@@ -1295,12 +1357,36 @@
 
 <script>
   (function () {
+    // Only the cases a person has to do are counted. The ones the suite runs
+    // are still here, and still tickable when shown, but a pass by hand is
+    // measured against the work a pass by hand actually is.
+    var byHand = Array.prototype.slice.call(document.querySelectorAll('.case:not(.run) input'));
     var boxes = Array.prototype.slice.call(document.querySelectorAll('.case input'));
+    var automatic = document.querySelectorAll('.case.run').length;
+
     var done = document.getElementById('done');
     var all = document.getElementById('all');
     var KEY = 'discwright-cases-v2';
+    var showAll = document.getElementById('showall');
 
-    all.textContent = boxes.length;
+    all.textContent = byHand.length;
+    document.getElementById('automatic').textContent = automatic;
+
+    try {
+      if (localStorage.getItem(KEY + '-showall') === '1') { showAll.checked = true; }
+    } catch (e) {
+      /* site data blocked; the page still works */
+    }
+
+    function alsoShow() {
+      document.body.classList.toggle('showing-all', showAll.checked);
+
+      try {
+        localStorage.setItem(KEY + '-showall', showAll.checked ? '1' : '0');
+      } catch (e) {
+        /* nothing to do about it */
+      }
+    }
 
     function read() {
       try {
@@ -1320,13 +1406,14 @@
 
     function retally() {
       var ticked = 0;
-      boxes.forEach(function (box) { if (box.checked) { ticked++; } });
+      byHand.forEach(function (box) { if (box.checked) { ticked++; } });
       done.textContent = ticked;
 
       Array.prototype.forEach.call(document.querySelectorAll('[data-cases]'), function (panel) {
         var of = panel.closest('section').querySelector('[data-of]');
         if (!of) { return; }
-        var mine = panel.querySelectorAll('input');
+        var mine = panel.querySelectorAll(
+            showAll.checked ? 'input' : '.case:not(.run) input');
         var up = 0;
         Array.prototype.forEach.call(mine, function (box) { if (box.checked) { up++; } });
         of.textContent = up + '/' + mine.length;
@@ -1350,6 +1437,9 @@
       retally();
     });
 
+    showAll.addEventListener('change', function () { alsoShow(); retally(); });
+
+    alsoShow();
     retally();
   }());
 </script>

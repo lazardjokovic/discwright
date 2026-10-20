@@ -2,6 +2,15 @@
 
 `test-matrix.html` is the pass somebody works through with the real program in front of them. Open it in a browser; it is one file and needs nothing else. Ticks are kept in that browser, so a pass can be left half finished and picked up later.
 
+## The three files here
+
+| | |
+|---|---|
+| `test-matrix.html` | every case, in a browser, with ticks that persist |
+| `WITH-A-REAL-DISC.md` | the seven that need a disc and a hand, written so the hand is all that is needed |
+| `Build-TheFixtures.ps1` | the folders a pass starts from |
+| `Invoke-Stryker.ps1` | the mutation run that says whether any of it is worth having |
+
 It covers what the automated suite cannot reach: whether the window changes when it should, whether a control is live when it should be and dead when it should not, whether a sentence still reads right at none and at one as well as at many, and the whole of the menu on the disc, which is an HTA and therefore invisible to UI Automation.
 
 ## Keeping it true

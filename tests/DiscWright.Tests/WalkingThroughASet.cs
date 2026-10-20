@@ -371,6 +371,239 @@ public class WalkingThroughASet
 
     // ------------------------------------------------------------------ helpers
 
+    // ------------------------------- when it goes wrong half way through
+
+    [Fact]
+    public async Task Stops_when_the_tray_will_not_shut_on_a_disc_in_the_middle()
+    {
+        // The one branch that really happens on this machine: the Blu-ray
+        // writer at E: cannot shut its own tray, so a set burned there waits
+        // for a hand after every disc, and a hand that never comes has to
+        // stop the set rather than carry on to disc 3 over an unchecked 2.
+        ABurnerThatRemembers burner = new();
+        MakeADisc window = await ASetOf(3, burner);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, ShutsUntilDisc(2), AlwaysAnother, NeverAsksToCarryOn);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+
+        Assert.False(went.Whole);
+        Assert.Equal(1, went.Written);
+        Assert.Contains("could not be read back", went.InWords, StringComparison.Ordinal);
+
+        // Disc 2 was written and never checked, so the set stops there rather
+        // than spending a third blank on a set that is already broken.
+        Assert.Equal(2, burner.Wrote.Count);
+        Assert.NotNull(window.ItWentWrong);
+    }
+
+    [Fact]
+    public async Task Says_it_was_stopped_when_somebody_stops_it()
+    {
+        using CancellationTokenSource stopping = new();
+        ABurnerThatStopsEverything burner = new(stopping);
+        MakeADisc window = await ASetOf(3, burner);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn,
+            stopping.Token);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+
+        // Stopped is not the same as broken, and a set that was stopped has
+        // to say so rather than name a disc as the thing that went wrong.
+        Assert.False(went.Whole);
+        Assert.Contains("stopped", went.InWords, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Offers_to_erase_what_is_in_the_drive_when_the_next_blank_is_not_blank()
+    {
+        // Nobody put a blank in, but what is in there is a rewritable with
+        // something on it. Offered, never done without being asked.
+        ADriveHoldingAUsedDisc drive = new();
+        ABurnerThatRemembers burner = new();
+        AnEraserThatCounts eraser = new(drive);
+
+        MakeADisc window = await ASetOf(2, burner, drives: drive, eraser: eraser);
+
+        await window.BurnTheSet(
+            [.. ThreeImages.Take(2)], OnlyOneDrive, ErasesWhatIsOffered, Closes,
+            AlwaysAnother, NeverAsksToCarryOn);
+
+        Assert.Equal(1, eraser.Erased);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+        Assert.True(went.Whole);
+    }
+
+    [Fact]
+    public async Task Stops_when_nothing_usable_can_be_got_into_the_drive()
+    {
+        // The same drive, and this time nobody wants it erased either.
+        ADriveHoldingAUsedDisc drive = new();
+        ABurnerThatRemembers burner = new();
+
+        MakeADisc window = await ASetOf(2, burner, drives: drive);
+
+        await window.BurnTheSet(
+            [.. ThreeImages.Take(2)], OnlyOneDrive, SaysNoToErasing, Closes,
+            AlwaysAnother, NeverAsksToCarryOn);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+
+        Assert.False(went.Whole);
+        Assert.Equal(0, went.Written);
+        Assert.Empty(burner.Wrote);
+    }
+
+    [Fact]
+    public async Task Says_which_disc_it_is_on_while_it_writes_one()
+    {
+        // The line somebody watches for a quarter of an hour. It carries the
+        // disc number as well as the step, because "writing" on its own says
+        // nothing about how far through a set of three it is.
+        List<string> said = [];
+        ABurnerThatReportsItsProgress burner = new(said);
+        MakeADisc window = await ASetOf(3, burner);
+        window.PropertyChanged += (_, what) =>
+        {
+            if (what.PropertyName == nameof(MakeADisc.Doing))
+            {
+                lock (said) { said.Add(window.Doing); }
+            }
+        };
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        lock (said)
+        {
+            Assert.Contains(said, each => each.Contains("disc 1 of 3: ", StringComparison.Ordinal));
+            Assert.Contains(said, each => each.Contains("disc 3 of 3: ", StringComparison.Ordinal));
+        }
+
+        // And never a disc that is not in the set.
+        lock (said)
+        {
+            Assert.DoesNotContain(said, each => each.Contains("disc 4 of 3", StringComparison.Ordinal));
+            Assert.DoesNotContain(said, each => each.Contains("disc 0 of 3", StringComparison.Ordinal));
+        }
+    }
+
+    // ---------------------------------------------------- the fakes for those
+
+    /// <summary>A tray that shuts until the disc given, and then will not.</summary>
+    private static Func<Recorder, Task<bool>> ShutsUntilDisc(int which)
+    {
+        int shut = 0;
+
+        return _ => Task.FromResult(++shut < which);
+    }
+
+    private static Task<Recorder?> ErasesWhatIsOffered(IReadOnlyList<Recorder> could) =>
+        Task.FromResult<Recorder?>(could.Count > 0 ? could[0] : null);
+
+    /// <summary>
+    /// Asked, and said no. NeverErases is an assertion that the question was
+    /// not put at all, which is a different thing.
+    /// </summary>
+    private static Task<Recorder?> SaysNoToErasing(IReadOnlyList<Recorder> could) =>
+        Task.FromResult<Recorder?>(null);
+
+    /// <summary>A drive holding a rewritable with something already on it.</summary>
+    private sealed class ADriveHoldingAUsedDisc : IFindRecorders
+    {
+        private bool _erased;
+
+        internal void Wiped() => _erased = true;
+
+        public IReadOnlyList<Recorder> All() =>
+            [new("id-E", "E:", "A Drive", 3, _erased, _erased ? 360_000 : 0, [750])];
+    }
+
+    private sealed class AnEraserThatCounts(ADriveHoldingAUsedDisc drive) : IEraseDiscs
+    {
+        internal int Erased { get; private set; }
+
+        public Task<Outcome<string>> BlankIt(
+            Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct)
+        {
+            Erased++;
+            drive.Wiped();
+
+            return Task.FromResult<Outcome<string>>("blank");
+        }
+    }
+
+    private sealed class ABurnerThatStopsEverything(CancellationTokenSource stopping) : IBurnDiscs
+    {
+        public Task<Outcome<BurnedDisc>> Burn(
+            string imagePath, Recorder onto, IProgress<BurnProgress>? progress, CancellationToken ct)
+        {
+            stopping.Cancel();
+            ct.ThrowIfCancellationRequested();
+
+            return Task.FromResult<Outcome<BurnedDisc>>(new BurnedDisc(onto.Drive, 0, 0, true));
+        }
+    }
+
+    /// <summary>
+    /// Reports its progress, and does not finish until the report has been
+    /// heard.
+    /// </summary>
+    /// <remarks>
+    /// Progress&lt;T&gt; hands its callback to another thread, and Say drops
+    /// anything that arrives once the burn is over, so a report made on the
+    /// way out is simply lost. Which thread wins is the machine's business:
+    /// this passed here every time and failed every other run on the test VM,
+    /// which is the kind of test that teaches people to press run again.
+    ///
+    /// So the burn does not end until what it said has been heard.
+    /// </remarks>
+    private sealed class ABurnerThatReportsItsProgress(List<string> said) : IBurnDiscs
+    {
+        public Task<Outcome<BurnedDisc>> Burn(
+            string imagePath, Recorder onto, IProgress<BurnProgress>? progress, CancellationToken ct)
+        {
+            Report(progress, new BurnProgress("writing", 0.5, 90));
+            Report(progress, new BurnProgress("closing the disc", 0.9, 10));
+
+            return Task.FromResult<Outcome<BurnedDisc>>(new BurnedDisc(onto.Drive, 0, 0, true));
+        }
+
+        private void Report(IProgress<BurnProgress>? progress, BurnProgress step)
+        {
+            if (progress is null)
+            {
+                return;
+            }
+
+            int before;
+            lock (said) { before = said.Count; }
+
+            progress.Report(step);
+
+            DateTime until = DateTime.UtcNow.AddSeconds(10);
+
+            while (DateTime.UtcNow < until)
+            {
+                lock (said)
+                {
+                    if (said.Count > before)
+                    {
+                        return;
+                    }
+                }
+
+                Thread.Sleep(1);
+            }
+
+            throw new InvalidOperationException($"The burn said \"{step.Doing}\" and nothing heard it.");
+        }
+    }
+
     private static readonly string[] ThreeImages =
         [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso", @"C:\out\A SET D3.iso"];
 
@@ -427,7 +660,8 @@ public class WalkingThroughASet
         bool checksOut = true,
         IFindRecorders? drives = null,
         IKeepTheSetsPlace? note = null,
-        Func<string, long>? howBig = null)
+        Func<string, long>? howBig = null,
+        IEraseDiscs? eraser = null)
     {
         MakeADisc window = new(new TheMachine(
             new NoEncoding(),
@@ -435,7 +669,7 @@ public class WalkingThroughASet
             new ImagesThatWork(),
             drives ?? new OneBlankDrive(),
             burner,
-            new AnEraserThatWorks(),
+            eraser ?? new AnEraserThatWorks(),
             checksOut ? new ADiskThatMatches() : new ADiskThatDoesNot(),
             new NoHashing(),
             note ?? new ANoteInMemory(),

@@ -776,10 +776,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
             _addOns.AddRange(_tree[at].AddOnsChosen(_addOnsAsFound.Where(addOn => addOn.BelongsTo == at)));
         }
 
+        // Which ends at Told, where those three are announced along with
+        // everything else about the list.
         Reconsider();
-        Tell(nameof(WhatIsLeftOff));
-        Tell(nameof(WhyThatMatters));
-        Tell(nameof(APatchWithNothingToPatch));
     }
 
     /// <summary>
@@ -1676,10 +1675,17 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _tree.Clear();
         _loose.Clear();
 
-        _artwork = null;
-        _manual = null;
-        _extrasFolder = null;
-        _music = null;
+        // Through the things that already say they changed, rather than
+        // through the fields behind them. Cleared as fields, the panel went
+        // on showing a manual that was no longer on the disc, and the line on
+        // the window went on saying the disc had one. A second list of what
+        // to announce is a list that drifts from the first, which is how this
+        // was missed: every one of these has a setter that announces, and
+        // none of them was in the list below.
+        Manual = null;
+        ExtrasFolder = null;
+        Music = null;
+        ChangeTheArtwork(new DiscArtwork());
 
         Label = string.Empty;
 
@@ -1704,6 +1710,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         // Which puts the window back to the sentence it opens with, and works
         // the refusal out again from nothing.
+        //
+        // Reconsider rather than leaning on the name being cleared to do it.
+        // Clearing a name that is already empty changes nothing and so
+        // reconsiders nothing, and an empty window was left showing "The disc
+        // needs a name" from when it had games and no name.
+        Reconsider();
         Started();
         LookForImages();
     }
@@ -2320,6 +2332,27 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
         else
         {
+            // Which games are wholly off, by position, settled BEFORE
+            // anything comes off. Two things made the loop below find nothing
+            // every time, so a game with every row unticked stayed on the
+            // list as a name with no files and no size.
+            //
+            // EveryThing walks down to the rows and never yields the branch
+            // itself, so taking the last row out of a game leaves an empty
+            // branch, and an empty branch has nothing to be all-off about and
+            // answers that it is on. And taking a row off rebuilds that
+            // branch as a new object, so a branch remembered from before is
+            // no longer the one in the tree and cannot be found in it.
+            //
+            // A position survives both.
+            List<int> wholly =
+            [
+                .. _tree
+                    .Select((branch, at) => (branch, at))
+                    .Where(both => both.branch.IsOn == false)
+                    .Select(both => both.at)
+            ];
+
             foreach (AThingOnTheDisc off in
                 _tree.SelectMany(game => game.EveryThing()).Where(each => each.IsOn == false).ToList())
             {
@@ -2327,9 +2360,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
             }
 
             // A game with every row unticked is itself unticked, and goes.
-            foreach (AThingOnTheDisc game in _tree.Where(each => each.IsOn == false).ToList())
+            // Highest first, so taking one off does not move the next.
+            foreach (int at in wholly.OrderByDescending(each => each))
             {
-                TakeOffJustThis(game);
+                if (at < _games.Count)
+                {
+                    Remove(_games[at]);
+                }
             }
         }
 
@@ -2752,6 +2789,22 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // Said about the folders on the list, so it follows the list.
         Tell(nameof(WhatTheDownloadsSay));
         Tell(nameof(WhatWillNotStartItself));
+
+        // And the three about what is ticked. These used to be announced
+        // beside the ticks and nowhere else, so every other way of changing
+        // the list left them on the window saying something about a list that
+        // was no longer there: starting a new disc kept "Leaving off 1 thing"
+        // over an empty one. Everything that changes the list ends here, so
+        // this is where they belong.
+        Tell(nameof(WhatIsLeftOff));
+        Tell(nameof(WhyThatMatters));
+        Tell(nameof(APatchWithNothingToPatch));
+
+        // And whether Remove would take anything, which turns on the same
+        // ticks. It was announced when a row was picked and nowhere else, so
+        // unticking something left Remove grey over a list with something to
+        // remove, and it only lit once a row happened to be clicked.
+        Tell(nameof(CanTakeSomethingOff));
 
         // Adding a game is what makes previewing possible, and this is the
         // path adding takes. A property nobody is told about keeps whatever

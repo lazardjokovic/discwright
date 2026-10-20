@@ -1,0 +1,45 @@
+# Every kind of disc this program can be asked to make.
+#
+# Ten axes. Multiplied out they are 5 x 3 x 6 x 6 x 4 x 4 x 2 x 2 x 2 x 2,
+# which is 276,480 projects, and nobody is testing that. What matters is that
+# every PAIR of values appears somewhere, because failures come of one thing
+# or two things interacting far more often than of six.
+#
+# PICT turns this into the shortest set of rows that covers every pair, and
+# tests\DiscWright.Tests\EveryKindOfDisc.cs runs every row of it. Regenerate
+# with tests\by-hand\Build-TheCombinations.ps1 after changing anything here.
+#
+# THE CONSTRAINTS ARE NOT TIDINESS. Each one is a rule the program really has,
+# and without it PICT invents projects that cannot exist and the test fails on
+# cases that are nobody's bug.
+
+Kind:        GogInstaller, GogWithAddOns, FilesWithOneToRun, FilesWithSeveralToRun, FilesWithNothingToRun
+Games:       1, 2, 3
+Biggest:     small, mostOfACd, biggerThanACd, overTwoGiB
+Size:        CD, DVD5, DVD9, BD25
+Artwork:     none, icon, background, cover, discFace, allOfIt
+Extras:      none, manual, extrasFolder, loose, music, allOfIt
+Menu:        on, off
+Checksums:   on, off
+Legacy:      on, off
+Split:       on, off
+
+# Add-ons come out of what was left beside a GOG installer. A folder of game
+# files leaves nothing behind, because that recogniser takes everything in it,
+# so those three kinds can never have any.
+# written as a constraint PICT rightly said it was always true, so it is a
+# comment: GogWithAddOns is a value of Kind rather than an axis of its own.
+
+# ISO9660 cannot describe a file over 2 GiB, and the program refuses rather
+# than finding out after copying 7 GB. That is its own case in the suite; here
+# it would make every row with a big file about one thing.
+IF [Biggest] = "overTwoGiB" THEN [Legacy] = "off";
+
+# A tune only reaches the disc when there is a menu to play it, so pairing
+# music with no menu says nothing that the menu-off cases do not already say.
+IF [Extras] = "music" THEN [Menu] = "on";
+
+# A file bigger than the disc with nothing to cut it is a refusal, and a
+# refusal is one state however it was arrived at. Half the rows would be that
+# one sentence. The cases that matter are covered deliberately in the suite.
+IF [Biggest] = "overTwoGiB" THEN [Size] <> "CD";

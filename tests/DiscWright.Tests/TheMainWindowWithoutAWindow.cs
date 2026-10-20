@@ -1858,6 +1858,291 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(string.Empty, window.AboutTheTray);
     }
 
+    // ------------------------------------ the guards a second press reaches
+
+    [Fact]
+    public async Task Will_not_start_a_second_burn_over_a_build_that_is_running()
+    {
+        // Pressed while something is already running. The buttons are dead
+        // in the window now, but a dead button is still a method, and the
+        // method is what writes to a disc.
+        ABuilderThatWaits waits = new();
+        MakeADisc window = New(builder: waits, drives: new ADriveHolding(3, true, 359_847));
+
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("A Game", 1000));
+
+        Task building = window.MakeIt();
+        await waits.Started.Task;
+
+        await window.BurnIt(
+            @"C:\out\A GAME.iso",
+            could => Task.FromResult<Recorder?>(could.Count > 0 ? could[0] : null),
+            _ => Task.FromResult<Recorder?>(null),
+            _ => Task.FromResult(true));
+
+        // Nothing was burned and nothing was said about burning, because it
+        // never started.
+        Assert.Null(window.HowTheDiscCameOut);
+
+        waits.LetGo.SetResult();
+        await building;
+    }
+
+    [Fact]
+    public async Task Will_not_ask_about_a_new_version_twice_at_once()
+    {
+        AnAskerThatWaitsToAnswer asker = new();
+        MakeADisc window = New(releases: asker);
+
+        Task first = window.CheckForANewVersion();
+        await asker.Started.Task;
+
+        // The second press arrives while the first is still out. One question
+        // to GitHub, not two, and the second press is simply nothing.
+        await window.CheckForANewVersion();
+
+        Assert.Equal(1, asker.Asked);
+
+        asker.Answer.SetResult(new WhatWasReleased("v2.1.0", "https://example.invalid/x"));
+        await first;
+
+        Assert.Equal(1, asker.Asked);
+    }
+
+    [Fact]
+    public void Does_nothing_when_an_option_is_set_to_what_it_already_is()
+    {
+        MakeADisc window = New();
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        // On by default, set on again. Nothing changed, so nothing is
+        // announced and nothing is worked out again.
+        window.Menu = true;
+        window.Checksums = true;
+        window.LegacyFileSystems = false;
+
+        Assert.Empty(told);
+    }
+
+    [Fact]
+    public void Takes_a_game_off_when_every_row_under_it_is_unticked()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        Assert.Single(window.Games);
+
+        foreach (AThingOnTheDisc thing in window.WhatGoesOnIt[0].EveryThing())
+        {
+            thing.IsOn = false;
+        }
+
+        // A game with nothing of it on the disc is not on the disc. Remove
+        // takes the whole branch rather than leaving an empty one behind.
+        window.TakeOff(null);
+
+        Assert.Empty(window.Games);
+        Assert.Empty(window.WhatGoesOnIt);
+    }
+
+    [Fact]
+    public void Shrugs_at_being_asked_to_take_off_a_row_that_is_not_there_any_more()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        AThingOnTheDisc stale = window.WhatGoesOnIt[0];
+
+        window.StartAgain();
+        window.Add(AGame("Gothic", 1000));
+
+        // The window holds a row from the tree as it was, and the tree has
+        // been rebuilt since. Taking off something that is not on the list is
+        // nothing rather than an exception or somebody else's game.
+        window.TakeOff(stale);
+
+        Assert.Single(window.Games);
+        Assert.Equal("Gothic", window.Games[0].Name);
+    }
+
+    [Fact]
+    public void Says_an_icon_and_artwork_to_print_are_among_what_is_chosen()
+    {
+        MakeADisc window = New();
+
+        Assert.Equal("Nothing chosen. A disc with none of it is still a disc.", window.WhatElseIsChosen);
+
+        window.DiscIcon = @"C:\art\icon.png";
+        Assert.Contains("an icon", window.WhatElseIsChosen, StringComparison.Ordinal);
+
+        window.Cover = @"C:\art\cover.png";
+        Assert.Contains("artwork to print", window.WhatElseIsChosen, StringComparison.Ordinal);
+
+        // And the disc face on its own says the same thing, because what is
+        // being said is that something will be printed, not which of them.
+        window.Cover = null;
+        window.DiscFace = @"C:\art\face.png";
+        Assert.Contains("artwork to print", window.WhatElseIsChosen, StringComparison.Ordinal);
+    }
+
+    /// <summary>One that does not answer until it is told to, and counts.</summary>
+    private sealed class AnAskerThatWaitsToAnswer : IAskWhatIsReleased
+    {
+        internal int Asked { get; private set; }
+
+        internal TaskCompletionSource Started { get; } = new();
+
+        internal TaskCompletionSource<WhatWasReleased> Answer { get; } = new();
+
+        public Task<WhatWasReleased> TheLatest(CancellationToken ct)
+        {
+            Asked++;
+            Started.TrySetResult();
+
+            return Answer.Task;
+        }
+    }
+
+    // -------------------------------- what the window says, for a given state
+
+    /// <summary>
+    /// The whole of what the window says, for one state at a time, read as a
+    /// table.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Everywhere else asks one question of one property. This asks what the
+    /// window looks like, which is the thing somebody is actually looking at,
+    /// and it asks it for the state in the first column rather than for a
+    /// state built up over nine lines of arranging.
+    /// </para>
+    /// <para>
+    /// The question it exists to answer is "should a warning be showing with
+    /// this chosen", which is not answerable by any test that looks at one
+    /// line at a time: a warning that is correct and a warning that should
+    /// have gone are the same sentence.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    // what is on it          size    split   red line                                 splitting line
+    [InlineData("nothing", "DVD5", false, "", "")]
+    [InlineData("a small game", "DVD5", false, "", "")]
+    [InlineData("a small game", "CD", false, "", "")]
+    [InlineData("a big game", "DVD5", false, "", "")]
+    [InlineData("a big game", "CD", false, "One file is bigger than a whole disc", "")]
+    [InlineData("a big game", "CD", true, "", "cut into 2 pieces")]
+    [InlineData("a big game", "DVD5", true, "", "Nothing here is bigger than one disc")]
+    [InlineData("a small game", "CD", true, "", "Nothing here is bigger than one disc")]
+    public void Says_the_right_things_for_what_is_chosen(
+        string whatIsOnIt, string size, bool split, string redLine, string splittingLine)
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+
+        switch (whatIsOnIt)
+        {
+            case "a small game": window.Add(AGame("Hollow Knight", 400_000_000)); break;
+            case "a big game": window.Add(AGame("Hollow Knight", 1_000_000_000)); break;
+        }
+
+        window.Medium = size == "CD" ? Media.Cd : Media.Dvd5;
+        window.CutFiles = split;
+
+        Assert.Equal(redLine, window.WhyNot?.Headline ?? string.Empty);
+
+        if (splittingLine.Length == 0)
+        {
+            Assert.Equal(string.Empty, window.WhatSplittingWouldDo);
+        }
+        else
+        {
+            Assert.Contains(splittingLine, window.WhatSplittingWouldDo, StringComparison.Ordinal);
+        }
+
+        // And the two buttons follow the red line, always.
+        Assert.Equal(redLine.Length == 0 && whatIsOnIt != "nothing", window.CanMakeIt);
+    }
+
+    [Theory]
+    // what is in the drive            aiming at   the amber line
+    [InlineData("nothing", "CD", "")]
+    [InlineData("a blank CD", "CD", "")]
+    [InlineData("a blank CD", "DVD5", "The disc in D: is a CD-R, and this is being built for DVD5 4.7 GB.")]
+    [InlineData("a blank DVD", "CD", "The disc in D: is a DVD-R, and this is being built for CD-R 700 MB.")]
+    [InlineData("a blank DVD", "DVD5", "")]
+    [InlineData("a used CD-RW", "CD", "")]
+    [InlineData("a used CD-RW", "DVD5", "The disc in D: is a CD-RW, and this is being built for DVD5 4.7 GB.")]
+    public async Task Says_the_right_thing_about_the_disc_in_the_drive(
+        string holding, string aimingAt, string amber)
+    {
+        ADriveHolding drive = holding switch
+        {
+            "nothing" => new ADriveHolding(0, false, 0),
+            "a blank CD" => new ADriveHolding(2, true, 359_847),
+            "a blank DVD" => new ADriveHolding(9, true, 2_297_888),
+            _ => new ADriveHolding(3, false, 0),
+        };
+
+        MakeADisc window = New(drives: drive);
+
+        await window.LookAtTheDrives();
+        window.Medium = aimingAt == "CD" ? Media.Cd : Media.Dvd5;
+
+        Assert.Equal(amber, window.AboutTheDiscInTheDrive);
+
+        // The ink it is drawn in follows the words, never separately.
+        Assert.Equal(amber.Length > 0, window.TheDiscIsADifferentSize);
+
+        // And erasing is offered only for something erasing would help.
+        Assert.Equal(holding == "a used CD-RW", window.CanErase);
+    }
+
+    [Theory]
+    // what is chosen                       what the line says
+    [InlineData("", "Nothing chosen. A disc with none of it is still a disc.")]
+    [InlineData("icon", "an icon")]
+    [InlineData("background", "a background")]
+    [InlineData("manual", "a manual")]
+    [InlineData("extras", "extras")]
+    [InlineData("music", "music")]
+    [InlineData("cover", "artwork to print")]
+    [InlineData("face", "artwork to print")]
+    public void Says_what_else_is_chosen_for_each_one_of_them(string chosen, string says)
+    {
+        MakeADisc window = New();
+
+        switch (chosen)
+        {
+            case "icon": window.DiscIcon = @"C:\art\icon.png"; break;
+            case "background": window.Background = @"C:\art\back.png"; break;
+            case "manual": window.Manual = @"C:\extras\how.txt"; break;
+            case "extras": window.ExtrasFolder = @"C:\extras"; break;
+            case "music": window.Music = @"C:\music\tune.mp3"; break;
+            case "cover": window.Cover = @"C:\art\cover.png"; break;
+            case "face": window.DiscFace = @"C:\art\face.png"; break;
+        }
+
+        Assert.Contains(says, window.WhatElseIsChosen, StringComparison.Ordinal);
+
+        // And when it is put back it says nothing again, which is the half
+        // that keeps being reported: chosen, cleared, and still named.
+        switch (chosen)
+        {
+            case "icon": window.DiscIcon = null; break;
+            case "background": window.Background = null; break;
+            case "manual": window.Manual = null; break;
+            case "extras": window.ExtrasFolder = null; break;
+            case "music": window.Music = null; break;
+            case "cover": window.Cover = null; break;
+            case "face": window.DiscFace = null; break;
+        }
+
+        Assert.Equal("Nothing chosen. A disc with none of it is still a disc.", window.WhatElseIsChosen);
+    }
+
     // ------------------------------------------ what the disc will start
 
     [Fact]

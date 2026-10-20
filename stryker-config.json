@@ -1,0 +1,17 @@
+{
+  "stryker-config": {
+    "project": "DiscWright.ViewModels.csproj",
+    "test-projects": [ "tests/DiscWright.Tests/DiscWright.Tests.csproj" ],
+    "reporters": [ "progress", "html", "json" ],
+    "mutation-level": "Basic",
+    "concurrency": 4,
+    "thresholds": {
+      "high": 85,
+      "low": 75,
+      "break": 70
+    },
+    "ignore-mutations": [
+      "string"
+    ]
+  }
+}
