@@ -162,61 +162,34 @@ public partial class MainWindow : Window
 
     private void Add(IEnumerable<string> folders)
     {
-        foreach (string folder in folders)
+        // Which folders are games, which hold games, what is asked about each
+        // and in what order all live in TakingFoldersOn, where a test can
+        // reach them. What is left here is the translation: a question becomes
+        // a dialog, and a step becomes a change to the screen.
+        //
+        // The steps arrive one at a time, so a game appears on the list before
+        // the next folder is asked about, which is how this has always
+        // behaved.
+        TakingFoldersOn.TheQuestions asking = new(
+            AddingThemSeparately,
+            LeavingItForItsGame,
+            (game, left) => WhatElseIsInThere.Ask(this, game, left),
+            WhicheverStartsIt);
+
+        foreach (TakingFoldersOn.WhatToDo step in new TakingFoldersOn(_disk, _reader).From(folders, asking))
         {
-            FolderListing listing = _disk.List(folder);
-
-            // Pointing at the folder that HOLDS the downloads rather than at
-            // one of them. Never refused, because a real game can have an
-            // installer buried in it too, and taking that whole is better than
-            // turning it away.
-            IReadOnlyList<string> inside = GamesInside.Of(listing);
-
-            if (inside.Count > 1)
+            switch (step)
             {
-                // Anything sitting loose in the folder belongs to none of the
-                // games inside it, so it belongs to the disc. Carried over
-                // rather than dropped, because taking a folder apart must not
-                // cost somebody a file.
-                string[] loose = [.. listing.AtTheTop.Select(file => System.IO.Path.Combine(folder, file.RelativePath))];
-
-                if (AddingThemSeparately(folder, inside, loose.Length))
-                {
-                    Add([.. inside.Select(each => System.IO.Path.Combine(folder, each))]);
-                    _screen.AlsoOnTheDisc(loose);
-                    continue;
-                }
-            }
-
-            switch (_reader.Read(listing))
-            {
-                case Outcome<GameFolder>.Ok(GameFolder game):
-                    // Something that installs onto a game, with no game. It
-                    // still goes on if somebody wants it to; it just must not
-                    // go on silently, because on the disc it becomes a game in
-                    // the menu and installing it does nothing.
-                    if (game.Installer is ListedFile installer
-                        && AddOn.LooksLikeOne(installer.Name)
-                        && LeavingItForItsGame(game))
-                    {
-                        break;
-                    }
-
-                    // What else was in there is asked about before the game
-                    // goes on the list, because the answer changes what the
-                    // game is.
-                    (GameFolder with, IReadOnlyList<LeftBehind> asAddOns) =
-                        WhatElseIsInThere.Ask(this, game, WhatWasLeftBehind.In(listing, game));
-
-                    _screen.Add(WhicheverStartsIt(with), asAddOns);
+                case TakingFoldersOn.WhatToDo.PutItOn(GameFolder game, IReadOnlyList<LeftBehind> asAddOns):
+                    _screen.Add(game, asAddOns);
                     break;
 
-                // Said here and now, about the one folder it is about, rather
-                // than kept for the bottom line. The bottom line is about what
-                // the disc will be; this is about a folder somebody just
-                // picked and can pick again.
-                case Outcome<GameFolder>.No refused:
-                    Explain(refused.Refusal);
+                case TakingFoldersOn.WhatToDo.AlsoOnTheDisc(IReadOnlyList<string> paths):
+                    _screen.AlsoOnTheDisc(paths);
+                    break;
+
+                case TakingFoldersOn.WhatToDo.Explain(Refusal refusal):
+                    Explain(refusal);
                     break;
             }
         }
@@ -905,14 +878,8 @@ public partial class MainWindow : Window
     /// window then says out loud.
     /// </para>
     /// </remarks>
-    private GameFolder WhicheverStartsIt(GameFolder game)
-    {
-        if (game.LauncherCandidates.Count < 2)
-        {
-            return game;
-        }
-
-        return PickOne.From(
+    private GameFolder WhicheverStartsIt(GameFolder game) =>
+        PickOne.From(
             this,
             $"Which file starts {game.Name}?",
             "Nothing is guessed here. A disc whose only button runs the wrong file is worse than one that "
@@ -921,7 +888,6 @@ public partial class MainWindow : Window
             file => file.RelativePath) is ListedFile chosen
             ? game with { LauncherCandidates = [chosen] }
             : game;
-    }
 
     private bool AddingThemSeparately(string folder, IReadOnlyList<string> inside, int loose) =>
         WorthAsking.Ask(

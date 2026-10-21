@@ -3806,6 +3806,35 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void The_window_does_something_about_every_kind_of_step()
+    {
+        // TakingFoldersOn decides what to do and the window does it. Every
+        // kind of step it can answer with has to be handled, because a kind
+        // the window quietly ignores is work silently thrown away: dropping
+        // AlsoOnTheDisc would lose the files somebody was promised go on the
+        // disc either way, and nothing else would notice.
+        //
+        // Read off disk, because nothing in this project can reference the
+        // code behind.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        Type[] kinds = [.. typeof(TakingFoldersOn.WhatToDo).GetNestedTypes()
+            .Where(each => each.IsSubclassOf(typeof(TakingFoldersOn.WhatToDo)))];
+
+        // Three today. The count is asserted so a fourth cannot arrive and be
+        // handled nowhere while this still reads as covering everything.
+        Assert.Equal(3, kinds.Length);
+
+        foreach (Type kind in kinds)
+        {
+            Assert.Contains(
+                $"TakingFoldersOn.WhatToDo.{kind.Name}(",
+                code,
+                StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void The_window_really_asks_which_file_starts_a_game()
     {
         // Nothing asked at all, and the menu ran a game only when a folder
@@ -3817,16 +3846,22 @@ public class TheMainWindowWithoutAWindow
         Assert.True(from >= 0, "Nothing asks which file starts a folder of game files.");
 
         string asking = code[from..];
-        asking = asking[..asking.IndexOf(Environment.NewLine + "    }", StringComparison.Ordinal)];
+        asking = asking[..asking.IndexOf(";" + Environment.NewLine, StringComparison.Ordinal)];
 
-        // Only with something to choose between, and the answer narrows the
-        // candidates to the one chosen, which is all the menu looks at.
-        Assert.Contains("game.LauncherCandidates.Count < 2", asking, StringComparison.Ordinal);
+        // The dialog, and an answer that narrows the candidates to the one
+        // chosen, which is all the menu looks at.
         Assert.Contains("PickOne.From(", asking, StringComparison.Ordinal);
         Assert.Contains("LauncherCandidates = [chosen]", asking, StringComparison.Ordinal);
 
-        // And it is on the path a game really takes.
-        Assert.Contains("_screen.Add(WhicheverStartsIt(with), asAddOns)", code, StringComparison.Ordinal);
+        // And it is really handed to the thing that decides when to ask.
+        //
+        // WHEN to ask used to be checked here as well, as the text
+        // "LauncherCandidates.Count < 2" sitting in this method. It has moved
+        // into TakingFoldersOn, where Fewer_than_two_and_nobody_is_asked runs
+        // it rather than reading it. This guard is weaker than it was on
+        // purpose: a real test took the part worth having.
+        Assert.Contains("TakingFoldersOn.TheQuestions asking = new(", code, StringComparison.Ordinal);
+        Assert.Contains("WhicheverStartsIt);", code, StringComparison.Ordinal);
     }
 
     [Fact]
