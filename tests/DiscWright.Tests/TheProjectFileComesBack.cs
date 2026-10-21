@@ -186,7 +186,7 @@ public class TheProjectFileComesBack
         new(AProject(),
             new DiscLayout([new PlannedDisc(1, [], 0), new PlannedDisc(2, [], 0)], 700_000_000, 1),
             new PlannedDisc(disc, [], 0),
-            @"F:\out\disc D" + disc,
+            wrote.AStageAt(@"F:\out\disc D" + disc),
             wrote);
 
     private static DiscProject AProject() => new(

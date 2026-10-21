@@ -77,6 +77,22 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : I
                     ? into
                     : System.IO.Path.Combine(into, Named(output, disc, taken));
 
+                // Made before anything is written into it, the way the builder
+                // empties each disc's folder before that disc's first step.
+                // The comment above said the discs below go in folders "made
+                // fresh" and nothing made them: emptying the root creates the
+                // root, and every disc after the first was a path nothing had
+                // brought into being.
+                //
+                // It took an icon to show. An icon is the only thing that sits
+                // at the root of a disc; everything else goes into AUTORUN or
+                // ARTWORK, and making one of those makes the disc's folder on
+                // the way. So previewing a set threw, and only for somebody
+                // who had chosen an icon. Reported from the window as "Could
+                // not find a part of the path ... HOLLOW KNIGHT
+                // D2(backslash)HOLLOWKNIGHT2.ico".
+                writer.MakeFolder(folder);
+
                 BuildContext context = new(forThisOne, output.Layout, disc, folder, writer);
 
                 // The artwork and the music first, and not only the menu.

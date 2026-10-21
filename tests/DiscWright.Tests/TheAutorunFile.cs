@@ -166,7 +166,7 @@ public class TheAutorunFile
             new DiscProject("HOLLOW KNIGHT", [], new DiscOptions()),
             new DiscLayout(discs, 1_000_000, 0),
             discs[disc - 1],
-            @"C:\stage",
+            wrote.AStageAt(@"C:\stage"),
             wrote);
     }
 }

@@ -322,6 +322,86 @@ public class SeeingTheMenuFirst
     }
 
     [Fact]
+    public void Previews_a_set_whose_discs_have_an_icon()
+    {
+        RecordingWriter wrote = new();
+        PicturesThatRead pictures = new() { Beside = wrote };
+
+        // Reported from the running program: "Could not find a part of the
+        // path ...\HOLLOW KNIGHT D2\HOLLOWKNIGHT2.ico". Every disc after the
+        // first was given a folder of its own in the path and nothing ever
+        // made it, so the first thing written into it threw.
+        //
+        // It took an icon to show. Everything else on a disc goes into a
+        // subfolder, and making AUTORUN makes the disc's folder on the way;
+        // the icon is the one thing that sits at the root, so it is the one
+        // thing that needs the root to be there already.
+        Outcome<IReadOnlyList<string>> went = new APreviewOfTheMenu(wrote, pictures)
+            .Write(ASetOfTwo() with { Artwork = new DiscArtwork(IconPath: @"C:\art\hk.png") },
+                Media.Cd, TheSizeOf, Look);
+
+        Assert.IsType<Outcome<IReadOnlyList<string>>.Ok>(went);
+
+        // One icon per disc, each in its own disc's folder, each named for
+        // its own number so Explorer cannot cache one over the other.
+        Assert.Equal(
+            [
+                System.IO.Path.Combine(Look, "HOLLOWKNIGHT1.ico"),
+                System.IO.Path.Combine(Look, "HOLLOW KNIGHT D2", "HOLLOWKNIGHT2.ico")
+            ],
+            pictures.Icons);
+    }
+
+    // The rig itself, because a net nobody has tested is a net nobody should
+    // lean on. These two are why the preview bug above can only happen once:
+    // the fakes now refuse what the disk refuses, so the next thing that
+    // writes into nowhere fails in a test rather than in front of somebody.
+    // Planting a fault that disables the picture check survived everything
+    // else in this file, which is exactly what an untested guard looks like.
+
+    [Fact]
+    public void The_rig_refuses_a_file_written_where_no_folder_was_made()
+    {
+        RecordingWriter wrote = new();
+
+        DirectoryNotFoundException went = Assert.Throws<DirectoryNotFoundException>(
+            () => wrote.WriteText(System.IO.Path.Combine(Look, "nowhere", "a file.txt"), "anything"));
+
+        Assert.Contains("Could not find a part of the path", went.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_rig_refuses_a_picture_written_where_no_folder_was_made()
+    {
+        RecordingWriter wrote = new();
+        PicturesThatRead pictures = new() { Beside = wrote };
+
+        Assert.Throws<DirectoryNotFoundException>(
+            () => pictures.WriteIcon(@"C:\art\hk.png", System.IO.Path.Combine(Look, "nowhere", "d.ico")));
+
+        // And accepts it once something has made the folder, or it would be a
+        // guard that refuses everything and proves nothing.
+        wrote.MakeFolder(System.IO.Path.Combine(Look, "nowhere"));
+        pictures.WriteIcon(@"C:\art\hk.png", System.IO.Path.Combine(Look, "nowhere", "d.ico"));
+
+        Assert.Single(pictures.Icons);
+    }
+
+    [Fact]
+    public void Makes_a_folder_for_every_disc_it_previews()
+    {
+        RecordingWriter wrote = new();
+
+        Previewing(wrote, ASetOfTwo());
+
+        // Said as its own guard rather than left to the icon to discover.
+        // The folder is the preview's job whatever happens to go in it, and
+        // the next thing that writes to a disc's root will not come with a
+        // bug report attached.
+        Assert.Contains(System.IO.Path.Combine(Look, "HOLLOW KNIGHT D2"), wrote.Folders);
+    }
+
+    [Fact]
     public void Shows_the_manual_and_the_extras_on_the_disc_that_has_them()
     {
         RecordingWriter wrote = new();
@@ -458,7 +538,7 @@ public class SeeingTheMenuFirst
     }
 
     private static IReadOnlyList<string> Previewing(RecordingWriter wrote, DiscProject project) =>
-        new APreviewOfTheMenu(wrote, new PicturesThatRead())
+        new APreviewOfTheMenu(wrote, new PicturesThatRead { Beside = wrote })
             .Write(project, Media.Cd, TheSizeOf, Look) is Outcome<IReadOnlyList<string>>.Ok(var where)
             ? where
             : throw new Xunit.Sdk.XunitException("the preview refused");
@@ -642,9 +722,18 @@ public class SeeingTheMenuFirst
     }
 
     /// <summary>Pictures that can all be read, which is the ordinary case.</summary>
+    /// <remarks>
+    /// Given the writer beside it, it refuses to put a picture into a folder
+    /// nobody made, which is what the disk does. Pictures reach the same
+    /// folders as everything else through a different port, so a fake that
+    /// never asked was the one way left to write into nowhere and be believed.
+    /// </remarks>
     private sealed class PicturesThatRead : IImages
     {
         internal string? Refuse { get; init; }
+
+        /// <summary>The writer making the folders these go into, when there is one.</summary>
+        internal RecordingWriter? Beside { get; init; }
 
         public ImageFacts Read(string path) =>
             Refuse is null ? new ImageFacts(true, 512, 512, null) : new ImageFacts(false, 0, 0, Refuse);
@@ -653,9 +742,27 @@ public class SeeingTheMenuFirst
 
         internal List<string> Backgrounds { get; } = [];
 
-        public void WriteIcon(string source, string destination) => Icons.Add(destination);
+        public void WriteIcon(string source, string destination)
+        {
+            MustBeSomewhere(destination);
+            Icons.Add(destination);
+        }
 
-        public void WriteBackground(string source, string destination, int width, int height, bool asIs) =>
+        public void WriteBackground(string source, string destination, int width, int height, bool asIs)
+        {
+            MustBeSomewhere(destination);
             Backgrounds.Add(destination);
+        }
+
+        private void MustBeSomewhere(string path)
+        {
+            string? folder = System.IO.Path.GetDirectoryName(path);
+
+            if (Beside is not null && folder is not null && !Beside.ThereIsAFolderAt(folder))
+            {
+                throw new DirectoryNotFoundException(
+                    $"Could not find a part of the path '{path}'. Nothing made {folder}.");
+            }
+        }
     }
 }

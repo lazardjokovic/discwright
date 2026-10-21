@@ -111,7 +111,7 @@ public sealed class CheckingEveryFile : IDisposable
             new DiscProject("HOLLOW KNIGHT", [], new DiscOptions(Checksums: checksums)),
             new DiscLayout([disc], 1_000_000, 0),
             disc,
-            _stage,
+            wrote.AStageAt(_stage),
             wrote);
     }
 }
