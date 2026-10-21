@@ -127,6 +127,61 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// <summary>Whether it has anything under it.</summary>
     public bool HasThingsInside => _inside.Count > 0;
 
+    /// <summary>How many rows sit above it: nought for a game.</summary>
+    public int HowDeep => _above is null ? 0 : _above.HowDeep + 1;
+
+    /// <summary>
+    /// How much room the name is given, so that what follows the name starts
+    /// at the same place on every row.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A tree indents a row by its depth, and the row is laid out left to
+    /// right from wherever it was indented to, so a file three folders down
+    /// had its size nearly sixty pixels right of a game's. Four depths on the
+    /// window meant four columns of numbers and no way to compare any of them,
+    /// which is a list of sizes that cannot be read down.
+    /// </para>
+    /// <para>
+    /// Taking the indent back off the name is what fixes it: the name is the
+    /// one thing on the row that can lose a little width without losing
+    /// anything, because it already trims and says itself in full on hover.
+    /// </para>
+    /// <para>
+    /// <strong>Pixels, in a view model, on purpose.</strong> Nothing may
+    /// reference the window project, so a number that lives in the window is a
+    /// number no test can ask about, and this one is the whole of whether the
+    /// sizes line up. It is here for the same reason <see cref="HowBig"/> and
+    /// <see cref="InFull"/> are.
+    /// </para>
+    /// </remarks>
+    public double HowWideTheNameIs =>
+        Math.Max(TheLeastANameGets, TheNameGets - (HowDeep * EachLevelIndentsBy));
+
+    /// <summary>What the name gets on a row that is not indented at all.</summary>
+    private const double TheNameGets = 250;
+
+    /// <summary>
+    /// How far a tree pushes a row in for each level it is down, in pixels.
+    /// </summary>
+    /// <remarks>
+    /// Measured rather than remembered. Four rows nested one inside the next,
+    /// laid out by WPF with the template it gives a tree row and nothing of
+    /// ours, put their headers at 22, 41, 60 and 79: nineteen a level.
+    /// </remarks>
+    private const double EachLevelIndentsBy = 19;
+
+    /// <summary>
+    /// What the name keeps however deep the row is.
+    /// </summary>
+    /// <remarks>
+    /// Thirteen folders down the sum above reaches nothing, and a width of
+    /// less than nothing is not a width WPF will take. Past that depth the
+    /// sizes stop lining up, which is the small loss, rather than the window
+    /// falling over, which is not.
+    /// </remarks>
+    private const double TheLeastANameGets = 60;
+
     /// <summary>
     /// Whether it goes on the disc. Nothing, for a folder with some of its
     /// contents left out.

@@ -691,7 +691,7 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
-    public void Remove_wakes_up_for_a_picked_row_and_for_an_unticked_one()
+    public void Remove_wakes_up_for_a_picked_row_and_for_nothing_else()
     {
         MakeADisc window = New();
         window.Add(AGame("The Witcher", 500));
@@ -702,8 +702,59 @@ public class TheMainWindowWithoutAWindow
         window.WhatIsSelected = null;
         Assert.False(window.CanTakeSomethingOff);
 
+        // It used to wake for this too, and took everything unticked when it
+        // was pressed. One button, two meanings, and which one somebody got
+        // depended on whether a row happened to be picked.
         window.WhatGoesOnIt[0].IsOn = false;
-        Assert.True(window.CanTakeSomethingOff);
+        Assert.False(window.CanTakeSomethingOff);
+    }
+
+    [Fact]
+    public void The_button_for_what_is_left_off_is_there_only_when_something_is()
+    {
+        MakeADisc window = New();
+        Assert.Null(window.WhatTakingTheLeftOffOnesSays);
+
+        window.Add(AGame("The Witcher", 500, parts: 3));
+        Assert.Null(window.WhatTakingTheLeftOffOnesSays);
+
+        AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
+
+        // The count is in the words, because the gesture takes several things
+        // at once and none of them is picked, so the button is the only place
+        // it can be seen before it happens.
+        rows[0].IsOn = false;
+        Assert.Equal("Remove the 1 thing left off", window.WhatTakingTheLeftOffOnesSays);
+
+        rows[1].IsOn = false;
+        Assert.Equal("Remove the 2 things left off", window.WhatTakingTheLeftOffOnesSays);
+
+        rows[0].IsOn = true;
+        rows[1].IsOn = true;
+        Assert.Null(window.WhatTakingTheLeftOffOnesSays);
+    }
+
+    [Fact]
+    public void Says_when_the_button_for_what_is_left_off_should_come_and_go()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("The Witcher", 500, parts: 2));
+
+        List<string> told = [];
+        window.PropertyChanged += (_, which) =>
+        {
+            if (which.PropertyName == nameof(MakeADisc.WhatTakingTheLeftOffOnesSays))
+            {
+                told.Add(which.PropertyName);
+            }
+        };
+
+        // A property nobody is told about leaves the button saying whatever it
+        // said the first time the window read it, which for this one is a
+        // button offering to remove things that are back on.
+        window.WhatGoesOnIt[0].EveryThing().First().IsOn = false;
+
+        Assert.NotEmpty(told);
     }
 
     [Fact]
@@ -1940,9 +1991,10 @@ public class TheMainWindowWithoutAWindow
             thing.IsOn = false;
         }
 
-        // A game with nothing of it on the disc is not on the disc. Remove
-        // takes the whole branch rather than leaving an empty one behind.
-        window.TakeOff(null);
+        // A game with nothing of it on the disc is not on the disc. Taking
+        // off what is left off takes the whole branch rather than leaving an
+        // empty one behind.
+        window.TakeOffWhatIsLeftOff();
 
         Assert.Empty(window.Games);
         Assert.Empty(window.WhatGoesOnIt);
@@ -3679,7 +3731,7 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
-    public void Remove_clears_out_everything_unticked_when_nothing_is_chosen()
+    public void The_other_button_clears_out_everything_left_off()
     {
         MakeADisc window = New();
         window.Add(AGame("One", 900, parts: 2));
@@ -3688,12 +3740,31 @@ public class TheMainWindowWithoutAWindow
         rows[0].IsOn = false;
         int was = rows.Length;
 
-        window.TakeOff(null);
+        window.TakeOffWhatIsLeftOff();
 
         // The tidying-up gesture after deciding what is not going on.
         // Unticked is "not on this disc, still listed"; removed is gone.
         Assert.Equal(was - 1, window.WhatGoesOnIt[0].EveryThing().Count());
         Assert.All(window.WhatGoesOnIt[0].EveryThing(), each => Assert.True(each.IsOn));
+    }
+
+    [Fact]
+    public void Remove_with_nothing_picked_takes_nothing_off()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900, parts: 2));
+
+        AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
+        rows[0].IsOn = false;
+        int was = rows.Length;
+
+        // This used to clear out everything unticked, which is a different
+        // thing wearing the same button. It is still one press away, on a
+        // button that says what it will take.
+        window.TakeOff(null);
+
+        Assert.Equal(was, window.WhatGoesOnIt[0].EveryThing().Count());
+        Assert.False(window.WhatGoesOnIt[0].EveryThing().First().IsOn);
     }
 
     [Fact]

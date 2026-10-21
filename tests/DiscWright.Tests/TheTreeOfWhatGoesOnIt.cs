@@ -261,6 +261,74 @@ public class TheTreeOfWhatGoesOnIt
         Assert.Equal(1, told);
     }
 
+    // --------------------------------------------- the sizes read down
+
+    [Fact]
+    public void Every_row_knows_how_far_the_tree_has_pushed_it_in()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        AThingOnTheDisc data = tree.Inside.Single(each => each.Name == "data");
+        AThingOnTheDisc textures = data.Inside.Single();
+        AThingOnTheDisc skin = textures.Inside.Single();
+
+        // A game is the top of its own tree, whatever else is on the window.
+        Assert.Equal(0, tree.HowDeep);
+        Assert.Equal(1, data.HowDeep);
+        Assert.Equal(2, textures.HowDeep);
+        Assert.Equal(3, skin.HowDeep);
+    }
+
+    [Fact]
+    public void Every_size_starts_at_the_same_place_however_deep_the_row_is()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        AThingOnTheDisc[] everyDepth =
+        [
+            tree,
+            tree.Inside.Single(each => each.Name == "data"),
+            tree.Inside.Single(each => each.Name == "data").Inside.Single(),
+            tree.Inside.Single(each => each.Name == "data").Inside.Single().Inside.Single()
+        ];
+
+        // This is the whole point of the property, said as the window sees it:
+        // wherever a row has been pushed to, the name gives that much back, so
+        // what follows the name begins in one column and the figures can be
+        // read down. Four rows on the window at four depths meant four columns
+        // of numbers and no way to compare any of them.
+        double[] whereTheNameEnds =
+        [
+            .. everyDepth.Select(row => (row.HowDeep * 19) + row.HowWideTheNameIs)
+        ];
+
+        Assert.Equal([250, 250, 250, 250], whereTheNameEnds);
+    }
+
+    [Fact]
+    public void A_name_keeps_some_room_however_deep_the_row_is()
+    {
+        AThingOnTheDisc bottom = new("bottom", 10, null, "bottom");
+        AThingOnTheDisc deep = bottom;
+        List<AThingOnTheDisc> everyRow = [bottom];
+
+        for (int above = 0; above < 20; above++)
+        {
+            deep = new AThingOnTheDisc($"folder {above}", 0, null, $"folder {above}").Holding(deep);
+            everyRow.Add(deep);
+        }
+
+        // Twenty folders deep the subtraction has gone through nothing and out
+        // the other side, and a width of less than nothing is not a width WPF
+        // will take. Past thirteen levels the sizes stop lining up, which is
+        // the small loss. The window falling over is not.
+        Assert.Equal(20, bottom.HowDeep);
+        Assert.Equal(60, bottom.HowWideTheNameIs);
+        Assert.All(
+            everyRow,
+            row => Assert.True(row.HowWideTheNameIs > 0, $"{row.Name} was given {row.HowWideTheNameIs}"));
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static GameFolder AGameWithFolders() => new(

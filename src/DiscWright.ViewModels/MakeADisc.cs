@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -1319,15 +1319,52 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
     /// <summary>Whether anything would come off if Remove were pressed.</summary>
     /// <remarks>
-    /// Remove takes what is selected, or everything unticked when nothing is,
-    /// so there is nothing for it to do on an empty list, and nothing for it
-    /// to do when everything is ticked and no row is picked. A button that
-    /// does nothing when pressed should look like one.
+    /// <para>
+    /// Exactly what is picked, so a button that does nothing when pressed
+    /// looks like one.
+    /// </para>
+    /// <para>
+    /// <strong>It used to mean two things.</strong> Remove took what was
+    /// selected, or everything unticked when nothing was, so which of the two
+    /// somebody got depended on whether a row happened to be picked, and
+    /// nothing on the window said so. Clearing out what has been turned off
+    /// is still worth having and now has a button of its own, wearing words
+    /// that say what it will do.
+    /// </para>
     /// </remarks>
-    public bool CanTakeSomethingOff =>
-        !IsWorking
-        && (WhatIsSelected is not null
-            || _tree.SelectMany(game => game.EveryThing()).Any(each => each.IsOn == false));
+    public bool CanTakeSomethingOff => !IsWorking && WhatIsSelected is not null;
+
+    /// <summary>
+    /// What the button that clears out the unticked rows says, or nothing when
+    /// there are none and there is no such button.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The count is in the words on purpose. The gesture takes several things
+    /// at once and none of them is selected, so the only place it can be seen
+    /// beforehand is the button, and a button called Remove with a count
+    /// somewhere else is the button this one was split out of.
+    /// </para>
+    /// <para>
+    /// Said the way <see cref="WhatIsLeftOff"/> says it, because they are
+    /// about the same rows and reading "left off" in one place and "turned
+    /// off" in the other would sound like two different things.
+    /// </para>
+    /// </remarks>
+    public string? WhatTakingTheLeftOffOnesSays
+    {
+        get
+        {
+            int left = _tree.SelectMany(game => game.EveryThing()).Count(each => each.IsOn == false);
+
+            return left switch
+            {
+                0 => null,
+                1 => "Remove the 1 thing left off",
+                _ => $"Remove the {left} things left off"
+            };
+        }
+    }
 
     /// <summary>The row the tree has picked, or nothing.</summary>
     private AThingOnTheDisc? _selected;
@@ -2341,8 +2378,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Takes things off the list: the one that is selected, or everything
-    /// that has been unticked when nothing is.
+    /// Takes one thing off the list: the one that is picked, and nothing else.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -2351,10 +2387,16 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// is <em>gone</em>, and comes back only by adding the folder again.
     /// </para>
     /// <para>
-    /// With nothing selected it clears out everything unticked, which is the
-    /// tidying-up gesture after deciding what is not going on. The first
-    /// version of this took the whole game whatever was selected, so clicking
-    /// a file and pressing Remove emptied the window.
+    /// <strong>Nothing picked takes nothing off.</strong> This used to clear
+    /// out everything unticked in that case, which made one button two
+    /// buttons: which of the two somebody got depended on whether a row
+    /// happened to be selected, and the window never said as much. That
+    /// gesture is worth keeping and is <see cref="TakeOffWhatIsLeftOff"/>,
+    /// which has a button of its own that says what it will take.
+    /// </para>
+    /// <para>
+    /// The first version of this took the whole game whatever was selected,
+    /// so clicking a file and pressing Remove emptied the window.
     /// </para>
     /// </remarks>
     public void TakeOff(AThingOnTheDisc? selected)
@@ -2362,44 +2404,55 @@ public sealed class MakeADisc : INotifyPropertyChanged
         if (selected is not null)
         {
             TakeOffJustThis(selected);
+            TakeTheTicksAsTheAnswer();
         }
-        else
+    }
+
+    /// <summary>
+    /// Takes off everything that has been turned off, and nothing that has not.
+    /// </summary>
+    /// <remarks>
+    /// The tidying-up gesture after deciding what is not going on the disc.
+    /// Its own thing rather than what Remove falls back to, so that it can be
+    /// offered only when there is something for it to do and can say how much
+    /// that is before it is pressed.
+    /// </remarks>
+    public void TakeOffWhatIsLeftOff()
+    {
+        // Which games are wholly off, by position, settled BEFORE
+        // anything comes off. Two things made the loop below find nothing
+        // every time, so a game with every row unticked stayed on the
+        // list as a name with no files and no size.
+        //
+        // EveryThing walks down to the rows and never yields the branch
+        // itself, so taking the last row out of a game leaves an empty
+        // branch, and an empty branch has nothing to be all-off about and
+        // answers that it is on. And taking a row off rebuilds that
+        // branch as a new object, so a branch remembered from before is
+        // no longer the one in the tree and cannot be found in it.
+        //
+        // A position survives both.
+        List<int> wholly =
+        [
+            .. _tree
+                .Select((branch, at) => (branch, at))
+                .Where(both => both.branch.IsOn == false)
+                .Select(both => both.at)
+        ];
+
+        foreach (AThingOnTheDisc off in
+            _tree.SelectMany(game => game.EveryThing()).Where(each => each.IsOn == false).ToList())
         {
-            // Which games are wholly off, by position, settled BEFORE
-            // anything comes off. Two things made the loop below find nothing
-            // every time, so a game with every row unticked stayed on the
-            // list as a name with no files and no size.
-            //
-            // EveryThing walks down to the rows and never yields the branch
-            // itself, so taking the last row out of a game leaves an empty
-            // branch, and an empty branch has nothing to be all-off about and
-            // answers that it is on. And taking a row off rebuilds that
-            // branch as a new object, so a branch remembered from before is
-            // no longer the one in the tree and cannot be found in it.
-            //
-            // A position survives both.
-            List<int> wholly =
-            [
-                .. _tree
-                    .Select((branch, at) => (branch, at))
-                    .Where(both => both.branch.IsOn == false)
-                    .Select(both => both.at)
-            ];
+            TakeOffJustThis(off);
+        }
 
-            foreach (AThingOnTheDisc off in
-                _tree.SelectMany(game => game.EveryThing()).Where(each => each.IsOn == false).ToList())
+        // A game with every row unticked is itself unticked, and goes.
+        // Highest first, so taking one off does not move the next.
+        foreach (int at in wholly.OrderByDescending(each => each))
+        {
+            if (at < _games.Count)
             {
-                TakeOffJustThis(off);
-            }
-
-            // A game with every row unticked is itself unticked, and goes.
-            // Highest first, so taking one off does not move the next.
-            foreach (int at in wholly.OrderByDescending(each => each))
-            {
-                if (at < _games.Count)
-                {
-                    Remove(_games[at]);
-                }
+                Remove(_games[at]);
             }
         }
 
@@ -2830,13 +2883,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // over an empty one. Everything that changes the list ends here, so
         // this is where they belong.
         Tell(nameof(WhatIsLeftOff));
+        Tell(nameof(WhatTakingTheLeftOffOnesSays));
         Tell(nameof(WhyThatMatters));
         Tell(nameof(APatchWithNothingToPatch));
 
-        // And whether Remove would take anything, which turns on the same
-        // ticks. It was announced when a row was picked and nowhere else, so
-        // unticking something left Remove grey over a list with something to
-        // remove, and it only lit once a row happened to be clicked.
+        // And whether Remove would take anything. It goes by what is picked,
+        // and what is picked is gone the moment the list is rebuilt under it.
         Tell(nameof(CanTakeSomethingOff));
 
         // Adding a game is what makes previewing possible, and this is the

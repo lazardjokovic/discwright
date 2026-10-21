@@ -239,12 +239,29 @@
                             Style="{StaticResource Ordinary}"
                             Click="AddAGame"
                             AutomationProperties.AutomationId="AddAGame" />
+                    <!-- Exactly what is picked in the list, and nothing else.
+                         It used to take everything unticked when nothing was
+                         picked, so which of the two somebody got depended on
+                         whether a row happened to be selected and nothing
+                         here said so. -->
                     <Button Content="Remove"
                             IsEnabled="{Binding CanTakeSomethingOff}"
                             Style="{StaticResource Ordinary}"
                             Margin="8,0,0,0"
                             Click="TakeItOff"
                             AutomationProperties.AutomationId="TakeItOff" />
+                    <!-- The other half of what Remove used to be, with its own
+                         words and its own count, and here at all only when
+                         there is something for it to take. A button that says
+                         how much it will remove cannot be the surprise the one
+                         button was. -->
+                    <Button Content="{Binding WhatTakingTheLeftOffOnesSays}"
+                            Visibility="{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}"
+                            IsEnabled="{Binding NothingIsRunning}"
+                            Style="{StaticResource Ordinary}"
+                            Margin="8,0,0,0"
+                            Click="TakeOffWhatIsLeftOff"
+                            AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
                 </StackPanel>
 
                 <Border Background="{StaticResource Panel}"
@@ -262,13 +279,32 @@
                         </Grid.RowDefinitions>
 
                         <!-- Said once, on an empty list, and gone the moment
-                             there is anything to show. -->
-                        <TextBlock Style="{StaticResource Aside}"
-                                   Margin="16"
-                                   VerticalAlignment="Top"
-                                   Visibility="{Binding Games.Count, Converter={StaticResource WhenNone}}"
-                                   AutomationProperties.AutomationId="NothingYet"
-                                   Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in." />
+                             there is anything to show.
+
+                             With the button beside the words rather than only
+                             at the foot of the column. On a window with
+                             nothing on it yet, the one thing there is to do
+                             sat under a large empty box, which is the wrong
+                             way round: the words that ask for a game and the
+                             button that takes one belong together. The one
+                             below stays, because once there is a list it
+                             means add another and belongs under the list. -->
+                        <StackPanel VerticalAlignment="Top"
+                                    Visibility="{Binding Games.Count, Converter={StaticResource WhenNone}}">
+                            <TextBlock Style="{StaticResource Aside}"
+                                       Margin="16,16,16,0"
+                                       TextWrapping="Wrap"
+                                       AutomationProperties.AutomationId="NothingYet"
+                                       Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in." />
+
+                            <Button Content="Add a game"
+                                    HorizontalAlignment="Left"
+                                    Margin="16,12,16,0"
+                                    IsEnabled="{Binding NothingIsRunning}"
+                                    Style="{StaticResource Ordinary}"
+                                    Click="AddAGame"
+                                    AutomationProperties.AutomationId="AddTheFirstGame" />
+                        </StackPanel>
 
                         <!-- A tree, because a game is not one thing.
                              It is an installer, its parts, whatever folders
@@ -331,7 +367,15 @@
                                                   IsChecked="{Binding IsOn, Mode=TwoWay}"
                                                   AutomationProperties.Name="{Binding Name}" />
 
-                                        <TextBlock Width="250"
+                                        <!-- Narrowed by however far the tree has
+                                             already pushed this row in, which
+                                             is what puts every size in one
+                                             column. Worked out by the row
+                                             rather than here, because nothing
+                                             may reference this project and a
+                                             number in this file is a number
+                                             no test can ask about. -->
+                                        <TextBlock Width="{Binding HowWideTheNameIs}"
                                                    VerticalAlignment="Center"
                                                    Text="{Binding Name}"
                                                    TextWrapping="NoWrap"
@@ -348,7 +392,17 @@
                                                    Margin="8,0,0,0"
                                                    Text="{Binding What}" />
 
+                                        <!-- Up against its own right edge, so
+                                             the figures end under each other
+                                             and the column can be read down.
+                                             Left aligned, "4.37 GB" and
+                                             "817 bytes" start together and end
+                                             nowhere near each other, and
+                                             comparing two rows meant reading
+                                             both of them in full. -->
                                         <TextBlock Style="{StaticResource Aside}"
+                                                   Width="76"
+                                                   TextAlignment="Right"
                                                    VerticalAlignment="Center"
                                                    Margin="4,0,2,0"
                                                    Text="{Binding HowBig}" />

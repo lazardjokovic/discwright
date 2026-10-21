@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Xml.Linq;
+using DiscWright.ViewModels;
 
 namespace DiscWright.Tests;
 
@@ -568,6 +570,8 @@ public class TheWindowsMarkup
     [InlineData("Menu")]
     [InlineData("Checksums")]
     [InlineData("LegacyFileSystems")]
+    [InlineData("AddTheFirstGame")]
+    [InlineData("TakeOffWhatIsLeftOff")]
     public void Nothing_that_changes_the_disc_can_be_touched_while_one_is_being_made(string which)
     {
         // Only the buttons went dead. Every box, tick and dropdown stayed
@@ -898,6 +902,178 @@ public class TheWindowsMarkup
 
         Assert.NotNull(row.Attribute("Width"));
         Assert.Equal("CharacterEllipsis", (string?)row.Attribute("TextTrimming"));
+    }
+
+    [Fact]
+    public void The_room_a_name_gets_is_decided_by_the_row_and_not_by_this_file()
+    {
+        XElement name = Row()
+            .Descendants(Xaml + "TextBlock")
+            .First(each => (string?)each.Attribute("Text") == "{Binding Name}");
+
+        // A fixed width here is what put a file three folders down nearly
+        // sixty pixels right of a game, and nothing in this file can be asked
+        // a question by a test: nothing may reference this project. The row
+        // works it out, so the arithmetic that lines the sizes up is somewhere
+        // a test can reach.
+        Assert.Equal("{Binding HowWideTheNameIs}", (string?)name.Attribute("Width"));
+    }
+
+    [Fact]
+    public void Every_size_in_the_list_ends_in_the_same_column()
+    {
+        XElement size = Row()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => (string?)each.Attribute("Text") == "{Binding HowBig}");
+
+        // Both halves are needed and neither is enough. Without a width it is
+        // as wide as the figure in it and the next row's figure starts
+        // somewhere else; without the alignment the figures start together and
+        // end nowhere near each other, which is a column that cannot be read
+        // down.
+        Assert.NotNull(size.Attribute("Width"));
+        Assert.Equal("Right", (string?)size.Attribute("TextAlignment"));
+    }
+
+    [Fact]
+    public void A_row_of_the_list_cannot_be_wider_than_the_list()
+    {
+        // Worked out from the window rather than stated, so widening a column
+        // or adding one fails here instead of on somebody's screen with the
+        // size clipped off the edge. The list cannot scroll sideways, by
+        // deliberate choice, so anything past the edge is simply gone.
+        double window = Figure(Window().Attribute("Width"));
+        double[] margin = [.. ((string)Window().Element(Xaml + "Grid")!.Attribute("Margin")!)
+            .Split(',').Select(each => double.Parse(each, CultureInfo.InvariantCulture))];
+
+        XElement columns = Window()
+            .Descendants(Xaml + "Grid")
+            .First(grid => (string?)grid.Attribute("Grid.Row") == "1");
+
+        double besideTheList = columns
+            .Element(Xaml + "Grid.ColumnDefinitions")!
+            .Elements(Xaml + "ColumnDefinition")
+            .Select(each => (string?)each.Attribute("Width"))
+            .Where(each => each != "*")
+            .Sum(each => double.Parse(each!, CultureInfo.InvariantCulture));
+
+        double list = window - margin[0] - margin[2] - besideTheList;
+
+        // What the list spends on itself before a row gets any of it: the
+        // panel's border, the tree's padding, the column a tree keeps for the
+        // little arrow, and the scrollbar that appears the moment there are
+        // more rows than fit.
+        const double TheBorder = 2;
+        const double ThePadding = 8;
+        const double TheArrow = 19;
+        const double TheScrollbar = 17;
+
+        double room = list - TheBorder - ThePadding - TheArrow - TheScrollbar;
+
+        // Everything a row declares for itself, and the box, which takes the
+        // size WPF gives it.
+        const double TheTickBox = 16;
+
+        double row = TheTickBox + Row()
+            .Descendants()
+            .Sum(each => WideAs(each.Attribute("Width")) + Across(each.Attribute("Margin")));
+
+        Assert.True(
+            row <= room,
+            $"A row declares {row} and the list has {room} to give it.");
+    }
+
+    /// <summary>
+    /// How wide a part of the row is, the widest of them included.
+    /// </summary>
+    /// <remarks>
+    /// The name does not state a width, it asks the row for one, and leaving
+    /// it out of the sum would leave out the widest column on the row and make
+    /// this a guard over the small ones.
+    /// </remarks>
+    private static double WideAs(XAttribute? width) =>
+        (string?)width == "{Binding HowWideTheNameIs}"
+            ? new AThingOnTheDisc("a name", 0, null, "a name").HowWideTheNameIs
+            : Figure(width);
+
+    /// <summary>A width or nought for something that does not state one.</summary>
+    private static double Figure(XAttribute? width) =>
+        width is null || !double.TryParse((string)width, CultureInfo.InvariantCulture, out double how)
+            ? 0
+            : how;
+
+    /// <summary>What a margin takes left and right of the thing it is on.</summary>
+    private static double Across(XAttribute? margin)
+    {
+        if (margin is null)
+        {
+            return 0;
+        }
+
+        double[] sides =
+        [
+            .. ((string)margin).Split(',').Select(each => double.Parse(each, CultureInfo.InvariantCulture))
+        ];
+
+        return sides.Length == 2 ? sides[0] * 2 : sides[0] + sides[2];
+    }
+
+    /// <summary>One row of the list of what goes on the disc.</summary>
+    private static XElement Row() => Window().Descendants(Xaml + "HierarchicalDataTemplate").Single();
+
+    [Fact]
+    public void The_empty_list_asks_for_a_game_where_the_asking_is()
+    {
+        // One reading of the file, because the two are held against each
+        // other and two readings are two different objects.
+        XElement window = Window();
+
+        XElement asked = window.Descendants(Xaml + "TextBlock").Single(each => IdOf(each) == "NothingYet");
+        XElement button = window.Descendants(Xaml + "Button").Single(each => IdOf(each) == "AddTheFirstGame");
+
+        // On a window with nothing on it yet, the one thing there was to do
+        // sat under a large empty box with the words that ask for a game at
+        // the top of it. They belong together, so they are in one thing that
+        // comes and goes as one.
+        Assert.Equal("Add a game", (string?)button.Attribute("Content"));
+        Assert.Same(asked.Parent, button.Parent);
+
+        XElement both = asked.Parent!;
+
+        Assert.Equal(
+            "{Binding Games.Count, Converter={StaticResource WhenNone}}",
+            (string?)both.Attribute("Visibility"));
+
+        // And the words themselves no longer carry it, or they would hide
+        // while the button stayed.
+        Assert.Null(asked.Attribute("Visibility"));
+
+        // The one under the list stays, because once there is a list it means
+        // add another and belongs under the list.
+        Assert.NotNull(window.Descendants(Xaml + "Button").SingleOrDefault(each => IdOf(each) == "AddAGame"));
+    }
+
+    [Fact]
+    public void Remove_means_what_is_picked_and_the_rest_has_its_own_button()
+    {
+        XElement[] buttons = [.. Window().Descendants(Xaml + "Button")];
+
+        XElement remove = buttons.Single(each => IdOf(each) == "TakeItOff");
+        XElement theRest = buttons.Single(each => IdOf(each) == "TakeOffWhatIsLeftOff");
+
+        // One button meant two things and which one somebody got depended on
+        // whether a row happened to be picked. Remove is now the selection and
+        // nothing else, and goes grey the moment there is no selection.
+        Assert.Equal("Remove", (string?)remove.Attribute("Content"));
+        Assert.Equal("{Binding CanTakeSomethingOff}", (string?)remove.Attribute("IsEnabled"));
+
+        // The other half says how many it will take, in words from the screen
+        // rather than typed here, and is on the window at all only when there
+        // is something for it to take.
+        Assert.Equal("{Binding WhatTakingTheLeftOffOnesSays}", (string?)theRest.Attribute("Content"));
+        Assert.Equal(
+            "{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}",
+            (string?)theRest.Attribute("Visibility"));
     }
 
     [Fact]

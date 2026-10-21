@@ -200,9 +200,12 @@ public partial class MainWindow : Window
 
     private void TakeItOff(object sender, RoutedEventArgs e)
     {
-        // Whatever is selected, or everything unticked when nothing is.
+        // Whatever is picked, and nothing when nothing is.
         _screen.TakeOff(_screen.WhatIsSelected);
     }
+
+    private void TakeOffWhatIsLeftOff(object sender, RoutedEventArgs e) =>
+        _screen.TakeOffWhatIsLeftOff();
 
     /// <summary>
     /// Erases a disc and nothing else.
