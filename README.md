@@ -68,4 +68,4 @@ So it is worth saying twice: **a secret committed here cannot be taken back late
 
 ## Licence
 
-To match v1, which is MIT.
+MIT, the same as v1, and the text is in [LICENSE](LICENSE) rather than in this sentence. It said "to match v1" for as long as there was no file to match it with, which is a licence nobody can actually rely on: GitHub reported this repository as having none, and a repository that goes public carrying an intention instead of a licence is one nobody may use.
