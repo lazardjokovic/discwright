@@ -1515,7 +1515,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _music = Tidy(value);
             Tell(nameof(Music));
-            Tell(nameof(WhatElseIsChosen));
             Told();
         }
     }
@@ -1528,7 +1527,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _manual = Tidy(value);
             Tell(nameof(Manual));
-            Tell(nameof(WhatElseIsChosen));
             Told();
         }
     }
@@ -1541,7 +1539,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _extrasFolder = Tidy(value);
             Tell(nameof(ExtrasFolder));
-            Tell(nameof(WhatElseIsChosen));
             Told();
         }
     }
@@ -1550,8 +1547,21 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// What has been chosen, in a line, for the window that does not show it.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// So that somebody can see at a glance whether their disc has a
     /// background on it without opening anything.
+    /// </para>
+    /// <para>
+    /// <strong>The files carried loose are in here although nobody chose
+    /// them in that panel.</strong> They arrive when a folder holding several
+    /// games is taken apart, and they were the one thing that reached the
+    /// disc with nothing on the window ever mentioning it again: the manual,
+    /// the extras, the tune and the artwork are all named here, and the total
+    /// above counts the tree alone, so a file sitting loose was carried in
+    /// silence. The line is about what the disc will have on it rather than
+    /// about which panel it came from, and a file nobody can see is a file
+    /// nobody can decide about.
+    /// </para>
     /// </remarks>
     public string WhatElseIsChosen
     {
@@ -1564,6 +1574,19 @@ public sealed class MakeADisc : INotifyPropertyChanged
             if (Music is not null) { got.Add("music"); }
             if (Manual is not null) { got.Add("a manual"); }
             if (ExtrasFolder is not null) { got.Add("extras"); }
+
+            // His own words for them, from the question that asks about taking
+            // a folder apart: "The one file sitting loose in it goes on the
+            // disc either way." Said the same way here, so the line answers
+            // the question that dialog raised rather than introducing a second
+            // name for the same thing.
+            if (_loose.Count > 0)
+            {
+                got.Add(_loose.Count == 1
+                    ? "a file sitting loose"
+                    : $"{_loose.Count} files sitting loose");
+            }
+
             if (Cover is not null || DiscFace is not null) { got.Add("artwork to print"); }
 
             return got.Count switch
@@ -1598,8 +1621,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         foreach (string named in new[]
         {
-            nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace),
-            nameof(WhatElseIsChosen)
+            nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace)
         })
         {
             Tell(named);
@@ -1625,13 +1647,24 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// Whether there is anything on this screen worth losing.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Asked by the window before it offers to throw it away. A screen with
     /// nothing on it needs no confirming, and being asked to confirm nothing
     /// teaches somebody to click through the question that matters.
+    /// </para>
+    /// <para>
+    /// The files carried loose count. Every other extra was in this list and
+    /// they were not, so a window holding nothing but a file sitting loose
+    /// had Start a new disc grey, and starting again threw that file away
+    /// anyway: the button said there was nothing to lose and then lost
+    /// something. Found by the walk the moment the line above learned to name
+    /// them, which is the whole argument for saying a thing out loud.
+    /// </para>
     /// </remarks>
     public bool HasAnythingOnIt =>
         _games.Count > 0 || Label.Length > 0 || Made is not null || _artwork is not null
-        || _manual is not null || _extrasFolder is not null || _music is not null;
+        || _manual is not null || _extrasFolder is not null || _music is not null
+        || _loose.Count > 0;
 
     /// <summary>
     /// Whether starting again would change anything.
@@ -2811,6 +2844,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // the window read out of it the first time, which for this one was a
         // button that stayed dead for ever.
         Tell(nameof(CanPreview));
+
+        // Here, rather than in the four setters that used to announce it one
+        // at a time. It names the files carried loose now, and those arrive
+        // through AlsoOnTheDisc and go through StartAgain and OpenThis, none
+        // of which is a setter with a line to add. Four places that announce
+        // a line is four places to forget the fifth, which is the shape of
+        // every bug the walk has found on this window. All of them end here.
+        Tell(nameof(WhatElseIsChosen));
     }
 
     private void Change<T>(ref T field, T value, [CallerMemberName] string? name = null)

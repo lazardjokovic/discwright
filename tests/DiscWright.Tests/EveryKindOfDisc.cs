@@ -309,15 +309,17 @@ public class EveryKindOfDisc
             return "The preview is live with no set to preview.";
         }
 
-        // What is chosen is said, and only what is chosen.
-        // Loose files are not in that line and that is right: they are
-        // not chosen in the panel it describes, they are carried over when
-        // a folder holding several games is taken apart, and the question
-        // about doing that says they go on either way. They are on the disc
-        // and counted in the plan, and the window never mentions them again.
-        bool nothingFromThePanel = wanted.Artwork == "none" && wanted.Extras is "none" or "loose";
+        // Everything on the disc is said, and only what is on it.
+        // The loose files are in that line now. This invariant used to allow
+        // them out of it, on the reasoning that they are not chosen in the
+        // panel it describes: they are carried over when a folder holding
+        // several games is taken apart. That reasoning held for the panel and
+        // not for the disc. They went on it, the total above counts the tree
+        // alone, and so they were the one thing aboard that the window never
+        // mentioned anywhere.
+        bool nothingOnIt = wanted.Artwork == "none" && wanted.Extras == "none";
 
-        if (nothingFromThePanel
+        if (nothingOnIt
             != (screen.WhatElseIsChosen == "Nothing chosen. A disc with none of it is still a disc."))
         {
             return $"Artwork is {wanted.Artwork} and extras are {wanted.Extras}, "

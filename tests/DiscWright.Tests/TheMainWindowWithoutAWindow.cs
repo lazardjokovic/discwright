@@ -2143,6 +2143,114 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal("Nothing chosen. A disc with none of it is still a disc.", window.WhatElseIsChosen);
     }
 
+    // ------------------------------------------ the files carried loose
+    //
+    // Nobody chooses these in that panel. They arrive when a folder holding
+    // several games is taken apart, and the question about doing that promises
+    // that the one file sitting loose in it goes on the disc either way. It
+    // then went on with nothing on the window saying so anywhere: the total
+    // above counts the tree alone, and every other extra is named in this line
+    // while these were not. They were the only thing aboard a disc that the
+    // window never mentioned.
+
+    [Fact]
+    public void Says_so_when_a_file_is_carried_loose()
+    {
+        MakeADisc window = New();
+
+        window.AlsoOnTheDisc([@"C:\downloads\read me.txt"]);
+
+        Assert.Equal("This disc has a file sitting loose.", window.WhatElseIsChosen);
+    }
+
+    [Theory]
+    [InlineData(1, "This disc has a file sitting loose.")]
+    [InlineData(2, "This disc has 2 files sitting loose.")]
+    [InlineData(3, "This disc has 3 files sitting loose.")]
+    public void Says_how_many_are_carried_loose(int many, string says)
+    {
+        MakeADisc window = New();
+
+        window.AlsoOnTheDisc(Enumerable.Range(0, many).Select(at => $@"C:\downloads\{at}.txt"));
+
+        Assert.Equal(says, window.WhatElseIsChosen);
+    }
+
+    [Fact]
+    public void A_file_carried_loose_is_named_beside_everything_else()
+    {
+        MakeADisc window = New();
+
+        window.Manual = @"C:\extras\how.txt";
+        window.ExtrasFolder = @"C:\extras";
+        window.Cover = @"C:\art\cover.png";
+        window.AlsoOnTheDisc([@"C:\downloads\read me.txt"]);
+
+        // Before the artwork, because the artwork is the one thing named in
+        // this line that gets printed rather than going on the disc.
+        Assert.Equal(
+            "This disc has a manual, extras, a file sitting loose and artwork to print.",
+            window.WhatElseIsChosen);
+    }
+
+    [Fact]
+    public void Carrying_a_file_loose_says_the_line_changed()
+    {
+        MakeADisc window = New();
+        List<string> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        window.AlsoOnTheDisc([@"C:\downloads\read me.txt"]);
+
+        // A line nobody is told about keeps whatever the window read out of it
+        // the first time, which for this one is the sentence about an empty
+        // disc, sitting over a disc with a file on it.
+        Assert.Contains(nameof(MakeADisc.WhatElseIsChosen), told);
+    }
+
+    [Fact]
+    public void A_file_carried_loose_is_something_to_lose()
+    {
+        MakeADisc window = New();
+
+        window.AlsoOnTheDisc([@"C:\downloads\read me.txt"]);
+
+        // Every other extra was in HasAnythingOnIt and these were not, so a
+        // window holding nothing but a loose file had Start a new disc grey,
+        // and pressing it anyway threw the file away: the button said there
+        // was nothing to lose and then lost something. The walk found it the
+        // moment the line above learned to name them.
+        Assert.True(window.HasAnythingOnIt);
+        Assert.True(window.CanStartAgain);
+    }
+
+    [Fact]
+    public void Starting_again_takes_the_loose_files_with_it()
+    {
+        MakeADisc window = New();
+        window.AlsoOnTheDisc([@"C:\downloads\read me.txt"]);
+
+        window.StartAgain();
+
+        Assert.Equal("Nothing chosen. A disc with none of it is still a disc.", window.WhatElseIsChosen);
+        Assert.False(window.HasAnythingOnIt);
+    }
+
+    [Fact]
+    public void A_disc_opened_again_says_what_it_carries_loose()
+    {
+        MakeADisc window = New();
+
+        // That fixture carries an icon, a manual and one loose file, so this is
+        // the whole round trip: it went into the project file, and it is named
+        // on the window when the project comes back.
+        window.OpenThis(AReopenedDisc());
+
+        Assert.Equal(
+            "This disc has an icon, a manual and a file sitting loose.",
+            window.WhatElseIsChosen);
+    }
+
     // ------------------------------------------ what the disc will start
 
     [Fact]
