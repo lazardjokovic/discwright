@@ -1,0 +1,141 @@
+name: checks
+
+# Until now there was nothing here, and the only thing standing between a branch
+# and main was somebody remembering to run the suite by hand. That worked
+# because one person did it every time. It is not a check, it is a habit, and a
+# habit cannot fail a pull request.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+# Read-only token: nothing here writes to the repository.
+permissions:
+  contents: read
+
+# A new push to the same branch makes the previous run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suite:
+    runs-on: windows-latest
+
+    # Every project here targets net10.0-windows except Core, Menu and Staging,
+    # and parts of the suite run cscript and subst, so this is Windows because
+    # the code is, not because the runner happened to be.
+    #
+    # A hung job is not a failed job: without a timeout it holds a runner until
+    # the six-hour default. The suite takes eight seconds.
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 10.0.x rather than the exact patch in global.json. That file pins
+      # 10.0.401 with rollForward latestFeature, which is a floor and not a
+      # ceiling, so the newest 10.0 SDK satisfies it. Asking for the exact patch
+      # would turn the day it leaves the download index into a red main.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # Printed before anything is built, because the first question about a
+      # failure here is always which SDK ran.
+      - name: Which SDK
+        run: dotnet --info
+
+      # Release, the way a published app is built, and not Debug. Directory.Build.props
+      # sets TreatWarningsAsErrors and EnforceCodeStyleInBuild, so this step is
+      # the analyser and the naming rules in .editorconfig as well as the
+      # compiler. There is no separate lint job because there is nothing left
+      # for one to do.
+      - name: Build
+        run: dotnet build DiscWright.slnx -c Release --nologo
+
+      # --no-build, so what is tested is what was just built rather than a
+      # second build nobody looked at.
+      #
+      # Nothing is excluded. The tests that need a real drive, a kit, the
+      # fixtures or GitHub itself read an environment variable and leave
+      # themselves out when it is unset, which is every run here:
+      #
+      #     DISCWRIGHT_CHECK_A_DISC   a disc in a real drive
+      #     DISCWRIGHT_SPEND_A_DISC   permission to write to one
+      #     DISCWRIGHT_KIT            discs built by hand
+      #     DISCWRIGHT_FIXTURES       the folders Build-TheFixtures.ps1 makes
+      #     DISCWRIGHT_ASK_GITHUB     a real call to the releases API
+      #     DISCWRIGHT_SOAK           ten thousand random sequences, not two hundred
+      #
+      # The window suite that needs a desktop is not here to exclude: the test
+      # project deliberately does not reference DiscWright.App, so nothing in it
+      # can open a window. What covers the window is source reading and markup
+      # reading, which need the checkout and nothing else.
+      - name: The suite
+        run: >
+          dotnet test tests/DiscWright.Tests/DiscWright.Tests.csproj
+          -c Release --no-build --nologo
+          --logger "trx;LogFileName=suite.trx"
+          --results-directory artifacts/test-results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: artifacts/test-results/*.trx
+          if-no-files-found: ignore
+
+  # The app is shipped as one self-contained file, and that is a different build
+  # from the one above: trimming, compression and the native libraries folded
+  # into the bundle. It has gone wrong once already, which is why
+  # packaging\Build-TheInstaller.ps1 carries a guard against wrapping an exe plus
+  # eight loose DLLs. A packaging step exercised only at release time is one that
+  # breaks at release time, when the tag is already pushed.
+  #
+  # This is the publish and that guard, without Inno Setup, so it says whether
+  # the thing a release is made of can still be made.
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish one file
+        run: >
+          dotnet publish src/DiscWright.App/DiscWright.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o artifacts/payload --nologo
+
+      # The same two things the installer script checks, for the same reason it
+      # checks them rather than trusting the publish above: an exe plus loose
+      # DLLs is what Smart App Control refuses one assembly at a time, and it
+      # looks like a working build until somebody with it on tries to run it.
+      - name: It really is one file
+        shell: pwsh
+        run: |
+          $exe = 'artifacts/payload/DiscWright.App.exe'
+          if (-not (Test-Path $exe)) {
+              Write-Host "::error::The publish produced no exe at $exe"
+              exit 1
+          }
+
+          $loose = @(Get-ChildItem artifacts/payload -Filter *.dll)
+          if ($loose.Count) {
+              Write-Host "::error::$($loose.Count) loose DLL(s), so the bundle did not bundle: $($loose.Name -join ', ')"
+              exit 1
+          }
+
+          $mb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
+          Write-Host "one file, $mb MB, version $((Get-Item $exe).VersionInfo.FileVersion)"

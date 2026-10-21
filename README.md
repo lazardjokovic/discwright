@@ -32,13 +32,15 @@ Nothing is finished. The solution is laid out, the dependency rule is guarded by
 
 ```
 dotnet build
-dotnet test                              # 72 of 81 here, see below
-tools\Invoke-TestsOnTheVM.ps1            # all 81, on the test VM
+dotnet test                              # all 1153, about thirteen seconds
+tools\Invoke-TestsOnTheVM.ps1            # all 1153, on the test VM
 ```
 
-**Nine tests cannot run on the development machine.** Smart App Control is on and enforcing there, and it refuses to load our own freshly built, unsigned `DiscWright.Platform.dll`: `An Application Control policy has blocked this file (0x800711C7)`. Everything that stays inside `Core` is unaffected, which is most of the suite and all of the fast part.
+Every pull request runs that same suite on a hosted Windows runner, in Release, and publishes the one self-contained file the app ships as. `.github/workflows/checks.yml` says what it runs, what leaves itself out, and why.
 
-So the whole suite runs on the VM, where Smart App Control is in Evaluation and audits without blocking. The runner sends the **working tree**, not the last commit, because the point of a test loop is to run what is on disk this second. It takes a `-Filter` that goes straight through to `dotnet test`, and it needs the VM password once per terminal:
+**Nine of these used to be impossible on the development machine.** Smart App Control was on and enforcing there, and it refused to load our own freshly built, unsigned `DiscWright.Platform.dll`: `An Application Control policy has blocked this file (0x800711C7)`. Everything that stayed inside `Core` was unaffected, which was most of the suite and all of the fast part. It has been off here since 2026-10-16 and the whole suite runs on both machines now. The single-file publish stays exactly as it is, because somebody who has it on meets all of that.
+
+The VM is still where a long run goes, because it is not this desktop. The runner sends the **working tree**, not the last commit, because the point of a test loop is to run what is on disk this second. It takes a `-Filter` that goes straight through to `dotnet test`, and it needs the VM password once per terminal:
 
 ```
 $env:DISCWRIGHT_VM_PASSWORD = '...'
