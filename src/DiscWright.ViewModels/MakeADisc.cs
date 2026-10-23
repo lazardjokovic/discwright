@@ -207,7 +207,21 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// the plan this waits on rather than the whole of CanMakeIt.
     /// </para>
     /// </remarks>
-    public bool CanPreview => !IsWorking && _games.Count > 0 && _thePlanIsSound;
+    /// <remarks>
+    /// <para>
+    /// There is nothing here about there being a game, because a plan with no
+    /// games in it is not a sound plan: Reconsider says so in the one place
+    /// that decides it. Saying it twice is two things to keep in step, and a
+    /// mutation pass can prove the second one cannot be wrong, which is how
+    /// this came to be one condition shorter.
+    /// </para>
+    /// <para>
+    /// Somewhere to put the discs is deliberately not in it either. A preview
+    /// writes into a temporary folder of its own and has never needed that
+    /// one.
+    /// </para>
+    /// </remarks>
+    public bool CanPreview => !IsWorking && _thePlanIsSound;
 
     /// <summary>
     /// What to call the folder this project's preview goes in.
@@ -698,7 +712,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// nothing is not the same as being ready, and this told them it was ready
     /// until a real window was driven with nothing on the list.
     /// </remarks>
-    public bool CanMakeIt => WhyNot is null && Games.Count > 0 && OutputFolder.Length > 0 && !IsWorking;
+    /// <remarks>
+    /// Nothing here about somewhere to put it, because with nowhere to put it
+    /// WhyNot already says so, in words somebody can read and with the remedy
+    /// attached. The games are still counted: an empty window has no refusal
+    /// on purpose, since somebody who has not added a game yet has not done
+    /// anything wrong.
+    /// </remarks>
+    public bool CanMakeIt => WhyNot is null && Games.Count > 0 && !IsWorking;
 
     /// <summary>
     /// What the window can do about the refusal it is showing, or nothing.

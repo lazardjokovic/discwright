@@ -2780,6 +2780,287 @@ public class TheMainWindowWithoutAWindow
         return window;
     }
 
+    // ------------------------------------------- the window's own answers
+    //
+    // The buttons' own rules, the lines it starts with, and the things it says
+    // while it works. A mutation pass found these one at a time: the stateful
+    // walk cannot see them, because a rule about whether a button is alive
+    // reads the same before and after a step, and what a build says while it
+    // runs is gone by the time the step is over.
+
+    [Fact]
+    public void Will_not_offer_a_preview_until_there_is_a_plan_worth_previewing()
+    {
+        MakeADisc window = New();
+
+        // Nothing on it. A preview of nothing is a window opening on an empty
+        // menu, which tells somebody less than the button being dead.
+        Assert.False(window.CanPreview);
+
+        window.Add(AGame("A Game", 1000));
+        Assert.True(window.CanPreview);
+
+        // And a plan that cannot be made at all. One file bigger than the
+        // disc it is being written to is a refusal, not a menu.
+        window.Medium = Media.Cd;
+        window.Add(AGame("Far Too Big", 900_000_000));
+
+        Assert.NotNull(window.WhyNot);
+        Assert.False(window.CanPreview);
+    }
+
+    [Fact]
+    public async Task Will_not_offer_a_preview_while_it_is_building()
+    {
+        bool offeredDuring = true;
+        MakeADisc window = null!;
+
+        window = New(builder: new ABuilderThatLooksAtTheWindow(() => offeredDuring = window.CanPreview));
+
+        window.Add(AGame("A Game", 1000));
+        window.OutputFolder = @"C:\out";
+
+        await window.MakeIt();
+
+        // Previewing writes real files into a folder a build may be writing
+        // into at that moment.
+        Assert.False(offeredDuring, "it offered a preview in the middle of a build");
+        Assert.True(window.CanPreview);
+    }
+
+    [Fact]
+    public void Will_not_make_it_without_somewhere_to_put_it()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("A Game", 1000));
+
+        // An empty folder box is not a folder.
+        Assert.Equal(string.Empty, window.OutputFolder);
+        Assert.False(window.CanMakeIt);
+
+        window.OutputFolder = @"C:\out";
+        Assert.True(window.CanMakeIt);
+    }
+
+    [Fact]
+    public async Task Offers_an_erase_when_any_one_drive_holds_a_disc_worth_erasing()
+    {
+        // A blank DVD in one drive and somebody's used CD-RW in the other,
+        // which is this machine on an ordinary evening. One of the two is
+        // worth erasing, and one is all it takes.
+        MakeADisc window = New(drives: new ADvdAndAUsedCd());
+
+        await window.LookAtTheDrives();
+
+        Assert.True(window.CanErase);
+    }
+
+    [Fact]
+    public void Says_a_patch_has_nothing_to_patch_when_its_game_is_turned_off()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000), [APatch("setup_hollow_knight_hidden_dreams.exe")]);
+
+        // A second game with an add-on of its own, which is what makes this
+        // about the right game rather than about add-ons in general.
+        window.Add(AGame("Gothic", 1000), [APatch("setup_gothic_patch.exe")]);
+
+        Assert.Null(window.APatchWithNothingToPatch);
+
+        // Every row of the game off, and the add-on left on. Allowed, because
+        // this window refuses by explaining rather than by greying things out,
+        // and somebody may be making a disc of patches on purpose.
+        foreach (AThingOnTheDisc row in window.WhatGoesOnIt[0].EveryThing())
+        {
+            if (row.What != TheTreeOfWhatGoesOn.AnAddOn)
+            {
+                row.IsOn = false;
+            }
+        }
+
+        Assert.Equal(
+            "Hollow Knight is not on the disc, but its add-ons are. They will have nothing to install onto.",
+            window.APatchWithNothingToPatch);
+    }
+
+    [Fact]
+    public async Task Says_what_it_is_doing_and_how_far_through_while_it_builds()
+    {
+        List<string> said = [];
+        List<double> far = [];
+        MakeADisc window = null!;
+
+        // The builder waits for each report to be heard before it goes on,
+        // because Progress<T> hands them to the thread pool and a build this
+        // fast would be over before the window had listened.
+        ABuilderThatReportsAndWaits builder = new(() =>
+        {
+            lock (far)
+            {
+                return far.Contains(0.5);
+            }
+        });
+
+        window = New(builder: builder);
+
+        window.PropertyChanged += (sender, about) =>
+        {
+            if (about.PropertyName == nameof(MakeADisc.Doing) && window.Doing.Length > 0)
+            {
+                lock (said)
+                {
+                    said.Add(window.Doing);
+                }
+            }
+
+            if (about.PropertyName == nameof(MakeADisc.HowFar))
+            {
+                lock (far)
+                {
+                    far.Add(window.HowFar);
+                }
+            }
+        };
+
+        window.Add(AGame("A Game", 1000));
+        window.OutputFolder = @"C:\out";
+
+        await window.MakeIt();
+
+        // It says so before the first step reports anything, because a
+        // builder takes a moment to get going and a window saying nothing is
+        // a window that looks ignored.
+        Assert.Equal("Starting", said[0]);
+        Assert.Contains("step 1 of 2, copying the files", said);
+
+        // Half way is half way. The bar is the step over the steps, which is
+        // the only arithmetic on this window.
+        Assert.Contains(0.5, far);
+
+        Assert.Equal(string.Empty, window.Doing);
+        Assert.Equal(0, window.HowFar);
+    }
+
+    [Fact]
+    public void Hands_the_window_the_same_two_lists_every_time()
+    {
+        MakeADisc window = New();
+
+        // The window binds to each collection once and the collection raises
+        // its own changes. A new one on every read is a binding that shows
+        // what it showed first and never moves again, which is how the program
+        // came to build the right disc while showing an empty list.
+        Assert.Same(window.Games, window.Games);
+        Assert.Same(window.WhatGoesOnIt, window.WhatGoesOnIt);
+
+        window.Add(AGame("A Game", 1000));
+
+        Assert.Same(window.Games, window.Games);
+        Assert.Single(window.Games);
+    }
+
+    [Fact]
+    public void Starts_with_nothing_to_say()
+    {
+        MakeADisc window = New();
+
+        // A window that opens with a sentence under a button nobody has
+        // pressed is a window somebody has to read before they can start.
+        Assert.Equal(string.Empty, window.WhatItWillMake);
+        Assert.Equal(string.Empty, window.WhatSplittingWouldDo);
+        Assert.Equal(string.Empty, window.Doing);
+        Assert.Equal(string.Empty, window.WhatIsOnIt);
+        Assert.Null(window.WhatIsLeftOff);
+
+        // And no refusal either, because somebody who has not added a game
+        // has not done anything wrong. Which is why the buttons count the
+        // games themselves rather than reading a refusal that is not there.
+        Assert.Null(window.WhyNot);
+        Assert.False(window.CanMakeIt);
+        Assert.False(window.CanPreview);
+    }
+
+    [Fact]
+    public async Task Kills_the_buttons_while_it_erases_rather_than_afterwards()
+    {
+        List<string> happened = [];
+        MakeADisc window = New(drives: new ADvdAndAUsedCd());
+
+        window.PropertyChanged += (sender, about) =>
+        {
+            lock (happened)
+            {
+                happened.Add("told: " + about.PropertyName);
+
+                if (about.PropertyName == nameof(MakeADisc.Doing) && window.Doing.Length > 0)
+                {
+                    happened.Add("said: " + window.Doing);
+                }
+            }
+        };
+
+        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        // Erasing takes most of a minute. The buttons have to be dead for that
+        // minute, which means saying so before the erase starts rather than
+        // when it is over: the look at the drives afterwards announces all of
+        // this again, so a test that only asked whether it was ever said would
+        // be answered by the end of the job.
+        List<string> inOrder;
+
+        lock (happened)
+        {
+            inOrder = [.. happened];
+        }
+
+        int erasing = inOrder.FindIndex(each => each.StartsWith("said: erasing the", StringComparison.Ordinal));
+
+        Assert.True(erasing > 0, string.Join(" | ", inOrder));
+        Assert.Contains("told: " + nameof(MakeADisc.CanStartAgain), inOrder.GetRange(0, erasing));
+        Assert.Contains("told: " + nameof(MakeADisc.CanTakeSomethingOff), inOrder.GetRange(0, erasing));
+    }
+
+    /// <summary>A builder that lets a test look at the window mid build.</summary>
+    private sealed class ABuilderThatLooksAtTheWindow(Action look) : IBuildDiscs
+    {
+        public Task<Outcome<BuiltDiscs>> Build(
+            DiscProject project, Medium medium, string outputFolder,
+            IProgress<BuildProgress>? progress, CancellationToken ct)
+        {
+            look();
+
+            return Task.FromResult<Outcome<BuiltDiscs>>(
+                new BuiltDiscs([new BuiltDisc(project.Label, 1, 1, outputFolder, 1000)]));
+        }
+    }
+
+    /// <summary>
+    /// A builder that reports the way the pipeline does and waits for the
+    /// window to have heard it.
+    /// </summary>
+    private sealed class ABuilderThatReportsAndWaits(Func<bool> heardTheHalfWay) : IBuildDiscs
+    {
+        public Task<Outcome<BuiltDiscs>> Build(
+            DiscProject project, Medium medium, string outputFolder,
+            IProgress<BuildProgress>? progress, CancellationToken ct)
+        {
+            progress?.Report(new BuildProgress(1, 2, "copying the files"));
+
+            for (DateTime until = DateTime.UtcNow.AddSeconds(10);
+                 !heardTheHalfWay() && DateTime.UtcNow < until;)
+            {
+                Thread.Sleep(1);
+            }
+
+            Assert.True(heardTheHalfWay(), "the build reported and nothing heard it");
+
+            progress?.Report(new BuildProgress(2, 2, "writing the menu"));
+
+            return Task.FromResult<Outcome<BuiltDiscs>>(
+                new BuiltDiscs([new BuiltDisc(project.Label, 1, 1, outputFolder, 1000)]));
+        }
+    }
+
     private static MakeADisc New(
         IBuildDiscs? builder = null,
         IMakeImages? images = null,
