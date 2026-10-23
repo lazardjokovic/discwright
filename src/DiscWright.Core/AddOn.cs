@@ -33,6 +33,44 @@ public sealed partial record AddOn(int BelongsTo, string Path, string Name, long
     public const string Folder = "Add-ons";
 
     /// <summary>
+    /// The same add-ons after the game at that position has been taken off
+    /// the list: the ones belonging to it gone, and the ones after it moved
+    /// down by one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>An add-on remembers its game by where that game sits.</strong>
+    /// So taking a game out moves every game after it, and without this a
+    /// patch for the game that was removed quietly becomes a patch for the
+    /// next one along, which on the disc means a patch in the wrong game's
+    /// Add-ons folder and a button in the wrong game's menu.
+    /// </para>
+    /// <para>
+    /// Here rather than written out twice in the window, where it was the same
+    /// loop over two lists and a mutation pass found the shuffle survived a
+    /// thousand tests. The position is the only thing holding the two
+    /// together, so the sum that moves it is worth being able to ask about.
+    /// </para>
+    /// <para>
+    /// <strong>One fault planted here cannot be caught, and that is the right
+    /// answer rather than a missing test.</strong> Turning the
+    /// <c>&gt; which</c> below into <c>&gt;= which</c> changes nothing,
+    /// because the line above it has already taken out every add-on belonging
+    /// to the game that went, so nothing reaching the sum can be equal to it.
+    /// </para>
+    /// </remarks>
+    /// <param name="addOns">Every add-on, whichever game it belongs to.</param>
+    /// <param name="which">Where the game that has gone was sitting, from nought.</param>
+    public static IReadOnlyList<AddOn> AfterTheGameAt(IReadOnlyList<AddOn> addOns, int which) =>
+    [
+        .. addOns
+            .Where(addOn => addOn.BelongsTo != which)
+            .Select(addOn => addOn.BelongsTo > which
+                ? addOn with { BelongsTo = addOn.BelongsTo - 1 }
+                : addOn)
+    ];
+
+    /// <summary>
     /// What to call an add-on, worked out from its file name.
     /// </summary>
     /// <remarks>

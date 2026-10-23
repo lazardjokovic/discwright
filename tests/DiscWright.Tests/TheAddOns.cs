@@ -79,4 +79,59 @@ public class TheAddOns
 
     private static GameFolder AGame(string name) =>
         new(@"C:\games\" + name, GameKind.GogInstaller, name, name, null, [], [], null);
+
+    // ------------------------------- when a game is taken off the list
+
+    [Fact]
+    public void Follow_their_game_down_the_list_when_one_before_it_goes()
+    {
+        IReadOnlyList<AddOn> after = AddOn.AfterTheGameAt(ThreeGamesWorth, 0);
+
+        // An add-on remembers its game by where that game sits, so taking one
+        // out moves every game after it. Without this a patch for the game
+        // that went quietly becomes a patch for the next one along, which on
+        // the disc is a patch in the wrong game's Add-ons folder and a button
+        // in the wrong game's menu.
+        Assert.Equal<IEnumerable<int>>([0, 1, 1], after.Select(each => each.BelongsTo));
+        Assert.Equal<IEnumerable<string>>(["one for the second", "one for the third", "another for the third"],
+            after.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Go_with_the_game_they_belong_to()
+    {
+        IReadOnlyList<AddOn> after = AddOn.AfterTheGameAt(ThreeGamesWorth, 1);
+
+        // The one belonging to the game that went is gone, and the two after
+        // it have come down a place.
+        Assert.Equal<IEnumerable<int>>([0, 1, 1], after.Select(each => each.BelongsTo));
+        Assert.DoesNotContain("one for the second", after.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Leave_the_ones_in_front_of_it_where_they_are()
+    {
+        IReadOnlyList<AddOn> after = AddOn.AfterTheGameAt(ThreeGamesWorth, 2);
+
+        // The last game off the list, which moves nothing.
+        Assert.Equal<IEnumerable<int>>([0, 1], after.Select(each => each.BelongsTo));
+        Assert.Equal<IEnumerable<string>>(["one for the first", "one for the second"],
+            after.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Are_left_alone_when_the_game_that_went_had_none()
+    {
+        IReadOnlyList<AddOn> only = [new AddOn(0, @"C:\games\patch.exe", "one for the first", 100)];
+
+        Assert.Equal<IEnumerable<int>>([0], AddOn.AfterTheGameAt(only, 1).Select(each => each.BelongsTo));
+    }
+
+    private static readonly IReadOnlyList<AddOn> ThreeGamesWorth =
+    [
+        new AddOn(0, @"C:\games\patch.exe", "one for the first", 100),
+        new AddOn(1, @"C:\games\patch.exe", "one for the second", 100),
+        new AddOn(2, @"C:\games\patch.exe", "one for the third", 100),
+        new AddOn(2, @"C:\games\patch.exe", "another for the third", 100)
+    ];
 }

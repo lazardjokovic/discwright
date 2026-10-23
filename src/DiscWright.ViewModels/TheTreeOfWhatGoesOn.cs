@@ -253,4 +253,35 @@ public static class TheTreeOfWhatGoesOn
             int left => $"Remove the {left} things left off"
         };
 
+
+    /// <summary>
+    /// Where the games sit that are wholly turned off, counting from nought.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Positions rather than the rows themselves, and worked out before
+    /// anything comes off, because two things made the obvious loop find
+    /// nothing every time and leave a game with every row unticked sitting on
+    /// the list as a name with no files and no size.
+    /// </para>
+    /// <para>
+    /// <see cref="AThingOnTheDisc.EveryThing"/> walks down to the rows and
+    /// never yields the branch itself, so taking the last row out of a game
+    /// leaves an empty branch, and an empty branch has nothing to be all off
+    /// about and answers that it is on. And taking a row off rebuilds that
+    /// branch as a new object, so a branch remembered from before is no longer
+    /// the one in the tree and cannot be found in it.
+    /// </para>
+    /// <para>
+    /// A position survives both.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<int> WhichGamesAreWhollyOff(this IEnumerable<AThingOnTheDisc> tree) =>
+    [
+        .. tree
+            .Select((branch, at) => (branch, at))
+            .Where(both => both.branch.IsOn == false)
+            .Select(both => both.at)
+    ];
+
 }

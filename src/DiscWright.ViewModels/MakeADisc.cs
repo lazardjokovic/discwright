@@ -2189,26 +2189,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     public void TakeOffWhatIsLeftOff()
     {
-        // Which games are wholly off, by position, settled BEFORE
-        // anything comes off. Two things made the loop below find nothing
-        // every time, so a game with every row unticked stayed on the
-        // list as a name with no files and no size.
-        //
-        // EveryThing walks down to the rows and never yields the branch
-        // itself, so taking the last row out of a game leaves an empty
-        // branch, and an empty branch has nothing to be all-off about and
-        // answers that it is on. And taking a row off rebuilds that
-        // branch as a new object, so a branch remembered from before is
-        // no longer the one in the tree and cannot be found in it.
-        //
-        // A position survives both.
-        List<int> wholly =
-        [
-            .. _tree
-                .Select((branch, at) => (branch, at))
-                .Where(both => both.branch.IsOn == false)
-                .Select(both => both.at)
-        ];
+        // Settled before anything comes off, and by position rather than by
+        // row, for the two reasons written down where it is worked out.
+        IReadOnlyList<int> wholly = _tree.WhichGamesAreWhollyOff();
 
         foreach (AThingOnTheDisc off in
             _tree.SelectMany(game => game.EveryThing()).Where(each => each.IsOn == false).ToList())
@@ -2252,11 +2235,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
         else
         {
-            _asFound[at] = _asFound[at] with
-            {
-                Files = [.. _asFound[at].Files.Where(file =>
-                    !string.Equals(file.RelativePath, thing.ItsPath, StringComparison.OrdinalIgnoreCase))]
-            };
+            _asFound[at] = _asFound[at].Without(thing.ItsPath);
         }
 
         // Built again from what is left, which is the only way the tree and
@@ -2286,24 +2265,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _games.RemoveAt(which);
         _asFound.RemoveAt(which);
         _tree.RemoveAt(which);
-        _addOnsAsFound.RemoveAll(addOn => addOn.BelongsTo == which);
-        _addOns.RemoveAll(addOn => addOn.BelongsTo == which);
-
-        for (int at = 0; at < _addOnsAsFound.Count; at++)
-        {
-            if (_addOnsAsFound[at].BelongsTo > which)
-            {
-                _addOnsAsFound[at] = _addOnsAsFound[at] with { BelongsTo = _addOnsAsFound[at].BelongsTo - 1 };
-            }
-        }
-
-        for (int at = 0; at < _addOns.Count; at++)
-        {
-            if (_addOns[at].BelongsTo > which)
-            {
-                _addOns[at] = _addOns[at] with { BelongsTo = _addOns[at].BelongsTo - 1 };
-            }
-        }
+        // Both lists renumbered the same way, by the same sum, which is now
+        // one thing that can be asked rather than the same loop written twice.
+        Replace(_addOnsAsFound, AddOn.AfterTheGameAt(_addOnsAsFound, which));
+        Replace(_addOns, AddOn.AfterTheGameAt(_addOns, which));
 
         Reconsider();
     }
@@ -2444,6 +2409,18 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// on each other: a bigger disc can turn a refusal into a build, and a
     /// game removed can turn three discs into one.
     /// </remarks>
+    /// <summary>Puts a worked out list back into the one the window holds.</summary>
+    /// <remarks>
+    /// The list itself is kept rather than swapped, because it is a field the
+    /// rest of this class reads by reference and a new one would leave half of
+    /// it looking at the old.
+    /// </remarks>
+    private static void Replace<T>(List<T> what, IReadOnlyList<T> with)
+    {
+        what.Clear();
+        what.AddRange(with);
+    }
+
     private void Reconsider()
     {
         Worry = Label.Length == 0 ? null : DiscLabel.WhatWindowsWillMakeOfIt(Label, _machine.Encoding);

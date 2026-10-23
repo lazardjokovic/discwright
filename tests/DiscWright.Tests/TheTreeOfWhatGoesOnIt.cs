@@ -419,6 +419,80 @@ public class TheTreeOfWhatGoesOnIt
         Assert.Equal("Leaving off 2 things, 300 bytes.", new[] { tree }.WhatIsTurnedOff());
     }
 
+
+    // ---------------------------- a game with one of its files taken off
+
+    [Fact]
+    public void Loses_one_file_and_keeps_the_rest()
+    {
+        GameFolder left = AGameWithFolders().Without(@"data\textures\skin.pak");
+
+        Assert.Equal<IEnumerable<string>>(
+            ["setup.exe", "readme.txt"], left.Files.Select(each => each.RelativePath));
+
+        // And it is lighter by exactly that file.
+        Assert.Equal(1000, left.Bytes);
+    }
+
+    [Fact]
+    public void Loses_its_installer_when_that_is_what_was_taken_off()
+    {
+        GameFolder left = AGameWithFolders().Without("setup.exe");
+
+        // Allowed, because this program refuses by explaining rather than by
+        // greying things out, and the window says out loud that a disc without
+        // it will not install the game. The installer itself is still named,
+        // which is what WhyThatMatters reads to say so.
+        Assert.DoesNotContain("setup.exe", left.Files.Select(each => each.RelativePath));
+        Assert.NotNull(left.Installer);
+    }
+
+    [Fact]
+    public void Takes_the_file_off_whatever_case_the_path_is_written_in()
+    {
+        // Windows does not tell two paths apart by case, and neither does any
+        // other part of this program: the row somebody clicked and the file in
+        // the list behind it can disagree about it and still be the same file.
+        GameFolder left = AGameWithFolders().Without(@"DATA\TEXTURES\SKIN.PAK");
+
+        Assert.Equal<IEnumerable<string>>(
+            ["setup.exe", "readme.txt"], left.Files.Select(each => each.RelativePath));
+    }
+
+    [Fact]
+    public void Keeps_every_file_when_the_one_named_is_not_in_it()
+    {
+        Assert.Equal(3, AGameWithFolders().Without("nothing like it.txt").Files.Count);
+    }
+
+    // --------------------------------- which games are wholly turned off
+
+    [Fact]
+    public void Says_which_games_are_wholly_turned_off_by_where_they_sit()
+    {
+        AThingOnTheDisc one = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        AThingOnTheDisc two = TheTreeOfWhatGoesOn.For(ADeeperGame(), []);
+        AThingOnTheDisc three = TheTreeOfWhatGoesOn.For(AGameWithOneFile(), []);
+
+        two.IsOn = false;
+
+        // By position, because a branch remembered from before is rebuilt as
+        // a new object the moment a row comes off it, and an empty branch
+        // answers that it is on.
+        Assert.Equal<IEnumerable<int>>([1], new[] { one, two, three }.WhichGamesAreWhollyOff());
+    }
+
+    [Fact]
+    public void Says_nothing_is_wholly_off_when_one_row_of_a_game_is_still_on()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(ADeeperGame(), []);
+        tree.Inside.Single().Inside.First().IsOn = false;
+
+        // Half a game off is not a game off. It stays on the list with one
+        // thing less on it.
+        Assert.Empty(new[] { tree }.WhichGamesAreWhollyOff());
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static GameFolder AGameWithFolders() => new(

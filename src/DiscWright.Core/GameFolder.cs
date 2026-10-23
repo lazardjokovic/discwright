@@ -48,6 +48,26 @@ public sealed record GameFolder(
     public long Bytes => Files.Sum(file => file.Bytes);
 
     /// <summary>
+    /// The same game with one of its files taken off, by the path the file
+    /// has inside the folder.
+    /// </summary>
+    /// <remarks>
+    /// The installer is deliberately not treated as special. Leaving it off is
+    /// allowed, because this program refuses by explaining rather than by
+    /// greying things out, and the window says out loud that a disc without it
+    /// will not install the game.
+    /// </remarks>
+    public GameFolder Without(string relativePath) =>
+        this with
+        {
+            Files =
+            [
+                .. Files.Where(file =>
+                    !string.Equals(file.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase))
+            ]
+        };
+
+    /// <summary>
     /// The largest single file, which is what the ISO9660 ceiling is measured
     /// against and what decides whether one file is too big for a whole disc.
     /// </summary>
