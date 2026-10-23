@@ -78,7 +78,7 @@ public class BurningOneDiscAndWatchingIt
         // Said every time, even when it worked, because a drive that would not
         // take a listener and a drive that took one and said nothing both
         // leave a bar that never moved, and they are different faults.
-        Assert.Contains(nameof(MakeADisc.AboutTheImage), watched.Announced);
+        Assert.Contains(nameof(MakeADisc.AboutTheImage), watched.WhatWasAnnounced());
         Assert.Contains("reported", watched.Window.AboutTheImage ?? string.Empty, StringComparison.Ordinal);
 
         // And said as the writing finishes, not at the end of the whole job.
@@ -126,10 +126,10 @@ public class BurningOneDiscAndWatchingIt
         // told only at the end has every button dead for the whole burn and
         // then lit afterwards, which is right by accident.
         Assert.True(
-            watched.Announced.Count(each => each == nameof(MakeADisc.IsWorking)) >= 2,
+            watched.WhatWasAnnounced().Count(each => each == nameof(MakeADisc.IsWorking)) >= 2,
             "it did not say both that it had started and that it had stopped");
 
-        Assert.Contains(nameof(MakeADisc.HowTheDiscCameOut), watched.Announced);
+        Assert.Contains(nameof(MakeADisc.HowTheDiscCameOut), watched.WhatWasAnnounced());
     }
 
     [Fact]
@@ -210,7 +210,7 @@ public class BurningOneDiscAndWatchingIt
         // it read the first time until something tells it otherwise, which is
         // how a file Windows cannot decode sailed through the whole window and
         // failed at the end as "A generic error occurred in GDI+".
-        Assert.Contains(nameof(MakeADisc.WhyNotThatPicture), watched.Announced);
+        Assert.Contains(nameof(MakeADisc.WhyNotThatPicture), watched.WhatWasAnnounced());
     }
 
     [Fact]
@@ -220,7 +220,7 @@ public class BurningOneDiscAndWatchingIt
 
         Assert.True(watched.Window.ThatPictureIsUsable(@"C:\art\icon.png"));
         Assert.Null(watched.Window.WhyNotThatPicture);
-        Assert.Contains(nameof(MakeADisc.WhyNotThatPicture), watched.Announced);
+        Assert.Contains(nameof(MakeADisc.WhyNotThatPicture), watched.WhatWasAnnounced());
     }
 
     // ------------------------------------------------------------- the rig
@@ -265,7 +265,14 @@ public class BurningOneDiscAndWatchingIt
 
             Window.PropertyChanged += (sender, about) =>
             {
-                Announced.Add(about.PropertyName ?? string.Empty);
+                // Everything in here is written under a lock, because the
+                // drive's own progress reports arrive on the thread pool and a
+                // list written from two threads at once loses entries or
+                // throws.
+                lock (Announced)
+                {
+                    Announced.Add(about.PropertyName ?? string.Empty);
+                }
 
                 lock (Happened)
                 {
@@ -309,6 +316,15 @@ public class BurningOneDiscAndWatchingIt
 
         internal List<string> Announced { get; } = [];
 
+        /// <summary>What was announced, as a list nothing else is writing to.</summary>
+        internal List<string> WhatWasAnnounced()
+        {
+            lock (Announced)
+            {
+                return [.. Announced];
+            }
+        }
+
         /// <summary>
         /// Everything said and everything announced, in one list in the order
         /// it happened, for the questions that are about when rather than
@@ -334,7 +350,10 @@ public class BurningOneDiscAndWatchingIt
                 Far.Clear();
             }
 
-            Announced.Clear();
+            lock (Announced)
+            {
+                Announced.Clear();
+            }
 
             lock (Happened)
             {

@@ -251,6 +251,37 @@ public class SeeingTheMenuFirst
     }
 
     [Fact]
+    public void Forgets_the_last_preview_before_it_writes_the_next()
+    {
+        MakeADisc screen = TheScreen(new AMenuThenNothing());
+        screen.Add(AGame("Hollow Knight"));
+
+        screen.PreviewTheMenu(Look);
+        Assert.NotEmpty(screen.ThePreviews);
+
+        // Pressed again, and this time it cannot be written. The window must
+        // not go on offering last time's menu: those files have just been
+        // cleared out of that folder, so every one of them is a link to
+        // nothing.
+        screen.PreviewTheMenu(Look);
+
+        Assert.Empty(screen.ThePreviews);
+        Assert.NotNull(screen.ItWentWrong);
+    }
+
+    /// <summary>A preview that works once and refuses after that.</summary>
+    private sealed class AMenuThenNothing : IShowTheMenu
+    {
+        private int _asked;
+
+        public Outcome<IReadOnlyList<string>> Write(
+            DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
+            _asked++ == 0
+                ? (string[])[@"X:\one\menu.hta"]
+                : Refusals.ThereIsNothingToPutOnADisc();
+    }
+
+    [Fact]
     public void The_window_opens_all_of_them_rather_than_the_first()
     {
         // A set is previewed a disc at a time, in a window each, and the

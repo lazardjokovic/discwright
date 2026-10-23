@@ -363,7 +363,7 @@ public class TheWindowChecksItself
 
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(30);
+        int which = dice.Next(35);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -448,6 +448,23 @@ public class TheWindowChecksItself
             28 => new("erase a disc", desk => desk.EraseOne()),
 
             29 => new($"open a project with {(row % 3) + 1} games in it", desk => desk.OpenAProject(row)),
+
+            // Five more doors into the window. The last five added here killed
+            // sixteen faults between them without a test being written about
+            // any of them, because every one of these decides something and
+            // has to say so.
+            30 => new("clear out everything turned off",
+                desk => desk.Screen.TakeOffWhatIsLeftOff()),
+
+            31 => new("look at the menu it would make", desk => desk.PreviewIt()),
+
+            32 => new("ask whether there is a newer version",
+                desk => desk.Screen.CheckForANewVersion().GetAwaiter().GetResult()),
+
+            33 => new("look at the drives again",
+                desk => desk.Screen.LookAtTheDrives().GetAwaiter().GetResult()),
+
+            34 => new($"pick drive {row}, or none", desk => desk.PickTheDrive(row)),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -953,6 +970,22 @@ public class TheWindowChecksItself
                 CarryOnFromThere).GetAwaiter().GetResult();
         }
 
+        /// <summary>
+        /// Looks at the menu the disc would get, into a folder of the kind the
+        /// window would really use.
+        /// </summary>
+        internal void PreviewIt() => Screen.PreviewTheMenu(
+            System.IO.Path.Combine(@"C:\Temp", Screen.WhereAPreviewWouldGo));
+
+        /// <summary>
+        /// Picks one of the drives, or none, which is its own state rather
+        /// than the absence of one: the warnings that follow are different.
+        /// </summary>
+        internal void PickTheDrive(int which) =>
+            Screen.TheDrive = Screen.Drives.Count == 0 || which % (Screen.Drives.Count + 1) == 0
+                ? null
+                : Screen.Drives[(which - 1) % Screen.Drives.Count];
+
         internal void EraseOne() =>
             Screen.EraseADisc(WhicheverCouldBeErased).GetAwaiter().GetResult();
 
@@ -1042,7 +1075,7 @@ public class TheWindowChecksItself
             new NothingIsRemembered(),
             new ATrayThatShuts(),
             new NothingIsReleased(),
-            new NoPreview(),
+            new APreviewThatWorks(),
             new PicturesThatRead(),
             "2.0.0",
             _ => 1000,
@@ -1156,11 +1189,20 @@ public class TheWindowChecksItself
             Task.FromResult(new WhatWasReleased(null, null, "nobody asked"));
     }
 
-    private sealed class NoPreview : IShowTheMenu
+    /// <summary>
+    /// A preview that says where it put the menus, without writing any.
+    /// </summary>
+    /// <remarks>
+    /// It used to refuse everything, which meant pressing the button only ever
+    /// moved the refusal. The window has to say what it wrote as well.
+    /// </remarks>
+    private sealed class APreviewThatWorks : IShowTheMenu
     {
         public Outcome<IReadOnlyList<string>> Write(
             DiscProject project, Medium medium, Func<string, long> sizeOf, string into) =>
-            Refusals.ThereIsNothingToPutOnADisc();
+            project.Games.Count == 0
+                ? Refusals.ThereIsNothingToPutOnADisc()
+                : (string[])[System.IO.Path.Combine(into, "AUTORUN", "menu.hta")];
     }
 
     private sealed class PicturesThatRead : IImages

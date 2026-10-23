@@ -1714,10 +1714,21 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// It does nothing while a build or a burn is running. There is no sensible
     /// meaning for clearing the screen out from under a laser.
     /// </para>
+    /// <para>
+    /// <strong>And nothing at all when its own button is dead</strong>, which
+    /// is the rule every other button on this window keeps. There is nothing
+    /// on an empty disc to clear, and clearing it anyway took the refusal left
+    /// over from the last thing that went wrong off the screen, which is a
+    /// dead button quietly tidying away the only explanation somebody had.
+    /// </para>
+    /// <para>
+    /// Found by the walk, the first time it could reach a window that was
+    /// empty and still had something to say.
+    /// </para>
     /// </remarks>
     public void StartAgain()
     {
-        if (IsWorking)
+        if (!CanStartAgain)
         {
             return;
         }
@@ -2214,10 +2225,35 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // row, for the two reasons written down where it is worked out.
         IReadOnlyList<int> wholly = _tree.WhichGamesAreWhollyOff();
 
-        foreach (AThingOnTheDisc off in
-            _tree.SelectMany(game => game.EveryThing()).Where(each => each.IsOn == false).ToList())
+        // Gathered as a position and a path rather than as a row, for the
+        // same reason the games above are gathered as positions.
+        //
+        // Taking a row off rebuilds the branch it was in, so every row
+        // gathered before the first one went belongs to a branch the tree no
+        // longer holds, and TakeOffJustThis cannot find a branch that is not
+        // there any more: it returns, quietly, having done nothing. So two
+        // rows turned off came off one at a time, and the button that says
+        // "Remove the 2 things left off" took one of them off and left the
+        // other sitting there with its tick still clear.
+        //
+        // A position and a path survive the rebuild, because that is what the
+        // rebuild is built from.
+        List<(int At, string Path, bool AnAddOn)> going = [];
+
+        for (int at = 0; at < _tree.Count; at++)
         {
-            TakeOffJustThis(off);
+            foreach (AThingOnTheDisc thing in _tree[at].EveryThing())
+            {
+                if (thing.IsOn == false)
+                {
+                    going.Add((at, thing.ItsPath, thing.What == TheTreeOfWhatGoesOn.AnAddOn));
+                }
+            }
+        }
+
+        foreach ((int at, string path, bool anAddOn) in going)
+        {
+            TakeTheRowOff(at, path, anAddOn);
         }
 
         // A game with every row unticked is itself unticked, and goes.
@@ -2249,14 +2285,42 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         // One row out of a game. The game stays, carrying one thing less.
-        if (thing.What == TheTreeOfWhatGoesOn.AnAddOn)
+        TakeTheRowOff(at, thing.ItsPath, thing.What == TheTreeOfWhatGoesOn.AnAddOn);
+    }
+
+    /// <summary>
+    /// Takes one row off the game at that position, by the path the row has
+    /// inside it.
+    /// </summary>
+    /// <remarks>
+    /// By position and path rather than by row, so that it can be called
+    /// again after the branch has been rebuilt. A row is an object in a tree
+    /// that is thrown away and built again every time anything comes off it;
+    /// a position and a path are what it is built from.
+    /// </remarks>
+    /// <remarks>
+    /// The bound below cannot be reached from either caller today: the tree
+    /// and the list of games are the same length, and the whole games that go
+    /// are taken off after the rows and highest first. It stays because a
+    /// position is the only thing holding those two lists together, and a
+    /// mutation pass will go on reporting its second half as a fault nothing
+    /// objects to, which is the honest answer rather than a missing test.
+    /// </remarks>
+    private void TakeTheRowOff(int at, string path, bool anAddOn)
+    {
+        if (at < 0 || at >= _games.Count)
+        {
+            return;
+        }
+
+        if (anAddOn)
         {
             _addOnsAsFound.RemoveAll(addOn =>
-                addOn.BelongsTo == at && string.Equals(addOn.Path, thing.ItsPath, StringComparison.OrdinalIgnoreCase));
+                addOn.BelongsTo == at && string.Equals(addOn.Path, path, StringComparison.OrdinalIgnoreCase));
         }
         else
         {
-            _asFound[at] = _asFound[at].Without(thing.ItsPath);
+            _asFound[at] = _asFound[at].Without(path);
         }
 
         // Built again from what is left, which is the only way the tree and

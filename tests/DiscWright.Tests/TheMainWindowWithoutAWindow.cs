@@ -1617,7 +1617,13 @@ public class TheMainWindowWithoutAWindow
     {
         MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
 
+        // On a window with something on it, because Start again is dead on an
+        // empty one and a dead button does nothing. Choosing a size is not
+        // something on the disc: it is how this person works.
+        window.Add(AGame("A Game", 1000));
         window.Medium = Media.Bd25;
+
+        Assert.True(window.CanStartAgain);
         window.StartAgain();
         await window.LookAtTheDrives();
 
@@ -1947,16 +1953,25 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = New(releases: asker);
 
         Task first = window.CheckForANewVersion();
-        await asker.Started.Task;
+        await asker.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         // The second press arrives while the first is still out. One question
         // to GitHub, not two, and the second press is simply nothing.
-        await window.CheckForANewVersion();
+        Task second = window.CheckForANewVersion();
 
-        Assert.Equal(1, asker.Asked);
-
+        // Answered before anything is asserted, and both presses waited for
+        // with a deadline, so that this test leaves nothing pending however
+        // it ends.
+        //
+        // That is not tidiness. Without the guard the second press waits for
+        // an answer nobody has given yet, and this test used to await it
+        // bare: the fault stopped the test finishing rather than making it
+        // fail, the test host stayed alive with 138 tests after it never run,
+        // and a mutation pass reported no verdict at all. A fault that hangs
+        // a test is indistinguishable from a quiet machine.
         asker.Answer.SetResult(new WhatWasReleased("v2.1.0", "https://example.invalid/x"));
-        await first;
+
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.Equal(1, asker.Asked);
     }
@@ -1976,6 +1991,79 @@ public class TheMainWindowWithoutAWindow
         window.LegacyFileSystems = false;
 
         Assert.Empty(told);
+    }
+
+    [Fact]
+    public void Takes_off_every_turned_off_row_of_one_game_and_not_just_the_first()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000, parts: 2));
+
+        AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
+        Assert.Equal(3, rows.Length);
+
+        rows[1].IsOn = false;
+        rows[2].IsOn = false;
+
+        // Two rows turned off, and the button that clears them says it will
+        // take two. Taking a row off rebuilds the branch it was in, so every
+        // row gathered before the first one went is a row that is no longer
+        // in the tree.
+        window.TakeOffWhatIsLeftOff();
+
+        Assert.Single(window.Games);
+        Assert.Single(window.Games[0].Files);
+    }
+
+    [Fact]
+    public void Takes_off_only_the_rows_that_are_turned_off()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000, parts: 2));
+
+        AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
+        Assert.Equal(3, rows.Length);
+
+        rows[1].IsOn = false;
+        window.TakeOffWhatIsLeftOff();
+
+        // One row off the disc, and the other two still on it. Taking off the
+        // ones somebody kept is the same gesture with the opposite meaning,
+        // and the window adds up either way afterwards, which is why the walk
+        // cannot see the difference.
+        Assert.Single(window.Games);
+        Assert.Equal(2, window.Games[0].Files.Count);
+    }
+
+    [Fact]
+    public void Takes_two_games_off_at_once_without_moving_the_rest_under_them()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 1000), [APatch("setup_one_patch.exe")]);
+        window.Add(AGame("Two", 1000), [APatch("setup_two_patch.exe")]);
+        window.Add(AGame("Three", 1000), [APatch("setup_three_patch.exe")]);
+
+        foreach (int which in (int[])[0, 1])
+        {
+            foreach (AThingOnTheDisc row in window.WhatGoesOnIt[which].EveryThing())
+            {
+                row.IsOn = false;
+            }
+        }
+
+        window.TakeOffWhatIsLeftOff();
+
+        // Highest first, or taking the first one off moves the second one
+        // under the hand reaching for it and the wrong game comes off.
+        Assert.Single(window.Games);
+        Assert.Equal("Three", window.Games[0].Name);
+
+        // And the one add-on left belongs to the one game left, by its new
+        // position rather than its old one.
+        List<AddOn> addOns = Assert.IsType<List<AddOn>>(window.AsAProject().AddOns, exactMatch: false);
+
+        Assert.Single(addOns);
+        Assert.Equal(0, addOns[0].BelongsTo);
     }
 
     [Fact]

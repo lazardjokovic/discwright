@@ -346,6 +346,7 @@ public class AskingIfThereIsANewerOne
         public Task<WhatWasReleased> TheLatest(CancellationToken ct)
         {
             Started.TrySetResult();
+
             return Answer.Task;
         }
     }

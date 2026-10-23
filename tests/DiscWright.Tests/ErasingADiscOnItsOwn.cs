@@ -168,9 +168,26 @@ public class ErasingADiscOnItsOwn
         List<string> announced = [];
         MakeADisc window = AWindow(new OneUsedRewritable(), new AnEraserThatWorks());
 
-        window.PropertyChanged += (sender, about) => announced.Add(about.PropertyName ?? string.Empty);
+        // Locked, because the drive's own progress reports arrive on the
+        // thread pool: Progress<T> posts them, and a list written from two
+        // threads at once loses entries or throws. It took a full suite under
+        // load to show, having passed on its own every time.
+        window.PropertyChanged += (sender, about) =>
+        {
+            lock (announced)
+            {
+                announced.Add(about.PropertyName ?? string.Empty);
+            }
+        };
 
         await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        List<string> said;
+
+        lock (announced)
+        {
+            said = [.. announced];
+        }
 
         // Four buttons hang off this, and a window nobody tells about keeps
         // whatever it read the first time: Remove and Start again stay dead for
@@ -184,7 +201,7 @@ public class ErasingADiscOnItsOwn
         ])
         {
             Assert.True(
-                announced.Count(each => each == about) >= 2,
+                said.Count(each => each == about) >= 2,
                 $"{about} was not said both at the start and at the end");
         }
 
