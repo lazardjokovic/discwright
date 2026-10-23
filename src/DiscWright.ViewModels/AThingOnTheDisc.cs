@@ -259,6 +259,13 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// Every row under it with nothing under them, itself included when it is
     /// one, whether ticked or not.
     /// </summary>
+    /// <remarks>
+    /// The <c>yield break</c> below cannot be shown to matter by any test, and
+    /// that is the honest answer rather than a missing one: what follows it is
+    /// a loop over the rows inside, and there are none, so leaving it out
+    /// yields exactly the same nothing. It stays because stopping where the
+    /// answer is complete is what the method means.
+    /// </remarks>
     public IEnumerable<AThingOnTheDisc> EveryThing()
     {
         if (_inside.Count == 0)

@@ -53,6 +53,12 @@ public static class TheTreeOfWhatGoesOn
             bool isTheInstaller = game.Installer is not null
                 && string.Equals(game.Installer.RelativePath, file.RelativePath, StringComparison.OrdinalIgnoreCase);
 
+            // A file whose path splits into nothing is a path of separators
+            // and nothing else, which no folder on this machine produces and
+            // no reader here hands back. The guard stays because the
+            // alternative is an index out of range inside a window, and a
+            // mutation pass will go on reporting it as a fault nothing
+            // objects to.
             under.Holding(new AThingOnTheDisc(
                 steps.Length == 0 ? file.RelativePath : steps[^1],
                 file.Bytes,

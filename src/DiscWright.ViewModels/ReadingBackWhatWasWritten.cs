@@ -156,6 +156,14 @@ public abstract record WhichDisc
     /// so the two cannot drift: "{label} D{number}" in a set, "{label}" for a
     /// disc on its own.
     /// </remarks>
+    /// <remarks>
+    /// <strong>Two faults planted in that line cannot be caught, and both are
+    /// the same thing.</strong> Always using the "D1" form, or taking every
+    /// disc as part of a set, only changes the answer for a disc that stands
+    /// alone, and a disc that stands alone is the only disc there is to fall
+    /// back to. The fallback gives the same folder, so nothing any test can
+    /// look at moves.
+    /// </remarks>
     public BuiltDisc? OutOf(IReadOnlyList<BuiltDisc> discs) => this switch
     {
         OfASet(int number, _) => discs.FirstOrDefault(disc => disc.Number == number),

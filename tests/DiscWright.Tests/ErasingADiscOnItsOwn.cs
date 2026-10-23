@@ -42,18 +42,32 @@ public class ErasingADiscOnItsOwn
     public async Task Erases_the_disc_somebody_picked_and_says_so()
     {
         AnEraserThatWorks eraser = new();
-        List<string> said = [];
+        List<string> saying = [];
         MakeADisc window = AWindow(new OneUsedRewritable(), eraser);
 
+        // Locked at both ends, because the drive's progress reports arrive on
+        // the thread pool and a list written from two threads at once loses
+        // entries or throws. This test passed on its own every time and
+        // failed a full suite under load.
         window.PropertyChanged += (sender, about) =>
         {
             if (about.PropertyName == nameof(MakeADisc.Doing) && window.Doing.Length > 0)
             {
-                said.Add(window.Doing);
+                lock (saying)
+                {
+                    saying.Add(window.Doing);
+                }
             }
         };
 
         await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        List<string> said;
+
+        lock (saying)
+        {
+            said = [.. saying];
+        }
 
         Assert.Equal<IEnumerable<string>>(["D:"], eraser.Blanked);
         Assert.Null(window.ItWentWrong);
@@ -68,7 +82,7 @@ public class ErasingADiscOnItsOwn
     [Fact]
     public async Task Moves_the_bar_while_it_erases()
     {
-        List<double> far = [];
+        List<double> howFar = [];
         MakeADisc window = null!;
 
         // Waited for inside the erase, because Progress<T> hands the report to
@@ -77,9 +91,9 @@ public class ErasingADiscOnItsOwn
         // at all, so the report would arrive after nobody was left to hear it.
         AnEraserThatWorks eraser = new(untilHeard: () =>
         {
-            lock (far)
+            lock (howFar)
             {
-                return far.Contains(0.5);
+                return howFar.Contains(0.5);
             }
         });
 
@@ -89,14 +103,21 @@ public class ErasingADiscOnItsOwn
         {
             if (about.PropertyName == nameof(MakeADisc.HowFar))
             {
-                lock (far)
+                lock (howFar)
                 {
-                    far.Add(window.HowFar);
+                    howFar.Add(window.HowFar);
                 }
             }
         };
 
         await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+
+        List<double> far;
+
+        lock (howFar)
+        {
+            far = [.. howFar];
+        }
 
         // The drive hands over a fraction as well as a sentence. Thrown away,
         // the bar sits at nothing for the whole half minute while the words

@@ -493,6 +493,163 @@ public class TheTreeOfWhatGoesOnIt
         Assert.Empty(new[] { tree }.WhichGamesAreWhollyOff());
     }
 
+    // ------------------------------------ what a tick says, and who hears it
+
+    [Fact]
+    public void Says_so_itself_when_its_own_tick_moves()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        AThingOnTheDisc readme = tree.Inside.Single(each => each.Name == "readme.txt");
+
+        List<string> told = [];
+        readme.PropertyChanged += (sender, about) => told.Add(about.PropertyName ?? string.Empty);
+
+        readme.IsOn = false;
+
+        // The tick box the mouse is in redraws from this and nothing else.
+        Assert.Equal([nameof(AThingOnTheDisc.IsOn)], told);
+    }
+
+    [Fact]
+    public void Says_nothing_when_a_tick_is_set_to_what_it_already_is()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        AThingOnTheDisc readme = tree.Inside.Single(each => each.Name == "readme.txt");
+
+        List<string> told = [];
+        readme.PropertyChanged += (sender, about) => told.Add(about.PropertyName ?? string.Empty);
+
+        readme.IsOn = true;
+
+        // It was already on. A window told that something changed when it did
+        // not is a window redrawing a tree for nothing, and this one is read
+        // by every row above it as well.
+        Assert.Empty(told);
+    }
+
+    [Fact]
+    public void Tells_every_row_above_it_that_its_own_tick_moved()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        AThingOnTheDisc data = tree.Inside.Single(each => each.Name == "data");
+        AThingOnTheDisc textures = data.Inside.Single();
+        AThingOnTheDisc skin = textures.Inside.Single();
+
+        List<string> theGame = [];
+        List<string> theFolder = [];
+        List<string> theOneInside = [];
+
+        tree.PropertyChanged += (sender, about) => theGame.Add(about.PropertyName ?? string.Empty);
+        data.PropertyChanged += (sender, about) => theFolder.Add(about.PropertyName ?? string.Empty);
+        textures.PropertyChanged += (sender, about) => theOneInside.Add(about.PropertyName ?? string.Empty);
+
+        skin.IsOn = false;
+
+        // Every row above it shows a box that is now part way: the folder it
+        // is in, the folder above that, and the game. Told about none of
+        // them, a window shows a ticked game over an unticked file.
+        Assert.NotEmpty(theGame);
+        Assert.NotEmpty(theFolder);
+        Assert.NotEmpty(theOneInside);
+    }
+
+    [Fact]
+    public void Tells_every_row_under_it_when_a_folder_is_turned_off()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(ADeeperGame(), []);
+        AThingOnTheDisc data = tree.Inside.Single(each => each.Name == "data");
+        AThingOnTheDisc[] files = [.. data.Inside];
+
+        List<string> first = [];
+        List<string> second = [];
+
+        files[0].PropertyChanged += (sender, about) => first.Add(about.PropertyName ?? string.Empty);
+        files[1].PropertyChanged += (sender, about) => second.Add(about.PropertyName ?? string.Empty);
+
+        data.IsOn = false;
+
+        // Unticking a folder unticks what is in it, and each of those boxes
+        // is drawn from its own row. Both of them, not the first.
+        Assert.NotEmpty(first);
+        Assert.NotEmpty(second);
+        Assert.False(files[0].IsOn);
+        Assert.False(files[1].IsOn);
+    }
+
+    [Fact]
+    public void Tells_a_folder_in_the_middle_when_a_tick_above_it_moves()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        AThingOnTheDisc data = tree.Inside.Single(each => each.Name == "data");
+        AThingOnTheDisc textures = data.Inside.Single();
+
+        List<string> middle = [];
+        textures.PropertyChanged += (sender, about) => middle.Add(about.PropertyName ?? string.Empty);
+
+        tree.IsOn = false;
+
+        // The game off takes everything with it, including the folders on the
+        // way down, each of which draws its own box.
+        Assert.NotEmpty(middle);
+        Assert.False(textures.IsOn);
+    }
+
+    [Fact]
+    public void Knows_whether_it_has_anything_under_it()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        // What the window draws an arrow for. A file with an arrow beside it
+        // is a row somebody clicks and nothing happens.
+        Assert.True(tree.HasThingsInside);
+        Assert.True(tree.Inside.Single(each => each.Name == "data").HasThingsInside);
+        Assert.False(tree.Inside.Single(each => each.Name == "readme.txt").HasThingsInside);
+    }
+
+    // ------------------------------------------- what the tree reads back
+
+    [Fact]
+    public void Keeps_the_installer_named_while_it_is_still_ticked()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        GameFolder chosen = tree.AsChosen(AGameWithFolders());
+
+        // The menu runs the installer by name, so a game that still has it
+        // has to say which file it is.
+        Assert.NotNull(chosen.Installer);
+        Assert.Equal("setup.exe", chosen.Installer.RelativePath);
+        Assert.False(tree.ItsInstallerIsOff());
+    }
+
+    [Fact]
+    public void Forgets_the_installer_once_it_is_turned_off()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        tree.Inside.Single(each => each.Name == "setup.exe").IsOn = false;
+
+        GameFolder chosen = tree.AsChosen(AGameWithFolders());
+
+        // Naming a file that is not on the disc would put a button in the
+        // menu that opens nothing.
+        Assert.Null(chosen.Installer);
+        Assert.True(tree.ItsInstallerIsOff());
+    }
+
+    [Fact]
+    public void Does_not_call_the_installer_off_because_something_else_is()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        tree.Inside.Single(each => each.Name == "readme.txt").IsOn = false;
+
+        // One row off and the installer still on. The window says "without
+        // its installer, the disc will not install the game" off the back of
+        // this, and saying it about a readme nobody wanted is the window
+        // crying wolf.
+        Assert.False(tree.ItsInstallerIsOff());
+        Assert.NotNull(tree.AsChosen(AGameWithFolders()).Installer);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static GameFolder AGameWithFolders() => new(
