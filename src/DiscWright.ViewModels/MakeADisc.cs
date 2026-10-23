@@ -1146,19 +1146,21 @@ public sealed class MakeADisc : INotifyPropertyChanged
             // have a backing class factory" arrived before a single thing had
             // been erased, from the sentence below rather than from the erase
             // the catch-all was written for.
-            IReadOnlyList<Recorder> all = await _settling.OnceTheyHaveAnswered(null, ct);
+            Outcome<IReadOnlyList<Recorder>> couldBe = await _settling.WhichCouldBeErased(ct);
 
-            Recorder[] could = [.. all.Where(each => each.ErasingWouldHelp)];
-
-            if (could.Length == 0)
+            if (couldBe is Outcome<IReadOnlyList<Recorder>>.No nothingToErase)
             {
-                ItWentWrong = Refusals.ThereIsNothingToErase(
-                    [.. all.Select(each => each.Drive)]);
+                ItWentWrong = nothingToErase.Refusal;
                 Tell(nameof(ItWentWrong));
                 return;
             }
 
-            if (await whichToErase(could) is not Recorder chosen)
+            // Either there was nothing to choose between, which cannot happen
+            // past the refusal above, or somebody closed the question, which
+            // erases nothing. Closing it is an answer and not a fault, so
+            // there is nothing to say about it.
+            if (couldBe is not Outcome<IReadOnlyList<Recorder>>.Ok(IReadOnlyList<Recorder> could)
+                || await whichToErase(could) is not Recorder chosen)
             {
                 return;
             }
@@ -1168,12 +1170,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(NothingIsRunning));
             Tell(nameof(CanStartAgain));
             Tell(nameof(CanTakeSomethingOff));
-            Say($"erasing the {chosen.Holding} in {chosen.Drive}", 0);
 
-            if (await _machine.Eraser.BlankIt(chosen, new Progress<EraseProgress>(step => Say(step.Doing, step.HowFar ?? 0)), ct)
-                is Outcome<string>.No stopped)
+            // The same erase a burn offers, with the same words in front of
+            // it, because it is the same act.
+            if (await _settling.Erase(chosen, ct) is Refusal why)
             {
-                ItWentWrong = stopped.Refusal;
+                ItWentWrong = why;
                 Tell(nameof(ItWentWrong));
                 return;
             }

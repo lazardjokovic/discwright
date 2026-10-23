@@ -159,6 +159,39 @@ public sealed class SettlingOnADrive(
     }
 
     /// <summary>
+    /// Every disc an erase would make usable, or why there is not one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For erasing on its own, which has nothing to do with writing anything:
+    /// somebody with a drawer of used rewritables wants them blank again, and
+    /// until there was a button for it the only way to erase one was to be
+    /// half way through a burn and be asked.
+    /// </para>
+    /// <para>
+    /// Here rather than in the window because it is the same question the
+    /// settling asks on the way to a burn, with the same patience in front of
+    /// it. In the window it was four lines nothing could reach without a drive
+    /// and a used disc.
+    /// </para>
+    /// </remarks>
+    public async Task<Outcome<IReadOnlyList<Recorder>>> WhichCouldBeErased(CancellationToken ct = default)
+    {
+        IReadOnlyList<Recorder> all = await OnceTheyHaveAnswered(null, ct);
+
+        Recorder[] could = [.. all.Where(each => each.ErasingWouldHelp)];
+
+        if (could.Length > 0)
+        {
+            return could;
+        }
+
+        // Which drives were asked, because "there is nothing to erase" about a
+        // machine with two drives in it is a sentence somebody will argue with.
+        return Refusals.ThereIsNothingToErase([.. all.Select(each => each.Drive)]);
+    }
+
+    /// <summary>
     /// The whole decision, with the one difference between the two ways in
     /// being whether there is a drive to ask about.
     /// </summary>
@@ -219,7 +252,7 @@ public sealed class SettlingOnADrive(
 
             if (mayErase && erasable.Length > 0 && await whichToErase(erasable) is Recorder chosen)
             {
-                if (await Blank(chosen, ct) is Refusal why)
+                if (await Erase(chosen, ct) is Refusal why)
                 {
                     return new Settled.No(why);
                 }
@@ -253,7 +286,12 @@ public sealed class SettlingOnADrive(
     /// Blanks a disc, saying so while it happens, and says why not when it
     /// will not.
     /// </summary>
-    private async Task<Refusal?> Blank(Recorder chosen, CancellationToken ct)
+    /// <remarks>
+    /// <strong>Nothing calls this on its own initiative.</strong> Somebody has
+    /// said which disc, either in answer to the offer above or by choosing one
+    /// to erase on its own, and whatever is on it goes.
+    /// </remarks>
+    public async Task<Refusal?> Erase(Recorder chosen, CancellationToken ct = default)
     {
         say($"erasing the {chosen.Holding} in {chosen.Drive}", 0);
 
