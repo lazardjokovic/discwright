@@ -149,4 +149,108 @@ public static class TheTreeOfWhatGoesOn
         under.Holding(made);
         return made;
     }
+
+    /// <summary>
+    /// What the whole list comes to, or nothing when nothing is ticked.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every row of the tree shows its own size and a game shows the sum of
+    /// what is under it, and there was nowhere at all that said what the lot
+    /// came to. With four games on the window somebody had to add them up by
+    /// eye to work out whether it would fit.
+    /// </para>
+    /// <para>
+    /// <strong>It follows the ticks.</strong> What goes on the disc is what is
+    /// ticked, and a total that counted rows somebody had just turned off
+    /// would be worse than no total at all.
+    /// </para>
+    /// <para>
+    /// The files alone, which is what the tree is a list of. The menu, the
+    /// artwork and the extras take their own room on top of this, and what
+    /// that comes to is already said where it matters: in the disc count, and
+    /// in the refusal when it will not fit.
+    /// </para>
+    /// <para>
+    /// Out of the window because the sentence is about the tree and nothing
+    /// else, and because nothing asserted either half of it: a mutation pass
+    /// could turn "in one file" into "in 1 files" and the suite went green.
+    /// </para>
+    /// </remarks>
+    public static string WhatItAllComesTo(this IEnumerable<AThingOnTheDisc> tree)
+    {
+        int things = 0;
+        long bytes = 0;
+
+        foreach (AThingOnTheDisc game in tree)
+        {
+            foreach (AThingOnTheDisc thing in game.EverythingOn())
+            {
+                things++;
+                bytes += thing.Bytes;
+            }
+        }
+
+        if (things == 0)
+        {
+            // Everything turned off is a thing somebody has just done on
+            // purpose, and the line under this one already says so.
+            return string.Empty;
+        }
+
+        return things == 1
+            ? $"{ByteSize.Describe(bytes)} in one file"
+            : $"{ByteSize.Describe(bytes)} in {things} files";
+    }
+
+    /// <summary>
+    /// What has been taken off the disc, said plainly, or nothing when the
+    /// answer is everything.
+    /// </summary>
+    /// <remarks>
+    /// Leaving a file off is allowed, because this window refuses by
+    /// explaining rather than by greying things out, and somebody making a
+    /// disc of just the extras has a reason nobody here can guess. It is said
+    /// out loud because a disc that cannot install the game is not what
+    /// anybody sets out to make by accident.
+    /// </remarks>
+    public static string? WhatIsTurnedOff(this IEnumerable<AThingOnTheDisc> tree)
+    {
+        int left = 0;
+        long bytes = 0;
+
+        foreach (AThingOnTheDisc thing in tree.SelectMany(game => game.EveryThing()))
+        {
+            if (thing.IsOn == false)
+            {
+                left++;
+                bytes += thing.Bytes;
+            }
+        }
+
+        if (left == 0)
+        {
+            return null;
+        }
+
+        return $"Leaving off {(left == 1 ? "1 thing" : $"{left} things")}, {ByteSize.Describe(bytes)}.";
+    }
+
+    /// <summary>
+    /// What the button that clears out the turned off rows says, or nothing
+    /// when there are none and there is no such button.
+    /// </summary>
+    /// <remarks>
+    /// Its own count in its own words, because the button does something
+    /// nobody can see the extent of: the rows it takes off are scattered down
+    /// a tree and some of them are inside folders that are shut.
+    /// </remarks>
+    public static string? WhatTakingThoseOffWouldSay(this IEnumerable<AThingOnTheDisc> tree) =>
+        tree.SelectMany(game => game.EveryThing()).Count(each => each.IsOn == false) switch
+        {
+            0 => null,
+            1 => "Remove the 1 thing left off",
+            int left => $"Remove the {left} things left off"
+        };
+
 }

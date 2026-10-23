@@ -329,6 +329,96 @@ public class TheTreeOfWhatGoesOnIt
             row => Assert.True(row.HowWideTheNameIs > 0, $"{row.Name} was given {row.HowWideTheNameIs}"));
     }
 
+
+    // --------------------------------------- what the whole list comes to
+
+    [Fact]
+    public void Says_what_the_whole_list_comes_to()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        // 900, 300 and 100 bytes, and three files to say it about. There was
+        // nowhere on the window that said what the lot came to, so somebody
+        // with four games had to add them up by eye.
+        Assert.Equal("1.3 KB in 3 files", new[] { tree }.WhatItAllComesTo());
+    }
+
+    [Fact]
+    public void Says_one_file_rather_than_1_files()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithOneFile(), []);
+
+        Assert.Equal("900 bytes in one file", new[] { tree }.WhatItAllComesTo());
+    }
+
+    [Fact]
+    public void Says_nothing_at_all_when_every_row_is_turned_off()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        tree.IsOn = false;
+
+        // Everything turned off is a thing somebody has just done on purpose,
+        // and the line under this one already says so.
+        Assert.Equal(string.Empty, new[] { tree }.WhatItAllComesTo());
+    }
+
+    [Fact]
+    public void Counts_only_what_is_still_ticked()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        tree.Inside.Single(each => each.Name == "readme.txt").IsOn = false;
+
+        // A total that counted rows somebody had just turned off would be
+        // worse than no total at all.
+        Assert.Equal("1.2 KB in 2 files", new[] { tree }.WhatItAllComesTo());
+    }
+
+    // ------------------------------------------------ what is left off it
+
+    [Fact]
+    public void Says_nothing_about_what_is_left_off_when_nothing_is()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        Assert.Null(new[] { tree }.WhatIsTurnedOff());
+        Assert.Null(new[] { tree }.WhatTakingThoseOffWouldSay());
+    }
+
+    [Fact]
+    public void Says_what_is_left_off_and_how_much_of_it()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        tree.Inside.Single(each => each.Name == "readme.txt").IsOn = false;
+
+        Assert.Equal("Leaving off 1 thing, 100 bytes.", new[] { tree }.WhatIsTurnedOff());
+        Assert.Equal("Remove the 1 thing left off", new[] { tree }.WhatTakingThoseOffWouldSay());
+    }
+
+    [Fact]
+    public void Counts_everything_left_off_wherever_it_sits_in_the_tree()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        tree.Inside.Single(each => each.Name == "readme.txt").IsOn = false;
+        tree.Inside.Single(each => each.Name == "setup.exe").IsOn = false;
+
+        // Rows scattered down a tree, some of them inside folders that are
+        // shut, which is why the button says how many it will take.
+        Assert.Equal("Leaving off 2 things, 1000 bytes.", new[] { tree }.WhatIsTurnedOff());
+        Assert.Equal("Remove the 2 things left off", new[] { tree }.WhatTakingThoseOffWouldSay());
+    }
+
+    [Fact]
+    public void Counts_the_files_in_a_folder_somebody_turned_off_and_not_the_folder()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(ADeeperGame(), []);
+        tree.Inside.Single(each => each.Name == "data").IsOn = false;
+
+        // Two things, not three. Unticking a folder unticks what is in it, and
+        // what comes off the disc is the two files: the folder is a way of
+        // showing them rather than a thing anybody put there.
+        Assert.Equal("Leaving off 2 things, 300 bytes.", new[] { tree }.WhatIsTurnedOff());
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static GameFolder AGameWithFolders() => new(
@@ -357,6 +447,16 @@ public class TheTreeOfWhatGoesOnIt
             new ListedFile(@"data\one.pak", 100),
             new ListedFile(@"data\two.pak", 200)
         ],
+        LauncherCandidates: [],
+        Warning: null);
+
+    private static GameFolder AGameWithOneFile() => new(
+        Path: @"C:\game",
+        Kind: GameKind.GogInstaller,
+        Name: "A Game",
+        MatchName: "A Game",
+        Installer: new ListedFile("setup.exe", 900),
+        Files: [new ListedFile("setup.exe", 900)],
         LauncherCandidates: [],
         Warning: null);
 }

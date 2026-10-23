@@ -825,34 +825,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// in the refusal when it will not fit.
     /// </para>
     /// </remarks>
-    public string WhatIsOnIt
-    {
-        get
-        {
-            int things = 0;
-            long bytes = 0;
-
-            foreach (AThingOnTheDisc game in _tree)
-            {
-                foreach (AThingOnTheDisc thing in game.EverythingOn())
-                {
-                    things++;
-                    bytes += thing.Bytes;
-                }
-            }
-
-            if (things == 0)
-            {
-                // Everything turned off is a thing somebody has just done on
-                // purpose, and the line under this one already says so.
-                return string.Empty;
-            }
-
-            return things == 1
-                ? $"{ByteSize.Describe(bytes)} in one file"
-                : $"{ByteSize.Describe(bytes)} in {things} files";
-        }
-    }
+    public string WhatIsOnIt => _tree.WhatItAllComesTo();
 
     /// <summary>
     /// What has been taken off the disc, said plainly, or nothing when the
@@ -865,38 +838,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// out loud because a disc that cannot install the game is not what
     /// anybody sets out to make by accident.
     /// </remarks>
-    public string? WhatIsLeftOff
-    {
-        get
-        {
-            int left = 0;
-            long bytes = 0;
-            bool noInstaller = false;
-
-            for (int at = 0; at < _tree.Count; at++)
-            {
-                foreach (AThingOnTheDisc thing in _tree[at].EveryThing())
-                {
-                    if (thing.IsOn == false)
-                    {
-                        left++;
-                        bytes += thing.Bytes;
-                    }
-                }
-
-                noInstaller |= _tree[at].ItsInstallerIsOff();
-            }
-
-            if (left == 0)
-            {
-                return null;
-            }
-
-            string what = left == 1 ? "1 thing" : $"{left} things";
-
-            return $"Leaving off {what}, {ByteSize.Describe(bytes)}.";
-        }
-    }
+    public string? WhatIsLeftOff => _tree.WhatIsTurnedOff();
 
     /// <summary>
     /// The one thing about leaving rows off that is worth a warning colour, or
@@ -1375,20 +1317,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// off" in the other would sound like two different things.
     /// </para>
     /// </remarks>
-    public string? WhatTakingTheLeftOffOnesSays
-    {
-        get
-        {
-            int left = _tree.SelectMany(game => game.EveryThing()).Count(each => each.IsOn == false);
-
-            return left switch
-            {
-                0 => null,
-                1 => "Remove the 1 thing left off",
-                _ => $"Remove the {left} things left off"
-            };
-        }
-    }
+    public string? WhatTakingTheLeftOffOnesSays => _tree.WhatTakingThoseOffWouldSay();
 
     /// <summary>The row the tree has picked, or nothing.</summary>
     private AThingOnTheDisc? _selected;
