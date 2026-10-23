@@ -363,7 +363,7 @@ public class TheWindowChecksItself
 
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(25);
+        int which = dice.Next(30);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -435,6 +435,19 @@ public class TheWindowChecksItself
 
             20 => new("put a loose file on the disc",
                 desk => desk.Screen.AlsoOnTheDisc([@"C:\loose\a note.txt"])),
+
+            // The four buttons the walk could not press, and the reason it
+            // could not was the machine under it rather than the walk itself.
+            // Every one of them decides something and has to say so.
+            25 => new("make the discs", desk => desk.Screen.MakeIt().GetAwaiter().GetResult()),
+
+            26 => new("burn whatever there is to burn", desk => desk.BurnOne()),
+
+            27 => new("burn the whole set", desk => desk.BurnTheSet()),
+
+            28 => new("erase a disc", desk => desk.EraseOne()),
+
+            29 => new($"open a project with {(row % 3) + 1} games in it", desk => desk.OpenAProject(row)),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -913,6 +926,75 @@ public class TheWindowChecksItself
             }
         }
 
+        internal void BurnOne()
+        {
+            if (Screen.TheImages.Count == 0)
+            {
+                return;
+            }
+
+            Screen.BurnIt(Screen.TheImages[0], TheFirstDrive, WhicheverCouldBeErased, TheTrayShuts)
+                .GetAwaiter().GetResult();
+        }
+
+        internal void BurnTheSet()
+        {
+            if (Screen.TheImages.Count == 0)
+            {
+                return;
+            }
+
+            Screen.BurnTheSet(
+                Screen.TheImages,
+                TheFirstDrive,
+                WhicheverCouldBeErased,
+                TheTrayShuts,
+                AnotherBlankIsIn,
+                CarryOnFromThere).GetAwaiter().GetResult();
+        }
+
+        internal void EraseOne() =>
+            Screen.EraseADisc(WhicheverCouldBeErased).GetAwaiter().GetResult();
+
+        /// <summary>
+        /// Opens a project file, with everything a project file can carry on
+        /// it: artwork, a manual, extras, a tune, a loose file and a size.
+        /// </summary>
+        /// <remarks>
+        /// Everything at once on purpose. What this step is for is the window
+        /// taking on a state it did not build up itself one picker at a time,
+        /// which is where a thing set without being announced hides.
+        /// </remarks>
+        internal void OpenAProject(int games)
+        {
+            DiscProject project = new(
+                "OPENED",
+                [.. Enumerable.Range(1, (games % 3) + 1).Select(at => AGogGame($"Opened {at}", 1000))],
+                new DiscOptions(Menu: false, Checksums: false, LegacyFileSystems: true, CutFiles: true),
+                Artwork: new DiscArtwork(
+                    @"C:\art\icon.png",
+                    @"C:\art\back.png",
+                    true,
+                    @"C:\art\cover.png",
+                    @"C:\art\face.png"),
+                Extras: new DiscExtras(@"C:\extras\how.txt", @"C:\extras", [@"C:\loose\a note.txt"], @"C:\music\tune.mp3"),
+                AddOns: []);
+
+            Screen.OpenThis(new Reopened(project, Media.Bd25, @"C:\out", [], []));
+        }
+
+        private static Task<Recorder?> TheFirstDrive(IReadOnlyList<Recorder> ready) =>
+            Task.FromResult(ready.Count == 0 ? null : ready[0]);
+
+        private static Task<Recorder?> WhicheverCouldBeErased(IReadOnlyList<Recorder> could) =>
+            Task.FromResult(could.Count == 0 ? null : could[0]);
+
+        private static Task<bool> TheTrayShuts(Recorder drive) => Task.FromResult(true);
+
+        private static Task<bool> AnotherBlankIsIn(int number, int of, Recorder drive) => Task.FromResult(true);
+
+        private static Task<bool> CarryOnFromThere(int from, int of) => Task.FromResult(true);
+
         internal void TickTheRow(int which, bool on)
         {
             AThingOnTheDisc[] rows = [.. Screen.WhatGoesOnIt.SelectMany(game => game.EveryThing())];
@@ -924,15 +1006,38 @@ public class TheWindowChecksItself
         }
     }
 
+    /// <summary>
+    /// The machine the walk runs on, where every button really does something.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>It used to refuse everything.</strong> No drives, a disk with
+    /// nothing on it, a builder that made no discs, so the walk could press
+    /// nothing but the pickers and the ticks. Half the window was out of its
+    /// reach, and a mutation pass said what that cost: forty six faults, every
+    /// one of them the window deciding something and telling nobody, in Make,
+    /// Burn, Erase and opening a project.
+    /// </para>
+    /// <para>
+    /// So the fakes answer the way a working machine answers: one blank disc
+    /// in one drive, a builder that makes a disc, images that are made, a disk
+    /// whose folders match what was built, a tray that shuts itself. What the
+    /// walk is checking is not that burning works, which has its own tests,
+    /// but that the window says what moved however it was driven.
+    /// </para>
+    /// <para>
+    /// The clock moves itself, so a drive is never really waited for.
+    /// </para>
+    /// </remarks>
     private static MakeADisc TheScreen() =>
         new(new TheMachine(
             new NoEncoding(),
-            new ABuilderThatDoesNothing(),
+            new ABuilderThatMakesADisc(),
             new ImagesThatDoNothing(),
-            new NoDrives(),
+            new OneBlankDisc(),
             new ABurnerThatDoesNothing(),
             new AnEraserThatDoesNothing(),
-            new ADiskWithNothingOnIt(),
+            new ADiskThatMatchesWhatWasBuilt(),
             new NoHashing(),
             new NothingIsRemembered(),
             new ATrayThatShuts(),
@@ -940,7 +1045,8 @@ public class TheWindowChecksItself
             new NoPreview(),
             new PicturesThatRead(),
             "2.0.0",
-            _ => 1000));
+            _ => 1000,
+            Patience: new AClockThatMovesItself().Patience));
 
     // --------------------------------------------------------------- the words
 
@@ -963,12 +1069,15 @@ public class TheWindowChecksItself
         public string AsAutorunWillSeeIt(string text) => text;
     }
 
-    private sealed class ABuilderThatDoesNothing : IBuildDiscs
+    private sealed class ABuilderThatMakesADisc : IBuildDiscs
     {
         public Task<Outcome<BuiltDiscs>> Build(
             DiscProject project, Medium medium, string outputFolder,
             IProgress<BuildProgress>? progress, CancellationToken ct) =>
-            Task.FromResult<Outcome<BuiltDiscs>>(new BuiltDiscs([]));
+            Task.FromResult<Outcome<BuiltDiscs>>(new BuiltDiscs(
+                project.Games.Count == 0
+                    ? []
+                    : [new BuiltDisc(project.Label, 1, 1, System.IO.Path.Combine(outputFolder, "disc 1"), 1000)]));
     }
 
     private sealed class ImagesThatDoNothing : IMakeImages
@@ -979,9 +1088,11 @@ public class TheWindowChecksItself
             Task.FromResult<Outcome<MadeImage>>(new MadeImage(imagePath, 0, null));
     }
 
-    private sealed class NoDrives : IFindRecorders
+    /// <summary>One drive with a blank in it, which is the ordinary machine.</summary>
+    private sealed class OneBlankDisc : IFindRecorders
     {
-        public IReadOnlyList<Recorder> All() => [];
+        public IReadOnlyList<Recorder> All() =>
+            [new("id-E", "E:", "A Drive", 2, true, 360_000, [750])];
     }
 
     private sealed class ABurnerThatDoesNothing : IBurnDiscs
@@ -998,11 +1109,24 @@ public class TheWindowChecksItself
             Task.FromResult<Outcome<string>>("blank");
     }
 
-    private sealed class ADiskWithNothingOnIt : IFileSystem
+    /// <summary>
+    /// A disk where what was built is where it was built, and a disc read back
+    /// out of the drive matches it.
+    /// </summary>
+    /// <remarks>
+    /// The image beside them is what the window finds when it looks for
+    /// something to burn, so Burn and the set walk are reachable at all.
+    /// </remarks>
+    private sealed class ADiskThatMatchesWhatWasBuilt : IFileSystem
     {
-        public bool FolderExists(string path) => false;
+        public bool FolderExists(string path) => true;
 
-        public FolderListing List(string path) => new(path, []);
+        public FolderListing List(string path) =>
+            new(path,
+            [
+                new ListedFile("setup_a_game.exe", 1000),
+                new ListedFile("A DISC.iso", 1000)
+            ]);
     }
 
     private sealed class NoHashing : IHasher
