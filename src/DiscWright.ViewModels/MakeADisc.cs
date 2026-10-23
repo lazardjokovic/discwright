@@ -1457,9 +1457,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         try
         {
             // A drive chosen in the window is the answer, so nothing is asked.
-            Recorder? onto = TheDriveIn(_theDrive is Recorder picked
-                ? await _settling.OnThatOne(picked.Drive, _machine.HowBigIs(image), whichToErase, ct)
-                : await _settling.OnWhicheverIsReady(
+            Recorder? onto = _theDrive is Recorder picked
+                ? TheDriveIn(await _settling.OnThatOne(
+                    picked.Drive, _machine.HowBigIs(image), whichToErase, ct))
+                : TheDriveIn(await _settling.OnWhicheverIsReady(
                     _machine.HowBigIs(image), chooseADrive, whichToErase, ct));
 
             if (onto is null)
@@ -1898,10 +1899,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
             // Once, before the first disc this run writes, and not at all
             // when the window already says which drive.
-            Recorder? drive = TheDriveIn(_theDrive is Recorder picked
-                ? await _settling.OnThatOne(
-                    picked.Drive, _machine.HowBigIs(images[broughtForward]), whichToErase, ct)
-                : await _settling.OnWhicheverIsReady(
+            Recorder? drive = _theDrive is Recorder picked
+                ? TheDriveIn(await _settling.OnThatOne(
+                    picked.Drive, _machine.HowBigIs(images[broughtForward]), whichToErase, ct))
+                : TheDriveIn(await _settling.OnWhicheverIsReady(
                     _machine.HowBigIs(images[broughtForward]), chooseADrive, whichToErase, ct));
 
             if (drive is null)
@@ -1914,14 +1915,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
             {
                 ct.ThrowIfCancellationRequested();
 
+                // Which disc of how many, said the same way by every line
+                // below it, the ones about writing and the ones about reading
+                // it back. The window has nothing else telling somebody where
+                // in the half hour they are.
+                WhichDisc.OfASet where = new(at + 1, images.Count);
+
                 // The first disc this run writes goes into the drive that was
                 // just settled, whether that is disc 1 or disc 3. It is the
                 // ones after it that need somebody to swap.
                 if (at > broughtForward)
                 {
-                    Say($"waiting for a blank disc for disc {at + 1} of {images.Count}", 0);
+                    Say(where.WaitingForABlank, 0);
 
-                    if (!await theNextBlankPlease(at + 1, images.Count, drive))
+                    if (!await theNextBlankPlease(where.Number, where.OfThem, drive))
                     {
                         stopped = "nobody put the next blank in";
                         return;
@@ -1930,22 +1937,28 @@ public sealed class MakeADisc : INotifyPropertyChanged
                     // Asked again, because what is in that drive has changed:
                     // the disc just written came out and something else went
                     // in, and it may not be blank.
-                    Recorder? again = TheDriveIn(await _settling.OnThatOne(
-                        drive.Drive, _machine.HowBigIs(images[at]), whichToErase, ct));
-
-                    if (again is null)
+                    switch (await _settling.OnThatOne(
+                        drive.Drive, _machine.HowBigIs(images[at]), whichToErase, ct))
                     {
-                        stopped = ItWentWrong?.Headline ?? "the next disc could not be used";
-                        return;
-                    }
+                        case Outcome<Recorder>.Ok(Recorder next):
+                            drive = next;
+                            break;
 
-                    drive = again;
+                        // Nobody was asked which drive, so there is no answer
+                        // here but the disc taking it or a refusal saying why
+                        // not. The sentence somebody reads is the refusal's
+                        // own, which names the drive and the disc in it.
+                        case Outcome<Recorder>.No refused:
+                            ItWentWrong = refused.Refusal;
+                            stopped = refused.Refusal.Headline;
+                            return;
+                    }
                 }
 
-                Say($"disc {at + 1} of {images.Count}", 0);
+                Say(where.InWords, 0);
 
                 Progress<BurnProgress> saying = new(step =>
-                    Say($"disc {at + 1} of {images.Count}: {step}", step.HowFar ?? 0));
+                    Say(where.Saying(step.ToString()), step.HowFar ?? 0));
 
                 switch (await _machine.Burner.Burn(images[at], drive, saying, ct))
                 {
@@ -1962,7 +1975,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                     return;
                 }
 
-                await HowTheDiscCameBack(drive, new WhichDisc.OfASet(at + 1), ct);
+                await HowTheDiscCameBack(drive, where, ct);
 
                 // Disc 2 is no use at all if disc 1 came out wrong.
                 if (HowTheDiscCameOut is not DiscCheck came || !came.Good)
@@ -2061,6 +2074,21 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         return (settled as Settled.ThisOne)?.Drive;
+    }
+
+    /// <inheritdoc cref="TheDriveIn(Settled)"/>
+    /// <remarks>
+    /// The same thing for a drive somebody already named, where there is no
+    /// question to answer with no drive and so no third answer to handle.
+    /// </remarks>
+    private Recorder? TheDriveIn(Outcome<Recorder> settled)
+    {
+        if (settled is Outcome<Recorder>.No refused)
+        {
+            ItWentWrong = refused.Refusal;
+        }
+
+        return settled is Outcome<Recorder>.Ok(Recorder ready) ? ready : null;
     }
 
     /// <summary>

@@ -77,12 +77,24 @@ public sealed class SettlingOnADrive(
     /// discs were written by two different lasers at two different speeds. So
     /// nothing is asked about which drive here. There is nothing to ask.
     /// </remarks>
-    public Task<Settled> OnThatOne(
+    /// <remarks>
+    /// <strong>An outcome rather than a <see cref="Settled"/>, because two of
+    /// the three answers cannot happen.</strong> Nobody is asked which drive,
+    /// so nobody can answer with none of them. Saying that in the type rather
+    /// than in a comment took a branch out of the window that nothing could
+    /// reach and nothing could test.
+    /// </remarks>
+    public async Task<Outcome<Recorder>> OnThatOne(
         string drive,
         long bytes,
         Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
         CancellationToken ct = default) =>
-        Settle(drive, bytes, null, whichToErase, ct);
+        await Settle(drive, bytes, null, whichToErase, ct) switch
+        {
+            Settled.ThisOne(Recorder ready) => ready,
+            Settled.No(Refusal why) => why,
+            _ => Refusals.ThereIsNoDiscWriter()
+        };
 
     /// <summary>
     /// What the drives are holding, once the one being waited on has something

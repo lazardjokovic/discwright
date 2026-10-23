@@ -71,22 +71,26 @@ public class SettlingOnADriveToWriteTo
     [Fact]
     public async Task Never_asks_which_drive_about_the_one_it_was_told_to_use()
     {
-        Settled settled = await Settling(new TwoBlankDiscs())
+        Outcome<Recorder> settled = await Settling(new TwoBlankDiscs())
             .OnThatOne("D:", ASmallImage, NeverAsksAboutErasing);
 
         // Two blanks in two drives, and no question, because the drive is
         // already settled: this is how every disc of a set after the first
-        // arrives here.
-        Assert.Equal("D:", Assert.IsType<Settled.ThisOne>(settled).Drive.Drive);
+        // arrives here. The answer is an outcome and not a Settled, because
+        // nobody asked and so nobody can have said none of them.
+        Assert.Equal("D:", Assert.IsType<Outcome<Recorder>.Ok>(settled).Value.Drive);
     }
 
     [Fact]
     public async Task Says_why_when_the_drive_it_was_told_to_use_is_not_there()
     {
-        Settled settled = await Settling(new OneBlankDisc("E:"))
+        Outcome<Recorder> settled = await Settling(new OneBlankDisc("E:"))
             .OnThatOne("D:", ASmallImage, NeverAsksAboutErasing);
 
-        Assert.Contains("D:", Assert.IsType<Settled.No>(settled).Why.Headline, StringComparison.Ordinal);
+        Assert.Contains(
+            "D:",
+            Assert.IsType<Outcome<Recorder>.No>(settled).Refusal.Headline,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -133,13 +137,13 @@ public class SettlingOnADriveToWriteTo
         ADiscThatIsBlankOnceErased drives = new("D:");
         AnEraserThatWorks eraser = new(() => drives.Erased = true);
 
-        Settled settled = await Settling(drives, eraser).OnThatOne(
+        Outcome<Recorder> settled = await Settling(drives, eraser).OnThatOne(
             "D:", ASmallImage, could => Task.FromResult<Recorder?>(could[0]));
 
         // This is the one Lazar hit: a used disc put in for the second disc of
         // a set, where the drive is already settled and nothing was asking
         // which. Nothing reached it before this test existed.
-        Assert.Equal("D:", Assert.IsType<Settled.ThisOne>(settled).Drive.Drive);
+        Assert.Equal("D:", Assert.IsType<Outcome<Recorder>.Ok>(settled).Value.Drive);
         Assert.Equal<IEnumerable<string>>(["D:"], eraser.Blanked);
     }
 
@@ -364,13 +368,13 @@ public class SettlingOnADriveToWriteTo
     {
         AClockThatMovesItself clock = new();
 
-        Settled settled = await Settling(new OneReadyAndOneStillThinking(), patience: clock.Patience)
+        Outcome<Recorder> settled = await Settling(new OneReadyAndOneStillThinking(), patience: clock.Patience)
             .OnThatOne("D:", ASmallImage, NeverAsksAboutErasing);
 
         // D: has answered. Whatever the other drive is doing is nothing to do
         // with the disc going in this one.
         Assert.Equal(0, clock.Waits);
-        Assert.Equal("D:", Assert.IsType<Settled.ThisOne>(settled).Drive.Drive);
+        Assert.Equal("D:", Assert.IsType<Outcome<Recorder>.Ok>(settled).Value.Drive);
     }
 
     [Fact]

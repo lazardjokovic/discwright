@@ -31,7 +31,7 @@ public class WhatADiscIsReadBackAgainst
     {
         Assert.Equal(
             @"C:\out\disc 2",
-            ReadingBackWhatWasWritten.WhereItWasBuiltFrom(ASetOfThree, new WhichDisc.OfASet(2)));
+            ReadingBackWhatWasWritten.WhereItWasBuiltFrom(ASetOfThree, new WhichDisc.OfASet(2, 3)));
     }
 
     [Fact]
@@ -72,14 +72,14 @@ public class WhatADiscIsReadBackAgainst
 
         Assert.Equal(
             @"C:\out\disc 1",
-            ReadingBackWhatWasWritten.WhereItWasBuiltFrom(ASetOfThree, new WhichDisc.OfASet(9)));
+            ReadingBackWhatWasWritten.WhereItWasBuiltFrom(ASetOfThree, new WhichDisc.OfASet(9, 3)));
     }
 
     [Fact]
     public void Has_no_folder_at_all_when_this_sitting_built_nothing()
     {
-        Assert.Null(ReadingBackWhatWasWritten.WhereItWasBuiltFrom(null, new WhichDisc.OfASet(1)));
-        Assert.Null(ReadingBackWhatWasWritten.WhereItWasBuiltFrom(new BuiltDiscs([]), new WhichDisc.OfASet(1)));
+        Assert.Null(ReadingBackWhatWasWritten.WhereItWasBuiltFrom(null, new WhichDisc.OfASet(1, 3)));
+        Assert.Null(ReadingBackWhatWasWritten.WhereItWasBuiltFrom(new BuiltDiscs([]), new WhichDisc.OfASet(1, 3)));
     }
 
     // --------------------------------------------------------- what it says
@@ -89,7 +89,7 @@ public class WhatADiscIsReadBackAgainst
     {
         // A set takes half an hour, and somebody watching it needs to know
         // where in the half hour they are.
-        Assert.Equal("disc 3: hashing one.bin", new WhichDisc.OfASet(3).Saying("hashing one.bin"));
+        Assert.Equal("disc 3 of 3: hashing one.bin", new WhichDisc.OfASet(3, 3).Saying("hashing one.bin"));
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class WhatADiscIsReadBackAgainst
         ADiskThatRemembers disk = new();
 
         Outcome<DiscCheck> how = await Reading(disk)
-            .HowItCameOut(InDriveE, new WhichDisc.OfASet(2), ASetOfThree, default);
+            .HowItCameOut(InDriveE, new WhichDisc.OfASet(2, 3), ASetOfThree, default);
 
         Assert.IsType<Outcome<DiscCheck>.Ok>(how);
 
@@ -127,7 +127,7 @@ public class WhatADiscIsReadBackAgainst
         ADiskThatRemembers disk = new() { TheFolders = [@"E:\"], TheList = AListOfNothing };
 
         Outcome<DiscCheck> how = await Reading(disk)
-            .HowItCameOut(InDriveE, new WhichDisc.OfASet(2), ASetOfThree, default);
+            .HowItCameOut(InDriveE, new WhichDisc.OfASet(2, 3), ASetOfThree, default);
 
         Assert.IsType<Outcome<DiscCheck>.Ok>(how);
         Assert.Contains(@"E:\" + ChecksumList.FileName, disk.Read);
@@ -158,7 +158,7 @@ public class WhatADiscIsReadBackAgainst
         ADiskThatRemembers disk = new() { TheFolders = [@"E:\"] };
 
         Outcome<DiscCheck> how = await Reading(disk)
-            .HowItCameOut(InDriveE, new WhichDisc.OfASet(2), ASetOfThree, default);
+            .HowItCameOut(InDriveE, new WhichDisc.OfASet(2, 3), ASetOfThree, default);
 
         Refusal why = Assert.IsType<Outcome<DiscCheck>.No>(how).Refusal;
         Assert.Equal("The disc was written but not checked", why.Headline);
@@ -177,7 +177,7 @@ public class WhatADiscIsReadBackAgainst
 
         await Reading(disk).HowItCameOut(
             new Recorder("id-E", drive, "A Drive", 2, false, 0, [750]),
-            new WhichDisc.OfASet(1),
+            new WhichDisc.OfASet(1, 3),
             ASetOfThree,
             default);
 
@@ -198,10 +198,10 @@ public class WhatADiscIsReadBackAgainst
         ADiskThatRemembers disk = new() { TheFiles = [new ListedFile("one.bin", 3)] };
 
         await new ReadingBackWhatWasWritten(disk, new NoHashing(), (doing, far) => said.Add(doing))
-            .HowItCameOut(InDriveE, new WhichDisc.OfASet(3), ASetOfThree, default);
+            .HowItCameOut(InDriveE, new WhichDisc.OfASet(3, 3), ASetOfThree, default);
 
         Assert.NotEmpty(said);
-        Assert.All(said, line => Assert.StartsWith("disc 3: ", line, StringComparison.Ordinal));
+        Assert.All(said, line => Assert.StartsWith("disc 3 of 3: ", line, StringComparison.Ordinal));
     }
 
     // ------------------------------------------------------------- the rig

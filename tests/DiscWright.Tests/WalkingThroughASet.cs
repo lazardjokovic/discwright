@@ -70,7 +70,11 @@ public class WalkingThroughASet
         Assert.False(went.Whole);
         Assert.Equal(2, went.Written);
         Assert.Equal(3, went.CarryOnFrom);
-        Assert.Contains("Discs 1 to 2 are written", went.InWords, StringComparison.Ordinal);
+        Assert.Contains(
+            "Discs 1 to 2 are written and checked. It stopped at disc 3 of 3: nobody put the next blank in",
+            went.InWords,
+            StringComparison.Ordinal);
+
         Assert.Equal(2, burner.Wrote.Count);
     }
 
@@ -142,6 +146,108 @@ public class WalkingThroughASet
 
         TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
         Assert.Equal(1, went.Written);
+    }
+
+    // ------------------------------------- what somebody watching it sees
+
+    [Fact]
+    public async Task Says_which_disc_of_how_many_at_every_step()
+    {
+        MakeADisc window = await ASetOf(2, new ABurnerThatRemembers());
+        List<string> said = [];
+
+        window.PropertyChanged += (sender, about) =>
+        {
+            if (about.PropertyName == nameof(MakeADisc.Doing) && window.Doing.Length > 0)
+            {
+                said.Add(window.Doing);
+            }
+        };
+
+        await window.BurnTheSet(
+            [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"],
+            OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // Which disc, and which of how many, in every line. Half an hour of
+        // watching a bar with no idea how many discs are left is the thing
+        // these sentences exist to prevent.
+        Assert.Contains("disc 1 of 2", said);
+        Assert.Contains("waiting for a blank disc for disc 2 of 2", said);
+        Assert.Contains("disc 2 of 2", said);
+        Assert.All(said, line => Assert.Contains(" of 2", line, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Leaves_nothing_running_when_the_set_is_finished()
+    {
+        MakeADisc window = await ASetOf(2, new ABurnerThatRemembers());
+        List<string> announced = [];
+
+        window.PropertyChanged += (sender, about) => announced.Add(about.PropertyName ?? string.Empty);
+
+        await window.BurnTheSet(
+            [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"],
+            OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // A window left saying it is working is a window with every button
+        // dead and a bar part way across, over a set that finished.
+        Assert.True(window.NothingIsRunning);
+        Assert.Equal(string.Empty, window.Doing);
+        Assert.Equal(0, window.HowFar);
+
+        // Said, and not only true. Twice over: once when it started and once
+        // when it stopped.
+        Assert.Contains(nameof(MakeADisc.HowTheSetWent), announced);
+        Assert.True(
+            announced.Count(each => each == nameof(MakeADisc.IsWorking)) >= 2,
+            "it did not say both that it had started and that it had stopped");
+    }
+
+    [Fact]
+    public async Task Stops_before_the_next_disc_when_somebody_cancels()
+    {
+        using CancellationTokenSource stop = new();
+        ABurnerThatRemembers burner = new();
+
+        // The note is left the moment a disc has been written and read back
+        // clean, which is the one place in the walk where a disc is finished
+        // and the next has not begun.
+        MakeADisc window = await ASetOf(3, burner, note: new ANoteThatCancels(stop));
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn, stop.Token);
+
+        // One blank spent, not two. Somebody who presses stop between discs
+        // has stopped it, and a disc written after that is a disc they did not
+        // ask for.
+        Assert.Single(burner.Wrote);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+        Assert.Equal(1, went.Written);
+        Assert.Contains("It stopped at disc 2 of 3: it was stopped", went.InWords, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Says_so_when_nobody_picks_a_drive()
+    {
+        ABurnerThatRemembers burner = new();
+        MakeADisc window = await ASetOf(3, burner, drives: new TwoDrives());
+
+        await window.BurnTheSet(
+            ThreeImages,
+            ready => Task.FromResult<Recorder?>(null),
+            NeverErases,
+            Closes,
+            AlwaysAnother,
+            NeverAsksToCarryOn);
+
+        // Two blanks in two drives and somebody who closed the question. That
+        // is a decision rather than a fault, and nothing was written.
+        Assert.Empty(burner.Wrote);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+        Assert.Contains("It stopped at disc 1 of 3: no drive was chosen", went.InWords, StringComparison.Ordinal);
+        Assert.Null(window.ItWentWrong);
     }
 
     [Fact]
@@ -674,6 +780,24 @@ public class WalkingThroughASet
         throw new InvalidOperationException("It should not have had to ask about carrying on.");
 
     /// <summary>
+    /// A blank for the first disc and somebody's used rewritable for the
+    /// second, which is the drawer most people are burning out of.
+    /// </summary>
+    private sealed class ADriveWithAUsedDiscForTheSecond : IFindRecorders
+    {
+        internal void TheDiscWasJustSwapped() => _used = true;
+
+        private bool _used;
+
+        public IReadOnlyList<Recorder> All() =>
+        [
+            _used
+                ? new Recorder("id-D", "D:", "A Drive", 3, false, 0, [750])
+                : new Recorder("id-D", "D:", "A Drive", 2, true, 360_000, [750])
+        ];
+    }
+
+    /// <summary>
     /// One drive that says nothing for the first few asks after the disc is
     /// swapped, the way a real one does while it is still reading what was
     /// just pushed in.
@@ -755,6 +879,17 @@ public class WalkingThroughASet
         public bool ShutIt(Recorder drive) => true;
 
         public bool CanShutItsOwnTray(Recorder drive) => true;
+    }
+
+    /// <summary>
+    /// A note that stops the set the moment a disc is finished, which is
+    /// somebody pressing stop between discs.
+    /// </summary>
+    private sealed class ANoteThatCancels(CancellationTokenSource stop) : IKeepTheSetsPlace
+    {
+        public string? WhatItSays(string folder) => null;
+
+        public void Leave(string folder, string text) => stop.Cancel();
     }
 
     /// <summary>
@@ -923,6 +1058,37 @@ public class WalkingThroughASet
         }
     }
 
+
+    [Fact]
+    public async Task Says_which_disc_is_in_the_way_when_the_next_one_cannot_be_used()
+    {
+        // Disc 1 goes onto a blank. What goes in for disc 2 is a used
+        // rewritable, and the offer to erase it is declined.
+        ADriveWithAUsedDiscForTheSecond drives = new();
+        ABurnerThatRemembers burner = new();
+        MakeADisc window = await ASetOf(2, burner, drives: drives);
+
+        await window.BurnTheSet(
+            [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"],
+            OnlyOneDrive,
+            could => Task.FromResult<Recorder?>(null),
+            Closes,
+            (number, of, drive) => { drives.TheDiscWasJustSwapped(); return Task.FromResult(true); },
+            NeverAsksToCarryOn);
+
+        // One disc written, and the sentence names the disc in the way rather
+        // than saying the next disc could not be used, which tells somebody
+        // standing at the drive nothing they can act on.
+        Assert.Single(burner.Wrote);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+        Assert.Equal(1, went.Written);
+        Assert.Contains(
+            "It stopped at disc 2 of 2: The CD-RW in D: has something on it",
+            went.InWords,
+            StringComparison.Ordinal);
+    }
+
     // ----------------------------------- a drive still reading the next disc
 
     [Fact]
@@ -981,6 +1147,13 @@ public class WalkingThroughASet
             "would not say",
             window.ItWentWrong?.Headline ?? string.Empty,
             StringComparison.Ordinal);
+
+        // And the set's own sentence carries that refusal rather than a
+        // general line about no drive being chosen. Somebody who declined to
+        // erase a disc knows they declined; what they need told is that the
+        // disc in the drive is the thing in the way.
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+        Assert.Contains("The CD-RW in D: has something on it", went.InWords, StringComparison.Ordinal);
     }
 
 }

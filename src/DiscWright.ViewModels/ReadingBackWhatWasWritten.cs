@@ -108,8 +108,40 @@ public abstract record WhichDisc
     {
     }
 
-    /// <summary>Disc three of a set, while the set is being walked.</summary>
-    public sealed record OfASet(int Number) : WhichDisc;
+    /// <summary>
+    /// Disc three of five, while the set is being walked, and every line the
+    /// window says about it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The words live here because they are about this disc and nothing else,
+    /// and because they were four interpolated strings inside the walk, built
+    /// from <c>at + 1</c> and a count, that nothing objected to being emptied.
+    /// </para>
+    /// <para>
+    /// <strong>How many there are is part of knowing which disc this is.</strong>
+    /// The walk said "disc 1 of 2" while it wrote and the check said "disc 1"
+    /// while it read back, which is the same disc described two ways in
+    /// consecutive lines over somebody watching a bar for half an hour.
+    /// </para>
+    /// </remarks>
+    /// <param name="Number">Which disc, from one.</param>
+    /// <param name="OfThem">How many the set has.</param>
+    public sealed record OfASet(int Number, int OfThem) : WhichDisc
+    {
+        /// <summary>"disc 2 of 3", which heads every line about this disc.</summary>
+        public string InWords => $"disc {Number} of {OfThem}";
+
+        /// <summary>
+        /// What the window says while it waits for somebody to swap the disc.
+        /// </summary>
+        /// <remarks>
+        /// The disc it is waiting for, not the one just written. A dialog is
+        /// asking for the next blank at the same moment, and the bar behind it
+        /// has to agree with the dialog.
+        /// </remarks>
+        public string WaitingForABlank => $"waiting for a blank disc for {InWords}";
+    }
 
     /// <summary>The disc an image was written from, burned on its own.</summary>
     public sealed record TheImageCalled(string Path) : WhichDisc;
@@ -126,7 +158,7 @@ public abstract record WhichDisc
     /// </remarks>
     public BuiltDisc? OutOf(IReadOnlyList<BuiltDisc> discs) => this switch
     {
-        OfASet(int number) => discs.FirstOrDefault(disc => disc.Number == number),
+        OfASet(int number, _) => discs.FirstOrDefault(disc => disc.Number == number),
 
         TheImageCalled(string path) when System.IO.Path.GetFileNameWithoutExtension(path) is string name =>
             discs.FirstOrDefault(disc => string.Equals(
@@ -148,7 +180,7 @@ public abstract record WhichDisc
     /// </remarks>
     public string Saying(string step) => this switch
     {
-        OfASet(int number) => $"disc {number}: {step}",
+        OfASet set => $"{set.InWords}: {step}",
         _ => step
     };
 }
