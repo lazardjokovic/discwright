@@ -56,4 +56,9 @@ public sealed record TheMachine(
 
     // Last and optional, so every place that builds one of these for a test
     // keeps working and the ones that care about a folder say so.
-    WhereDiscsWouldGo? Places = null);
+    WhereDiscsWouldGo? Places = null,
+
+    // How long a drive gets to say what is in it, which is as much a fact
+    // about this machine as the drives themselves. A real one needs seconds
+    // and a test needs none. Null means what a real one needs.
+    HowLongADriveGets? Patience = null);

@@ -661,7 +661,8 @@ public class WalkingThroughASet
         IFindRecorders? drives = null,
         IKeepTheSetsPlace? note = null,
         Func<string, long>? howBig = null,
-        IEraseDiscs? eraser = null)
+        IEraseDiscs? eraser = null,
+        AClockThatMovesItself? clock = null)
     {
         MakeADisc window = new(new TheMachine(
             new NoEncoding(),
@@ -678,7 +679,13 @@ public class WalkingThroughASet
             new NoPreview(),
             new PicturesThatRead(),
             "2.0.0",
-            howBig ?? (_ => 1000)));
+            howBig ?? (_ => 1000),
+
+            // A clock that moves itself, so a drive that is slow to read the
+            // disc just pushed in is waited for without the suite sitting
+            // through the seconds. The two tests below used to spend three
+            // real ones each.
+            Patience: (clock ?? new AClockThatMovesItself()).Patience));
 
         window.OutputFolder = @"C:\out";
         window.Add(AGame("A Big Game"));
@@ -853,7 +860,8 @@ public class WalkingThroughASet
     {
         ADriveSlowToReadTheNextDisc slow = new(quietAfter: 3, blankWhenRead: true);
         ABurnerThatRemembers burner = new();
-        MakeADisc window = await ASetOf(2, burner, drives: slow);
+        AClockThatMovesItself clock = new();
+        MakeADisc window = await ASetOf(2, burner, drives: slow, clock: clock);
 
         await window.BurnTheSet(
             [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"],
@@ -869,6 +877,12 @@ public class WalkingThroughASet
         TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
         Assert.True(went.Whole, $"the set stopped: {window.ItWentWrong?.Headline}");
         Assert.Equal([@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"], burner.Wrote);
+
+        // Through the clock it was handed, which is the only proof that the
+        // window waits with the machine's patience rather than with one of
+        // its own. Ignoring it would leave the suite sitting through real
+        // seconds and still passing.
+        Assert.True(clock.Waits > 0, "nothing waited on the clock it was given");
     }
 
     [Fact]

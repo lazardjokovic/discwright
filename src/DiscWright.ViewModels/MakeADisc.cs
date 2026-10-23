@@ -84,9 +84,21 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private DiscOptions _options = new();
     private ReadOnlyObservableCollection<GameFolder>? _view;
 
+    /// <summary>
+    /// Finding a drive with a disc in it that will take what is to be written.
+    /// </summary>
+    /// <remarks>
+    /// A class of its own, because every way into it ran through a burn and a
+    /// mutation pass found branches of it that nothing reached at all. It
+    /// still reports through <see cref="Say"/>, so what somebody watching the
+    /// window sees is what they saw before.
+    /// </remarks>
+    private readonly SettlingOnADrive _settling;
+
     public MakeADisc(TheMachine machine)
     {
         _machine = machine;
+        _settling = new SettlingOnADrive(machine.Drives, machine.Eraser, Say, machine.Patience);
         Reconsider();
     }
 
@@ -1124,7 +1136,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             // have a backing class factory" arrived before a single thing had
             // been erased, from the sentence below rather than from the erase
             // the catch-all was written for.
-            IReadOnlyList<Recorder> all = await WaitForTheDriveToSaySomething(_machine.Drives.All(), null, ct);
+            IReadOnlyList<Recorder> all = await _settling.OnceTheyHaveAnswered(null, ct);
 
             Recorder[] could = [.. all.Where(each => each.ErasingWouldHelp)];
 
@@ -1435,9 +1447,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         try
         {
             // A drive chosen in the window is the answer, so nothing is asked.
-            Recorder? onto = _theDrive is Recorder picked
-                ? await SettleThatOne(picked.Drive, _machine.HowBigIs(image), whichToErase, ct)
-                : await Settle(_machine.HowBigIs(image), chooseADrive, whichToErase, ct);
+            Recorder? onto = TheDriveIn(_theDrive is Recorder picked
+                ? await _settling.OnThatOne(picked.Drive, _machine.HowBigIs(image), whichToErase, ct)
+                : await _settling.OnWhicheverIsReady(
+                    _machine.HowBigIs(image), chooseADrive, whichToErase, ct));
 
             if (onto is null)
             {
@@ -1875,9 +1888,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
             // Once, before the first disc this run writes, and not at all
             // when the window already says which drive.
-            Recorder? drive = _theDrive is Recorder picked
-                ? await SettleThatOne(picked.Drive, _machine.HowBigIs(images[broughtForward]), whichToErase, ct)
-                : await Settle(_machine.HowBigIs(images[broughtForward]), chooseADrive, whichToErase, ct);
+            Recorder? drive = TheDriveIn(_theDrive is Recorder picked
+                ? await _settling.OnThatOne(
+                    picked.Drive, _machine.HowBigIs(images[broughtForward]), whichToErase, ct)
+                : await _settling.OnWhicheverIsReady(
+                    _machine.HowBigIs(images[broughtForward]), chooseADrive, whichToErase, ct));
 
             if (drive is null)
             {
@@ -1905,7 +1920,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
                     // Asked again, because what is in that drive has changed:
                     // the disc just written came out and something else went
                     // in, and it may not be blank.
-                    Recorder? again = await SettleThatOne(drive.Drive, _machine.HowBigIs(images[at]), whichToErase, ct);
+                    Recorder? again = TheDriveIn(await _settling.OnThatOne(
+                        drive.Drive, _machine.HowBigIs(images[at]), whichToErase, ct));
 
                     if (again is null)
                     {
@@ -2019,55 +2035,22 @@ public sealed class MakeADisc : INotifyPropertyChanged
             new TheNoteBesideTheDiscs(Label, images, written).AsText());
 
     /// <summary>
-    /// The one drive again, after whatever is in it has changed.
+    /// The drive out of an answer, having kept the refusal when there is one.
     /// </summary>
-    private async Task<Recorder?> SettleThatOne(
-        string drive,
-        long bytes,
-        Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
-        CancellationToken ct)
+    /// <remarks>
+    /// Nothing to show for a question answered with no drive, which is a
+    /// decision somebody took and not a thing that went wrong. A refusal is
+    /// kept rather than shown here, because every caller is inside a build
+    /// whose end tells the window about it.
+    /// </remarks>
+    private Recorder? TheDriveIn(Settled settled)
     {
-        IReadOnlyList<Recorder> all = await WaitForTheDriveToSaySomething(
-            _machine.Drives.All(), drive, ct);
-
-        for (int attempt = 0; attempt < 2; attempt++)
+        if (settled is Settled.No refused)
         {
-            switch (WhichRecorder.For(all, bytes, drive))
-            {
-                case Outcome<Recorder>.Ok(Recorder ready):
-                    return ready;
-
-                case Outcome<Recorder>.No refused:
-                    Recorder[] erasable =
-                    [
-                        .. all.Where(each =>
-                            each.ErasingWouldHelp
-                            && string.Equals(each.Drive, drive, StringComparison.OrdinalIgnoreCase))
-                    ];
-
-                    if (attempt == 0 && erasable.Length > 0 && await whichToErase(erasable) is Recorder chosen)
-                    {
-                        Say($"erasing the {chosen.Holding} in {chosen.Drive}", 0);
-
-                        Outcome<string> erased = await _machine.Eraser.BlankIt(
-                            chosen, new Progress<EraseProgress>(step => Say(step.Doing, step.HowFar ?? 0)), ct);
-
-                        if (erased is Outcome<string>.No stopped)
-                        {
-                            ItWentWrong = stopped.Refusal;
-                            return null;
-                        }
-
-                        all = _machine.Drives.All();
-                        continue;
-                    }
-
-                    ItWentWrong = refused.Refusal;
-                    return null;
-            }
+            ItWentWrong = refused.Why;
         }
 
-        return null;
+        return (settled as Settled.ThisOne)?.Drive;
     }
 
     /// <summary>Reads back one disc of a set, against the folder it was built from.</summary>
@@ -2110,123 +2093,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
             ct);
 
         Tell(nameof(HowTheDiscCameOut));
-    }
-
-    /// <summary>
-    /// Which drive, asking only where there is something to ask.
-    /// </summary>
-    /// <summary>
-    /// How long to let a drive think before taking its silence as an answer.
-    /// </summary>
-    /// <remarks>
-    /// A drive asked the moment a tray shuts can take ten seconds to say what
-    /// is in it, measured on the ASUS writer here. Fifteen is that with room
-    /// to spare, and it only ever costs anything when something is wrong.
-    /// </remarks>
-    private static readonly TimeSpan LongEnoughForADriveToWakeUp = TimeSpan.FromSeconds(15);
-
-    /// <summary>
-    /// Reads the drives again until the one being waited on has something to
-    /// say, or until it has had long enough.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A disc that has just been pushed in is still being read, and asking
-    /// then throws rather than answering, which becomes
-    /// <see cref="Recorder.WhyNot"/>.
-    /// </para>
-    /// <para>
-    /// That is not a refusal, it is a drive that has not finished thinking,
-    /// and treating it as one is worse than it sounds: WhyNot also makes
-    /// <see cref="Recorder.ErasingWouldHelp"/> false, so the offer to erase
-    /// the disc never appears and somebody who put a used disc in is told the
-    /// drive would not say what is in it, with nothing to do about it.
-    ///
-    /// Found by Lazar putting a used disc in for the second disc of a set on
-    /// purpose, and getting a dead end instead of the question.
-    /// </para>
-    /// </remarks>
-    private async Task<IReadOnlyList<Recorder>> WaitForTheDriveToSaySomething(
-        IReadOnlyList<Recorder> all, string? onlyThisOne, CancellationToken ct)
-    {
-        bool StillThinking(IReadOnlyList<Recorder> drives) => drives.Any(each =>
-            each.WhyNot is not null
-            && (onlyThisOne is null || string.Equals(each.Drive, onlyThisOne, StringComparison.OrdinalIgnoreCase)));
-
-        if (!StillThinking(all))
-        {
-            return all;
-        }
-
-        Say("waiting for the drive", 0);
-
-        for (DateTimeOffset until = DateTimeOffset.UtcNow + LongEnoughForADriveToWakeUp;
-             DateTimeOffset.UtcNow < until;)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(1), ct);
-
-            all = _machine.Drives.All();
-
-            if (!StillThinking(all))
-            {
-                return all;
-            }
-        }
-
-        return all;
-    }
-
-    private async Task<Recorder?> Settle(
-        long bytes,
-        Func<IReadOnlyList<Recorder>, Task<Recorder?>> chooseADrive,
-        Func<IReadOnlyList<Recorder>, Task<Recorder?>> whichToErase,
-        CancellationToken ct)
-    {
-        IReadOnlyList<Recorder> all = await WaitForTheDriveToSaySomething(
-            _machine.Drives.All(), null, ct);
-
-        // Twice at most: once as it stands, and once more after an erase,
-        // because erasing changes the answer.
-        for (int attempt = 0; attempt < 2; attempt++)
-        {
-            switch (WhichRecorder.For(all, bytes))
-            {
-                case Outcome<Recorder>.Ok(Recorder ready):
-                    return ready;
-
-                case Outcome<Recorder>.No refused:
-                    Recorder[] waiting = [.. all.Where(each => each.Ready)];
-
-                    if (waiting.Length > 1)
-                    {
-                        return await chooseADrive(waiting);
-                    }
-
-                    Recorder[] erasable = [.. all.Where(each => each.ErasingWouldHelp)];
-
-                    if (attempt == 0 && erasable.Length > 0 && await whichToErase(erasable) is Recorder chosen)
-                    {
-                        Say("erasing the " + chosen.Holding + " in " + chosen.Drive, 0);
-
-                        Outcome<string> erased = await _machine.Eraser.BlankIt(
-                            chosen, new Progress<EraseProgress>(step => Say(step.Doing, step.HowFar ?? 0)), ct);
-
-                        if (erased is Outcome<string>.No stopped)
-                        {
-                            ItWentWrong = stopped.Refusal;
-                            return null;
-                        }
-
-                        all = _machine.Drives.All();
-                        continue;
-                    }
-
-                    ItWentWrong = refused.Refusal;
-                    return null;
-            }
-        }
-
-        return null;
     }
 
     private async Task CheckIt(Recorder onto, string image, CancellationToken ct)
