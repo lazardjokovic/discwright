@@ -97,14 +97,14 @@ public class MakingARealImage : IDisposable
         string staged = Staged(("big.bin", 3_000_000));
         string image = Path.Combine(_root, "PROGRESS.iso");
 
-        List<ImageProgress> said = [];
+        EverythingItSaid<ImageProgress> said = new();
 
-        await New().Make(staged, image, "PROGRESS", false, 1, 1, new Progress<ImageProgress>(said.Add), default);
+        await New().Make(staged, image, "PROGRESS", false, 1, 1, said, default);
 
         // Reported at all, and the last word is the whole of it, so nothing is
         // left sitting at 199 parts in 200.
-        Assert.NotEmpty(said);
-        Assert.Equal(1, said[^1].HowFar);
+        Assert.NotEmpty(said.Heard);
+        Assert.Equal(1, said.Heard[^1].HowFar);
     }
 
     [Fact]

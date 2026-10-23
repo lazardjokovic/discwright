@@ -144,21 +144,15 @@ public sealed class ADiscCheckedAgainstItsOwnList
     public async Task Counts_its_way_through_so_the_window_can_say_where_it_is()
     {
         ADisc disc = new(("a.txt", "aaa"), ("b.txt", "bbb"), ("c.txt", "ccc"));
-        List<CheckProgress> said = [];
+        EverythingItSaid<CheckProgress> said = new();
 
-        await TheDiscAgainstItsOwnList.Check(
-            @"E:\", disc, disc, new Progress<CheckProgress>(said.Add), default);
+        await TheDiscAgainstItsOwnList.Check(@"E:\", disc, disc, said, default);
 
-        // Progress<T> posts its callbacks to another thread, so it is given a
-        // moment rather than read the instant the task returns.
-        for (int waited = 0; waited < 50 && said.Count < 3; waited++)
-        {
-            await Task.Delay(20);
-        }
-
-        Assert.Equal(3, said.Count);
-        Assert.Equal(3, said[^1].Done);
-        Assert.Equal(1, said[^1].HowFar);
+        // Heard on the thread they were said on, so there is nothing to wait
+        // for. This used to give Progress<T> a second to deliver the last one.
+        Assert.Equal(3, said.Heard.Count);
+        Assert.Equal(3, said.Heard[^1].Done);
+        Assert.Equal(1, said.Heard[^1].HowFar);
     }
 
     /// <summary>A disc that carries a list, and can be made to misbehave.</summary>

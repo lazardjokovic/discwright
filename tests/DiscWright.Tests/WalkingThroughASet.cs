@@ -99,6 +99,52 @@ public class WalkingThroughASet
     }
 
     [Fact]
+    public async Task Says_out_loud_that_a_disc_could_not_be_checked()
+    {
+        // The staging folder has gone and the disc carries no list, so there
+        // is nothing to compare the disc with. The disc is written and that is
+        // all anybody knows, which is not the same as a disc that failed.
+        List<string> announced = [];
+        MakeADisc window = await ASetOf(2, new ABurnerThatRemembers(), disk: new ADiskWithNothingLeftBesideIt());
+
+        window.PropertyChanged += (sender, about) => announced.Add(about.PropertyName ?? string.Empty);
+
+        await window.BurnTheSet(
+            [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"],
+            OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // Said, and not only decided. One half of this used to set the answer
+        // and tell nobody, so a window showing the previous disc's result went
+        // on showing it over a disc nothing had looked at. Nothing caught it
+        // because nothing in the suite can press Burn.
+        Assert.Contains(nameof(MakeADisc.HowTheDiscCameOut), announced);
+        Assert.Null(window.HowTheDiscCameOut);
+
+        Refusal why = Assert.IsType<Refusal>(window.ItWentWrong);
+        Assert.Equal("The disc was written but not checked", why.Headline);
+    }
+
+    [Fact]
+    public async Task Never_keeps_one_discs_answer_over_a_disc_nothing_could_check()
+    {
+        // Disc 1 was built, burned and read back clean. Disc 2's folder has
+        // gone, so there is nothing to compare it with.
+        MakeADisc window = await ASetOf(
+            2, new ABurnerThatRemembers(), disk: new ADiskThatKeptOnlyTheFirstDiscsFolder());
+
+        await window.BurnTheSet(
+            [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"],
+            OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // Leaving disc 1's answer in place puts a tick beside a disc nothing
+        // ever looked at, which is the worst way for this program to be wrong.
+        Assert.Null(window.HowTheDiscCameOut);
+
+        TheSetSoFar went = Assert.IsType<TheSetSoFar>(window.HowTheSetWent);
+        Assert.Equal(1, went.Written);
+    }
+
+    [Fact]
     public async Task Writes_the_whole_set_to_the_one_drive_it_settled_on()
     {
         ABurnerThatRemembers burner = new();
@@ -658,6 +704,7 @@ public class WalkingThroughASet
         int discs,
         IBurnDiscs burner,
         bool checksOut = true,
+        IFileSystem? disk = null,
         IFindRecorders? drives = null,
         IKeepTheSetsPlace? note = null,
         Func<string, long>? howBig = null,
@@ -671,7 +718,7 @@ public class WalkingThroughASet
             drives ?? new OneBlankDrive(),
             burner,
             eraser ?? new AnEraserThatWorks(),
-            checksOut ? new ADiskThatMatches() : new ADiskThatDoesNot(),
+            disk ?? (checksOut ? new ADiskThatMatches() : new ADiskThatDoesNot()),
             new NoHashing(),
             note ?? new ANoteInMemory(),
             new ATrayThatShuts(),
@@ -790,6 +837,29 @@ public class WalkingThroughASet
             new("id-D", "D:", "A Drive", 2, true, 360_000, [750]),
             new("id-E", "E:", "Another Drive", 2, true, 360_000, [750])
         ];
+    }
+
+    /// <summary>
+    /// A disc that can be read and a staging folder that has gone, which is
+    /// what a project looks like a week after it was built.
+    /// </summary>
+    private sealed class ADiskWithNothingLeftBesideIt : IFileSystem
+    {
+        public bool FolderExists(string path) => path.StartsWith("E:", StringComparison.OrdinalIgnoreCase);
+
+        public FolderListing List(string path) => new(path, []);
+    }
+
+    /// <summary>
+    /// The first disc's folder still there and the second one's gone, which is
+    /// a set finished over two evenings with a tidy up in between.
+    /// </summary>
+    private sealed class ADiskThatKeptOnlyTheFirstDiscsFolder : IFileSystem
+    {
+        public bool FolderExists(string path) =>
+            !path.EndsWith("disc D2", StringComparison.OrdinalIgnoreCase);
+
+        public FolderListing List(string path) => new(path, [new ListedFile("setup_a_game.exe", 1000)]);
     }
 
     private sealed class ADiskThatMatches : IFileSystem

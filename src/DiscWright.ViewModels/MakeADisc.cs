@@ -95,10 +95,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     private readonly SettlingOnADrive _settling;
 
+    /// <summary>
+    /// Reading a disc back against the right thing, once it is written.
+    /// </summary>
+    /// <remarks>
+    /// Out here for the same reason as the settling: the only way in was to
+    /// burn a disc, and the choice it makes was written twice in this file.
+    /// </remarks>
+    private readonly ReadingBackWhatWasWritten _reading;
+
     public MakeADisc(TheMachine machine)
     {
         _machine = machine;
         _settling = new SettlingOnADrive(machine.Drives, machine.Eraser, Say, machine.Patience);
+        _reading = new ReadingBackWhatWasWritten(machine.Disk, machine.Hasher, Say);
         Reconsider();
     }
 
@@ -1479,7 +1489,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                         return;
                     }
 
-                    await CheckIt(onto, image, ct);
+                    await HowTheDiscCameBack(onto, new WhichDisc.TheImageCalled(image), ct);
 
                     // A disc burned on its own counts towards the set too.
                     //
@@ -1952,7 +1962,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                     return;
                 }
 
-                await CheckThatDisc(drive, at + 1, ct);
+                await HowTheDiscCameBack(drive, new WhichDisc.OfASet(at + 1), ct);
 
                 // Disc 2 is no use at all if disc 1 came out wrong.
                 if (HowTheDiscCameOut is not DiscCheck came || !came.Good)
@@ -2053,113 +2063,40 @@ public sealed class MakeADisc : INotifyPropertyChanged
         return (settled as Settled.ThisOne)?.Drive;
     }
 
-    /// <summary>Reads back one disc of a set, against the folder it was built from.</summary>
-    private async Task CheckThatDisc(Recorder onto, int number, CancellationToken ct)
-    {
-        string root = onto.Drive.TrimEnd((char)92) + (char)92;
-
-        string staged = Made is { Discs.Count: > 0 } made
-            ? (made.Discs.FirstOrDefault(disc => disc.Number == number) ?? made.Discs[0]).Folder
-            : string.Empty;
-
-        if (staged.Length == 0 || !_machine.Disk.FolderExists(staged))
-        {
-            // Walking a set after opening the project it was built from is
-            // the ordinary way to finish one, so this is the common case and
-            // not the odd one.
-            HowTheDiscCameOut = TheDiscAgainstItsOwnList.IsOn(root, _machine.Disk)
-                ? await TheDiscAgainstItsOwnList.Check(
-                    root,
-                    _machine.Disk,
-                    _machine.Hasher,
-                    new Progress<CheckProgress>(step => Say($"disc {number}: {step}", step.HowFar)),
-                    ct)
-                : null;
-
-            if (HowTheDiscCameOut is null)
-            {
-                ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
-            }
-
-            return;
-        }
-
-        HowTheDiscCameOut = await TheDiscAgainstWhatWasBuilt.Check(
-            root,
-            staged,
-            _machine.Disk,
-            _machine.Hasher,
-            new Progress<CheckProgress>(step => Say($"disc {number}: {step}", step.HowFar)),
-            ct);
-
-        Tell(nameof(HowTheDiscCameOut));
-    }
-
-    private async Task CheckIt(Recorder onto, string image, CancellationToken ct)
-    {
-        string root = onto.Drive.TrimEnd((char)92) + (char)92;
-
-        // The disc that was burned, not whichever was built first. This took
-        // Discs[0] every time, so burning disc 2 of a set made in the same
-        // sitting compared it against disc 1 and called every file on it
-        // wrong, which looks exactly like a ruined disc.
-        string staged = Made is { Discs.Count: > 0 } made
-            ? (TheOneThatMade(made, image) ?? made.Discs[0]).Folder
-            : string.Empty;
-
-        HowTheDiscCameOut = await ReadItBack(root, staged, onto, ct);
-        Tell(nameof(HowTheDiscCameOut));
-    }
-
-    /// <summary>Which built disc an image came from, by its name.</summary>
-    /// <remarks>
-    /// Every disc in a set carries the same label, so the label alone cannot
-    /// tell them apart. The name is rebuilt the way TheImageOf builds it, so
-    /// the two cannot drift: "{label} D{number}.iso" in a set, "{label}.iso"
-    /// for a disc on its own.
-    /// </remarks>
-    private static BuiltDisc? TheOneThatMade(BuiltDiscs made, string image)
-    {
-        string name = System.IO.Path.GetFileNameWithoutExtension(image);
-
-        return made.Discs.FirstOrDefault(disc =>
-            string.Equals(
-                disc.OfDiscs > 1 ? $"{disc.Label} D{disc.Number}" : disc.Label,
-                name,
-                StringComparison.OrdinalIgnoreCase));
-    }
-
     /// <summary>
-    /// Reads a disc back, against the folder it was built from when that is
-    /// still here, and against the list the disc carries when it is not.
+    /// Reads the disc back and says how it came out, or says that nobody can
+    /// speak for it.
     /// </summary>
     /// <remarks>
-    /// Opening a finished project and pressing Burn leaves nothing built in
-    /// this sitting, so there was no folder to compare with and a disc that
-    /// read back perfectly was reported as written but not checked. The same
-    /// went for a disc from another machine, or one whose staging folder had
-    /// been tidied away, and always would have.
+    /// <para>
+    /// Both ways in land here: a disc burned on its own, known by the image it
+    /// came from, and a disc of a set, known by its number. What differs
+    /// between them is in <see cref="WhichDisc"/> and nowhere else.
+    /// </para>
+    /// <para>
+    /// <strong>It announces either way.</strong> The half of this that read a
+    /// disc of a set against the list the disc carries set the answer and said
+    /// nothing, so a window showing the previous disc's result went on showing
+    /// it. Nothing caught that, because nothing can press Burn.
+    /// </para>
     /// </remarks>
-    private async Task<DiscCheck?> ReadItBack(string root, string staged, Recorder onto, CancellationToken ct)
+    private async Task HowTheDiscCameBack(Recorder onto, WhichDisc which, CancellationToken ct)
     {
-        Progress<CheckProgress> saying = new(step => Say(step.ToString(), step.HowFar));
-
-        if (staged.Length > 0 && _machine.Disk.FolderExists(staged))
+        switch (await _reading.HowItCameOut(onto, which, Made, ct))
         {
-            return await TheDiscAgainstWhatWasBuilt.Check(
-                root, staged, _machine.Disk, _machine.Hasher, saying, ct);
+            case Outcome<DiscCheck>.Ok(DiscCheck how):
+                HowTheDiscCameOut = how;
+                break;
+
+            case Outcome<DiscCheck>.No refused:
+                // The disc is written, and that is all that can honestly be
+                // said about it.
+                HowTheDiscCameOut = null;
+                ItWentWrong = refused.Refusal;
+                break;
         }
 
-        if (TheDiscAgainstItsOwnList.IsOn(root, _machine.Disk))
-        {
-            return await TheDiscAgainstItsOwnList.Check(
-                root, _machine.Disk, _machine.Hasher, saying, ct);
-        }
-
-        // Neither. The disc is written, and that is all that can honestly be
-        // said about it.
-        ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
-        return null;
+        Tell(nameof(HowTheDiscCameOut));
     }
 
     /// <summary>One line about what is happening, and how far through it is.</summary>

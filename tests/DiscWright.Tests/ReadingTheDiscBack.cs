@@ -162,13 +162,13 @@ public class ReadingTheDiscBack : IDisposable
         string built = Folder("built", ("one.bin", "a"), ("two.bin", "b"), ("three.bin", "c"));
         string disc = Folder("disc", ("one.bin", "a"), ("two.bin", "b"), ("three.bin", "c"));
 
-        List<CheckProgress> said = [];
-        await Check(disc, built, new Progress<CheckProgress>(said.Add));
+        EverythingItSaid<CheckProgress> said = new();
+        await Check(disc, built, said);
 
         // Hashing a full disc takes minutes, and a still window is how somebody
         // decides it has hung.
-        Assert.Equal(3, said.Count);
-        Assert.Equal(1, said[^1].HowFar);
+        Assert.Equal(3, said.Heard.Count);
+        Assert.Equal(1, said.Heard[^1].HowFar);
     }
 
     // ------------------------------------------------------------------ helpers
