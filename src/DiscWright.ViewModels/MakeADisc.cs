@@ -543,13 +543,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
             _lookingAtTheDrives = false;
         }
 
-        // Not while something is running. A set being burned asks for its
-        // next blank, and a blank of a different kind going in would move the
-        // size the window is describing out from under a burn of the old one.
-        if (!_theSizeWasChosen
-            && !IsWorking
-            && TheDiscsThatAreIn.TheSizeToStartFrom(drives) is Medium found
-            && found != _medium)
+        if (WhatTheDrivesMean.TheSizeToStartFrom(drives, _medium, _theSizeWasChosen, IsWorking)
+            is Medium found)
         {
             // Not through the setter, which would count as a person choosing
             // and stop the drives mattering ever again.
@@ -569,21 +564,22 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(CanErase));
         Tell(nameof(WhatTheDrivesAreDoing));
 
-        // A drive that has been unplugged is not a choice any more. The slim
-        // one here lives on a USB cable.
-        if (_theDrive is not null
-            && !drives.Any(each => string.Equals(each.Drive, _theDrive.Drive, StringComparison.OrdinalIgnoreCase)))
+        if (_theDrive is not null)
         {
-            TheDrive = null;
-        }
-        else if (_theDrive is not null)
-        {
-            // Kept by letter rather than by the record, because what is in it
-            // has almost certainly changed since it was picked.
-            _theDrive = drives.First(each =>
-                string.Equals(each.Drive, _theDrive.Drive, StringComparison.OrdinalIgnoreCase));
-
-            Tell(nameof(TheDrive));
+            // Through the setter when it has gone, because losing the drive
+            // changes the tray warning and the line about the disc in it, and
+            // the setter is what says all of that. Kept as a field when it is
+            // still there, because the record is only a fresher photograph of
+            // the same drive.
+            if (WhatTheDrivesMean.TheSameDriveAgain(_theDrive, drives) is Recorder again)
+            {
+                _theDrive = again;
+                Tell(nameof(TheDrive));
+            }
+            else
+            {
+                TheDrive = null;
+            }
         }
 
         _traysThatShut = shut;
@@ -616,18 +612,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     private void SayWhatTheTraysNeed()
     {
-        string? chosen = _theDrive?.Drive;
-
-        // Once a drive is chosen, the warning is about THAT one. A sentence
-        // about the drive somebody is not using is noise, and one left over
-        // from the drive they were using a moment ago is worse than noise.
-        IReadOnlyList<Recorder> asking =
-        [
-            .. _lastSeen
-                .Where(each => _traysThatShut.ContainsKey(each.Drive))
-                .Where(each => chosen is null
-                    || string.Equals(each.Drive, chosen, StringComparison.OrdinalIgnoreCase))
-        ];
+        IReadOnlyList<Recorder> asking = WhatTheDrivesMean.TheOnesToAskAboutTrays(
+            _lastSeen, _traysThatShut, _theDrive?.Drive);
 
         AboutTheTray = TheDiscsThatAreIn.WhatToSayAboutTheTray(
             asking, drive => _traysThatShut[drive.Drive]) ?? string.Empty;
@@ -1046,22 +1032,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// a push, so the fact still reaches whoever is standing there, and this
     /// is the part that reaches them beforehand.
     /// </remarks>
-    public string WhatTheDrivesAreDoing
-    {
-        get
-        {
-            const string leaveIt =
-                "Leave this alone and DiscWright works it out, and asks only if there is something to ask.";
-
-            // Not "is string", which an empty one also is. With no tray to
-            // warn about, that joined a full stop and a space to nothing and
-            // hung a paragraph about a problem nobody had under a sentence
-            // that had already answered the question.
-            return AboutTheTray is { Length: > 0 } tray
-                ? leaveIt + "\n\n" + tray + ". " + WhyTheTrayMatters
-                : leaveIt;
-        }
-    }
+    public string WhatTheDrivesAreDoing =>
+        WhatTheDrivesMean.WhatThePickerSays(AboutTheTray, WhyTheTrayMatters);
 
     /// <summary>
     /// Why a tray that needs pushing matters, for the window to hover with.
