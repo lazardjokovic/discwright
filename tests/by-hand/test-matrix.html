@@ -387,7 +387,7 @@
   happens when you try the thing that should not be there, and whether what it says still reads right at none
   and at one as well as at many.</p>
 
-  <p class="lede"><strong>Fifty six of these are now run by the suite and are hidden.</strong> They are still
+  <p class="lede"><strong>66 of these are now run by the suite and are hidden.</strong> They are still
   here, because this is a map of everything the program can be asked to do and a map with roads missing is
   worse than a long one, but a pass by hand should only be the part a person has to do. Turn them on with the
   switch above and each says which test runs it.</p>
@@ -816,11 +816,11 @@
         <span class="what">A README or a manual sitting loose beside the installer</span>
         <span class="look">Offered as something to keep rather than as an add-on. It belongs beside the game, not
         in the Add-ons folder.</span></label>
-      <label class="case"><input type="checkbox" id="e6"><span class="id">E6</span>
+      <label class="case run" data-by="Says_what_is_left_off_and_how_much_of_it"><input type="checkbox" id="e6"><span class="id">E6</span>
         <span class="what">Untick a patch after adding it</span>
         <span class="look"><i>Leaving off 1 thing, N MB.</i> in ordinary ink, not amber: it is the thing you just
         chose to do.</span></label>
-      <label class="case"><input type="checkbox" id="e7"><span class="id">E7</span>
+      <label class="case run" data-by="Says_a_patch_has_nothing_to_patch_when_its_game_is_turned_off"><input type="checkbox" id="e7"><span class="id">E7</span>
         <span class="what">Untick the installer and leave the patch on</span>
         <span class="look">Two different sentences, both of them: <i>Without its installer, the disc will not
         install the game.</i> and <i>X is not on the disc, but its add-ons are.</i></span></label>
@@ -964,7 +964,7 @@
         <span class="what">Two games with the same name</span>
         <span class="look">They must not land on each other, on the disc or in a preview. Three of them is the
         case that found the fault.</span></label>
-      <label class="case"><input type="checkbox" id="e41"><span class="id">E41</span>
+      <label class="case run" data-by="Remove_wakes_up_for_a_picked_row_and_for_nothing_else"><input type="checkbox" id="e41"><span class="id">E41</span>
         <span class="what">Remove: pick a row and press it; then untick several and press it with nothing picked</span>
         <span class="look">One behaviour. It takes what is picked, and with nothing picked it is grey and takes nothing,
         however many rows are unticked. The unticked ones go through the button beside it, which says how many it will take.
@@ -1029,7 +1029,7 @@
       <label class="case"><input type="checkbox" id="f13"><span class="id">F13</span>
         <span class="what">Choose a picture that is not a picture</span>
         <span class="look">Explained rather than crashed, and the old choice not quietly kept.</span></label>
-      <label class="case"><input type="checkbox" id="f14"><span class="id">F14</span>
+      <label class="case run" data-by="A_tune_that_has_been_moved_since_it_was_chosen_is_a_sentence"><input type="checkbox" id="f14"><span class="id">F14</span>
         <span class="what">Choose a tune, move or rename the file, then preview</span>
         <span class="look">This took the program down once. It must arrive as a sentence.</span></label>
     </div>
@@ -1182,7 +1182,7 @@
         <span class="what">Start a new disc, with something on it and with nothing on it</span>
         <span class="look">Asked first when there is something to lose; grey when there is not. Where it builds
         and More options survive.</span></label>
-      <label class="case"><input type="checkbox" id="i15"><span class="id">I15</span>
+      <label class="case run" data-by="AskingIfThereIsANewerOne"><input type="checkbox" id="i15"><span class="id">I15</span>
         <span class="what">Check for new version</span>
         <span class="look">Four states on one line: the offer, <i>Asking GitHub</i>, the answer, and
         <b>Get it</b> only when there is something newer to get.</span></label>
@@ -1266,11 +1266,11 @@
         <span class="what">The line under <i>Split a file too big for one disc</i></span>
         <span class="look">Three forms: nothing to cut · one file named with its size and its pieces · <i>2 files
         will be cut, into 6 pieces between them.</i></span></label>
-      <label class="case"><input type="checkbox" id="k5"><span class="id">K5</span>
+      <label class="case run" data-by="ReadingTheDiscBack"><input type="checkbox" id="k5"><span class="id">K5</span>
         <span class="what">A disc that fails its read-back</span>
         <span class="look"><i>1 file could not be read off it</i> and its name · several, with up to three named
         · more than three, ending <i>, and 2 more.</i></span></label>
-      <label class="case"><input type="checkbox" id="k6"><span class="id">K6</span>
+      <label class="case run" data-by="Stops_when_a_disc_does_not_read_back"><input type="checkbox" id="k6"><span class="id">K6</span>
         <span class="what">How far a set got</span>
         <span class="look"><i>No disc of the set is finished.</i> when none is, and never <i>Nothing was
         written</i> about a blank that is spent.</span></label>
@@ -1286,7 +1286,7 @@
         <span class="what">The tray warning</span>
         <span class="look">Hidden · <i>D: needs the tray pushed in</i> · <i>D: and E: need the tray pushed
         in</i>. Check the verb.</span></label>
-      <label class="case"><input type="checkbox" id="k10"><span class="id">K10</span>
+      <label class="case run" data-by="WhatTheDrivesMeanToTheWindow"><input type="checkbox" id="k10"><span class="id">K10</span>
         <span class="what">Hovering WHICH DRIVE</span>
         <span class="look">One sentence when nothing needs a hand. Two paragraphs when something does, with a
         blank line between them and no stray full stop at the start of the second.</span></label>
@@ -1294,7 +1294,7 @@
         <span class="what">Erasing, on a machine with one writer and with two</span>
         <span class="look">One writer and one erasable disc gets a yes or no question naming it. Two gets a
         choice, because being told which drive is not the same as picking it.</span></label>
-      <label class="case"><input type="checkbox" id="k12"><span class="id">K12</span>
+      <label class="case run" data-by="Names_the_drives_it_looked_in_rather_than_refusing_in_the_abstract"><input type="checkbox" id="k12"><span class="id">K12</span>
         <span class="what">Nothing to erase, and nothing to burn</span>
         <span class="look">Each refusal names the drives it looked at rather than saying no in the
         abstract.</span></label>
@@ -1305,7 +1305,7 @@
         <span class="what">What else is chosen, on the main window</span>
         <span class="look"><i>Nothing chosen. A disc with none of it is still a disc.</i> · one thing named ·
         several, and check the joining.</span></label>
-      <label class="case"><input type="checkbox" id="k15"><span class="id">K15</span>
+      <label class="case run" data-by="AskingIfThereIsANewerOne"><input type="checkbox" id="k15"><span class="id">K15</span>
         <span class="what">The version line, all four states</span>
         <span class="look">The offer · <i>Asking GitHub</i> · the answer · <b>Get it</b> only when there really
         is something newer. On this build the honest answer is that it is newer than anything

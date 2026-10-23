@@ -103,6 +103,21 @@ public class SettlingOnADriveToWriteTo
     }
 
     [Fact]
+    public async Task Names_the_drives_it_looked_in_rather_than_refusing_in_the_abstract()
+    {
+        Settled settled = await Settling(new TwoUsedRewritables())
+            .OnWhicheverIsReady(ASmallImage, NeverAsksWhichDrive, could => Task.FromResult<Recorder?>(null));
+
+        // "There is no blank disc" about a machine with two drives in it is a
+        // sentence somebody will argue with. Both letters are in it, so they
+        // know which trays to look in.
+        Refusal why = Assert.IsType<Settled.No>(settled).Why;
+
+        Assert.Contains("D:", why.Because, StringComparison.Ordinal);
+        Assert.Contains("E:", why.Because, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Says_why_when_the_disc_in_the_drive_is_too_small_for_it()
     {
         // One sector free, and a megabyte to write into it.
