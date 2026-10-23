@@ -1607,14 +1607,22 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private static string? Tidy(string? path) =>
         string.IsNullOrWhiteSpace(path) ? null : path;
 
+    /// <summary>
+    /// Everything a picture can be chosen for, which is announced together.
+    /// </summary>
+    /// <remarks>
+    /// One record holds all five, so any change to it moves all five as far as
+    /// the window is concerned. Named here rather than in each place that has
+    /// to say so, because the second place that had to say so did not.
+    /// </remarks>
+    private static readonly string[] ThePicturesOnIt =
+        [nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace)];
+
     private void ChangeTheArtwork(DiscArtwork now)
     {
         _artwork = now.IsAnything || now.BackgroundAsIs ? now : null;
 
-        foreach (string named in new[]
-        {
-            nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace)
-        })
+        foreach (string named in ThePicturesOnIt)
         {
             Tell(named);
         }
@@ -2407,6 +2415,24 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(LegacyFileSystems));
         Tell(nameof(CutFiles));
 
+        // The artwork, the manual, the tune and the folder of extras, which a
+        // project file carries and which nothing here announced.
+        //
+        // So a project opened with an icon, a cover and a manual on it showed
+        // a panel with none of them named, while the disc it built got all
+        // three. Every one of those pickers reads its own property once and
+        // then believes what it read.
+        //
+        // Found by the walk, the first time it was taught to open a project.
+        foreach (string named in ThePicturesOnIt)
+        {
+            Tell(named);
+        }
+
+        Tell(nameof(Manual));
+        Tell(nameof(ExtrasFolder));
+        Tell(nameof(Music));
+
         Reconsider();
     }
 
@@ -2601,9 +2627,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
         LookForImages();
 
         Tell(nameof(IsWorking));
-            Tell(nameof(NothingIsRunning));
-            Tell(nameof(CanStartAgain));
-            Tell(nameof(CanTakeSomethingOff));
+        Tell(nameof(NothingIsRunning));
+        Tell(nameof(CanStartAgain));
+        Tell(nameof(CanTakeSomethingOff));
         Tell(nameof(Doing));
         Tell(nameof(HowFar));
         Tell(nameof(Made));
@@ -2611,6 +2637,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(CanMakeIt));
         Tell(nameof(CanBurn));
         Tell(nameof(CanPreview));
+
+        // What the drive said about its own reporting, which starting
+        // anything clears and nothing announced. The line is about the burn
+        // that has just been left behind, so a build started after one left
+        // it on screen underneath a bar that had gone back to nothing.
+        //
+        // Found by the walk, once it could press Make and Burn.
+        Tell(nameof(AboutTheImage));
     }
 
     private void Told()
