@@ -1204,10 +1204,18 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// Discs that stand alone are burned one at a time, chosen from whatever
     /// images are in the folder, which is the ordinary way to burn one disc.
     /// </para>
+    /// <para>
+    /// <strong>When this sitting built nothing, the folder answers.</strong>
+    /// Opening a finished project and pressing Burn is the ordinary way to
+    /// finish a set, and it got one image at a time from a list that did not
+    /// say which were done, with the note beside the discs never offered. The
+    /// images in the folder that are named as this disc's set, 1 upwards with
+    /// no gap, are the set.
+    /// </para>
     /// </remarks>
     public IReadOnlyList<string> TheSetToBurn =>
         Made is null
-            ? []
+            ? TheImageOf.TheSetAmong(TheImages, Label)
             : [.. Made.Discs.Where(disc => disc.OfDiscs > 1).OrderBy(disc => disc.Number).Select(TheImageOf.That)];
 
     /// <summary>
@@ -2724,6 +2732,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         Tell(nameof(TheImages));
         Tell(nameof(CanBurn));
+
+        // Which of them are a set follows the list, and follows the name, so
+        // it is said again from Told as well.
+        Tell(nameof(TheSetToBurn));
     }
 
     private void Started()
@@ -2806,6 +2818,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // a line is four places to forget the fifth, which is the shape of
         // every bug the walk has found on this window. All of them end here.
         Tell(nameof(WhatElseIsChosen));
+
+        // The set in the folder is the set named after this disc, so a name
+        // typed moves it.
+        Tell(nameof(TheSetToBurn));
     }
 
     private void Change<T>(ref T field, T value, [CallerMemberName] string? name = null)

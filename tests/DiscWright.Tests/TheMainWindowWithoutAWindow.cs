@@ -1123,6 +1123,77 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void Offers_the_set_the_folder_holds_when_this_sitting_built_nothing()
+    {
+        MakeADisc window = New(disk: new ASetOfTwoWithADiscInTheDrive());
+
+        window.OutputFolder = @"C:\out";
+        Assert.Empty(window.TheSetToBurn);
+
+        window.Label = "A GAME";
+
+        // Opening a finished project and pressing Burn is the ordinary way to
+        // finish a set. It got one image at a time from a list that did not
+        // say which were done, and the note beside the discs was never
+        // offered, because the window knew a set only from a build.
+        Assert.Equal([@"C:\out\A GAME D1.iso", @"C:\out\A GAME D2.iso"], window.TheSetToBurn);
+    }
+
+    [Fact]
+    public void Tells_the_window_about_the_set_in_the_folder_as_the_name_and_the_folder_change()
+    {
+        MakeADisc window = New(disk: new ASetOfTwoWithADiscInTheDrive());
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.OutputFolder = @"C:\out";
+        Assert.Contains(nameof(MakeADisc.TheSetToBurn), told);
+
+        told.Clear();
+        window.Label = "A GAME";
+        Assert.Contains(nameof(MakeADisc.TheSetToBurn), told);
+    }
+
+    [Fact]
+    public async Task Walks_a_reopened_set_and_offers_to_carry_on_where_the_note_says()
+    {
+        ANoteInMemory note = new(
+            new TheNoteBesideTheDiscs(
+                "A GAME",
+                [new NotedImage("A GAME D1.iso", 1000), new NotedImage("A GAME D2.iso", 1000)],
+                1).AsText());
+        ABurnerThatWorks burner = new();
+
+        MakeADisc window = New(
+            drives: new TheseDrives(ABlankIn("E:")),
+            disk: new ASetOfTwoWithADiscInTheDrive(),
+            hasher: new AHasherThatAgrees(),
+            burner: burner,
+            note: note);
+
+        window.OutputFolder = @"C:\out";
+        window.Label = "A GAME";
+
+        (int number, int of) asked = (0, 0);
+
+        await window.BurnTheSet(
+            window.TheSetToBurn, NeverAsked, NeverAskedAboutErasing, Closes,
+            (number, of, drive) => Task.FromResult(true),
+            (number, of) =>
+            {
+                asked = (number, of);
+                return Task.FromResult(true);
+            });
+
+        // Asked to carry on from disc 2, which is what the note knows, and
+        // the set is then whole.
+        Assert.Equal((2, 2), asked);
+        Assert.Equal("E:", burner.WroteTo);
+        Assert.True(window.HowTheSetWent?.Whole);
+        Assert.Equal(1, window.HowTheSetWent?.BroughtForward);
+    }
+
+    [Fact]
     public async Task Leaves_the_note_alone_when_the_disc_did_not_read_back()
     {
         ANoteInMemory note = new(
