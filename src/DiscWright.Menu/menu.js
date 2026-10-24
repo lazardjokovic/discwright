@@ -1052,16 +1052,86 @@ function setRowsOf(rows, disc) {
 // person's side that is what it does: the copying is how the install works
 // rather than what they came to do. "Install" alone once every file is in
 // the folder, and "Play" once the game is on the machine.
-function restoreButtonSays(scan, discIn, discsInSet, installed) {
+// verb is what the game's own button would say on one disc, "Install" for
+// a game with an installer and "Copy and play" for a folder of files, so a
+// folder of files split across discs says "Copy and play, disc 1 of 2" and
+// not something about installing that never happens.
+function restoreButtonSays(scan, discIn, discsInSet, installed, verb) {
     if (installed === true) {
         return "Play";
     }
 
     if (scan && scan.complete) {
-        return "Install";
+        return verb || "Install";
     }
 
-    return "Install, disc " + (discIn > 0 ? discIn : 1) + " of " + discsInSet;
+    return (verb || "Install") + ", disc " + (discIn > 0 ? discIn : 1) + " of " + discsInSet;
+}
+
+// Opens the tray the disc is in, so that "put disc 2 in" arrives with the
+// drive already open and disc 1 already out. Through Windows Media Player's
+// control, which has been on every Windows since XP and is the one eject
+// a script can ask for without a console. False when it could not, which
+// is not a failure: the person opens the tray themselves, as before.
+function ejectTheDisc(discRoot) {
+    var letter = String(discRoot || "").substring(0, 2).toUpperCase();
+    var player, drives, i, drive;
+
+    if (!/^[A-Z]:$/.test(letter)) {
+        return false;
+    }
+
+    try {
+        player = new ActiveXObject("WMPlayer.OCX");
+        drives = player.cdromCollection;
+
+        for (i = 0; i < drives.count; i++) {
+            drive = drives.item(i);
+
+            if (String(drive.driveSpecifier).toUpperCase() === letter) {
+                drive.eject();
+                return true;
+            }
+        }
+    } catch (noPlayer) {
+    }
+
+    return false;
+}
+
+// Whether a process of that name is running, which is how the menu knows
+// the installer it started is still going. By name rather than by the
+// process it started, because a GOG installer asks for elevation and the
+// elevated process is not the one the menu was handed.
+function installerIsRunning(exeName) {
+    var wmi, found;
+
+    try {
+        wmi = GetObject("winmgmts:" + BACKSLASH + BACKSLASH + "." + BACKSLASH + "root" + BACKSLASH + "cimv2");
+        found = wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE Name = '" + String(exeName).replace(/'/g, "''") + "'");
+
+        return found.Count > 0;
+    } catch (cannotAsk) {
+        return false;
+    }
+}
+
+// When the menu stops waiting for the installer: once it has been seen
+// running and is gone, or after five looks without ever seeing it, which
+// is an installer that refused to start or finished inside ten seconds.
+function whenTheInstallerIsDone(seenRunning, running, polls) {
+    return !running && (seenRunning || polls >= 5);
+}
+
+// The line under the buttons while the installer runs, and after.
+function whatInstallingSays(name) {
+    return "Installing " + name + ". This menu waits for the installer and says when it is done.";
+}
+
+function whatTheInstallerLeft(installed, name) {
+    return installed
+        ? name + " is installed. Play starts it."
+        : "The installer closed, and " + name + " is not on this machine. Install runs it again.";
 }
 
 // One sentence about where the set stands, for the line under the buttons.

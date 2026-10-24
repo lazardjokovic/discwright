@@ -945,6 +945,60 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Says_copy_and_play_rather_than_install_for_a_folder_of_files_across_discs()
+    {
+        // The owner asked what a non GOG game does. The same copy and join,
+        // then the game's exe runs from the folder, so the button says what
+        // it would say on one disc, with the disc number after it.
+        Assert.Equal("Copy and play, disc 1 of 2", Ask("restoreButtonSays({complete: false}, 1, 2, false, 'Copy and play')"));
+        Assert.Equal("Copy and play", Ask("restoreButtonSays({complete: true}, 2, 2, false, 'Copy and play')"));
+        Assert.Equal("Install, disc 1 of 2", Ask("restoreButtonSays({complete: false}, 1, 2, false, undefined)"));
+    }
+
+    [Fact]
+    public void Knows_whether_the_installer_it_started_is_still_running()
+    {
+        // By name, through WMI, because a GOG installer asks for elevation
+        // and the elevated process is not the one the menu was handed. The
+        // script host running this test is a process that certainly exists.
+        Assert.Equal("true", Ask("String(installerIsRunning('cscript.exe'))"));
+        Assert.Equal("false", Ask("String(installerIsRunning('nothing_of_the_sort_at_all.exe'))"));
+    }
+
+    [Fact]
+    public void Stops_waiting_for_the_installer_once_it_was_seen_and_is_gone_or_never_appeared()
+    {
+        Assert.Equal("false", Ask("String(whenTheInstallerIsDone(false, true, 1))"));
+        Assert.Equal("false", Ask("String(whenTheInstallerIsDone(true, true, 30))"));
+        Assert.Equal("true", Ask("String(whenTheInstallerIsDone(true, false, 2))"));
+        Assert.Equal("false", Ask("String(whenTheInstallerIsDone(false, false, 4))"));
+        Assert.Equal("true", Ask("String(whenTheInstallerIsDone(false, false, 5))"));
+    }
+
+    [Fact]
+    public void Says_what_the_installer_is_doing_and_what_it_left()
+    {
+        Assert.Equal(
+            "Installing Hollow Knight. This menu waits for the installer and says when it is done.",
+            Ask("whatInstallingSays('Hollow Knight')"));
+        Assert.Equal("Hollow Knight is installed. Play starts it.", Ask("whatTheInstallerLeft(true, 'Hollow Knight')"));
+        Assert.Equal(
+            "The installer closed, and Hollow Knight is not on this machine. Install runs it again.",
+            Ask("whatTheInstallerLeft(false, 'Hollow Knight')"));
+    }
+
+    [Fact]
+    public void Cannot_eject_a_drive_that_is_not_there_and_says_so_quietly()
+    {
+        // The real eject opens a real tray, which no test may do. A letter
+        // with no drive behind it, and a folder that is not a drive root,
+        // both come back false rather than throwing.
+        Assert.Equal("false", Ask(@"String(ejectTheDisc('Q:\\'))"));
+        Assert.Equal("false", Ask("String(ejectTheDisc('not a drive'))"));
+        Assert.Equal("false", Ask("String(ejectTheDisc(''))"));
+    }
+
+    [Fact]
     public void Puts_the_game_back_under_the_profile_when_that_drive_has_the_room()
     {
         Assert.Equal(

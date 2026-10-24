@@ -143,6 +143,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "document.URL = " + AsJScript(new Uri(Path.Combine(disc2, "AUTORUN", "menu.hta")).AbsoluteUri) + ";\n"
                 + "WHERE = null;\n"
                 + "pump(function () { return closed; });\n"
+                + "out.push('title=' + document.title);\n"
                 + "said();\n"
                 + "out.push('alerts=' + alerts.length + (alerts.length ? ' ' + alerts.join(' / ') : ''));\n"
                 + "WScript.Echo(out.join('\\n'));\n");
@@ -162,12 +163,14 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 "bar=drawn button=btn next dead",
                 "press again=0",
 
-                // Disc 2 found in the drive, copied, the installer put back
-                // together and started from the folder, and the menu gone.
+                // Disc 2 found in the drive, the title following it, the
+                // installer put back together and started from the folder.
+                // The menu stays and watches the installer; the stand-in
+                // starts nothing, so after five looks it says what it left.
                 "start " + Path.Combine(dest, "setup_big.exe") + " in " + dest,
-                "close",
+                "title=Big Game (disc 2 of 2)",
                 "button=Install",
-                "line=Every file is here, in " + dest + ". Install runs the installer from there.",
+                "line=The installer closed, and Big Game is not on this machine. Install runs it again.",
                 "alerts=0"
             ],
             lines);
@@ -184,6 +187,50 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.False(File.Exists(Path.Combine(dest, "autorun.inf")));
         Assert.False(File.Exists(Path.Combine(dest, "Start Here.hta")));
         Assert.False(Directory.Exists(Path.Combine(dest, "AUTORUN")));
+    }
+
+    [Fact]
+    public void A_one_disc_install_keeps_the_menu_open_until_the_installer_closes()
+    {
+        // The same watch on a disc that is not a set: the button says
+        // Installing and is dead while the installer runs, and afterwards
+        // says what it left rather than the menu having vanished.
+        string disc = Path.Combine(_folder, "one");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "setup_small.exe"), "12345");
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Small Game", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Small Game", "setup_small.exe", string.Empty)])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "SET = loadTheSet();\n"
+                + "startIt = function (what, from) { out.push('start ' + what + ' in ' + from); return null; };\n"
+                + "doTheThing();\n"
+                + "out.push('while=' + document.getElementById('doIt').innerText.replace(String.fromCharCode(8230), '...') + ' ' + document.getElementById('doIt').parentNode.className);\n"
+                + "pump(function () { return closed; });\n"
+                + "out.push('after=' + document.getElementById('doIt').innerText + ' ' + document.getElementById('doIt').parentNode.className);\n"
+                + "out.push('line=' + document.getElementById('stillWanted').innerText);\n"
+                + "out.push('closed=' + closed + ' alerts=' + alerts.length);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = [.. went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.TrimEnd((char)92))];
+
+        Assert.Equal("start " + Path.Combine(disc, "setup_small.exe") + " in", lines[0]);
+        Assert.Equal(
+            [
+                "start " + Path.Combine(disc, "setup_small.exe") + " in",
+                "while=Installing... btn next dead",
+                "after=Install btn next",
+                "line=The installer closed, and Small Game is not on this machine. Install runs it again.",
+                "closed=false alerts=0"
+            ],
+
+            // The folder the installer is started in comes with the disc's own
+            // trailing separator, which is not worth asserting on.
+            lines);
     }
 
     [Fact]

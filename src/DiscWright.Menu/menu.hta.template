@@ -278,9 +278,14 @@ function doTheThing() {
         return;
     }
 
-    // Installing and playing both hand over to something else, and the menu
-    // has no further part in it. It gets out of the way rather than sitting on
-    // top of whatever just started.
+    // An installer is watched, and the menu stays to say what it left.
+    // Playing hands over to the game, and the menu has no further part in
+    // it: it gets out of the way rather than sitting on top of what started.
+    if (doing.act === "install") {
+        watchTheInstaller(game, doing.run);
+        return;
+    }
+
     window.close();
 }
 
@@ -512,7 +517,7 @@ var SET = null;
 // from the press until the installer starts or something fails, and while
 // it is the big button is dead: on the first real set it stayed live under
 // the copy, and a second press would have started a second copy.
-var restoring = { copying: "", joining: "", wanting: 0, done: 0, all: 0, startedAt: 0, rate: 0, busy: false, ticking: false };
+var restoring = { copying: "", joining: "", wanting: 0, done: 0, all: 0, startedAt: 0, rate: 0, busy: false, ticking: false, installing: false };
 
 function readTheSetFile() {
     try {
@@ -612,9 +617,14 @@ function keepTheBarMoving() {
 function showTheSet(game) {
     var scan = scanTheSet();
 
-    document.getElementById("doIt").innerText = restoreButtonSays(scan, SET.discIn, SET.of, isInstalled(game));
+    document.getElementById("doIt").innerText = restoring.installing
+        ? "Installing\u2026"
+        : restoreButtonSays(scan, SET.discIn, SET.of, isInstalled(game), whatToDoWith(game, false));
     document.getElementById("doIt").parentNode.className = "btn next" + (restoring.busy ? " dead" : "");
-    sayTheSet(scan);
+
+    if (!restoring.installing) {
+        sayTheSet(scan);
+    }
 }
 
 // Pressing Install on a disc of a set: the whole job, from this disc to the
@@ -730,6 +740,9 @@ function copyThisDisc() {
                     if (scan.complete) {
                         installFromTheFolder();
                     } else {
+                        // This disc is done with, so out it comes, and "put
+                        // disc 2 in" arrives with the tray already open.
+                        ejectTheDisc(theDisc());
                         waitForTheNextDisc(scan);
                     }
                 }
@@ -780,6 +793,7 @@ function checkForTheNextDisc() {
 
     if (wanted) {
         SET.discIn = inTheDrive;
+        document.title = discTitle(DISC.game, SET.discIn, SET.of);
         restoring.wanting = 0;
         showTheSet(gameAt(DISC.games, showing));
         copyThisDisc();
@@ -815,7 +829,59 @@ function installFromTheFolder() {
         return;
     }
 
-    window.close();
+    watchTheInstaller(game, run);
+}
+
+// The menu stays while the installer runs, with the button grey and saying
+// so, and says what the installer left when it closes: Play, if the game is
+// on the machine now. Asked for by the owner on the first real set, where
+// the menu vanished and the installer appeared a second later with nothing
+// to say which was which.
+function watchTheInstaller(game, run) {
+    var exeName = String(run).split("/").join(BACKSLASH).split(BACKSLASH).pop();
+    var seen = false;
+    var polls = 0;
+
+    restoring.busy = true;
+    restoring.installing = true;
+    document.getElementById("doIt").innerText = "Installing\u2026";
+    document.getElementById("doIt").parentNode.className = "btn next dead";
+    document.getElementById("restoreBar").style.display = "none";
+    document.getElementById("stillWanted").innerText = whatInstallingSays(game.name);
+    document.getElementById("stillWanted").style.display = "block";
+
+    function look() {
+        var running = installerIsRunning(exeName);
+        var installed;
+
+        polls++;
+
+        if (running) {
+            seen = true;
+        }
+
+        if (!whenTheInstallerIsDone(seen, running, polls)) {
+            window.setTimeout(look, 2000);
+            return;
+        }
+
+        restoring.busy = false;
+        restoring.installing = false;
+        installed = isInstalled(game);
+
+        if (SET) {
+            showTheSet(game);
+        } else {
+            document.getElementById("doIt").innerText = whatToDoWith(game, installed);
+            document.getElementById("doIt").parentNode.className = "btn next";
+            showAddOnsOf(game);
+        }
+
+        document.getElementById("stillWanted").innerText = whatTheInstallerLeft(installed, game.name);
+        document.getElementById("stillWanted").style.display = "block";
+    }
+
+    window.setTimeout(look, 2000);
 }
 
 // The music, behind everything, and a way to turn it off.
