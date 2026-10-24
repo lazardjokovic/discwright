@@ -159,6 +159,12 @@
                          Pressing it opens a window, which is what a button
                          does, and it was quiet enough to be missed even after
                          it moved out here. -->
+                    <!-- It says it opens one window per disc, because a set
+                         opens several and the second can land exactly behind
+                         the first. Somebody looked at disc 1 of 2, took it for
+                         the whole answer, and had no way of knowing the other
+                         window was there. The titles say which disc each one
+                         is; this says to go looking for them. -->
                     <Button Content="See what it will look like"
                             Style="{StaticResource Ordinary}"
                             HorizontalAlignment="Right"
@@ -166,6 +172,7 @@
                             Margin="0,0,0,8"
                             IsEnabled="{Binding CanPreview}"
                             Click="PreviewTheMenu"
+                            ToolTip="One window per disc, so a set opens one for each. The manual and the extras are on the last disc."
                             AutomationProperties.AutomationId="PreviewTheMenu" />
                 </Grid>
 
