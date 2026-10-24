@@ -570,7 +570,6 @@ public class TheWindowsMarkup
     [InlineData("Menu")]
     [InlineData("Checksums")]
     [InlineData("LegacyFileSystems")]
-    [InlineData("AddTheFirstGame")]
     [InlineData("TakeOffWhatIsLeftOff")]
     public void Nothing_that_changes_the_disc_can_be_touched_while_one_is_being_made(string which)
     {
@@ -1022,35 +1021,34 @@ public class TheWindowsMarkup
     private static XElement Row() => Window().Descendants(Xaml + "HierarchicalDataTemplate").Single();
 
     [Fact]
-    public void The_empty_list_asks_for_a_game_where_the_asking_is()
+    public void The_empty_list_asks_for_a_game_and_one_button_takes_one()
     {
-        // One reading of the file, because the two are held against each
-        // other and two readings are two different objects.
         XElement window = Window();
 
         XElement asked = window.Descendants(Xaml + "TextBlock").Single(each => IdOf(each) == "NothingYet");
-        XElement button = window.Descendants(Xaml + "Button").Single(each => IdOf(each) == "AddTheFirstGame");
 
-        // On a window with nothing on it yet, the one thing there was to do
-        // sat under a large empty box with the words that ask for a game at
-        // the top of it. They belong together, so they are in one thing that
-        // comes and goes as one.
-        Assert.Equal("Add a game", (string?)button.Attribute("Content"));
-        Assert.Same(asked.Parent, button.Parent);
-
-        XElement both = asked.Parent!;
-
+        // The words carry their own coming and going, because there is
+        // nothing in there with them to come and go alongside.
         Assert.Equal(
             "{Binding Games.Count, Converter={StaticResource WhenNone}}",
-            (string?)both.Attribute("Visibility"));
+            (string?)asked.Attribute("Visibility"));
 
-        // And the words themselves no longer carry it, or they would hide
-        // while the button stayed.
-        Assert.Null(asked.Attribute("Visibility"));
+        // And exactly one button on the window takes a game.
+        //
+        // A second one sat beside those words for a day, on the argument that
+        // the one thing there is to do should not be under a large empty box.
+        // It could not be pressed: the tree is drawn over that cell, so a
+        // mouse reached the tree and never the button, while automation could
+        // invoke it perfectly well. That is the shape of a thing that looks
+        // tested and is not, and this is the guard against it coming back.
+        XElement[] adding =
+        [
+            .. window.Descendants(Xaml + "Button")
+                .Where(each => (string?)each.Attribute("Content") == "Add a game")
+        ];
 
-        // The one under the list stays, because once there is a list it means
-        // add another and belongs under the list.
-        Assert.NotNull(window.Descendants(Xaml + "Button").SingleOrDefault(each => IdOf(each) == "AddAGame"));
+        Assert.Single(adding);
+        Assert.Equal("AddAGame", IdOf(adding[0]));
     }
 
     [Fact]

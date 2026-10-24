@@ -288,30 +288,23 @@
                         <!-- Said once, on an empty list, and gone the moment
                              there is anything to show.
 
-                             With the button beside the words rather than only
-                             at the foot of the column. On a window with
-                             nothing on it yet, the one thing there is to do
-                             sat under a large empty box, which is the wrong
-                             way round: the words that ask for a game and the
-                             button that takes one belong together. The one
-                             below stays, because once there is a list it
-                             means add another and belongs under the list. -->
-                        <StackPanel VerticalAlignment="Top"
-                                    Visibility="{Binding Games.Count, Converter={StaticResource WhenNone}}">
-                            <TextBlock Style="{StaticResource Aside}"
-                                       Margin="16,16,16,0"
-                                       TextWrapping="Wrap"
-                                       AutomationProperties.AutomationId="NothingYet"
-                                       Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in." />
-
-                            <Button Content="Add a game"
-                                    HorizontalAlignment="Left"
-                                    Margin="16,12,16,0"
-                                    IsEnabled="{Binding NothingIsRunning}"
-                                    Style="{StaticResource Ordinary}"
-                                    Click="AddAGame"
-                                    AutomationProperties.AutomationId="AddTheFirstGame" />
-                        </StackPanel>
+                             The words and nothing else. A second Add a game
+                             button sat beside them for a day, on the argument
+                             that the one thing there is to do should not be
+                             under a large empty box, and it could not be
+                             pressed: the tree is drawn over this cell, so a
+                             mouse reached the tree and never the button.
+                             Automation could invoke it perfectly well, which
+                             is exactly the shape of a thing that looks tested
+                             and is not. The button under the list is the only
+                             one, and it was always the one that worked. -->
+                        <TextBlock Style="{StaticResource Aside}"
+                                   VerticalAlignment="Top"
+                                   Margin="16,16,16,0"
+                                   TextWrapping="Wrap"
+                                   Visibility="{Binding Games.Count, Converter={StaticResource WhenNone}}"
+                                   AutomationProperties.AutomationId="NothingYet"
+                                   Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in." />
 
                         <!-- A tree, because a game is not one thing.
                              It is an installer, its parts, whatever folders

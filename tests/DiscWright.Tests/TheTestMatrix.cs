@@ -86,11 +86,16 @@ public class TheTestMatrix
         // boxes and the dropdowns to anything, which is what a mutation run
         // walked straight through.
         //
-        // Seven kinds and 47 of them today. Both figures go up when a window
+        // Seven kinds and 46 of them today. Both figures go up when a window
         // gains something, and changing them is the moment to look at the
         // matrix rather than a number to bump.
+        //
+        // It was 47 until the Add a game button inside the empty list came
+        // out, which is the other direction and worth saying: a window can
+        // lose a control on purpose, and then this number comes down with it
+        // rather than the guard being left loose.
         Assert.True(
-            held >= 47 && kinds.Count >= 7,
+            held >= 46 && kinds.Count >= 7,
             $"This held {held} controls of {kinds.Count} kinds to the matrix, which is fewer than it did. "
                 + "Either a window has lost controls, or this guard has stopped looking at some of them.");
     }
