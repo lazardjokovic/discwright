@@ -54,6 +54,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
     private string _label = string.Empty;
     private string _outputFolder = string.Empty;
+
+    /// <summary>
+    /// Whether the output folder is one this program suggested from a game's
+    /// name, rather than one a person chose or a project file carried.
+    /// </summary>
+    /// <remarks>
+    /// Starting a new disc keeps a folder somebody chose, because that is how
+    /// they work rather than what they are making. A folder suggested from the
+    /// game's name is the other thing: it is named for the disc that was just
+    /// cleared, and kept, the next game built into "Hollow Knight Disc",
+    /// emptied that disc's staging folder, wrote over its project file and
+    /// left two images for Burn to ask about.
+    /// </remarks>
+    private bool _theFolderWasSuggested;
     private Medium _medium = Media.Dvd5;
     private bool _theSizeWasChosen;
     private bool _lookingAtTheDrives;
@@ -150,6 +164,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
         get => _outputFolder;
         set
         {
+            // Set from outside, so somebody chose it. Add puts the flag back
+            // when it was this program's suggestion.
+            _theFolderWasSuggested = false;
             Change(ref _outputFolder, value);
             LookForImages();
         }
@@ -1764,6 +1781,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // A new disc is a new question, so the drives get to answer it again.
         _theSizeWasChosen = false;
 
+        // And a folder named after the disc that has just gone is not where
+        // the next one should land. Only a suggested one: a folder somebody
+        // chose is how they work and stays.
+        if (_theFolderWasSuggested)
+        {
+            OutputFolder = string.Empty;
+        }
+
         Made = null;
         AboutTheImage = null;
         ItWentWrong = null;
@@ -2181,6 +2206,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             && _machine.Places?.ForAGameCalled(game.Name) is string where)
         {
             OutputFolder = where;
+            _theFolderWasSuggested = true;
         }
 
         Reconsider();
@@ -2448,7 +2474,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         if (back.OutputFolder is string where)
         {
+            // Somebody's answer once, so it is a chosen folder and not a
+            // suggestion, and Start a new disc keeps it.
             _outputFolder = where;
+            _theFolderWasSuggested = false;
         }
 
         // The images are already sitting in that folder, and without this

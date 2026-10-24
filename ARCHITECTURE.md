@@ -695,7 +695,9 @@ They are collapsed now, which has a consequence worth stating: **a collapsed thi
 
 ### Starting a new disc keeps the machine and forgets the disc
 
-The games, the name, the artwork, the manual and everything the last run left behind all go. **Where the discs get built, and what is in More options, stay**, because they are how this person works rather than what they are making, and having to find that folder again every time is its own small insult.
+The games, the name, the artwork, the manual and everything the last run left behind all go. **A folder somebody chose for the discs, and what is in More options, stay**, because they are how this person works rather than what they are making, and having to find that folder again every time is its own small insult.
+
+A folder this program suggested from the game's name is the other thing, and goes with the disc. Kept, the next game was built into "Hollow Knight Disc": its staging folder emptied, its project file written over, and two images left for Burn to ask about. Added 2026-10-24.
 
 It does nothing at all while a build or a burn is running. There is no sensible meaning for clearing the screen out from under a laser.
 

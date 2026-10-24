@@ -644,8 +644,8 @@ public partial class MainWindow : Window
                 this,
                 "Start a new disc?",
                 "What is on the screen now goes: the games, the name, the artwork and the manual. "
-                    + "Nothing already built or burned is touched, and where the discs get built stays "
-                    + "as it is.",
+                    + "Nothing already built or burned is touched. A folder you chose for the discs stays; "
+                    + "one that was only suggested from the game goes with it.",
                 "Keep what is here",
                 "Start a new disc"))
         {

@@ -2795,6 +2795,63 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void A_folder_that_was_only_suggested_goes_with_the_disc_it_was_suggested_for()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(@"C:\d", @"C:\h", []));
+        window.Add(AGame("Hollow Knight", 1000));
+        Assert.Equal(@"C:\d\Hollow Knight Disc", window.OutputFolder);
+
+        window.StartAgain();
+
+        // Kept, the next game was built into "Hollow Knight Disc": that
+        // disc's staging folder emptied, its project file written over, and
+        // two images left for Burn to ask about.
+        Assert.Equal(string.Empty, window.OutputFolder);
+
+        window.Add(AGame("Gothic", 1000));
+        Assert.Equal(@"C:\d\Gothic Disc", window.OutputFolder);
+    }
+
+    [Fact]
+    public void A_folder_somebody_chose_stays_when_a_new_disc_is_started()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(@"C:\d", @"C:\h", []));
+        window.OutputFolder = @"D:\all my discs";
+        window.Add(AGame("Hollow Knight", 1000));
+
+        window.StartAgain();
+
+        // How this person works rather than what they are making, and having
+        // to find it again every time is its own small insult.
+        Assert.Equal(@"D:\all my discs", window.OutputFolder);
+    }
+
+    [Fact]
+    public void A_folder_chosen_over_a_suggestion_stays_too()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(@"C:\d", @"C:\h", []));
+        window.Add(AGame("Hollow Knight", 1000));
+        window.OutputFolder = @"D:\all my discs";
+
+        window.StartAgain();
+
+        Assert.Equal(@"D:\all my discs", window.OutputFolder);
+    }
+
+    [Fact]
+    public void A_folder_an_opened_project_named_stays_when_a_new_disc_is_started()
+    {
+        MakeADisc window = New(places: new WhereDiscsWouldGo(@"C:\d", @"C:\h", []));
+        window.OpenThis(AReopenedDisc());
+        Assert.Equal(@"D:\out", window.OutputFolder);
+
+        window.StartAgain();
+
+        // Somebody's answer once, so it counts as chosen.
+        Assert.Equal(@"D:\out", window.OutputFolder);
+    }
+
+    [Fact]
     public void Still_asks_when_there_is_nowhere_worth_suggesting()
     {
         MakeADisc window = New(places: new WhereDiscsWouldGo(string.Empty, string.Empty, []));
