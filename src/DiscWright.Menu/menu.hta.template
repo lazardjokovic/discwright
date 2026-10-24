@@ -877,11 +877,42 @@ function watchTheInstaller(game, run) {
             showAddOnsOf(game);
         }
 
-        document.getElementById("stillWanted").innerText = whatTheInstallerLeft(installed, game.name);
-        document.getElementById("stillWanted").style.display = "block";
+        offerToRemoveTheCopy(installed);
     }
 
     window.setTimeout(look, 2000);
+}
+
+// After the installer: the line about what it left, and on a set with the
+// game installed, the button that removes the copy the discs were put back
+// into. The copy was the means; the installed game is the end. Offered and
+// never done by itself, which is the owner's design.
+function offerToRemoveTheCopy(installed) {
+    var game = gameAt(DISC.games, showing);
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+    var dir = SET && SET.dir ? SET.dir : "";
+    var bytes = SET && installed && mayRemoveTheCopy(dir) ? bytesIn(files, dir) : 0;
+    var button = document.getElementById("removeTheCopy");
+
+    document.getElementById("stillWanted").innerText = whatTheInstallerLeft(installed, game.name, bytes, dir);
+    document.getElementById("stillWanted").style.display = "block";
+
+    button.innerText = bytes > 0 ? removeTheCopyButtonSays(bytes) : "";
+    button.style.display = bytes > 0 ? "block" : "none";
+}
+
+function removeTheCopyNow() {
+    var game = gameAt(DISC.games, showing);
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+    var wrong = removeTheCopy(files, SET ? SET.dir : "");
+
+    if (wrong) {
+        alert(wrong);
+        return;
+    }
+
+    document.getElementById("removeTheCopy").style.display = "none";
+    document.getElementById("stillWanted").innerText = "The copy is gone. " + whatTheInstallerLeft(true, game.name);
 }
 
 // The music, behind everything, and a way to turn it off.
@@ -1028,6 +1059,7 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
         <div id="gameScreen" style="display: none">
             <h1 id="gameName"></h1>
             <a class="btn next" href="#" onclick="doTheThing(); return false;"><span id="doIt"></span></a>
+            <a class="btn" id="removeTheCopy" href="#" onclick="removeTheCopyNow(); return false;" style="display: none"></a>
             <div id="addOns"></div>
             <div id="addOnNote"></div>
             <a class="btn" id="manual" href="#" onclick="openTheManual(); return false;">Manual</a>

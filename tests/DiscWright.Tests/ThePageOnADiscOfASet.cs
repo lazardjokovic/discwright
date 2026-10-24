@@ -190,6 +190,69 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     }
 
     [Fact]
+    public void Offers_to_remove_the_copy_once_the_game_is_installed_and_removes_it_on_the_press()
+    {
+        // The last piece of the owner's design: after the installer has run,
+        // the copy the discs were put back into is offered for removal, and
+        // never removed by itself. A set whose folder is already complete,
+        // with the registry stood in to say the game is installed afterwards.
+        string disc = Path.Combine(_folder, "disc1");
+        string games = Path.Combine(_folder, "Games");
+        string dest = Path.Combine(games, "Big Game");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        Directory.CreateDirectory(dest);
+        File.WriteAllText(Path.Combine(dest, "setup_big.exe"), "1234567");
+        File.WriteAllText(Path.Combine(dest, "readme.txt"), "12345");
+        File.SetAttributes(Path.Combine(dest, "setup_big.exe"), FileAttributes.ReadOnly);
+
+        SetEntry[] entries =
+        [
+            new(1, "setup_big.exe.dwpart01", "a1", 3),
+            new(1, "readme.txt", "b2", 5),
+            new(2, "setup_big.exe.dwpart02", "c3", 4)
+        ];
+        SetJoin[] joins = [new("setup_big.exe", "e5", 7, ["setup_big.exe.dwpart01", "setup_big.exe.dwpart02"])];
+        File.WriteAllText(
+            Path.Combine(disc, SetManifest.FileName),
+            SetManifest.For("BIG GAME", entries, 1, 2, "CD-R 700 MB", DateTimeOffset.UtcNow, joins));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Big Game", "DiscWright.Test", 1, 2, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Big Game", "setup_big.exe", string.Empty)])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "SET = loadTheSet();\n"
+                + "SET.dir = " + AsJScript(dest) + ";\n"
+                + "startIt = function (what, from) { out.push('start ' + what); return null; };\n"
+                + "var installedNow = false; isInstalled = function () { return installedNow; };\n"
+                + "doTheThing();\n"
+                + "installedNow = true;\n"
+                + "pump(function () { return closed; });\n"
+                + "out.push('button=' + document.getElementById('doIt').innerText);\n"
+                + "out.push('line=' + document.getElementById('stillWanted').innerText);\n"
+                + "out.push('offer=' + document.getElementById('removeTheCopy').innerText + ' shown=' + document.getElementById('removeTheCopy').style.display);\n"
+                + "removeTheCopyNow();\n"
+                + "out.push('then=' + document.getElementById('stillWanted').innerText + ' shown=' + document.getElementById('removeTheCopy').style.display);\n"
+                + "out.push('alerts=' + alerts.length + (alerts.length ? ' ' + alerts.join(' / ') : ''));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        Assert.Equal(
+            [
+                "start " + Path.Combine(dest, "setup_big.exe"),
+                "button=Play",
+                "line=Big Game is installed. Play starts it. The 12 bytes copied to " + dest + " is not needed any more.",
+                "offer=Remove the copy, 12 bytes shown=block",
+                "then=The copy is gone. Big Game is installed. Play starts it. shown=none",
+                "alerts=0"
+            ],
+            went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+
+        Assert.False(Directory.Exists(dest), "the copy should be gone");
+        Assert.True(Directory.Exists(games), "and only the copy");
+    }
+
+    [Fact]
     public void A_one_disc_install_keeps_the_menu_open_until_the_installer_closes()
     {
         // The same watch on a disc that is not a set: the button says

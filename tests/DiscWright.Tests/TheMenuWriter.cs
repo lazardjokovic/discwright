@@ -121,6 +121,8 @@ public class TheMenuWriter
         Assert.Contains("joinThePieces({", page, StringComparison.Ordinal);
         Assert.Contains("window.setTimeout(checkForTheNextDisc, 1500);", page, StringComparison.Ordinal);
         Assert.Contains("id=\"restoreBar\"", page, StringComparison.Ordinal);
+        Assert.Contains("id=\"removeTheCopy\"", page, StringComparison.Ordinal);
+        Assert.Contains("offerToRemoveTheCopy(installed);", page, StringComparison.Ordinal);
     }
 
     [Fact]

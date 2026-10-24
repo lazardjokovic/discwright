@@ -988,6 +988,65 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Says_a_size_the_way_a_person_does()
+    {
+        Assert.Equal("7 bytes", Ask("bytesInWords(7)"));
+        Assert.Equal("12 KB", Ask("bytesInWords(12288)"));
+        Assert.Equal("491 MB", Ask("bytesInWords(514588672)"));
+        Assert.Equal("1.2 GB", Ask("bytesInWords(1241037720)"));
+        Assert.Equal("Remove the copy, 1.2 GB", Ask("removeTheCopyButtonSays(1241037720)"));
+    }
+
+    [Fact]
+    public void Offers_to_remove_the_copy_only_once_the_game_is_installed()
+    {
+        Assert.Equal(
+            "Hollow Knight is installed. Play starts it. The 1.2 GB copied to C:\\Users\\x\\Games\\Hollow Knight is not needed any more.",
+            Ask(@"whatTheInstallerLeft(true, 'Hollow Knight', 1241037720, 'C:\\Users\\x\\Games\\Hollow Knight')"));
+        Assert.Equal("Hollow Knight is installed. Play starts it.", Ask("whatTheInstallerLeft(true, 'Hollow Knight', 0, '')"));
+        Assert.Equal(
+            "The installer closed, and Hollow Knight is not on this machine. Install runs it again.",
+            Ask(@"whatTheInstallerLeft(false, 'Hollow Knight', 1241037720, 'C:\\Users\\x\\Games\\Hollow Knight')"));
+    }
+
+    [Fact]
+    public void Removes_only_a_folder_it_made_itself()
+    {
+        // The guard between a button and somebody's files. A drive root, the
+        // profile and anything not directly under a folder called Games is
+        // left alone whatever asks.
+        Assert.Equal("true", Ask(@"String(mayRemoveTheCopy('C:\\Users\\x\\Games\\Hollow Knight'))"));
+        Assert.Equal("true", Ask(@"String(mayRemoveTheCopy('D:\\Games\\Hollow Knight\\'))"));
+        Assert.Equal("false", Ask(@"String(mayRemoveTheCopy('C:\\'))"));
+        Assert.Equal("false", Ask(@"String(mayRemoveTheCopy('C:\\Users\\x'))"));
+        Assert.Equal("false", Ask(@"String(mayRemoveTheCopy('C:\\Users\\x\\Games'))"));
+        Assert.Equal("false", Ask(@"String(mayRemoveTheCopy('C:\\Users\\x\\Documents\\Hollow Knight'))"));
+        Assert.Equal("false", Ask("String(mayRemoveTheCopy(''))"));
+    }
+
+    [Fact]
+    public void Removes_the_copy_read_only_files_and_all_and_says_what_went_wrong()
+    {
+        string games = Path.Combine(_folder, "Games");
+        string copy = Path.Combine(games, "Big Game");
+        Directory.CreateDirectory(Path.Combine(copy, "data"));
+        File.WriteAllText(Path.Combine(copy, "setup.exe"), "12345");
+        File.WriteAllText(Path.Combine(copy, "data", "more.dat"), "12");
+        File.SetAttributes(Path.Combine(copy, "setup.exe"), FileAttributes.ReadOnly);
+
+        Assert.Equal("7", Ask(WithFiles("bytesIn(f, " + AsJScript(copy) + ")")));
+        Assert.Equal("null", Ask(WithFiles("String(removeTheCopy(f, " + AsJScript(copy) + "))")));
+        Assert.False(Directory.Exists(copy), "the copy should be gone");
+        Assert.True(Directory.Exists(games), "only the copy, not the folder above it");
+
+        // Gone already is not a failure, and a folder it did not make is
+        // refused with its name.
+        Assert.Equal("null", Ask(WithFiles("String(removeTheCopy(f, " + AsJScript(copy) + "))")));
+        Assert.StartsWith("That is not a folder this menu made", Ask(WithFiles("removeTheCopy(f, " + AsJScript(_folder) + ")")), StringComparison.Ordinal);
+        Assert.True(Directory.Exists(_folder));
+    }
+
+    [Fact]
     public void Cannot_eject_a_drive_that_is_not_there_and_says_so_quietly()
     {
         // The real eject opens a real tray, which no test may do. A letter

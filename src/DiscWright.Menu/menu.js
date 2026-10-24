@@ -1128,10 +1128,83 @@ function whatInstallingSays(name) {
     return "Installing " + name + ". This menu waits for the installer and says when it is done.";
 }
 
-function whatTheInstallerLeft(installed, name) {
-    return installed
-        ? name + " is installed. Play starts it."
-        : "The installer closed, and " + name + " is not on this machine. Install runs it again.";
+// copyBytes and folder say what the set left on the hard drive, when it
+// left anything: the whole game, copied off the discs so that it could be
+// installed. Installed, it is not needed any more, and the line says so
+// beside a button that removes it. Nothing is removed without that press.
+function whatTheInstallerLeft(installed, name, copyBytes, folder) {
+    if (!installed) {
+        return "The installer closed, and " + name + " is not on this machine. Install runs it again.";
+    }
+
+    if (copyBytes > 0 && folder) {
+        return name + " is installed. Play starts it. The " + bytesInWords(copyBytes)
+            + " copied to " + folder + " is not needed any more.";
+    }
+
+    return name + " is installed. Play starts it.";
+}
+
+// A size the way a person says it. Whole numbers of MB, one decimal of GB.
+function bytesInWords(bytes) {
+    if (bytes >= 1073741824) {
+        return (Math.round(bytes / 107374182.4) / 10) + " GB";
+    }
+
+    if (bytes >= 1048576) {
+        return Math.round(bytes / 1048576) + " MB";
+    }
+
+    if (bytes >= 1024) {
+        return Math.round(bytes / 1024) + " KB";
+    }
+
+    return bytes + " bytes";
+}
+
+function removeTheCopyButtonSays(bytes) {
+    return "Remove the copy, " + bytesInWords(bytes);
+}
+
+// Whether a folder is one this menu made and may remove: a drive root is
+// not, the person's profile is not, and nothing is unless it sits directly
+// under a folder called Games, which is the only place restoreFolderFor
+// ever puts a game. The guard between a button and somebody's files.
+function mayRemoveTheCopy(dir) {
+    var parts = String(dir || "").split("/").join(BACKSLASH).split(BACKSLASH);
+
+    while (parts.length && parts[parts.length - 1] === "") {
+        parts.pop();
+    }
+
+    return parts.length >= 3 && parts[parts.length - 2].toLowerCase() === "games" && parts[parts.length - 1].length > 0;
+}
+
+// How much is in a folder, or 0 when it is not there.
+function bytesIn(files, dir) {
+    try {
+        return files.FolderExists(dir) ? files.GetFolder(dir).Size : 0;
+    } catch (cannotTell) {
+        return 0;
+    }
+}
+
+// Removes the copy, and says what went wrong rather than nothing. Forced,
+// because the files came off a CD and are read-only.
+function removeTheCopy(files, dir) {
+    if (!mayRemoveTheCopy(dir)) {
+        return "That is not a folder this menu made, so it is left alone: " + dir;
+    }
+
+    try {
+        if (files.FolderExists(dir)) {
+            files.DeleteFolder(dir, true);
+        }
+
+        return files.FolderExists(dir) ? "Some of it would not go. It may still be open in the installer: " + dir : null;
+    } catch (wrong) {
+        return "The copy could not be removed: " + wrong.message;
+    }
 }
 
 // One sentence about where the set stands, for the line under the buttons.
