@@ -334,8 +334,21 @@
                             <TreeView.ItemContainerStyle>
                                 <Style TargetType="TreeViewItem">
                                     <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
-                                    <Setter Property="IsExpanded" Value="True" />
 
+                                    <!-- A game is open and the folders inside
+                                         it are shut. Every row used to open,
+                                         and a folder of game files is three
+                                         hundred rows of them, so one such game
+                                         filled the panel and the game under it
+                                         was somewhere below the fold. A GOG
+                                         download has no folders, so it shows
+                                         every file as before. -->
+                                    <Setter Property="IsExpanded" Value="False" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsAWholeGame}" Value="True">
+                                            <Setter Property="IsExpanded" Value="True" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
                                 </Style>
                             </TreeView.ItemContainerStyle>
 

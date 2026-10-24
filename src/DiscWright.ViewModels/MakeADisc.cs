@@ -964,9 +964,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
     {
         get
         {
+            // Folders of files only. A GOG download whose installer has been
+            // unticked has no installer either, and the menu would copy it,
+            // but WhyThatMatters already says the one thing worth saying
+            // about it, and this line beneath it read as a second complaint
+            // about the same tick, with words meant for a folder.
             string[] copied =
             [
                 .. _games
+                    .Where(game => game.Kind != GameKind.GogInstaller)
                     .Where(game => game.Installer is null && game.LauncherCandidates.Count != 1)
                     .Select(game => game.Name)
             ];

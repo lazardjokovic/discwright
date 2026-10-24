@@ -71,8 +71,10 @@ public partial class MainWindow : Window
         }
 
         // Asked before anything is replaced, because what is on the window may
-        // be somebody's afternoon.
-        if (_screen.Games.Count > 0 && !WorthAsking.Ask(
+        // be somebody's afternoon. Anything at all, the same rule Start a new
+        // disc keeps: a name typed, a cover chosen and a manual attached are an
+        // afternoon too, and this asked only once a game was on the list.
+        if (_screen.HasAnythingOnIt && !WorthAsking.Ask(
             this,
             "Replace what is on the window?",
             "Opening a disc puts its games, its name and its settings here, and takes away what is here now. "
@@ -680,30 +682,22 @@ public partial class MainWindow : Window
     /// them being in the room: they may have been thrown away, or somebody may
     /// be making a second copy on purpose. Both are ordinary things.
     /// </remarks>
-    private Task<bool> CarryOnFromDisc(int number, int ofDiscs)
-    {
-        string already = number == 2
-            ? "Disc 1 of this set is already written."
-            : $"Discs 1 to {number - 1} of this set are already written.";
-
-        return Task.FromResult(!WorthAsking.Ask(
-            this,
-            already,
-            $"DiscWright can carry on from disc {number} of {ofDiscs}, or start again from disc 1 and "
-                + "write the whole set. It knows about them because it checked each one as it was "
-                + "written, not because it can see them now.",
-            "Start again from disc 1",
-            $"Carry on from disc {number}"));
-    }
+    private Task<bool> CarryOnFromDisc(int number, int ofDiscs) =>
+        Task.FromResult(Ask(WhatASetAsks.WhetherToCarryOn(number, ofDiscs)));
 
     private Task<bool> TheNextBlankPlease(int number, int ofDiscs, Recorder drive) =>
-        Task.FromResult(!WorthAsking.Ask(
-            this,
-            $"Disc {number - 1} is done. Put a blank in for disc {number} of {ofDiscs}.",
-            $"Take disc {number - 1} out of {drive.Drive}, label it, and put a blank disc in. The set is not "
-                + "finished until every disc is written, so stopping here leaves it half made.",
-            "Stop here",
-            "The blank is in"));
+        Task.FromResult(Ask(WhatASetAsks.ForTheNextBlank(new WhichDisc.OfASet(number, ofDiscs), drive.Drive)));
+
+    /// <summary>
+    /// Asks a question the screen worded, and answers true for the likely one.
+    /// </summary>
+    /// <remarks>
+    /// The words and which answer is the likely one are the screen's, so a
+    /// test can read them. Decided in here, two of these had the accent and
+    /// Enter on the answer that walks away from a half-made set.
+    /// </remarks>
+    private bool Ask(AQuestion question) =>
+        WorthAsking.Ask(this, question.Headline, question.Because, question.TheLikelyOne, question.TheOtherWay);
 
     /// <summary>
     /// Which image to burn, asked only when there is more than one.

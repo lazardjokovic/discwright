@@ -823,7 +823,8 @@ public class TheWindowChecksItself
         // What will only be copied is about folders of files with no one
         // thing to run, and nothing else.
         if (screen.WhatWillNotStartItself is not null
-            && !screen.Games.Any(game => game.Installer is null && game.LauncherCandidates.Count != 1))
+            && !screen.Games.Any(game =>
+                game.Kind != GameKind.GogInstaller && game.Installer is null && game.LauncherCandidates.Count != 1))
         {
             return "It says a game will only be copied and no game on it would be.";
         }

@@ -2509,6 +2509,42 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void Says_nothing_about_a_download_whose_installer_was_left_off()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        window.WhatGoesOnIt[0].EveryThing()
+            .First(each => each.What == TheTreeOfWhatGoesOn.TheInstaller).IsOn = false;
+
+        // The menu would copy it, which is true, and the line under it already
+        // says the one thing worth saying about that tick. Two sentences about
+        // one tick read as two complaints, and this one's words were written
+        // for a folder of files.
+        Assert.Null(window.WhatWillNotStartItself);
+        Assert.NotNull(window.WhyThatMatters);
+    }
+
+    [Fact]
+    public void Asks_before_opening_over_anything_on_the_window_and_not_only_over_games()
+    {
+        // The same rule Start a new disc keeps. A name typed, a cover chosen
+        // and a manual attached are an afternoon too, and this asked only
+        // once a game was on the list. Read off disk, like the other guards
+        // over the code behind.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        int from = code.IndexOf("void OpenADisc", StringComparison.Ordinal);
+        Assert.True(from >= 0, "The window no longer opens a disc.");
+
+        string handler = code[from..];
+        handler = handler[..handler.IndexOf("_screen.OpenThis(", StringComparison.Ordinal)];
+
+        Assert.Contains("_screen.HasAnythingOnIt && !WorthAsking.Ask(", handler, StringComparison.Ordinal);
+        Assert.DoesNotContain("Games.Count > 0 &&", handler, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Names_all_of_them_when_several_will_only_be_copied()
     {
         MakeADisc window = New();
