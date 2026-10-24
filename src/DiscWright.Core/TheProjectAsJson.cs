@@ -98,7 +98,12 @@ public static class TheProjectAsJson
                 writing.WriteString("MatchName", game.MatchName);
                 WriteOrNull(writing, "Setup", TheInstallerPathOf(game));
                 writing.WriteString("Kind", "Game");
-                writing.WriteString("Source", game.Kind == GameKind.FilesWithLauncher ? "Files" : "GOG");
+                // Anything that is not a GOG download is a folder of files,
+                // whether or not something in it can be run. Only a folder
+                // with something to run was written as Files, so a folder with
+                // nothing to run came back as a download and v1 went looking
+                // for a setup exe that was never there.
+                writing.WriteString("Source", game.Kind == GameKind.GogInstaller ? "GOG" : "Files");
                 writing.WriteNumber("Parent", -1);
                 writing.WriteNull("Manual");
                 writing.WriteNull("Extras");

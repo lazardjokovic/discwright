@@ -168,6 +168,23 @@ public class TheRecogniser
     }
 
     [Fact]
+    public void Refuses_a_set_we_built_as_well_as_a_single_disc()
+    {
+        // The output folder of a set, which this program names "disc D1" and
+        // "disc D2". The guard knew only "disc", so a set slipped past to the
+        // next recogniser and the window offered to add every disc of it as a
+        // game of its own.
+        Refusal refusal = Refused(Folder(@"C:\kit\out",
+            (@"disc D1\setup_the_witcher.exe", 800),
+            (@"disc D1\AUTORUN\menu.hta", 40_000),
+            (@"disc D2\setup_the_witcher-1.bin", 4_000),
+            ("THE WITCHER D1.iso", 3_801_088)));
+
+        Assert.Contains("disc", refusal.Headline, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(RemedyKind.PickFolder, refusal.Remedy?.Kind);
+    }
+
+    [Fact]
     public void Knows_game_files_with_something_to_run()
     {
         // Source folder B.

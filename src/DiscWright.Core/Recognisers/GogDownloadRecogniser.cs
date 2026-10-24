@@ -69,13 +69,30 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
             WarningAbout(installers, installer, parts));
     }
 
+    /// <summary>
+    /// Whether an installer sits one level down in a folder this program
+    /// names its staging folders: <c>disc</c> for a disc on its own, and
+    /// <c>disc D1</c>, <c>disc D2</c> for the discs of a set.
+    /// </summary>
+    /// <remarks>
+    /// Both shapes, because it knew only the first. An output folder holding
+    /// a set slipped past to the next recogniser, which took the lot as a
+    /// folder of game files, and the window then offered to add every disc
+    /// of the set as a game of its own.
+    /// </remarks>
     private static bool LooksLikeADiscWeBuilt(FolderListing folder) =>
         folder.Files.Any(file =>
             file.Extension == ".exe"
             && file.Name.StartsWith("setup_", StringComparison.OrdinalIgnoreCase)
-            && file.RelativePath.StartsWith("disc", StringComparison.OrdinalIgnoreCase)
-            && file.RelativePath.Length > 4
-            && (file.RelativePath[4] == '\\' || file.RelativePath[4] == '/'));
+            && AStagingFolder().IsMatch(FirstPartOf(file.RelativePath)));
+
+    private static string FirstPartOf(string relativePath)
+    {
+        int slash = relativePath.IndexOfAny(['/', (char)92]);
+
+        // No folder at all is not a folder this program named.
+        return slash < 0 ? string.Empty : relativePath[..slash];
+    }
 
     /// <summary>
     /// What to call it. The installer's own product name where it has one, and
@@ -185,4 +202,11 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
 
     [GeneratedRegex(@"-(\d+)$")]
     private static partial Regex TrailingNumber();
+
+    /// <summary>
+    /// Exactly what the builder calls a staging folder, the same rule
+    /// <c>WhatMayBeEmptied</c> keeps for what it may empty.
+    /// </summary>
+    [GeneratedRegex("^disc( D[0-9]+)?$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex AStagingFolder();
 }

@@ -360,8 +360,20 @@ public class BurningOneDiscAndWatchingIt
                 Happened.Clear();
             }
 
-            await Window.BurnIt(Window.TheImages[0], TheFirstDrive, NothingToErase, TheTrayShuts);
+            // Heard the way the window hears it: on one thread, in order.
+            //
+            // Progress<T> posts each report to the thread that started the
+            // burn when that thread has a context, which in the app is the
+            // thread the window is drawn on, so the last report of a check
+            // always lands before the burn's own ending does. A test thread
+            // has no context, so the reports went to the pool, and the last
+            // one could land after the burn had finished and be dropped as a
+            // report about nothing. It did, once in six runs of the suite, on
+            // 2026-10-24: "checking the disc, 2 of 2" was never said.
+            await _thread.Run(() => Window.BurnIt(Window.TheImages[0], TheFirstDrive, NothingToErase, TheTrayShuts));
         }
+
+        private readonly OneThreadInOrder _thread = new();
 
         /// <summary>Whether the bar has been told about this fraction yet.</summary>
         internal bool Heard(double far)
@@ -369,6 +381,79 @@ public class BurningOneDiscAndWatchingIt
             lock (Far)
             {
                 return Far.Contains(far);
+            }
+        }
+
+        /// <summary>
+        /// Waits for the bar to be told about this fraction, delivering the
+        /// window's reports meanwhile.
+        /// </summary>
+        /// <remarks>
+        /// The burner calls this from the thread the burn runs on, which is
+        /// also the thread that delivers the reports, so waiting without
+        /// delivering would wait for ever.
+        /// </remarks>
+        internal bool WaitToHear(double far)
+        {
+            DateTime until = DateTime.UtcNow.AddSeconds(10);
+
+            _thread.PumpUntil(() => Heard(far) || DateTime.UtcNow >= until);
+
+            return Heard(far);
+        }
+    }
+
+    /// <summary>
+    /// One thread that delivers everything posted to it, in the order it was
+    /// posted, the way the thread a window is drawn on does.
+    /// </summary>
+    /// <remarks>
+    /// Installed only around the burn. Everything the burn awaits comes back
+    /// through here, and every report the drive or the check makes is posted
+    /// here, so what the test hears is what a window would hear, in the order
+    /// a window would hear it.
+    /// </remarks>
+    private sealed class OneThreadInOrder : SynchronizationContext
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<(SendOrPostCallback What, object? With)> _posted = [];
+
+        public override void Post(SendOrPostCallback d, object? state) => _posted.Add((d, state));
+
+        public override void Send(SendOrPostCallback d, object? state) => d(state);
+
+        /// <summary>Starts the work with this as the thread's context, and delivers until it is done.</summary>
+        internal Task Run(Func<Task> start)
+        {
+            SynchronizationContext? was = Current;
+            SetSynchronizationContext(this);
+
+            try
+            {
+                Task work = start();
+                PumpUntil(() => work.IsCompleted);
+
+                return work;
+            }
+            finally
+            {
+                SetSynchronizationContext(was);
+            }
+        }
+
+        /// <summary>Delivers what has been posted until the condition holds, and then whatever is left.</summary>
+        internal void PumpUntil(Func<bool> done)
+        {
+            while (!done())
+            {
+                if (_posted.TryTake(out (SendOrPostCallback What, object? With) next, 10))
+                {
+                    next.What(next.With);
+                }
+            }
+
+            while (_posted.TryTake(out (SendOrPostCallback What, object? With) left))
+            {
+                left.What(left.With);
             }
         }
     }
@@ -416,13 +501,9 @@ public class BurningOneDiscAndWatchingIt
                 return;
             }
 
-            for (DateTime until = DateTime.UtcNow.AddSeconds(10);
-                 !Watching.Heard(far) && DateTime.UtcNow < until;)
-            {
-                Thread.Sleep(1);
-            }
-
-            Assert.True(Watching.Heard(far), $"the burn said \"{step.Doing}\" and nothing heard it");
+            // Delivering while it waits, because the report is posted to the
+            // very thread this is running on.
+            Assert.True(Watching.WaitToHear(far), $"the burn said \"{step.Doing}\" and nothing heard it");
         }
     }
 

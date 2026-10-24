@@ -83,6 +83,25 @@ public class TheProjectFileComesBack
     }
 
     [Fact]
+    public void A_folder_of_files_comes_back_as_files_whether_or_not_anything_in_it_runs()
+    {
+        GameFolder nothingToRun = new(
+            @"C:\games\Just Data", GameKind.FilesOnly, "Just Data", "Just Data", null,
+            [new ListedFile(@"data\things.pak", 900)], [], null);
+        GameFolder somethingToRun = nothingToRun with
+        {
+            Kind = GameKind.FilesWithLauncher,
+            LauncherCandidates = [new ListedFile("game.exe", 100)]
+        };
+
+        // Only a folder with something to run was written as Files, so a
+        // folder with nothing to run came back as a GOG download, and v1
+        // reading it went looking for a setup exe that was never there.
+        Assert.False(Written(AProject() with { Games = [nothingToRun] }).Games.Single().WasAGogDownload);
+        Assert.False(Written(AProject() with { Games = [somethingToRun] }).Games.Single().WasAGogDownload);
+    }
+
+    [Fact]
     public void An_add_on_comes_back_pointing_at_the_game_it_belongs_to()
     {
         OpenedProject back = Written(AProject());
