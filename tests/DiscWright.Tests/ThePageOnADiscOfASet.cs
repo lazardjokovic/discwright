@@ -39,9 +39,19 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     {
         try
         {
+            // The stand-in discs hold read-only files, as a CD does, and a
+            // recursive delete refuses those.
+            foreach (FileInfo file in new DirectoryInfo(_folder).EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                file.Attributes = FileAttributes.Normal;
+            }
+
             Directory.Delete(_folder, recursive: true);
         }
         catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
         {
         }
     }
@@ -64,6 +74,10 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         File.WriteAllText(Path.Combine(disc1, "readme.txt"), "12345");
         File.WriteAllText(Path.Combine(disc2, "setup_big.exe.dwpart02"), "DEFG");
         File.WriteAllText(Path.Combine(disc2, "data", "more file.dat"), "12");
+
+        // Read-only, as everything on a CD is. Found on the first real set.
+        File.SetAttributes(Path.Combine(disc1, "setup_big.exe.dwpart01"), FileAttributes.ReadOnly);
+        File.SetAttributes(Path.Combine(disc2, "setup_big.exe.dwpart02"), FileAttributes.ReadOnly);
 
         // And the disc's own files, which the set file lists like everything
         // else and which must not come along.

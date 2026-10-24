@@ -1485,6 +1485,11 @@ function copyTheSetDisc(work) {
 // size, because a join that half worked and then removed its own evidence is
 // the one failure here that cannot be recovered from.
 //
+// The delete is forced, because a file copied off a CD arrives read-only,
+// robocopy carries the attribute over, and DeleteFile without the force flag
+// refuses a read-only file. On the first real set the join was perfect and
+// both pieces stayed behind, 1.2 GB of them.
+//
 // work is {files, dir, joins, say, after}. after is called with the names of
 // the files that could not be put back together.
 function joinThePieces(work) {
@@ -1528,7 +1533,7 @@ function joinThePieces(work) {
         waitForJob(startAJob(setJoinCommand(work.dir, todo[at])), function () {
             if (sizeOf(todo[at].path) === todo[at].bytes) {
                 for (piece = 0; piece < todo[at].pieces.length; piece++) {
-                    try { work.files.DeleteFile(onTheDisc(work.dir, todo[at].pieces[piece])); } catch (stillOpen) { }
+                    try { work.files.DeleteFile(onTheDisc(work.dir, todo[at].pieces[piece]), true); } catch (stillOpen) { }
                 }
             } else {
                 failed.push(todo[at].path);

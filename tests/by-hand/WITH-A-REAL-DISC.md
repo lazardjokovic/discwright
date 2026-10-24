@@ -200,8 +200,8 @@ folder. **Expect on the disc:** exactly that, and no attempt to run anything.
 The suite installs a set of two from two folders, under cscript, with the real
 robocopy and the real `copy /b`. Only a real drive proves the swap is noticed.
 
-1. Build `fixtures\size-three-cds` at **CD-R 700 MB** with splitting on, and
-   burn both discs.
+1. Build `fixtures\size-one-too-big-for-a-cd` at **CD-R 700 MB** with
+   splitting on, which makes exactly two, and burn both discs.
 2. Put **disc 1** in a machine and open the menu.
 
 **Expect:** the big button says **Install, disc 1 of 2**, and the line under

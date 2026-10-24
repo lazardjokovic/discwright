@@ -46,9 +46,19 @@ public sealed class TheMenuScript : IDisposable
     {
         try
         {
+            // The stand-in discs hold read-only files, as a CD does, and a
+            // recursive delete refuses those.
+            foreach (FileInfo file in new DirectoryInfo(_folder).EnumerateFiles("*", SearchOption.AllDirectories))
+            {
+                file.Attributes = FileAttributes.Normal;
+            }
+
             Directory.Delete(_folder, recursive: true);
         }
         catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
         {
         }
     }
@@ -981,6 +991,12 @@ public sealed class TheMenuScript : IDisposable
         File.WriteAllText(Path.Combine(disc1, "big.bin.dwpart01"), "ABC");
         File.WriteAllText(Path.Combine(disc2, "big.bin.dwpart02"), "DEFG");
         File.WriteAllText(Path.Combine(disc2, "data", "more file.dat"), "12");
+
+        // Read-only, the way every file on a CD is, and robocopy carries the
+        // attribute over. On the first real set the join was perfect and
+        // both pieces stayed behind, because the delete did not force it.
+        File.SetAttributes(Path.Combine(disc1, "big.bin.dwpart01"), FileAttributes.ReadOnly);
+        File.SetAttributes(Path.Combine(disc2, "big.bin.dwpart02"), FileAttributes.ReadOnly);
 
         const string rows = "[{disc: 1, sha256: 'a', bytes: 5, path: 'setup.exe'}, {disc: 1, sha256: 'b', bytes: 3, path: 'big.bin.dwpart01'},"
             + " {disc: 2, sha256: 'c', bytes: 4, path: 'big.bin.dwpart02'}, {disc: 2, sha256: 'd', bytes: 2, path: 'data/more file.dat'}]";
