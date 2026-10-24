@@ -104,6 +104,15 @@ public sealed record ImagePlan(
                 char.IsAsciiLetterOrDigit(character) || character == '_' ? character : '_')
         ]);
 
+        // One underscore where several would be. "MICROSOFT® WINDOWS" folds
+        // to "MICROSOFT__WINDOWS" and then to "MICROSOFT___W_D1" once cut,
+        // which is what This PC showed on the first real set: a name that
+        // reads as an encoding fault rather than as a name.
+        while (allowed.Contains("__", StringComparison.Ordinal))
+        {
+            allowed = allowed.Replace("__", "_", StringComparison.Ordinal);
+        }
+
         allowed = allowed.Trim('_');
 
         if (allowed.Length > room)

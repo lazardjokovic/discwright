@@ -123,10 +123,23 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "said();\n"
                 + "startIt = function (what, from) { out.push('start ' + what + ' in ' + from); return null; };\n"
 
+                // Every distinct width the bar's fill is given, so the test
+                // can see that it moved while a file copied.
+                + "var drawTheSet = sayTheSet; var lastWidth = null;\n"
+                + "sayTheSet = function (s) { drawTheSet(s); var w = document.getElementById('restoreBarIn').style.width;"
+                + " if (w !== undefined && w !== lastWidth) { widths.push(w); lastWidth = w; } };\n"
+
                 // The big button, pressed the way the page presses it.
                 + "doTheThing();\n"
                 + "pump(function () { return restoring.wanting > 0; });\n"
                 + "said();\n"
+
+                // The bar was drawn while the file copied, which on files this
+                // small is 99% at once, and the button is dead
+                // while the set is being worked on: a second press starts
+                // nothing. Both found on the first real set.
+                + "out.push('bar=' + (widths.length >= 1 ? 'drawn' : 'never drawn') + ' button=' + document.getElementById('doIt').parentNode.className);\n"
+                + "var before = window.timers.length; doTheThing(); out.push('press again=' + (window.timers.length - before));\n"
                 + "document.URL = " + AsJScript(new Uri(Path.Combine(disc2, "AUTORUN", "menu.hta")).AbsoluteUri) + ";\n"
                 + "WHERE = null;\n"
                 + "pump(function () { return closed; });\n"
@@ -146,6 +159,8 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 // anybody pressing anything else.
                 "button=Install, disc 1 of 2",
                 "line=Put disc 2 in. This carries on by itself once it is there.",
+                "bar=drawn button=btn next dead",
+                "press again=0",
 
                 // Disc 2 found in the drive, copied, the installer put back
                 // together and started from the folder, and the menu gone.
@@ -220,6 +235,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     private static string StandIns(string menuUrl) =>
         "var out = [];\n"
         + "var alerts = [];\n"
+        + "var widths = [];\n"
         + "var closed = false;\n"
         + "function alert(text) { alerts.push(String(text)); }\n"
         + "var screen = { availWidth: 1920, availHeight: 1080 };\n"
@@ -231,7 +247,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         + "    documentElement: { clientWidth: 760, clientHeight: 480 },\n"
         + "    body: {},\n"
         + "    getElementById: function (id) {\n"
-        + "        if (!this.elements[id]) { this.elements[id] = { id: id, style: {}, innerText: '', innerHTML: '', title: '' }; }\n"
+        + "        if (!this.elements[id]) { this.elements[id] = { id: id, style: {}, innerText: '', innerHTML: '', title: '', parentNode: { className: '' } }; }\n"
         + "        return this.elements[id];\n"
         + "    }\n"
         + "};\n"

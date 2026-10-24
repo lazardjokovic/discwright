@@ -12,7 +12,7 @@ public class ThePlanForAnImage
 
     [Theory]
     [InlineData("HOLLOW KNIGHT", "HOLLOW_KNIGHT")]
-    [InlineData("The Witcher: Enhanced", "The_Witcher__Enh")]
+    [InlineData("The Witcher: Enhanced", "The_Witcher_Enha")]
     [InlineData("A", "A")]
     [InlineData("1234567890123456789", "1234567890123456")]
     public void Makes_a_volume_name_out_of_the_label(string label, string expected)
@@ -62,6 +62,18 @@ public class ThePlanForAnImage
 
         Assert.DoesNotContain("__", name, StringComparison.Ordinal);
         Assert.False(name.EndsWith('_'), $"'{name}' ends in the gap where a space was");
+    }
+
+    [Fact]
+    public void Folds_a_run_of_dropped_characters_into_one_gap()
+    {
+        // "MICROSOFT® WINDOWS® OPERATING SYSTEM" came out as MICROSOFT___W_D1
+        // on the first real set, three underscores for a sign and a space,
+        // which reads as an encoding fault rather than as a name.
+        string name = ImagePlan.For("MICROSOFT® WINDOWS® OPERATING SYSTEM", Gib, 1000, false, 1, 2).VolumeName;
+
+        Assert.Equal("MICROSOFT_WIN_D1", name);
+        Assert.DoesNotContain("__", name, StringComparison.Ordinal);
     }
 
     [Fact]

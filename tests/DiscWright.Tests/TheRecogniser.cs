@@ -93,6 +93,21 @@ public class TheRecogniser
     }
 
     [Fact]
+    public void Undoes_a_product_name_the_installer_double_encoded()
+    {
+        // Found on the first real set: the installer was Windows' own
+        // Character Map padded out, and its menu, its title bar and its set
+        // file all said "MicrosoftÂ® WindowsÂ®". The untouched copy in
+        // System32 reports the same, so this is other people's files, and
+        // the name on the disc is the one thing somebody else typed.
+        GameFolder game = Read(
+            Folder(@"C:\kit\A", ("setup_wide_game_1.0_(92222).exe", 900)),
+            reports: "MicrosoftÂ® WindowsÂ® Operating System");
+
+        Assert.Equal("Microsoft® Windows® Operating System", game.Name);
+    }
+
+    [Fact]
     public void Prefers_the_name_the_installer_reports_about_itself()
     {
         GameFolder game = Read(

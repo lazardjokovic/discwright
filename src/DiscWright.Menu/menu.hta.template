@@ -249,6 +249,13 @@ function doTheThing() {
     // together from every disc first, and installed from there. Unless it
     // is already on the machine, in which case the button says Play and
     // does that.
+    // Already at it. The button is drawn dead while a set copies, joins or
+    // waits for the next disc, and a press on it does nothing rather than
+    // starting a second copy over the first.
+    if (SET && restoring.busy) {
+        return;
+    }
+
     if (SET && !where) {
         restoreGo();
         return;
@@ -501,8 +508,11 @@ function runTheAddOn(which) {
 // off the disc afterwards would come off whichever disc is in by then.
 var SET = null;
 
-// What is happening right now, for the sentence and the bar.
-var restoring = { copying: "", joining: "", wanting: 0, done: 0, all: 0 };
+// What is happening right now, for the sentence and the bar. busy is true
+// from the press until the installer starts or something fails, and while
+// it is the big button is dead: on the first real set it stayed live under
+// the copy, and a second press would have started a second copy.
+var restoring = { copying: "", joining: "", wanting: 0, done: 0, all: 0, startedAt: 0, rate: 0, busy: false, ticking: false };
 
 function readTheSetFile() {
     try {
@@ -577,10 +587,25 @@ function sayTheSet(scan) {
 
     if (restoring.copying && restoring.all > 0) {
         bar.style.display = "block";
-        filled.style.width = percentDone(restoring.done, 0, 0, restoring.all) + "%";
+        filled.style.width = restoreBarPercent(restoring, (new Date()).getTime()) + "%";
     } else {
         bar.style.display = "none";
     }
+}
+
+// Redraws the bar twice a second while a file copies, because nothing else
+// happens between the start of a file and its end, and a bar that only
+// moves when a file finishes is a bar that never moves on a disc with one
+// file on it.
+function keepTheBarMoving() {
+    if (!restoring.copying) {
+        restoring.ticking = false;
+        return;
+    }
+
+    restoring.ticking = true;
+    sayTheSet();
+    window.setTimeout(keepTheBarMoving, 500);
 }
 
 // The big button and the line, for a disc of a set.
@@ -588,6 +613,7 @@ function showTheSet(game) {
     var scan = scanTheSet();
 
     document.getElementById("doIt").innerText = restoreButtonSays(scan, SET.discIn, SET.of, isInstalled(game));
+    document.getElementById("doIt").parentNode.className = "btn next" + (restoring.busy ? " dead" : "");
     sayTheSet(scan);
 }
 
@@ -638,6 +664,9 @@ function restoreGo() {
     } catch (cannotTell) {
     }
 
+    restoring.busy = true;
+    showTheSet(gameAt(DISC.games, showing));
+
     // Everything this disc holds is already there, so it is another disc
     // that is wanted.
     if (scan.mineTotal > 0 && scan.mineHere >= scan.mineTotal) {
@@ -663,11 +692,19 @@ function copyThisDisc() {
             restoring.copying = progress.copying;
             restoring.done = progress.done;
             restoring.all = progress.all;
-            sayTheSet();
+            restoring.startedAt = progress.startedAt || 0;
+            restoring.rate = progress.rate || 0;
+
+            if (restoring.copying && !restoring.ticking) {
+                keepTheBarMoving();
+            } else {
+                sayTheSet();
+            }
         },
         after: function (bad) {
             if (bad > 0) {
-                sayTheSet();
+                restoring.busy = false;
+                showTheSet(gameAt(DISC.games, showing));
                 alert(bad + " of the files on this disc would not copy.\n\nIt may be scratched. Press Install to try again, "
                     + "or copy them in Explorer into " + theRestoreFolder() + ".");
                 return;

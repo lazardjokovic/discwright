@@ -106,7 +106,10 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
         // leak into folder names: "...Edition                    Disc".
         if (!string.IsNullOrWhiteSpace(reported))
         {
-            return reported.Trim();
+            // And with the one encoding mistake undone that other people's
+            // installers carry: Windows' own Character Map reports itself as
+            // "MicrosoftÂ® WindowsÂ®", and so did the first real set.
+            return Mojibake.Undone(reported.Trim());
         }
 
         // setup_hollow_knight_1.5.12620_(64bit)_(89718) -> Hollow Knight.

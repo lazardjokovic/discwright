@@ -917,6 +917,23 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Moves_the_bar_through_a_file_by_the_clock_and_the_rate()
+    {
+        // Nothing on a disc can see inside a copy, so the bar sat at nothing
+        // for four minutes on the first real set under "Copying file 1 of
+        // 1". Bytes finished, plus seconds on this file at the rate so far.
+        Assert.Equal("0", Ask("restoreBarPercent({done: 0, all: 1000, startedAt: 5000, rate: 100}, 5000)"));
+        Assert.Equal("50", Ask("restoreBarPercent({done: 0, all: 1000, startedAt: 5000, rate: 100}, 10000)"));
+        Assert.Equal("75", Ask("restoreBarPercent({done: 500, all: 1000, startedAt: 5000, rate: 100}, 7500)"));
+        Assert.Equal("99", Ask("restoreBarPercent({done: 0, all: 1000, startedAt: 5000, rate: 100}, 99000)"));
+
+        // Before anything has been measured, the 8x CD guess.
+        Assert.Equal(
+            Ask("percentDone(0, 2, startingRate(), 10000000)"),
+            Ask("restoreBarPercent({done: 0, all: 10000000, startedAt: 1000, rate: 0}, 3000)"));
+    }
+
+    [Fact]
     public void The_button_says_install_and_which_disc_and_nothing_about_copying()
     {
         // From the person's side that is what it does. The copying is how
@@ -1005,7 +1022,12 @@ public sealed class TheMenuScript : IDisposable
         string went = Ask(
             "(function () { var f = new ActiveXObject('Scripting.FileSystemObject'); var out = []; var quiet = function () {};"
             + " var rows = " + rows + "; var joins = " + joins + ";"
-            + " copyTheSetDisc({files: f, discRoot: " + AsJScript(disc1) + ", dir: " + AsJScript(dest) + ", rows: rows, discIn: 1, say: quiet,"
+
+            // What the engine says while it copies carries what the bar
+            // needs: when this file started and the rate so far, which is
+            // the 8x CD guess until a file has been timed.
+            + " var heard = function (p) { if (p.copying) { out.push('says ' + p.copying + ' rate=' + (p.rate > 0) + ' started=' + (p.startedAt > 0)); } };"
+            + " copyTheSetDisc({files: f, discRoot: " + AsJScript(disc1) + ", dir: " + AsJScript(dest) + ", rows: rows, discIn: 1, say: heard,"
             + "   after: function (bad) { out.push('disc 1 bad=' + bad); }});"
             + " var one = setScan(rows, joins, 1, sizeOfUnder(f, " + AsJScript(dest) + "));"
             + " out.push('then ok=' + one.ok + ' need=' + one.need.join(',') + ' complete=' + one.complete);"
@@ -1018,7 +1040,8 @@ public sealed class TheMenuScript : IDisposable
             + " return out.join(' | '); })()");
 
         Assert.Equal(
-            "disc 1 bad=0 | then ok=2 need=2 complete=false | disc 2 bad=0 | failed=0 | then ok=4 pending=0 complete=true",
+            "says 1 of 2 rate=true started=true | says 2 of 2 rate=true started=true | disc 1 bad=0"
+            + " | then ok=2 need=2 complete=false | disc 2 bad=0 | failed=0 | then ok=4 pending=0 complete=true",
             went);
 
         Assert.Equal("ABCDEFG", File.ReadAllText(Path.Combine(dest, "big.bin")));

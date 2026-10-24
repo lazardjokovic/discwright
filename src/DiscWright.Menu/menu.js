@@ -1140,6 +1140,25 @@ function restoreSentence(scan, discIn, busy, folder) {
     return line;
 }
 
+// How far the bar is along while a file copies.
+//
+// Nothing on a disc can see inside a copy that is happening: robocopy sizes
+// the destination to its full length the moment it starts, so the file's
+// size says nothing, and on the first real set the bar sat at nothing for
+// four minutes under "Copying file 1 of 1" and then the disc was done. The
+// same estimate the whole menu uses, then: the bytes finished, plus the
+// seconds on the current file at the rate measured so far, and a guess of
+// 8x CD before anything has been measured. Never 100.
+//
+// progress is what copyTheSetDisc says: done, all, startedAt in
+// milliseconds and rate in bytes a second. now is the clock, handed in so a
+// test can hold it still.
+function restoreBarPercent(progress, now) {
+    var seconds = progress.startedAt > 0 ? Math.max(0, (now - progress.startedAt) / 1000) : 0;
+
+    return percentDone(progress.done, seconds, progress.rate || startingRate(), progress.all);
+}
+
 // Where to put the game back together.
 //
 // Under the person's own profile when that drive has the room, the same
@@ -1432,7 +1451,7 @@ function sizeOfUnder(files, dir) {
 function copyTheSetDisc(work) {
     var mine = setRowsOf(work.rows, work.discIn);
     var sizeOf = sizeOfUnder(work.files, work.dir);
-    var state = { at: 0, bad: 0, done: 0, all: 0 };
+    var state = { at: 0, bad: 0, done: 0, all: 0, startedAt: 0, samples: [] };
     var i;
 
     for (i = 0; i < mine.length; i++) {
@@ -1458,7 +1477,14 @@ function copyTheSetDisc(work) {
             return;
         }
 
-        work.say({ copying: (state.at + 1) + " of " + mine.length, done: state.done, all: state.all });
+        state.startedAt = (new Date()).getTime();
+        work.say({
+            copying: (state.at + 1) + " of " + mine.length,
+            done: state.done,
+            all: state.all,
+            startedAt: state.startedAt,
+            rate: rateFrom(state.samples, startingRate())
+        });
 
         try {
             makeTheWholePath(work.files, work.files.GetParentFolderName(onTheDisc(work.dir, row.path)));
@@ -1470,6 +1496,7 @@ function copyTheSetDisc(work) {
                 state.bad++;
             } else {
                 state.done += row.bytes;
+                state.samples.push({ bytes: row.bytes, seconds: ((new Date()).getTime() - state.startedAt) / 1000 });
             }
 
             state.at++;
