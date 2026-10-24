@@ -269,6 +269,51 @@ what to watch:
   questions.** Watching for the words "blank" or "next" catches the first and
   misses the second.
 
+## Case 8, the swap, judged 2026-10-24
+
+**Pass, with two things found and fixed the same afternoon.** The set was a
+1.2 GB installer cut in two at CD-R 700 MB, built through the installed
+window and burned to the two CD-RWs through IMAPI, disc 1 in D: and disc 2
+in E: at once, about eight minutes each. The installer was a copy of
+Character Map with 1.2 GB of nothing on its end, so that it would be
+recognised as a GOG download and be big enough to cut.
+
+What happened, from the person at the drive and from a watcher reading the
+`Games` folder and the drives from the side:
+
+- The menu said **Install, disc 1 of 2**. Pressing it started the copy, and
+  the first piece appeared in `Games\Microsoft® Windows® Operating System`
+  under the profile at its full size at once, which is robocopy pre-sizing.
+- Disc 1 came out at 15:50:42. Disc 2 mounted at 15:51:23 and the page
+  carried on **ten seconds later with nothing pressed**.
+- The joined installer appeared at 15:54:10 at exactly 1,288,490,189 bytes,
+  and its SHA-256 matched the `JOIN` line in `Disc set.txt` byte for byte.
+- The page said *Every file is here*, started the installer and closed.
+
+**Found, and fixed before the discs were out:** the set file lists the
+disc's own files too, because any one disc has to be able to say what the
+whole set is, and the engine took every row as the game. `AUTORUN`, `Start
+Here.hta` and `autorun.inf` would have been copied in beside the installer.
+#110 takes them out, and the discs were built and burned again before the
+swap was tried.
+
+**Found by the swap:** the two pieces stayed behind after a perfect join. A
+file copied off a CD arrives **read-only**, robocopy carries the attribute
+over, and `DeleteFile` refuses a read-only file unless forced. #111 forces
+it, and both tests that join real pieces make them read-only first.
+
+**Not a finding, but worth knowing:** nothing appeared when the menu
+closed. The joined file is byte for byte the padded Character Map, and
+started by hand from Explorer it also quits at once with exit code 0 and
+no window, while the untouched Character Map opens. Character Map refuses
+itself with 1.2 GB stuck on its end. **Next time pad something that does
+not mind**, or build a small exe of your own, so that the end of the flow
+is a window rather than an inference. Steps 6, 7 and 8 of the case, disc 2
+first, a set left half done and the preview, were not judged on a drive
+and stand as written.
+
+---
+
 ## When something here fails
 
 Say which case, which drive, and what was in it. The drives report themselves
