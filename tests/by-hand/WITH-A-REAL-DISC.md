@@ -314,6 +314,49 @@ and stand as written.
 
 ---
 
+## Case 8 again, the same evening, with a real installer
+
+**Pass.** Hollow Knight's own GOG installer, 1.16 GB, cut in two at CD-R
+700 MB, disc 1 on a CD-RW and disc 2 on a write once CD-R, both read back
+against their lists before anything was tried. Both discs went through E:.
+
+- 21:07 disc 1 in, the menu up, **Install, disc 1 of 2**, the name Hollow
+  Knight everywhere and This PC saying `HOLLOW_KNIGHT_D1`.
+- The bar moved on its own under *Copying file 1 of 1*, and the big button
+  was grey and did nothing while it copied.
+- 21:13 disc 1 out, disc 2 in. The page carried on **fourteen seconds after
+  disc 2 mounted** with nothing pressed.
+- 21:17 the join done, and the folder held the whole installer and nothing
+  else: the pieces were gone, which is #111 working on a real disc.
+- The menu closed and the GOG installer opened a second later. **Hollow
+  Knight installed from the folder.**
+
+Three things the owner asked for, done in #115: the tray opens when a disc
+is done and more are wanted; the title bar follows the disc instead of
+saying *disc 1 of 2* for ever; and the menu stays while the installer
+runs, grey and saying *Installing*, and says **Play** when it closes with
+the game on the machine. A folder of files across discs now says *Copy and
+play, disc 1 of 2*, which answers what a non GOG game does.
+
+**What the evening cost, and what to do differently.** Five burns of disc 2
+onto CD-RWs failed to read back, on two rewritables and in both drives,
+after each had been erased and written a few times that day, while the
+same CD-RW had taken disc 1 cleanly an hour earlier. The CD-R took disc 2
+first time. Two rules for the lab from that:
+
+- **Read every disc back before trusting it.** The app's own Burn does;
+  the IMAPI shortcut used here did not, and the owner's question "did you
+  run the verification" is what caught it.
+- **Rewritables wear within a day of this.** Keep write once discs for
+  the second and third burn of an afternoon, and keep the discs apart and
+  labelled, because they look alike and one went back into a drive twice.
+  The lab burner now reads a disc's label before any erase and refuses a
+  disc of the set being made.
+
+Steps 6, 7 and 8 of the case are still unjudged on a drive.
+
+---
+
 ## When something here fails
 
 Say which case, which drive, and what was in it. The drives report themselves
