@@ -122,6 +122,43 @@ public class TheSetManifest
         Assert.Contains("On this disc: 2 of the 3 files.", file, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Names_the_files_that_were_cut_and_the_pieces_each_goes_back_together_from()
+    {
+        string file = Written(joins: [new SetJoin("big.bin", "eeee5555", 2500, ["big.bin.dwpart01", "big.bin.dwpart02"])]);
+
+        // JOIN and PART lines start with a letter, so the row parsers walk
+        // past them and the menu reads them. The hash is the finished file's
+        // own, which is the one check that proves the join rather than the
+        // pieces.
+        Assert.Contains("JOIN eeee5555 2500          *big.bin", file, StringComparison.Ordinal);
+        Assert.Contains("PART 1   *big.bin.dwpart01", file, StringComparison.Ordinal);
+        Assert.Contains("PART 2   *big.bin.dwpart02", file, StringComparison.Ordinal);
+
+        // And the line a person types, with Windows paths and every name
+        // quoted, because a slash after the first argument is a switch to cmd
+        // and an unquoted space is two files that are not there.
+        Assert.Contains("  copy /b \"big.bin.dwpart01\"+\"big.bin.dwpart02\" \"big.bin\"", file, StringComparison.Ordinal);
+        Assert.Contains("  cat 'big.bin.dwpart01' 'big.bin.dwpart02' > 'big.bin'", file, StringComparison.Ordinal);
+        Assert.Contains("3. Put the files that were cut to fit back together", file, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_nothing_about_cut_files_when_nothing_was_cut()
+    {
+        string file = Written();
+
+        Assert.DoesNotContain("JOIN ", file, StringComparison.Ordinal);
+        Assert.DoesNotContain("cut to fit", file, StringComparison.Ordinal);
+        Assert.Contains("3. Run the installer from that folder", file, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_the_menu_installs_the_set_for_you()
+    {
+        Assert.Contains("press Install on", Written(), StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static SetEntry[] Entries() =>
@@ -131,6 +168,9 @@ public class TheSetManifest
         new(2, "big.bin.dwpart02", "cccc3333", 500)
     ];
 
-    private static string Written(int thisDisc = 1) =>
-        SetManifest.For("HOLLOW KNIGHT", Entries(), thisDisc, 2, "DVD5 4.7 GB", DateTimeOffset.Parse("2026-10-14T19:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+    private static string Written(int thisDisc = 1, IReadOnlyList<SetJoin>? joins = null) =>
+        SetManifest.For(
+            "HOLLOW KNIGHT", Entries(), thisDisc, 2, "DVD5 4.7 GB",
+            DateTimeOffset.Parse("2026-10-14T19:00:00Z", System.Globalization.CultureInfo.InvariantCulture),
+            joins);
 }

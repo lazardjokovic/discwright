@@ -173,7 +173,7 @@ public sealed class DiscBuilder(
             made.Add(new BuiltDisc(label, disc.Number, layout.Discs.Count, folder, disc.Bytes));
         }
 
-        WriteTheSetFile(forThisDisc, made, medium, ct);
+        WriteTheSetFile(forThisDisc, made, layout, medium, ct);
 
         return new BuiltDiscs(made);
     }
@@ -195,7 +195,7 @@ public sealed class DiscBuilder(
     /// </para>
     /// </remarks>
     private void WriteTheSetFile(
-        DiscProject project, List<BuiltDisc> made, Medium medium, CancellationToken ct)
+        DiscProject project, List<BuiltDisc> made, DiscLayout layout, Medium medium, CancellationToken ct)
     {
         if (made.Count <= 1)
         {
@@ -230,13 +230,47 @@ public sealed class DiscBuilder(
             }
         }
 
+        IReadOnlyList<SetJoin> joins = TheFilesThatWereCut(layout, ct);
+
         foreach (BuiltDisc disc in made)
         {
             writer.WriteText(
                 System.IO.Path.Combine(disc.Folder, SetManifest.FileName),
-                SetManifest.For(project.Label, entries, disc.Number, made.Count, medium.Name, DateTimeOffset.Now));
+                SetManifest.For(project.Label, entries, disc.Number, made.Count, medium.Name, DateTimeOffset.Now, joins));
         }
     }
+
+    /// <summary>
+    /// Every file that was cut across discs, with the pieces it goes back
+    /// together from and the hash of the whole.
+    /// </summary>
+    /// <remarks>
+    /// The whole file is hashed here, off the source, because nothing on any
+    /// disc holds it whole: the checksum lists carry the pieces. It is the
+    /// one hash in the set file that proves a join rather than a piece, and
+    /// it costs a pass over the file, which on a four gigabyte installer is a
+    /// minute. A set with nothing cut costs nothing.
+    /// </remarks>
+    private IReadOnlyList<SetJoin> TheFilesThatWereCut(DiscLayout layout, CancellationToken ct) =>
+    [
+        .. layout.Discs
+            .SelectMany(disc => disc.Files)
+            .Where(file => file.Part is not null)
+            .GroupBy(file => file.Source, StringComparer.OrdinalIgnoreCase)
+            .Select(pieces =>
+            {
+                ct.ThrowIfCancellationRequested();
+
+                PlannedFile[] inOrder = [.. pieces.OrderBy(piece => piece.Part!.Index)];
+                string whole = DiscPlanner.TheWholeFileOf(inOrder[0].RelativePath).Replace((char)92, '/');
+
+                return new SetJoin(
+                    whole,
+                    hasher.Sha256(inOrder[0].Source, ct),
+                    inOrder[0].Part!.WholeBytes,
+                    [.. inOrder.Select(piece => piece.RelativePath.Replace((char)92, '/'))]);
+            })
+    ];
 
     /// <summary>
     /// A path from the checksum list, which writes forward slashes, back as

@@ -58,9 +58,13 @@ public sealed class TheGeneratedDataBlock : IDisposable
     [Fact]
     public void Gives_JScript_a_set_it_can_count()
     {
-        string answer = Run(DataBlockFor("Hollow Knight"), "DISC.discsInSet + '/' + DISC.discsCopied.length");
+        // How many discs, and which this one is. Which discs have been
+        // copied is not baked in any more: the menu reads that off the folder
+        // the set is being put back into, because one menu drives the whole
+        // set and the disc under it gets swapped.
+        string answer = Run(DataBlockFor("Hollow Knight"), "DISC.discsInSet + '/' + DISC.discNumber + '/' + typeof DISC.discsCopied");
 
-        Assert.Equal("1/1", answer);
+        Assert.Equal("1/1/undefined", answer);
     }
 
     [Fact]

@@ -102,61 +102,6 @@ function percentDone(bytesFinished, secondsOnTheCurrentFile, rate, bytesInAll) {
     return percent;
 }
 
-// Which discs of a set are still wanted.
-//
-// Given the disc numbers already copied and how many there are in all, returns
-// the ones missing, in order. The menu turns this into "insert disc 2", and
-// into the line that says what is still needed when somebody puts in the wrong
-// one.
-function discsStillWanted(discsCopied, discsInSet) {
-    var wanted = [];
-
-    for (var number = 1; number <= discsInSet; number++) {
-        var found = false;
-
-        for (var i = 0; i < discsCopied.length; i++) {
-            if (discsCopied[i] === number) {
-                found = true;
-            }
-        }
-
-        if (!found) {
-            wanted.push(number);
-        }
-    }
-
-    return wanted;
-}
-
-// What to say about what is still missing. Written here rather than in the HTA
-// so the wording is tested with the arithmetic that decides it.
-function whatIsStillWanted(discsCopied, discsInSet) {
-    var wanted = discsStillWanted(discsCopied, discsInSet);
-
-    if (wanted.length === 0) {
-        return "";
-    }
-
-    if (wanted.length === 1) {
-        return "Insert disc " + wanted[0] + ".";
-    }
-
-    if (wanted.length === 2) {
-        return "Still needs discs " + wanted[0] + " and " + wanted[1] + ".";
-    }
-
-    var all = "";
-
-    for (var i = 0; i < wanted.length - 1; i++) {
-        if (all !== "") {
-            all += ", ";
-        }
-        all += wanted[i];
-    }
-
-    return "Still needs discs " + all + " and " + wanted[wanted.length - 1] + ".";
-}
-
 // Which screen the menu opens on.
 //
 // One game and it opens on that game, because a chooser offering one choice is
@@ -827,4 +772,737 @@ function isInstalled(game) {
     }
 
     return whereTheGameIs(game.match || game.name) !== null;
+}
+
+// ===========================================================================
+// A set: putting the game back together.
+//
+// A game bigger than one disc is spread across several, and no disc in a set
+// can install it on its own. Every disc carries "Disc set.txt", which names
+// every file on every disc with its size and hash, and any cut file with the
+// pieces it goes back together from. The menu reads that file once, copies
+// each disc's share into one folder on the hard drive, asks for the next
+// disc, joins the pieces after the last one, and then installs from the
+// folder. From the person's side the button says "Install, disc 1 of 3" and
+// the rest is the installer's business, which is how a game on several discs
+// always worked.
+//
+// Nothing in here touches the page. The engine takes callbacks for what to
+// say and what to do when it is done, so cscript can run it against real
+// folders and the page can draw it.
+// ===========================================================================
+
+// The rows of the set file: every file on every disc.
+//
+// A row is a line that starts with a digit and holds a star, which is the
+// rule all three readers of the file keep. Everything after the star is the
+// name, because a file name can hold spaces and splitting on them would cut
+// it in half.
+function setRowsFrom(text) {
+    var rows = [];
+    var lines = String(text || "").split("\n");
+    var i, line, star, head, k, kept;
+
+    for (i = 0; i < lines.length; i++) {
+        line = lines[i].replace(/\r$/, "");
+
+        if (line.length === 0 || line.charAt(0) < "0" || line.charAt(0) > "9") {
+            continue;
+        }
+
+        star = line.indexOf("*");
+
+        if (star < 0) {
+            continue;
+        }
+
+        head = line.substring(0, star).split(" ");
+        kept = [];
+
+        for (k = 0; k < head.length; k++) {
+            if (head[k].length) {
+                kept.push(head[k]);
+            }
+        }
+
+        if (kept.length < 3) {
+            continue;
+        }
+
+        rows.push({
+            disc: parseInt(kept[0], 10),
+            sha256: kept[1],
+            bytes: parseFloat(kept[2]),
+            path: line.substring(star + 1)
+        });
+    }
+
+    return rows;
+}
+
+// The files that were cut to fit, and the pieces each goes back together
+// from, read off the JOIN and PART lines the row parser walks past because
+// they start with a letter.
+//
+//   JOIN <sha256 of the finished file> <bytes> *name
+//   PART <n> *name.dwpart01
+function setJoinsFrom(text) {
+    var joins = [];
+    var lines = String(text || "").split("\n");
+    var i, line, star, head, bits, k, current = null;
+
+    for (i = 0; i < lines.length; i++) {
+        line = lines[i].replace(/\r$/, "");
+        star = line.indexOf("*");
+
+        if (star < 0) {
+            continue;
+        }
+
+        head = line.substring(0, star);
+
+        if (head.substring(0, 5) === "JOIN ") {
+            bits = [];
+            head = head.substring(5).split(" ");
+
+            for (k = 0; k < head.length; k++) {
+                if (head[k].length) {
+                    bits.push(head[k]);
+                }
+            }
+
+            if (bits.length < 2) {
+                continue;
+            }
+
+            current = { path: line.substring(star + 1), sha256: bits[0], bytes: parseFloat(bits[1]), pieces: [] };
+            joins.push(current);
+        } else if (head.substring(0, 5) === "PART " && current) {
+            current.pieces.push(line.substring(star + 1));
+        }
+    }
+
+    return joins;
+}
+
+// Which disc of the set a set file belongs to, from its own "disc N of M"
+// line, or 0 when it has none. Read off the disc rather than baked into the
+// menu, because one menu drives the whole set: disc 1's page stays open while
+// disc 2 goes into the drive, and the only thing it asks the drive is which
+// disc is in it.
+function whichDiscTheSetFileSays(text) {
+    var match = String(text || "").match(/^\s*disc\s+(\d+)\s+of\s+(\d+)\./im);
+
+    return match ? parseInt(match[1], 10) : 0;
+}
+
+// How many discs the set file says there are, or 0.
+function howManyDiscsTheSetFileSays(text) {
+    var match = String(text || "").match(/^\s*disc\s+(\d+)\s+of\s+(\d+)\./im);
+
+    return match ? parseInt(match[2], 10) : 0;
+}
+
+// Where the set stands in the folder it is being put back into.
+//
+// sizeOf answers a path relative to that folder with the file's size, or a
+// negative number when the file is not there, so this can be asked of a
+// real folder and of a written list alike.
+function setScan(rows, joins, discIn, sizeOf) {
+    var scan = {
+        total: rows.length, ok: 0, missing: 0, bad: 0, need: [], pending: 0,
+        complete: false, mineTotal: 0, mineHere: 0, bytes: 0, discs: 0
+    };
+    var joined = {};
+    var needed = {};
+    var i, k, row, got, all, join;
+
+    // A piece whose finished file is already here is not missing: it was
+    // used and deleted. And every piece here with the file not yet joined is
+    // work still to do on this machine, not a disc still to come.
+    for (i = 0; i < joins.length; i++) {
+        join = joins[i];
+
+        if (sizeOf(join.path) === join.bytes) {
+            for (k = 0; k < join.pieces.length; k++) {
+                joined[join.pieces[k]] = true;
+            }
+        } else {
+            all = true;
+
+            for (k = 0; k < join.pieces.length; k++) {
+                if (sizeOf(join.pieces[k]) < 0) {
+                    all = false;
+                    break;
+                }
+            }
+
+            if (all) {
+                scan.pending++;
+            }
+        }
+    }
+
+    for (i = 0; i < rows.length; i++) {
+        row = rows[i];
+        scan.bytes += row.bytes;
+
+        if (row.disc > scan.discs) {
+            scan.discs = row.disc;
+        }
+
+        if (row.disc === discIn) {
+            scan.mineTotal++;
+        }
+
+        if (joined[row.path]) {
+            scan.ok++;
+
+            if (row.disc === discIn) {
+                scan.mineHere++;
+            }
+
+            continue;
+        }
+
+        got = sizeOf(row.path);
+
+        if (got < 0) {
+            scan.missing++;
+            needed[row.disc] = true;
+            continue;
+        }
+
+        // A half-copied file is the likeliest thing to go wrong, and it is a
+        // different problem from a disc nobody has put in yet.
+        if (got !== row.bytes) {
+            scan.bad++;
+            needed[row.disc] = true;
+            continue;
+        }
+
+        scan.ok++;
+
+        if (row.disc === discIn) {
+            scan.mineHere++;
+        }
+    }
+
+    for (i = 1; i <= scan.discs; i++) {
+        if (needed[i]) {
+            scan.need.push(i);
+        }
+    }
+
+    scan.complete = scan.total > 0 && scan.ok === scan.total && scan.pending === 0;
+
+    return scan;
+}
+
+// The rows that belong to one disc.
+function setRowsOf(rows, disc) {
+    var mine = [];
+
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i].disc === disc) {
+            mine.push(rows[i]);
+        }
+    }
+
+    return mine;
+}
+
+// What the one big button says on a disc of a set.
+//
+// "Install, disc 2 of 3" and nothing about copying, because from the
+// person's side that is what it does: the copying is how the install works
+// rather than what they came to do. "Install" alone once every file is in
+// the folder, and "Play" once the game is on the machine.
+function restoreButtonSays(scan, discIn, discsInSet, installed) {
+    if (installed === true) {
+        return "Play";
+    }
+
+    if (scan && scan.complete) {
+        return "Install";
+    }
+
+    return "Install, disc " + (discIn > 0 ? discIn : 1) + " of " + discsInSet;
+}
+
+// One sentence about where the set stands, for the line under the buttons.
+//
+// It ends on what to do next rather than on a fact: "Now put disc 2 in" is
+// the same information as "still needed: disc 2", said to somebody standing
+// at a drive with a disc in their hand.
+//
+// busy says what is happening right now, when something is: copying is
+// "3 of 9", joining is a file name, wanting is the disc being waited for.
+function restoreSentence(scan, discIn, busy, folder) {
+    var rest, i, line;
+
+    busy = busy || {};
+
+    if (busy.joining) {
+        return "Putting " + busy.joining + " back together. On a large file this takes a few minutes.";
+    }
+
+    if (busy.copying) {
+        return "Copying file " + busy.copying + " off this disc.";
+    }
+
+    if (busy.wanting) {
+        return "Put disc " + busy.wanting + " in. This carries on by itself once it is there.";
+    }
+
+    if (!scan || !scan.total) {
+        return "This disc says it is part of a set, but its list of files is missing.";
+    }
+
+    if (scan.complete) {
+        return "Every file is here" + (folder ? ", in " + folder : "") + ". Install runs the installer from there.";
+    }
+
+    if (scan.pending && scan.ok === scan.total) {
+        return "Every file is here. "
+            + (scan.pending === 1
+                ? "One file was cut to fit and still has to be put back together."
+                : scan.pending + " files were cut to fit and still have to be put back together.");
+    }
+
+    if (scan.ok === 0 && scan.bad === 0) {
+        line = "Nothing is copied yet.";
+    } else {
+        line = scan.ok + " of " + scan.total + " files copied so far.";
+
+        if (scan.bad > 0) {
+            line += " " + scan.bad + " copied badly and will be done again.";
+        }
+    }
+
+    rest = [];
+
+    for (i = 0; i < scan.need.length; i++) {
+        if (scan.need[i] !== discIn) {
+            rest.push(scan.need[i]);
+        }
+    }
+
+    if (scan.need.length > rest.length) {
+        // This disc is one of the ones wanted.
+        if (rest.length === 0) {
+            line += " Install copies this disc and finishes.";
+        } else if (rest.length === 1) {
+            line += " Install copies this disc, then asks for disc " + rest[0] + ".";
+        } else {
+            line += " Install copies this disc, then asks for the rest: discs " + rest.join(", ") + ".";
+        }
+    } else if (scan.need.length === 1) {
+        line += " Now put disc " + scan.need[0] + " in.";
+    } else if (scan.need.length > 1) {
+        line += " Still to come: discs " + scan.need.join(", ") + ".";
+    }
+
+    return line;
+}
+
+// Where to put the game back together.
+//
+// Under the person's own profile when that drive has the room, the same
+// place a game with nothing to install is copied to, because a folder
+// somebody cannot write to half copies and stops. When it does not, the
+// drive with the most room, because a set is by definition bigger than one
+// disc. The name comes from the game and nothing else, so every disc of the
+// set proposes the same folder without anything being remembered between
+// them. Offered rather than asked, because asking is a dialog on every disc.
+//
+// drives is a list of {letter: "D:", free: bytes}, and home is the profile
+// folder, so this can be worked out without a disk in a test.
+function restoreFolderFor(home, name, drives, needBytes) {
+    var folder = folderNameFor(name);
+    var homeDrive = String(home || "").substring(0, 2).toUpperCase();
+    var i, best = null;
+
+    for (i = 0; i < drives.length; i++) {
+        if (drives[i].letter.toUpperCase() === homeDrive && drives[i].free > needBytes) {
+            return onTheDisc(onTheDisc(String(home), "Games"), folder);
+        }
+    }
+
+    for (i = 0; i < drives.length; i++) {
+        if (best === null || drives[i].free > best.free) {
+            best = drives[i];
+        }
+    }
+
+    if (best === null) {
+        return onTheDisc(onTheDisc(String(home || ""), "Games"), folder);
+    }
+
+    return onTheDisc(onTheDisc(best.letter + BACKSLASH, "Games"), folder);
+}
+
+// The hard drives on this machine with how much room each has, for
+// restoreFolderFor. Fixed drives only: a game put back onto a USB stick
+// that is pulled out is a game gone.
+function hardDrivesWithRoom(files) {
+    var drives = [];
+    var each, drive;
+
+    try {
+        each = new Enumerator(files.Drives);
+
+        for (; !each.atEnd(); each.moveNext()) {
+            drive = each.item();
+
+            try {
+                if (drive.DriveType === 2 && drive.IsReady) {
+                    drives.push({ letter: String(drive.DriveLetter) + ":", free: drive.FreeSpace });
+                }
+            } catch (notReady) {
+            }
+        }
+    } catch (noDrives) {
+    }
+
+    return drives;
+}
+
+// What the whole set needs before it is finished with, which is more than
+// the discs hold: a cut file is written out whole while its pieces are all
+// still there, so the high point is the set plus the largest finished file.
+function setBytesNeeded(rows, joins) {
+    var bytes = 0;
+    var biggest = 0;
+    var i;
+
+    for (i = 0; i < rows.length; i++) {
+        bytes += rows[i].bytes;
+    }
+
+    for (i = 0; i < joins.length; i++) {
+        if (joins[i].bytes > biggest) {
+            biggest = joins[i].bytes;
+        }
+    }
+
+    return bytes + biggest;
+}
+
+// A path in quotes for the command line, which is not as simple as putting
+// quotes round it. A backslash immediately before a closing quote escapes
+// that quote, so a quoted drive root does not mean the root of the drive, it
+// means a quote character and everything after it runs on into the same
+// argument. Every disc is a drive root, so every real disc hits this.
+// Doubling the trailing run is the documented escape.
+function setQuote(path) {
+    var quote = String.fromCharCode(34);
+    var run = 0;
+    var i, tail = "";
+
+    for (i = path.length - 1; i >= 0 && path.charAt(i) === BACKSLASH; i--) {
+        run++;
+    }
+
+    for (i = 0; i < run; i++) {
+        tail += BACKSLASH;
+    }
+
+    return quote + path + tail + quote;
+}
+
+// The command that copies one file of the set off the disc.
+//
+// robocopy, one call per file, because the disc holds a subset of the game:
+// copying the folder would bring AUTORUN, the set file and the icon along
+// with it, and the installer has to run in a folder holding nothing but the
+// game. /R:1 /W:1 so a scratched file fails in two seconds rather than in a
+// million retries, /NJH /NJS because nothing reads its report.
+function setCopyCommand(discRoot, dir, relativePath) {
+    var parts = String(relativePath).split("/");
+    var name = parts[parts.length - 1];
+    var sub = [];
+    var i;
+
+    for (i = 0; i < parts.length - 1; i++) {
+        sub.push(parts[i]);
+    }
+
+    var from = sub.length ? onTheDisc(discRoot, sub.join("/")) : discRoot;
+    var to = sub.length ? onTheDisc(dir, sub.join("/")) : dir;
+
+    return "robocopy " + setQuote(from) + " " + setQuote(to) + " " + setQuote(name) + " /R:1 /W:1 /NJH /NJS";
+}
+
+// The command that puts a cut file back together. copy /b is the whole
+// mechanism: it is in Windows, it needs nothing installed, and it is what the
+// set file tells somebody to type if they are doing this by hand.
+function setJoinCommand(dir, join) {
+    var names = [];
+
+    for (var i = 0; i < join.pieces.length; i++) {
+        names.push(setQuote(onTheDisc(dir, join.pieces[i])));
+    }
+
+    return "copy /b " + names.join("+") + " " + setQuote(onTheDisc(dir, join.path));
+}
+
+// ------------------------------------------------- running a command and waiting
+
+var setJobNumber = 0;
+
+// Starts a command with no window and nothing listening to it, and hands
+// back a flag file to watch for.
+//
+// Not Exec, which shows a console on top of the menu and gives the child a
+// pipe nobody reads: robocopy fills the pipe with its running percentage and
+// then blocks for ever, measured at five minutes of a copy that had finished
+// 692 MB in. Run with window style 0 is hidden and has no pipes. What it
+// does not hand back is anything to poll, so the command writes its exit
+// code into a small file when it is finished, and that file is what gets
+// polled. Written under another name and renamed into place, because a
+// redirection creates its file the instant it opens it and a poll landing
+// in that window read a refused, empty flag as a failure.
+function startAJob(command) {
+    var shell = new ActiveXObject("WScript.Shell");
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+    var flag = onTheDisc(
+        shell.ExpandEnvironmentStrings("%TEMP%"),
+        "dwjob" + (++setJobNumber) + "_" + (new Date()).getTime() + "_" + Math.floor(Math.random() * 1000000) + ".done");
+
+    try { if (files.FileExists(flag)) { files.DeleteFile(flag); } } catch (stale) { }
+    try { if (files.FileExists(flag + ".part")) { files.DeleteFile(flag + ".part"); } } catch (stalePart) { }
+
+    // Wrapped in brackets before the ampersand, or a command with an operator
+    // of its own takes the echo with it. call is what makes the exit code
+    // survive being read on the same line it was set.
+    shell.Run(
+        "cmd /c (" + command + ") & call echo %^errorlevel%> " + setQuote(flag + ".part")
+            + " & move /y " + setQuote(flag + ".part") + " " + setQuote(flag),
+        0,
+        false);
+
+    return { flag: flag };
+}
+
+// Finished, rather than merely present: the rename is what says so, and a
+// size of nothing is the one case the rename cannot speak for.
+function jobIsDone(job) {
+    try {
+        var files = new ActiveXObject("Scripting.FileSystemObject");
+
+        return files.FileExists(job.flag) && files.GetFile(job.flag).Size > 0;
+    } catch (cannotTell) {
+        return false;
+    }
+}
+
+// What the command said on its way out, and then the flag is gone. Anything
+// unreadable counts as a failure rather than as a nought, because the one
+// thing worse than a copy that failed is a copy that failed quietly.
+function jobCode(job) {
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+    var code = 8;
+    var reading, said, number;
+
+    try {
+        reading = files.OpenTextFile(job.flag, 1);
+        said = reading.ReadAll();
+        reading.Close();
+        number = parseInt(said, 10);
+
+        if (!isNaN(number)) {
+            code = number;
+        }
+    } catch (unreadable) {
+        code = 8;
+    }
+
+    try { files.DeleteFile(job.flag); } catch (gone) { }
+    try { if (files.FileExists(job.flag + ".part")) { files.DeleteFile(job.flag + ".part"); } } catch (gonePart) { }
+
+    return code;
+}
+
+// Waits for a job the way everything in here waits: on a timer where there
+// is a window to keep alive, and in place where there is not. A window whose
+// script is sitting in a blocking call cannot redraw and cannot see a disc
+// being swapped, and on a real restore mshta answered a blocking copy with
+// "Stop running this script?", which somebody reading it presses Yes to.
+function waitForJob(job, after) {
+    if (jobIsDone(job)) {
+        after(jobCode(job));
+        return;
+    }
+
+    if (typeof window !== "undefined" && window.setTimeout) {
+        window.setTimeout(function () { waitForJob(job, after); }, 400);
+        return;
+    }
+
+    // No window means cscript, which means a test. A test that waits for
+    // ever on a job that never finishes is worse than one that fails, so
+    // this one gives up after five minutes and says the job failed.
+    var until = (new Date()).getTime() + 5 * 60 * 1000;
+
+    while (!jobIsDone(job)) {
+        if ((new Date()).getTime() > until) {
+            after(8);
+            return;
+        }
+
+        WScript.Sleep(50);
+    }
+
+    after(jobCode(job));
+}
+
+// ----------------------------------------------------------- the engine
+
+// Makes a folder and every folder above it.
+function makeTheWholePath(files, path) {
+    var parent = files.GetParentFolderName(path);
+
+    if (parent && parent.length > 0 && !files.FolderExists(parent)) {
+        makeTheWholePath(files, parent);
+    }
+
+    if (!files.FolderExists(path)) {
+        files.CreateFolder(path);
+    }
+}
+
+// The size of a file under a folder, or -1 when it is not there, which is
+// what setScan asks.
+function sizeOfUnder(files, dir) {
+    return function (relativePath) {
+        try {
+            var path = onTheDisc(dir, relativePath);
+
+            return files.FileExists(path) ? files.GetFile(path).Size : -1;
+        } catch (cannotTell) {
+            return -1;
+        }
+    };
+}
+
+// Copies one disc's share of the set into the folder, one file at a time,
+// each started and then waited for.
+//
+// work is {files, discRoot, dir, rows, discIn, say, after}. say is called
+// with {copying: "3 of 9", done: bytes, all: bytes} as it goes, and after
+// with how many files would not copy. Both questions are asked of every
+// file, because neither answer is enough on its own: robocopy says 8 and up
+// for a real failure, and a disc that goes unreadable part way leaves a
+// short file that robocopy pre-sized to its full length.
+function copyTheSetDisc(work) {
+    var mine = setRowsOf(work.rows, work.discIn);
+    var sizeOf = sizeOfUnder(work.files, work.dir);
+    var state = { at: 0, bad: 0, done: 0, all: 0 };
+    var i;
+
+    for (i = 0; i < mine.length; i++) {
+        state.all += mine[i].bytes;
+    }
+
+    function next() {
+        var row;
+
+        if (state.at >= mine.length) {
+            work.say({ copying: "", done: state.done, all: state.all });
+            work.after(state.bad);
+            return;
+        }
+
+        row = mine[state.at];
+
+        // Already here and the right size, from an earlier go at this disc.
+        if (sizeOf(row.path) === row.bytes) {
+            state.done += row.bytes;
+            state.at++;
+            next();
+            return;
+        }
+
+        work.say({ copying: (state.at + 1) + " of " + mine.length, done: state.done, all: state.all });
+
+        try {
+            makeTheWholePath(work.files, work.files.GetParentFolderName(onTheDisc(work.dir, row.path)));
+        } catch (cannotMake) {
+        }
+
+        waitForJob(startAJob(setCopyCommand(work.discRoot, work.dir, row.path)), function (code) {
+            if (code >= 8 || sizeOf(row.path) !== row.bytes) {
+                state.bad++;
+            } else {
+                state.done += row.bytes;
+            }
+
+            state.at++;
+            next();
+        });
+    }
+
+    next();
+}
+
+// Puts every cut file back together whose pieces are all here, one at a
+// time, and deletes the pieces only once the finished file is the right
+// size, because a join that half worked and then removed its own evidence is
+// the one failure here that cannot be recovered from.
+//
+// work is {files, dir, joins, say, after}. after is called with the names of
+// the files that could not be put back together.
+function joinThePieces(work) {
+    var sizeOf = sizeOfUnder(work.files, work.dir);
+    var todo = [];
+    var failed = [];
+    var i, k, all, join;
+
+    for (i = 0; i < work.joins.length; i++) {
+        join = work.joins[i];
+
+        if (sizeOf(join.path) === join.bytes) {
+            continue;
+        }
+
+        all = true;
+
+        for (k = 0; k < join.pieces.length; k++) {
+            if (sizeOf(join.pieces[k]) < 0) {
+                all = false;
+                break;
+            }
+        }
+
+        if (all) {
+            todo.push(join);
+        }
+    }
+
+    function next(at) {
+        var piece;
+
+        if (at >= todo.length) {
+            work.say({ joining: "" });
+            work.after(failed);
+            return;
+        }
+
+        work.say({ joining: todo[at].path });
+
+        waitForJob(startAJob(setJoinCommand(work.dir, todo[at])), function () {
+            if (sizeOf(todo[at].path) === todo[at].bytes) {
+                for (piece = 0; piece < todo[at].pieces.length; piece++) {
+                    try { work.files.DeleteFile(onTheDisc(work.dir, todo[at].pieces[piece])); } catch (stillOpen) { }
+                }
+            } else {
+                failed.push(todo[at].path);
+            }
+
+            next(at + 1);
+        });
+    }
+
+    next(0);
 }

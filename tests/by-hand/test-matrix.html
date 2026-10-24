@@ -387,7 +387,7 @@
   happens when you try the thing that should not be there, and whether what it says still reads right at none
   and at one as well as at many.</p>
 
-  <p class="lede"><strong>66 of these are now run by the suite and are hidden.</strong> They are still
+  <p class="lede"><strong>67 of these are now run by the suite and are hidden.</strong> They are still
   here, because this is a map of everything the program can be asked to do and a map with roads missing is
   worse than a long one, but a pass by hand should only be the part a person has to do. Turn them on with the
   switch above and each says which test runs it.</p>
@@ -1188,6 +1188,16 @@
         <span class="what">A whole run end to end: add, choose, build, burn, read back, open the disc</span>
         <span class="look">The one case that is all of them. Put the finished disc in a machine and press
         Install.</span></label>
+      <label class="case run" data-by="ThePageOnADiscOfASet"><input type="checkbox" id="i17"><span class="id">I17</span>
+        <span class="what">Install a set of two from its menu, with one press</span>
+        <span class="look"><b>Install, disc 1 of 2</b>, a bar, <i>Put disc 2 in. This carries on by itself once it
+        is there.</i>, then the installer starts from the folder and the menu closes. The folder holds the game
+        and nothing of the disc's own. Run from two folders under cscript; the swap in a real drive is case 8
+        of WITH-A-REAL-DISC.</span></label>
+      <label class="case"><input type="checkbox" id="i18"><span class="id">I18</span>
+        <span class="what">A set from disc 2 first, and a set left half done</span>
+        <span class="look"><b>Install, disc 2 of 2</b> and it asks for disc 1 afterwards. Exit halfway and come
+        back: <i>N of M files copied so far</i>, and only the rest is copied.</span></label>
     </div>
   </section>
 

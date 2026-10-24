@@ -279,6 +279,27 @@ public sealed class BuildingADisc : IDisposable
     }
 
     [Fact]
+    public async Task Tells_the_set_file_how_a_cut_file_goes_back_together_and_what_it_should_hash_to()
+    {
+        GameFolder game = AGogDownload("Huge", 9000);
+
+        BuiltDiscs built = await Build(Project(game, cut: true), capacity: Overhead + 5000);
+
+        Assert.Equal(2, built.Discs.Count);
+        string file = File.ReadAllText(On(built.Discs[0], "Disc set.txt"));
+
+        // The hash of the WHOLE file, off the source, because no disc holds
+        // it whole and the pieces being right does not prove the join was.
+        string whole = Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Combine(game.Path, "setup_huge.exe"))));
+
+        Assert.Contains($"JOIN {whole} 9000          *setup_huge.exe", file, StringComparison.Ordinal);
+        Assert.Contains("PART 1   *setup_huge.exe.dwpart01", file, StringComparison.Ordinal);
+        Assert.Contains("PART 2   *setup_huge.exe.dwpart02", file, StringComparison.Ordinal);
+        Assert.Contains("copy /b \"setup_huge.exe.dwpart01\"+\"setup_huge.exe.dwpart02\" \"setup_huge.exe\"", file, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Gives_every_disc_of_a_set_the_same_set_id()
     {
         GameFolder game = AGogDownload("Big Game", 4000, parts: 3);

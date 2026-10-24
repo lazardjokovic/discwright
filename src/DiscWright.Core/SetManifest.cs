@@ -72,8 +72,10 @@ public static class SetManifest
         int thisDisc,
         int discsInSet,
         string mediaName,
-        DateTimeOffset written)
+        DateTimeOffset written,
+        IReadOnlyList<SetJoin>? joins = null)
     {
+        joins ??= [];
         long total = entries.Sum(entry => entry.Bytes);
         int mine = entries.Count(entry => entry.Disc == thisDisc);
 
@@ -113,10 +115,21 @@ public static class SetManifest
         Line("  1. Make one empty folder on a hard drive.");
         Line("  2. Copy the contents of every disc in the set into that one folder.");
         Line("     The order does not matter.");
-        Line("  3. Run the installer from that folder, never from a disc.");
+
+        if (joins.Count > 0)
+        {
+            Line("  3. Put the files that were cut to fit back together. How is below.");
+            Line("  4. Run the installer from that folder, never from a disc.");
+        }
+        else
+        {
+            Line("  3. Run the installer from that folder, never from a disc.");
+        }
+
         Line();
-        Line("The menu on any disc in the set does all of that for you and checks every");
-        Line("file afterwards. This file is here so it can be done by hand as well.");
+        Line("The menu on any disc in the set does all of that for you: press Install on");
+        Line("any disc, put the others in when it asks, and it installs from the folder.");
+        Line("This file is here so it can be done by hand as well.");
         Line();
         Line(string.Create(CultureInfo.InvariantCulture, $"On this disc: {mine} of the {entries.Count} files."));
         Line();
@@ -152,6 +165,12 @@ public static class SetManifest
         }
 
         Line();
+
+        if (joins.Count > 0)
+        {
+            TheFilesThatWereCut(Line, joins);
+        }
+
         Line("Each line is the disc number, the SHA-256, the size in bytes, then the");
         Line("file. To check a folder you have copied the discs into, run this from");
         Line("inside that folder:");
@@ -168,7 +187,101 @@ public static class SetManifest
 
         return text.ToString();
     }
+
+    /// <summary>
+    /// The files that were cut to fit, the pieces each goes back together
+    /// from, and how to do that by hand.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Three readers again. The menu reads the JOIN and PART lines, which
+    /// start with a letter and so are walked past by the row parsers; a
+    /// person reads the copy /b and cat lines; and the finished file's own
+    /// hash is here because the pieces being right does not prove the join
+    /// was: they can go back together in the wrong order, or one of them
+    /// twice.
+    /// </para>
+    /// <para>
+    /// The copy /b line gets Windows paths with every name quoted. Pasted at
+    /// a prompt with forward slashes it was "The syntax of the command is
+    /// incorrect", because cmd reads a slash after the first argument as a
+    /// switch, and unquoted a name with a space in it is two files that are
+    /// not there. A GOG installer has no space in its name, which is how that
+    /// went out on two real sets in v1 before it was caught.
+    /// </para>
+    /// </remarks>
+    private static void TheFilesThatWereCut(Action<string> line, IReadOnlyList<SetJoin> joins)
+    {
+        const char backslash = (char)92;
+        const char quote = (char)34;
+
+        line("Files that were cut to fit");
+        line("--------------------------");
+        line("");
+        line("These are on the discs in pieces, because no disc in this set is big");
+        line("enough to hold one of them whole. The menu puts them back together after");
+        line("the last disc is copied, and checks the result against the hash below.");
+        line("");
+        line("To do it by hand, from inside the folder you copied the discs into.");
+        line("On Windows:");
+        line("");
+
+        foreach (SetJoin join in joins)
+        {
+            line("  copy /b "
+                + string.Join("+", join.Pieces.Select(piece => quote + piece.Replace('/', backslash) + quote))
+                + " " + quote + join.RelativePath.Replace('/', backslash) + quote);
+        }
+
+        line("");
+        line("On Linux or macOS:");
+        line("");
+
+        foreach (SetJoin join in joins)
+        {
+            line("  cat "
+                + string.Join(" ", join.Pieces.Select(piece => "'" + piece.Replace(backslash, '/') + "'"))
+                + " > '" + join.RelativePath.Replace(backslash, '/') + "'");
+        }
+
+        line("");
+        line("and then delete the pieces. Each JOIN line below is the finished file:");
+        line("its SHA-256, its size in bytes, and its name. Each PART line under it is");
+        line("one piece, in the order they go back together.");
+        line("");
+
+        foreach (SetJoin join in joins)
+        {
+            line(string.Create(CultureInfo.InvariantCulture,
+                $"JOIN {join.Sha256} {join.Bytes,-13} *{join.RelativePath.Replace(backslash, '/')}"));
+
+            for (int at = 0; at < join.Pieces.Count; at++)
+            {
+                line(string.Create(CultureInfo.InvariantCulture, $"PART {at + 1,-3} *{join.Pieces[at].Replace(backslash, '/')}"));
+            }
+        }
+
+        line("");
+        line("Check the finished file afterwards. It should come back with exactly the");
+        line("SHA-256 printed above:");
+        line("");
+
+        foreach (SetJoin join in joins)
+        {
+            line("  (Get-FileHash '" + join.RelativePath.Replace('/', backslash) + "' -Algorithm SHA256).Hash");
+            line("  sha256sum '" + join.RelativePath.Replace(backslash, '/') + "'");
+        }
+
+        line("");
+    }
 }
+
+/// <summary>One file that was cut to fit, and the pieces it goes back together from.</summary>
+/// <param name="RelativePath">Where the finished file sits, relative to the root of the folder.</param>
+/// <param name="Sha256">What the finished file hashes to, lowercase hexadecimal.</param>
+/// <param name="Bytes">How big the finished file is.</param>
+/// <param name="Pieces">The pieces, in the order they go back together, as paths relative to the root.</param>
+public sealed record SetJoin(string RelativePath, string Sha256, long Bytes, IReadOnlyList<string> Pieces);
 
 /// <summary>One file somewhere in a set.</summary>
 /// <param name="Disc">Which disc it is on, from one.</param>

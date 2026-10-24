@@ -69,7 +69,6 @@ public static class MenuWriter
         data.Append("    game: ").Append(JScript.Literal(facts.GameName)).Append(",\n");
         data.Append("    discNumber: ").Append(JScript.Number(facts.DiscNumber)).Append(",\n");
         data.Append("    discsInSet: ").Append(JScript.Number(facts.DiscsInSet)).Append(",\n");
-        data.Append("    discsCopied: ").Append('[').Append(JScript.Number(facts.DiscNumber)).Append("],\n");
         data.Append("    buttons: ").Append(JScript.ListOf(facts.Buttons)).Append(",\n");
         data.Append("    manual: ").Append(JScript.Literal(facts.Manual ?? string.Empty)).Append(",\n");
         data.Append("    extras: ").Append(JScript.Literal(facts.Extras ?? string.Empty)).Append(",\n");

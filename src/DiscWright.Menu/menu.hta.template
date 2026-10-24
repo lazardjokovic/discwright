@@ -134,9 +134,9 @@ function start() {
 
     document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);
 
-    var wanted = whatIsStillWanted(DISC.discsCopied, DISC.discsInSet);
-    document.getElementById("stillWanted").innerText = wanted;
-    document.getElementById("stillWanted").style.display = wanted === "" ? "block" : "block";
+    // Read once, before anything is drawn. A disc of a set draws its button
+    // and its line from it.
+    SET = loadTheSet();
 
     if (whichScreenToOpenOn(DISC.games) === "chooser") {
         showChooser();
@@ -185,7 +185,12 @@ function showGame(index) {
     document.getElementById("chooserScreen").style.display = "none";
     document.getElementById("gameScreen").style.display = "block";
     document.getElementById("gameName").innerText = game.name;
-    document.getElementById("doIt").innerText = whatToDoWith(game, isInstalled(game));
+
+    if (SET) {
+        showTheSet(game);
+    } else {
+        document.getElementById("doIt").innerText = whatToDoWith(game, isInstalled(game));
+    }
 
     showAddOnsOf(game);
 
@@ -236,8 +241,18 @@ function showAddOnsOf(game) {
 // button in this page: whatever lives here can never be tested.
 function doTheThing() {
     var game = gameAt(DISC.games, showing);
-    var doing = whatPressingItDoes(game, whereTheGameIs(game ? (game.match || game.name) : ""), theDisc());
+    var where = whereTheGameIs(game ? (game.match || game.name) : "");
+    var doing = whatPressingItDoes(game, where, theDisc());
     var wrong;
+
+    // A disc of a set cannot install on its own. The game is put back
+    // together from every disc first, and installed from there. Unless it
+    // is already on the machine, in which case the button says Play and
+    // does that.
+    if (SET && !where) {
+        restoreGo();
+        return;
+    }
 
     if (!doing) {
         alert("There is nothing on this disc for that button to start.");
@@ -346,18 +361,6 @@ function askWhereToPutIt(game) {
         // No folder picker is not a reason to refuse. The suggestion is a
         // perfectly good answer and the person is told where it went.
         return suggested;
-    }
-}
-
-function makeTheWholePath(files, path) {
-    var parent = files.GetParentFolderName(path);
-
-    if (parent && parent.length > 0 && !files.FolderExists(parent)) {
-        makeTheWholePath(files, parent);
-    }
-
-    if (!files.FolderExists(path)) {
-        files.CreateFolder(path);
     }
 }
 
@@ -483,6 +486,301 @@ function runTheAddOn(which) {
     }
 }
 
+// ===========================================================================
+// A set, on this disc's menu.
+//
+// Everything that decides is in menu.js, where cscript runs it against real
+// folders. What is here is the page's part: read the set file off the disc,
+// draw the one big button and the line under it, and hand the engine the
+// callbacks that redraw them.
+// ===========================================================================
+
+// The set this disc belongs to, read once off the disc, or null on a disc
+// that stands alone. Read once because one menu drives the whole set: the
+// page stays open while the disc under it is swapped, and everything read
+// off the disc afterwards would come off whichever disc is in by then.
+var SET = null;
+
+// What is happening right now, for the sentence and the bar.
+var restoring = { copying: "", joining: "", wanting: 0, done: 0, all: 0 };
+
+function readTheSetFile() {
+    try {
+        var files = new ActiveXObject("Scripting.FileSystemObject");
+        var path = onTheDisc(theDisc(), "Disc set.txt");
+
+        if (!files.FileExists(path)) {
+            return "";
+        }
+
+        var reading = files.OpenTextFile(path, 1);
+        var text = reading.ReadAll();
+        reading.Close();
+
+        return text;
+    } catch (cannotRead) {
+        return "";
+    }
+}
+
+function loadTheSet() {
+    if (DISC.discsInSet <= 1) {
+        return null;
+    }
+
+    var text = readTheSetFile();
+
+    return {
+        rows: setRowsFrom(text),
+        joins: setJoinsFrom(text),
+        discIn: whichDiscTheSetFileSays(text) || DISC.discNumber,
+        of: DISC.discsInSet,
+        dir: ""
+    };
+}
+
+// Where the game is being put back together. Worked out once and kept, so
+// every disc of the set lands in the same place.
+function theRestoreFolder() {
+    if (SET.dir) {
+        return SET.dir;
+    }
+
+    var home = "";
+
+    try {
+        home = new ActiveXObject("WScript.Shell").ExpandEnvironmentStrings("%USERPROFILE%");
+    } catch (noShell) {
+    }
+
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+
+    SET.dir = restoreFolderFor(home, DISC.game, hardDrivesWithRoom(files), setBytesNeeded(SET.rows, SET.joins));
+
+    return SET.dir;
+}
+
+function scanTheSet() {
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+
+    return setScan(SET.rows, SET.joins, SET.discIn, sizeOfUnder(files, theRestoreFolder()));
+}
+
+// The line under the buttons, and the bar above it while something copies.
+function sayTheSet(scan) {
+    var line = document.getElementById("stillWanted");
+    var bar = document.getElementById("restoreBar");
+    var filled = document.getElementById("restoreBarIn");
+
+    line.innerText = restoreSentence(scan || scanTheSet(), SET.discIn, restoring, SET.dir);
+    line.style.display = "block";
+
+    if (restoring.copying && restoring.all > 0) {
+        bar.style.display = "block";
+        filled.style.width = percentDone(restoring.done, 0, 0, restoring.all) + "%";
+    } else {
+        bar.style.display = "none";
+    }
+}
+
+// The big button and the line, for a disc of a set.
+function showTheSet(game) {
+    var scan = scanTheSet();
+
+    document.getElementById("doIt").innerText = restoreButtonSays(scan, SET.discIn, SET.of, isInstalled(game));
+    sayTheSet(scan);
+}
+
+// Pressing Install on a disc of a set: the whole job, from this disc to the
+// installer, with nothing asked on the way unless something is wrong.
+function restoreGo() {
+    var preview = whyNothingRuns();
+
+    if (preview) {
+        alert(preview);
+        return;
+    }
+
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+    var dir = theRestoreFolder();
+
+    try {
+        makeTheWholePath(files, dir);
+    } catch (cannotMake) {
+        alert("That folder could not be made: " + dir);
+        return;
+    }
+
+    var scan = scanTheSet();
+
+    if (!scan.total) {
+        alert(restoreSentence(scan, SET.discIn, null, dir));
+        return;
+    }
+
+    if (scan.complete) {
+        installFromTheFolder();
+        return;
+    }
+
+    // Room for the whole set, asked once at the start rather than found out
+    // at ninety per cent on the last disc.
+    try {
+        var drive = files.GetDrive(files.GetDriveName(dir));
+        var need = setBytesNeeded(SET.rows, SET.joins) - scan.bytes * (scan.ok / Math.max(1, scan.total));
+
+        if (drive.FreeSpace < need) {
+            alert("There is not enough room to install this game.\n\nIt needs about "
+                + Math.round(need / 1048576) + " MB free in " + dir + " while it works, and the drive has "
+                + Math.round(drive.FreeSpace / 1048576) + " MB.");
+            return;
+        }
+    } catch (cannotTell) {
+    }
+
+    // Everything this disc holds is already there, so it is another disc
+    // that is wanted.
+    if (scan.mineTotal > 0 && scan.mineHere >= scan.mineTotal) {
+        waitForTheNextDisc(scan);
+        return;
+    }
+
+    copyThisDisc();
+}
+
+function copyThisDisc() {
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+
+    restoring.wanting = 0;
+
+    copyTheSetDisc({
+        files: files,
+        discRoot: theDisc(),
+        dir: theRestoreFolder(),
+        rows: SET.rows,
+        discIn: SET.discIn,
+        say: function (progress) {
+            restoring.copying = progress.copying;
+            restoring.done = progress.done;
+            restoring.all = progress.all;
+            sayTheSet();
+        },
+        after: function (bad) {
+            if (bad > 0) {
+                sayTheSet();
+                alert(bad + " of the files on this disc would not copy.\n\nIt may be scratched. Press Install to try again, "
+                    + "or copy them in Explorer into " + theRestoreFolder() + ".");
+                return;
+            }
+
+            joinThePieces({
+                files: files,
+                dir: theRestoreFolder(),
+                joins: SET.joins,
+                say: function (progress) {
+                    restoring.joining = progress.joining;
+                    sayTheSet();
+                },
+                after: function (failed) {
+                    if (failed.length) {
+                        alert(failed.length + " file(s) could not be put back together:\n\n" + failed.join("\n")
+                            + "\n\nThe pieces are still there, so nothing is lost. There may not be room.");
+                    }
+
+                    var scan = scanTheSet();
+                    showTheSet(gameAt(DISC.games, showing));
+
+                    if (scan.complete) {
+                        installFromTheFolder();
+                    } else {
+                        waitForTheNextDisc(scan);
+                    }
+                }
+            });
+        }
+    });
+}
+
+// This disc is done and the set is not. Ask for the next one, then watch the
+// drive for it, which is what an installer did: you are told which disc, you
+// put it in, and it carries on. Polled rather than told, because Windows
+// has no event a page can hear for a disc arriving, and the poll is one
+// small read of one line.
+function waitForTheNextDisc(scan) {
+    if (!scan.need.length) {
+        restoring.wanting = 0;
+        sayTheSet(scan);
+        return;
+    }
+
+    restoring.wanting = scan.need[0];
+    sayTheSet(scan);
+    window.setTimeout(checkForTheNextDisc, 1500);
+}
+
+function checkForTheNextDisc() {
+    if (!restoring.wanting) {
+        return;
+    }
+
+    var scan = scanTheSet();
+
+    if (scan.complete) {
+        restoring.wanting = 0;
+        showTheSet(gameAt(DISC.games, showing));
+        installFromTheFolder();
+        return;
+    }
+
+    var inTheDrive = whichDiscTheSetFileSays(readTheSetFile());
+    var wanted = false;
+
+    for (var i = 0; i < scan.need.length; i++) {
+        if (scan.need[i] === inTheDrive) {
+            wanted = true;
+        }
+    }
+
+    if (wanted) {
+        SET.discIn = inTheDrive;
+        restoring.wanting = 0;
+        showTheSet(gameAt(DISC.games, showing));
+        copyThisDisc();
+        return;
+    }
+
+    window.setTimeout(checkForTheNextDisc, 1500);
+}
+
+// Every file is in the folder: run the installer from there, and get out of
+// the way. With nothing recorded to run, open the folder instead, which
+// leaves them with the game and knowing where it is.
+function installFromTheFolder() {
+    var game = gameAt(DISC.games, showing);
+    var dir = theRestoreFolder();
+    var run = game && game.runs && String(game.runs).length > 0 ? onTheDisc(dir, game.runs) : "";
+    var wrong;
+
+    if (!run) {
+        wrong = openTheFolder(dir);
+
+        if (wrong) {
+            alert(wrong);
+        }
+
+        return;
+    }
+
+    wrong = startIt(run, dir);
+
+    if (wrong) {
+        alert(wrong);
+        return;
+    }
+
+    window.close();
+}
+
 // The music, behind everything, and a way to turn it off.
 //
 // The Windows Media Player control rather than <audio> or <bgsound>, and
@@ -587,6 +885,10 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 .btn.next { background: #0C2B2E; background: rgba(16, 58, 62, 0.55);
             border-color: #00BEC8; border-left-width: 3px; color: #FFFFFF; }
 #stillWanted { margin-top: 18px; font-size: 11px; line-height: 16px; color: #8FA3AA; }
+/* How far a set has copied. Only on screen while a file is copying, because a
+   bar that sits at nought under an idle menu reads as something stuck. */
+#restoreBar { margin-top: 18px; height: 4px; background: #1A2429; }
+#restoreBarIn { height: 4px; width: 0; background: #00BEC8; }
 .hint { margin: 0 0 14px 0; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #5E727A; }
 /* A button that cannot be pressed yet looks like one, rather than looking like
    a button that does nothing when you press it. */
@@ -631,6 +933,7 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
             <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
         </div>
 
+        <div id="restoreBar" style="display: none"><div id="restoreBarIn"></div></div>
         <div id="stillWanted"></div>
     </div>
 

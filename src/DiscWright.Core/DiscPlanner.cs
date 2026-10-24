@@ -39,6 +39,28 @@ public static class DiscPlanner
     /// </remarks>
     private const string PartSuffix = ".dwpart";
 
+    /// <summary>
+    /// The whole file a piece was cut from, by name: the piece's path with the
+    /// suffix and its number taken off.
+    /// </summary>
+    /// <remarks>
+    /// Here, beside the code that puts the suffix on, so the two cannot drift.
+    /// A path that is not a piece comes back as it was.
+    /// </remarks>
+    public static string TheWholeFileOf(string piecePath)
+    {
+        int at = piecePath.LastIndexOf(PartSuffix, StringComparison.Ordinal);
+
+        if (at < 0)
+        {
+            return piecePath;
+        }
+
+        string number = piecePath[(at + PartSuffix.Length)..];
+
+        return number.Length > 0 && number.All(char.IsAsciiDigit) ? piecePath[..at] : piecePath;
+    }
+
     public static Outcome<DiscLayout> Plan(PlanRequest request)
     {
         long room = request.Medium.Capacity - request.OverheadPerDisc;

@@ -127,24 +127,6 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
-    public void Knows_which_discs_of_a_set_are_still_wanted()
-    {
-        Assert.Equal("2,3", Ask("discsStillWanted([1], 3).join(',')"));
-        Assert.Equal("", Ask("discsStillWanted([1, 2, 3], 3).join(',')"));
-        Assert.Equal("1,3", Ask("discsStillWanted([2], 3).join(',')"));
-    }
-
-    [Theory]
-    [InlineData("whatIsStillWanted([1, 2], 2)", "")]
-    [InlineData("whatIsStillWanted([1], 2)", "Insert disc 2.")]
-    [InlineData("whatIsStillWanted([1], 3)", "Still needs discs 2 and 3.")]
-    [InlineData("whatIsStillWanted([2], 4)", "Still needs discs 1, 3 and 4.")]
-    public void Says_what_is_still_wanted_in_words(string call, string expected)
-    {
-        Assert.Equal(expected, Ask(call));
-    }
-
-    [Fact]
     public void Opens_on_the_game_when_there_is_only_one()
     {
         // A chooser offering one choice is a door with one door behind it.
@@ -767,6 +749,262 @@ public sealed class TheMenuScript : IDisposable
         string slash = ((char)92).ToString();
 
         return "'" + path.Replace(slash, slash + slash, StringComparison.Ordinal) + "'";
+    }
+
+    // ------------------------------------------- a set, put back together
+
+    private const string ASetFile =
+        "DiscWright disc set\\n===================\\n\\n  BIG GAME\\n  disc 2 of 3.  4 files in the set, 14 bytes in all.\\n\\n"
+        + "disc  sha256  bytes  file\\n"
+        + "1     aaaa 5             *setup.exe\\n"
+        + "1     bbbb 3             *big.bin.dwpart01\\n"
+        + "2     cccc 4             *big.bin.dwpart02\\n"
+        + "3     dddd 2             *data/more file.dat\\n\\n"
+        + "JOIN eeee 7             *big.bin\\n"
+        + "PART 1   *big.bin.dwpart01\\n"
+        + "PART 2   *big.bin.dwpart02\\n";
+
+    [Fact]
+    public void Reads_every_row_of_the_set_file_and_nothing_else()
+    {
+        // A row starts with a digit and holds a star; the name is everything
+        // after the star, because it can hold spaces.
+        Assert.Equal("4", Ask("setRowsFrom('" + ASetFile + "').length"));
+        Assert.Equal("data/more file.dat", Ask("setRowsFrom('" + ASetFile + "')[3].path"));
+        Assert.Equal("3", Ask("setRowsFrom('" + ASetFile + "')[3].disc"));
+        Assert.Equal("4", Ask("setRowsFrom('" + ASetFile + "')[2].bytes"));
+    }
+
+    [Fact]
+    public void Reads_the_cut_files_and_their_pieces_in_order()
+    {
+        Assert.Equal("1", Ask("setJoinsFrom('" + ASetFile + "').length"));
+        Assert.Equal("big.bin", Ask("setJoinsFrom('" + ASetFile + "')[0].path"));
+        Assert.Equal("7", Ask("setJoinsFrom('" + ASetFile + "')[0].bytes"));
+        Assert.Equal(
+            "big.bin.dwpart01,big.bin.dwpart02",
+            Ask("setJoinsFrom('" + ASetFile + "')[0].pieces.join(',')"));
+    }
+
+    [Fact]
+    public void Reads_which_disc_the_set_file_belongs_to_off_the_file_itself()
+    {
+        // Read off the disc rather than baked into the menu, because one menu
+        // drives the whole set and the disc under it gets swapped.
+        Assert.Equal("2", Ask("whichDiscTheSetFileSays('" + ASetFile + "')"));
+        Assert.Equal("3", Ask("howManyDiscsTheSetFileSays('" + ASetFile + "')"));
+        Assert.Equal("0", Ask("whichDiscTheSetFileSays('nothing of the kind')"));
+    }
+
+    /// <summary>A scan over a written folder: what is there and how big.</summary>
+    private static string ScanWith(string present, int discIn) =>
+        "(function () { var have = " + present + "; "
+        + "var rows = setRowsFrom('" + ASetFile + "'); var joins = setJoinsFrom('" + ASetFile + "'); "
+        + "var s = setScan(rows, joins, " + discIn + ", function (p) { return have[p] === undefined ? -1 : have[p]; }); "
+        + "return s.ok + '/' + s.total + ' missing=' + s.missing + ' bad=' + s.bad + ' need=' + s.need.join(',')"
+        + " + ' pending=' + s.pending + ' complete=' + s.complete + ' mine=' + s.mineHere + '/' + s.mineTotal; })()";
+
+    [Fact]
+    public void Knows_which_discs_are_still_wanted_from_what_is_in_the_folder()
+    {
+        Assert.Equal("0/4 missing=4 bad=0 need=1,2,3 pending=0 complete=false mine=0/1", Ask(ScanWith("{}", 2)));
+
+        Assert.Equal(
+            "2/4 missing=2 bad=0 need=2,3 pending=0 complete=false mine=0/1",
+            Ask(ScanWith("{'setup.exe': 5, 'big.bin.dwpart01': 3}", 2)));
+    }
+
+    [Fact]
+    public void Counts_a_half_copied_file_as_bad_and_wants_its_disc_again()
+    {
+        // A different problem from a disc nobody has put in yet, and said so.
+        Assert.Equal(
+            "1/4 missing=2 bad=1 need=1,2,3 pending=0 complete=false mine=1/2",
+            Ask(ScanWith("{'setup.exe': 2, 'big.bin.dwpart01': 3}", 1)));
+    }
+
+    [Fact]
+    public void Is_not_complete_while_a_cut_file_is_still_in_pieces()
+    {
+        // Every piece here and not yet joined is work still to do on this
+        // machine, not a disc still to come. It happens to anybody who copies
+        // the discs in Explorer rather than from the menu.
+        Assert.Equal(
+            "4/4 missing=0 bad=0 need= pending=1 complete=false mine=1/1",
+            Ask(ScanWith("{'setup.exe': 5, 'big.bin.dwpart01': 3, 'big.bin.dwpart02': 4, 'data/more file.dat': 2}", 3)));
+    }
+
+    [Fact]
+    public void Counts_a_joined_file_s_pieces_as_arrived_once_the_pieces_are_gone()
+    {
+        // The join deletes the pieces when it is done, so without this every
+        // piece would read as missing the moment the join succeeded.
+        Assert.Equal(
+            "4/4 missing=0 bad=0 need= pending=0 complete=true mine=1/1",
+            Ask(ScanWith("{'setup.exe': 5, 'big.bin': 7, 'data/more file.dat': 2}", 3)));
+    }
+
+    [Theory]
+    [InlineData("{}", 1, "Nothing is copied yet. Install copies this disc, then asks for the rest: discs 2, 3.")]
+    [InlineData("{'setup.exe': 5, 'big.bin.dwpart01': 3}", 2, "2 of 4 files copied so far. Install copies this disc, then asks for disc 3.")]
+    [InlineData("{'setup.exe': 5, 'big.bin.dwpart01': 3}", 1, "2 of 4 files copied so far. Still to come: discs 2, 3.")]
+    [InlineData("{'setup.exe': 5, 'big.bin.dwpart01': 3, 'big.bin.dwpart02': 4}", 3, "3 of 4 files copied so far. Install copies this disc and finishes.")]
+    [InlineData("{'setup.exe': 5, 'big.bin.dwpart01': 3, 'big.bin.dwpart02': 4}", 1, "3 of 4 files copied so far. Now put disc 3 in.")]
+    [InlineData("{'setup.exe': 5, 'big.bin.dwpart01': 3, 'big.bin.dwpart02': 4, 'data/more file.dat': 2}", 3, "Every file is here. One file was cut to fit and still has to be put back together.")]
+    [InlineData("{'setup.exe': 5, 'big.bin': 7, 'data/more file.dat': 2}", 3, "Every file is here, in D:\\Games\\Big. Install runs the installer from there.")]
+    public void Says_where_the_set_stands_and_what_to_do_next(string present, int discIn, string expected)
+    {
+        // It ends on what to do next rather than on a fact: "Now put disc 3
+        // in" is the same information as "still needed: disc 3", said to
+        // somebody standing at a drive with a disc in their hand.
+        string sentence = Ask(
+            "(function () { var have = " + present + "; "
+            + "var rows = setRowsFrom('" + ASetFile + "'); var joins = setJoinsFrom('" + ASetFile + "'); "
+            + "var s = setScan(rows, joins, " + discIn + ", function (p) { return have[p] === undefined ? -1 : have[p]; }); "
+            + "return restoreSentence(s, " + discIn + ", null, 'D:\\\\Games\\\\Big'); })()");
+
+        Assert.Equal(expected, sentence);
+    }
+
+    [Fact]
+    public void Says_what_is_happening_while_it_happens()
+    {
+        Assert.Equal(
+            "Copying file 3 of 9 off this disc.",
+            Ask("restoreSentence(null, 1, {copying: '3 of 9'}, '')"));
+        Assert.Equal(
+            "Putting big.bin back together. On a large file this takes a few minutes.",
+            Ask("restoreSentence(null, 1, {joining: 'big.bin'}, '')"));
+        Assert.Equal(
+            "Put disc 2 in. This carries on by itself once it is there.",
+            Ask("restoreSentence(null, 1, {wanting: 2}, '')"));
+        Assert.Equal(
+            "This disc says it is part of a set, but its list of files is missing.",
+            Ask("restoreSentence({total: 0}, 1, null, '')"));
+    }
+
+    [Fact]
+    public void The_button_says_install_and_which_disc_and_nothing_about_copying()
+    {
+        // From the person's side that is what it does. The copying is how
+        // the install works rather than what they came to do.
+        Assert.Equal("Install, disc 2 of 3", Ask("restoreButtonSays({complete: false}, 2, 3, false)"));
+        Assert.Equal("Install, disc 1 of 3", Ask("restoreButtonSays({complete: false}, 0, 3, false)"));
+        Assert.Equal("Install", Ask("restoreButtonSays({complete: true}, 3, 3, false)"));
+        Assert.Equal("Play", Ask("restoreButtonSays({complete: false}, 1, 3, true)"));
+    }
+
+    [Fact]
+    public void Puts_the_game_back_under_the_profile_when_that_drive_has_the_room()
+    {
+        Assert.Equal(
+            @"C:\Users\somebody\Games\Big Game",
+            Ask(@"restoreFolderFor('C:\\Users\\somebody', 'Big Game', [{letter: 'C:', free: 1000}, {letter: 'D:', free: 5000}], 900)"));
+    }
+
+    [Fact]
+    public void Puts_the_game_back_on_the_drive_with_the_most_room_when_the_profile_s_has_not_got_it()
+    {
+        // A set is by definition bigger than one disc.
+        Assert.Equal(
+            @"D:\Games\Half-Life  Opposing Force",
+            Ask(@"restoreFolderFor('C:\\Users\\somebody', 'Half-Life: Opposing Force', [{letter: 'C:', free: 100}, {letter: 'D:', free: 5000}], 900)"));
+    }
+
+    [Fact]
+    public void Quotes_a_drive_root_so_the_command_line_reads_it_as_one()
+    {
+        // A backslash before a closing quote escapes the quote, so a quoted
+        // drive root ran on into the next argument and robocopy chose a
+        // destination inside System32. Every disc is a drive root.
+        Assert.Equal("\"D:\\\\\"", Ask(@"setQuote('D:\\')"));
+        Assert.Equal("\"C:\\Games\\Big\"", Ask(@"setQuote('C:\\Games\\Big')"));
+    }
+
+    [Fact]
+    public void Copies_one_file_at_a_time_with_robocopy_and_keeps_its_folder()
+    {
+        Assert.Equal(
+            "robocopy \"D:\\\\\" \"C:\\Games\\Big\" \"setup.exe\" /R:1 /W:1 /NJH /NJS",
+            Ask(@"setCopyCommand('D:\\', 'C:\\Games\\Big', 'setup.exe')"));
+
+        Assert.Equal(
+            "robocopy \"D:\\data\" \"C:\\Games\\Big\\data\" \"more file.dat\" /R:1 /W:1 /NJH /NJS",
+            Ask(@"setCopyCommand('D:\\', 'C:\\Games\\Big', 'data/more file.dat')"));
+    }
+
+    [Fact]
+    public void Joins_the_pieces_with_copy_b_in_order()
+    {
+        Assert.Equal(
+            "copy /b \"C:\\Games\\Big\\big.bin.dwpart01\"+\"C:\\Games\\Big\\big.bin.dwpart02\" \"C:\\Games\\Big\\big.bin\"",
+            Ask(@"setJoinCommand('C:\\Games\\Big', {path: 'big.bin', pieces: ['big.bin.dwpart01', 'big.bin.dwpart02']})"));
+    }
+
+    [Fact]
+    public void Puts_a_set_of_two_discs_back_together_from_real_folders()
+    {
+        // The whole engine against real folders, under cscript: disc 1's
+        // share copied, disc 2's share copied, the cut file put back together
+        // from its pieces, the pieces gone, and the scan calling it complete.
+        // robocopy and copy /b are the ones Windows ships, so this is the same
+        // mechanism a disc runs.
+        string disc1 = Path.Combine(_folder, "disc1");
+        string disc2 = Path.Combine(_folder, "disc2");
+        string dest = Path.Combine(_folder, "put back");
+        Directory.CreateDirectory(disc1);
+        Directory.CreateDirectory(Path.Combine(disc2, "data"));
+        File.WriteAllText(Path.Combine(disc1, "setup.exe"), "12345");
+        File.WriteAllText(Path.Combine(disc1, "big.bin.dwpart01"), "ABC");
+        File.WriteAllText(Path.Combine(disc2, "big.bin.dwpart02"), "DEFG");
+        File.WriteAllText(Path.Combine(disc2, "data", "more file.dat"), "12");
+
+        const string rows = "[{disc: 1, sha256: 'a', bytes: 5, path: 'setup.exe'}, {disc: 1, sha256: 'b', bytes: 3, path: 'big.bin.dwpart01'},"
+            + " {disc: 2, sha256: 'c', bytes: 4, path: 'big.bin.dwpart02'}, {disc: 2, sha256: 'd', bytes: 2, path: 'data/more file.dat'}]";
+        const string joins = "[{path: 'big.bin', sha256: 'e', bytes: 7, pieces: ['big.bin.dwpart01', 'big.bin.dwpart02']}]";
+
+        string went = Ask(
+            "(function () { var f = new ActiveXObject('Scripting.FileSystemObject'); var out = []; var quiet = function () {};"
+            + " var rows = " + rows + "; var joins = " + joins + ";"
+            + " copyTheSetDisc({files: f, discRoot: " + AsJScript(disc1) + ", dir: " + AsJScript(dest) + ", rows: rows, discIn: 1, say: quiet,"
+            + "   after: function (bad) { out.push('disc 1 bad=' + bad); }});"
+            + " var one = setScan(rows, joins, 1, sizeOfUnder(f, " + AsJScript(dest) + "));"
+            + " out.push('then ok=' + one.ok + ' need=' + one.need.join(',') + ' complete=' + one.complete);"
+            + " copyTheSetDisc({files: f, discRoot: " + AsJScript(disc2) + ", dir: " + AsJScript(dest) + ", rows: rows, discIn: 2, say: quiet,"
+            + "   after: function (bad) { out.push('disc 2 bad=' + bad); }});"
+            + " joinThePieces({files: f, dir: " + AsJScript(dest) + ", joins: joins, say: quiet,"
+            + "   after: function (failed) { out.push('failed=' + failed.length); }});"
+            + " var two = setScan(rows, joins, 2, sizeOfUnder(f, " + AsJScript(dest) + "));"
+            + " out.push('then ok=' + two.ok + ' pending=' + two.pending + ' complete=' + two.complete);"
+            + " return out.join(' | '); })()");
+
+        Assert.Equal(
+            "disc 1 bad=0 | then ok=2 need=2 complete=false | disc 2 bad=0 | failed=0 | then ok=4 pending=0 complete=true",
+            went);
+
+        Assert.Equal("ABCDEFG", File.ReadAllText(Path.Combine(dest, "big.bin")));
+        Assert.Equal("12", File.ReadAllText(Path.Combine(dest, "data", "more file.dat")));
+        Assert.False(File.Exists(Path.Combine(dest, "big.bin.dwpart01")), "the pieces should be gone once the file is whole");
+        Assert.False(File.Exists(Path.Combine(dest, "big.bin.dwpart02")));
+    }
+
+    [Fact]
+    public void Leaves_the_pieces_alone_when_one_of_them_is_still_missing()
+    {
+        string dest = Path.Combine(_folder, "half");
+        Directory.CreateDirectory(dest);
+        File.WriteAllText(Path.Combine(dest, "big.bin.dwpart01"), "ABC");
+
+        const string joins = "[{path: 'big.bin', sha256: 'e', bytes: 7, pieces: ['big.bin.dwpart01', 'big.bin.dwpart02']}]";
+
+        string went = Ask(
+            "(function () { var f = new ActiveXObject('Scripting.FileSystemObject'); var out = [];"
+            + " joinThePieces({files: f, dir: " + AsJScript(dest) + ", joins: " + joins + ", say: function () {},"
+            + "   after: function (failed) { out.push('failed=' + failed.length); }}); return out.join(' | '); })()");
+
+        Assert.Equal("failed=0", went);
+        Assert.True(File.Exists(Path.Combine(dest, "big.bin.dwpart01")));
+        Assert.False(File.Exists(Path.Combine(dest, "big.bin")));
     }
 
     // ------------------------------------------------ a preview starts nothing

@@ -556,6 +556,20 @@ The price is that `Disc set.txt` is the second file `checksums.sha256` does not 
 
 Telling somebody that one disc of one is all there is would be noise on every disc that never needed it.
 
+### The menu installs the set, and the person never meets the copy
+
+A disc of a set cannot install the game on its own, and v1 said so with a **Copy** button and a sentence about joining the pieces afterwards. That put the mechanism in front of the person. What they came to do is install the game, so that is what the button says: **Install, disc 1 of 3**. Pressing it copies that disc's share into one folder on the hard drive with a bar, then says *Put disc 2 in. This carries on by itself once it is there*, and does exactly that: the page polls the drive every second and a half for a set file naming a disc it still wants, and carries on when one arrives. After the last disc it puts any cut file back together, and runs the installer from the folder. The menu closes behind it, the way it does for a game on one disc. Owner's design, 2026-10-24, and the same shape as every installer that ever asked for disc 2.
+
+**One menu drives the whole set.** Disc 1's page stays open while disc 2 goes into the drive, so nothing about the set can be baked into the page: which disc is in is read off the drive's own `Disc set.txt`, and what has been copied is read off the folder. The page reads the set file once at start and never again except to ask which disc is in.
+
+**The folder is chosen without asking**, because asking is a dialog on every disc. `Games\<game>` under the person's profile when that drive has room for the whole set plus the largest cut file, otherwise the fixed drive with the most room. The name comes from the game and nothing else, so every disc proposes the same folder without anything being remembered between them.
+
+**A cut file goes back together with `copy /b`**, which is in Windows, needs nothing installed and is what the set file tells a person to type. The set file carries a `JOIN` line per cut file with the hash and size of the *whole*, hashed off the source at build time because no disc holds it whole, and a `PART` line per piece in order. The pieces are deleted only once the finished file is the right size, because a join that half worked and removed its own evidence is the one failure here nobody can recover from.
+
+**Each copy is one `robocopy` per file**, started hidden through `cmd /c` and waited for on a flag file, exactly as v1 learned to: `Exec` gives the child a pipe nobody reads, and robocopy filled it with its running percentage and blocked for ever. A disc that goes unreadable part way leaves a short file that robocopy pre-sized to its full length, so every file is checked for size after its copy and a wrong one counts as bad and gets its disc asked for again.
+
+All of the deciding is in `menu.js`, where cscript runs it against real folders, and `ThePageOnADiscOfASet` goes one further: it takes the script block the menu writer generates, stands in a `document`, a `window` and an `alert`, and presses the button, from disc 1 to the installer starting after disc 2, with the real robocopy and the real `copy /b`. The page's timers are queued rather than fired, which is how "put disc 2 in" is answered by pointing the page at another folder between two pumps.
+
 ## Add-ons, and the gap they close
 
 ### An add-on is dead until its game is installed

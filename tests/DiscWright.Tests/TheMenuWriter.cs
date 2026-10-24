@@ -105,6 +105,25 @@ public class TheMenuWriter
     }
 
     [Fact]
+    public void A_disc_of_a_set_installs_from_the_folder_the_set_is_put_back_into()
+    {
+        string page = MenuWriter.MenuPage(Facts());
+
+        // The page's part of the set: read the set file once off the disc,
+        // draw the one big button and the line under it from it, and send
+        // Install through the engine in menu.js rather than at the disc. The
+        // engine itself is tested under cscript against real folders.
+        Assert.Contains("SET = loadTheSet();", page, StringComparison.Ordinal);
+        Assert.Contains("if (SET && !where)", page, StringComparison.Ordinal);
+        Assert.Contains("restoreGo();", page, StringComparison.Ordinal);
+        Assert.Contains("restoreButtonSays(scan, SET.discIn, SET.of, isInstalled(game))", page, StringComparison.Ordinal);
+        Assert.Contains("copyTheSetDisc({", page, StringComparison.Ordinal);
+        Assert.Contains("joinThePieces({", page, StringComparison.Ordinal);
+        Assert.Contains("window.setTimeout(checkForTheNextDisc, 1500);", page, StringComparison.Ordinal);
+        Assert.Contains("id=\"restoreBar\"", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Keeps_one_disc_menu_at_a_time_and_lets_previews_pile_up()
     {
         Assert.Contains("singleinstance=\"yes\"", MenuWriter.MenuPage(Facts(onlyOne: true)), StringComparison.Ordinal);

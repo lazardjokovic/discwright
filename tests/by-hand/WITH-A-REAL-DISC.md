@@ -195,6 +195,56 @@ folder. **Expect on the disc:** exactly that, and no attempt to run anything.
 
 ---
 
+## 8. Installing a set from its menu
+
+The suite installs a set of two from two folders, under cscript, with the real
+robocopy and the real `copy /b`. Only a real drive proves the swap is noticed.
+
+1. Build `fixtures\size-three-cds` at **CD-R 700 MB** with splitting on, and
+   burn both discs.
+2. Put **disc 1** in a machine and open the menu.
+
+**Expect:** the big button says **Install, disc 1 of 2**, and the line under
+the buttons says *Nothing is copied yet. Install copies this disc, then asks
+for disc 2.*
+
+3. Press it.
+
+**Expect:** a thin bar under the buttons and *Copying file N of M off this
+disc*, then *Put disc 2 in. This carries on by itself once it is there.* The
+menu stays open. Nothing is asked.
+
+4. Swap the disc for **disc 2** and touch nothing.
+
+**Expect:** within two seconds it carries on copying. After the last file,
+*Putting setup_….exe back together* if anything was cut, then the installer
+starts from `Games\<the game>` under your profile, or on the drive with the
+most room when yours has not got it, and the menu closes. The folder holds the
+game and nothing of the disc's own: no `AUTORUN`, no `Disc set.txt`.
+
+5. Check the joined file against the `JOIN` line in `Disc set.txt`:
+
+```powershell
+(Get-FileHash '...\setup_the_game.exe' -Algorithm SHA256).Hash
+```
+
+6. Start again with **disc 2 first**.
+
+**Expect:** the button says **Install, disc 2 of 2**; after copying it asks
+for disc 1 and finishes the same way.
+
+7. Press **Exit** halfway through disc 1, then open the disc again and press
+   Install.
+
+**Expect:** *N of M files copied so far*, and it copies only what is missing.
+
+8. Open the menu's preview from the window instead and press the button.
+
+**Expect:** *This is a preview of the menu. Nothing starts from here*, and no
+folder is made.
+
+---
+
 ## What the last pass found, and when
 
 **2026-10-24, on this machine**, with two CD-RWs. Cases 1, 2 and 3 were judged
