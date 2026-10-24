@@ -141,38 +141,6 @@ public class TheProjectFileComesBack
         Assert.Empty(back.LooseExtras);
     }
 
-    [Fact]
-    public async Task Is_written_beside_the_discs_and_only_once_for_a_whole_set()
-    {
-        RecordingWriter wrote = new();
-        WriteTheProjectFileStep step = new("2.0.0", "CD", @"F:\out", () => DateTimeOffset.UnixEpoch);
-
-        await step.Run(ContextFor(wrote, disc: 1), CancellationToken.None);
-
-        // Beside them, not on one. A disc is a copy of a game; the project is
-        // the recipe, and a recipe on the disc is a file on every copy that
-        // nobody asked for.
-        Assert.Equal(@"F:\out\discproject.json", wrote.Texts.Single().Path);
-
-        // A set is one project, so the other discs have nothing to add.
-        Assert.True(step.AppliesTo(ContextFor(wrote, disc: 1)));
-        Assert.False(step.AppliesTo(ContextFor(wrote, disc: 2)));
-    }
-
-    [Fact]
-    public async Task Says_which_build_wrote_it_and_when()
-    {
-        RecordingWriter wrote = new();
-
-        await new WriteTheProjectFileStep("2.0.0+abc123", "DVD5", @"F:\out", () => DateTimeOffset.UnixEpoch)
-            .Run(ContextFor(wrote, disc: 1), CancellationToken.None);
-
-        string json = wrote.Texts.Single().Text;
-
-        Assert.Contains("2.0.0+abc123", json, StringComparison.Ordinal);
-        Assert.Contains("1970-01-01T00:00:00", json, StringComparison.Ordinal);
-    }
-
     // ------------------------------------------------------------------ helpers
 
     private static OpenedProject Written(DiscProject project)
@@ -181,13 +149,6 @@ public class TheProjectFileComesBack
 
         return Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(json)).Value;
     }
-
-    private static BuildContext ContextFor(RecordingWriter wrote, int disc) =>
-        new(AProject(),
-            new DiscLayout([new PlannedDisc(1, [], 0), new PlannedDisc(2, [], 0)], 700_000_000, 1),
-            new PlannedDisc(disc, [], 0),
-            wrote.AStageAt(@"F:\out\disc D" + disc),
-            wrote);
 
     private static DiscProject AProject() => new(
         Label: "A BIG GAME",

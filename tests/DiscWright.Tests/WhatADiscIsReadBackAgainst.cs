@@ -60,6 +60,36 @@ public class WhatADiscIsReadBackAgainst
     }
 
     [Fact]
+    public void Takes_a_disc_of_the_set_and_not_a_disc_that_stands_alone_beside_it()
+    {
+        // Several games that would not share a disc, one of which needed a
+        // set. Every disc that stands alone is numbered one, and the walk
+        // through the set must not be handed one of them for disc 1.
+        BuiltDiscs mixed = new(
+        [
+            new BuiltDisc("Small", 1, 1, @"C:\out\Small\disc", 100),
+            new BuiltDisc("BIG", 1, 2, @"C:\out\BIG\disc D1", 1000),
+            new BuiltDisc("BIG", 2, 2, @"C:\out\BIG\disc D2", 1000)
+        ]);
+
+        Assert.Equal(@"C:\out\BIG\disc D1", ReadingBackWhatWasWritten.WhereItWasBuiltFrom(mixed, new WhichDisc.OfASet(1, 2)));
+        Assert.Equal(@"C:\out\BIG\disc D2", ReadingBackWhatWasWritten.WhereItWasBuiltFrom(mixed, new WhichDisc.OfASet(2, 2)));
+    }
+
+    [Fact]
+    public void Knows_the_image_of_a_disc_whose_label_had_to_be_tidied_for_a_file_name()
+    {
+        // The image is named with the label tidied, because a colon cannot be
+        // in a file name, so the match has to tidy it the same way.
+        BuiltDiscs one = new([new BuiltDisc("Command & Conquer: Red Alert", 1, 1, @"C:\out\disc", 1000)]);
+
+        Assert.Equal(
+            @"C:\out\disc",
+            ReadingBackWhatWasWritten.WhereItWasBuiltFrom(
+                one, new WhichDisc.TheImageCalled(@"C:\out\Command & Conquer  Red Alert.iso")));
+    }
+
+    [Fact]
     public void Falls_back_to_the_first_disc_when_none_of_them_answers_to_it()
     {
         // Something built in this sitting is more likely to be the disc in the

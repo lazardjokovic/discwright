@@ -34,6 +34,58 @@ public sealed record DiscProject(
 
     /// <summary>The add-ons belonging to one game, in the order they were added.</summary>
     public IEnumerable<AddOn> AddOnsFor(int game) => AddOnsOrNone.Where(addOn => addOn.BelongsTo == game);
+
+    /// <summary>
+    /// The same project narrowed to some of its games, under another label,
+    /// with the add-ons of those games pointed at where the games sit now.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For a game that gets a disc of its own when several will not share
+    /// one. <strong>An add-on remembers its game by position</strong>, so a
+    /// project cut down to one game with its add-on list left whole hands
+    /// every game the add-ons of whichever game sat first: the second game's
+    /// menu offered the first game's patches, and its own, whose files were
+    /// on its disc, were on no button at all. The builder and the preview
+    /// both cut the project down this way and both had this wrong.
+    /// </para>
+    /// <para>
+    /// Games are matched by identity rather than by name, because two folders
+    /// can report the same name and a patch must stay with the folder it was
+    /// taken from.
+    /// </para>
+    /// </remarks>
+    public DiscProject KeepingOnly(IReadOnlyList<GameFolder> kept, string label)
+    {
+        List<AddOn> addOns = [];
+
+        for (int now = 0; now < kept.Count; now++)
+        {
+            int was = IndexOf(kept[now]);
+
+            if (was < 0)
+            {
+                continue;
+            }
+
+            addOns.AddRange(AddOnsFor(was).Select(addOn => addOn with { BelongsTo = now }));
+        }
+
+        return this with { Label = label, Games = kept, AddOns = addOns };
+    }
+
+    private int IndexOf(GameFolder game)
+    {
+        for (int at = 0; at < Games.Count; at++)
+        {
+            if (ReferenceEquals(Games[at], game))
+            {
+                return at;
+            }
+        }
+
+        return -1;
+    }
 }
 
 /// <summary>

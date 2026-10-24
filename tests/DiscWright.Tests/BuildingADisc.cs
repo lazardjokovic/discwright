@@ -447,6 +447,81 @@ public sealed class BuildingADisc : IDisposable
     }
 
     [Fact]
+    public async Task Gives_each_disc_of_a_disc_each_build_its_own_add_ons_and_nobody_elses()
+    {
+        GameFolder one = AGogDownload("One", 3000);
+        GameFolder two = AGogDownload("Two", 3000);
+        string forOne = APatch("patch_one_1_to_2.exe", 100);
+        string forTwo = APatch("patch_two_1_to_2.exe", 100);
+
+        DiscProject project = Project(one, two) with
+        {
+            AddOns = [new AddOn(0, forOne, "Update 2 (one)", 100), new AddOn(1, forTwo, "Update 2 (two)", 100)]
+        };
+
+        BuiltDiscs built = await Build(project, capacity: Overhead + 5000);
+        string menuOfTwo = File.ReadAllText(On(built.Discs[1], @"AUTORUN\menu.hta"));
+
+        // The files always landed right. The menu did not: the project was
+        // cut down to one game with the add-on list left whole, so every disc
+        // offered the first game's add-ons and its own were on no button.
+        Assert.True(File.Exists(On(built.Discs[1], @"Add-ons\patch_two_1_to_2.exe")));
+        Assert.Contains("Update 2 (two)", menuOfTwo, StringComparison.Ordinal);
+        Assert.DoesNotContain("Update 2 (one)", menuOfTwo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Writes_one_project_file_at_the_top_for_a_disc_each_build()
+    {
+        DiscProject project = Project(AGogDownload("One", 3000), AGogDownload("Two", 3000));
+
+        await Build(project, capacity: Overhead + 5000);
+
+        // One recipe for the whole compilation, where "Open one you built"
+        // looks. It was a step in each disc's pipeline, so each game's folder
+        // got one describing that game alone and the top got none, and the
+        // compilation could not be opened again.
+        string[] written = Directory.GetFiles(_out, TheProjectAsJson.FileName, SearchOption.AllDirectories);
+        Assert.Equal([Path.Combine(_out, TheProjectAsJson.FileName)], written);
+
+        OpenedProject back = Assert.IsType<Outcome<OpenedProject>.Ok>(
+            AProjectFile.Read(File.ReadAllText(written[0]))).Value;
+        Assert.Equal(["One", "Two"], back.Games.Select(game => game.Name));
+        Assert.Equal("HOLLOW KNIGHT", back.Label);
+    }
+
+    [Fact]
+    public async Task Writes_the_project_file_beside_the_discs_of_a_set_and_only_once()
+    {
+        BuiltDiscs built = await Build(Project(AGogDownload("Hollow Knight", 4000, parts: 2), cut: false), capacity: Overhead + 5000);
+
+        // A set, so three disc folders beside one recipe, and not one in each.
+        Assert.Equal(3, built.Discs.Count);
+        Assert.Equal(
+            [Path.Combine(_out, TheProjectAsJson.FileName)],
+            Directory.GetFiles(_out, TheProjectAsJson.FileName, SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task Says_in_the_project_file_which_build_wrote_it_and_when()
+    {
+        DiscBuilder builder = new(
+            new WindowsFileSystem(), new WindowsStageWriter(), new WindowsImages(), new Sha256Hasher(),
+            "2.0.0+abc123", () => DateTimeOffset.UnixEpoch);
+
+        Outcome<BuiltDiscs> built = await builder.Build(
+            Project(AGogDownload("Hollow Knight", 400)), new Medium("TEST", "a test disc", Overhead + 1_000_000),
+            _out, null, CancellationToken.None);
+
+        Assert.IsType<Outcome<BuiltDiscs>.Ok>(built);
+        string json = File.ReadAllText(Path.Combine(_out, TheProjectAsJson.FileName));
+
+        Assert.Contains("2.0.0+abc123", json, StringComparison.Ordinal);
+        Assert.Contains("1970-01-01T00:00:00", json, StringComparison.Ordinal);
+        Assert.Contains("\"MediaKey\": \"TEST\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Keeps_the_whole_shape_of_a_folder_of_game_files()
     {
         GameFolder game = AFolderOfGameFiles("Gothic");

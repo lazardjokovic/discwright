@@ -206,6 +206,40 @@ public class SeeingTheMenuFirst
     }
 
     [Fact]
+    public void Shows_each_disc_of_a_disc_each_build_with_its_own_add_ons()
+    {
+        RecordingWriter wrote = new();
+
+        // Big enough that the two will not share a CD and each fits alone,
+        // so each gets a disc of its own. The planner weighs the files
+        // themselves, not the size function, which only prices the extras.
+        GameFolder knight = ABigGame("Hollow Knight");
+        GameFolder grim = ABigGame("Grim Fandango");
+
+        DiscProject big = AProject() with
+        {
+            Games = [knight, grim],
+            AddOns =
+            [
+                new AddOn(0, @"C:\games\Hollow Knight\patch.exe", "Update 2 (knight)", 10),
+                new AddOn(1, @"C:\games\Grim Fandango\soundtrack.exe", "Grim Soundtrack", 10)
+            ]
+        };
+
+        new APreviewOfTheMenu(wrote, new PicturesThatRead()).Write(big, Media.Cd, _ => 600L * 1024 * 1024, Look);
+
+        string[] pages = [.. wrote.Texts
+            .Where(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal))
+            .Select(text => text.Text)];
+
+        // The preview cut the project down the same way the builder did, so
+        // the second window showed the first game's add-ons.
+        string ofGrim = Assert.Single(pages, page => page.Contains("name: \"Grim Fandango\"", StringComparison.Ordinal));
+        Assert.Contains("Grim Soundtrack", ofGrim, StringComparison.Ordinal);
+        Assert.DoesNotContain("Update 2 (knight)", ofGrim, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Refuses_rather_than_previewing_nothing()
     {
         Outcome<IReadOnlyList<string>> went = new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead())

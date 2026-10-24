@@ -37,7 +37,7 @@ public sealed class DiscBuilder(
     /// would hash a half-made disc and still look like it worked. The rest
     /// could be in any order and are in the order somebody would describe them.
     /// </remarks>
-    private IReadOnlyList<IBuildStep> StepsFor(Medium medium, string outputFolder) =>
+    private IReadOnlyList<IBuildStep> StepsFor() =>
     [
         new CopyTheFilesStep(),
         new CopyTheExtrasStep(files),
@@ -45,12 +45,7 @@ public sealed class DiscBuilder(
         new WriteTheAutorunStep(),
         new CopyTheArtworkStep(images),
         new WriteTheMenuStep(),
-        new WriteTheChecksumsStep(files, hasher),
-
-        // Last of all, and beside the discs rather than on one. Nothing
-        // written before this point can be opened again without it.
-        new WriteTheProjectFileStep(
-            madeBy, medium.Key, outputFolder, now ?? (() => DateTimeOffset.UtcNow))
+        new WriteTheChecksumsStep(files, hasher)
     ];
 
     /// <summary>
@@ -93,15 +88,11 @@ public sealed class DiscBuilder(
                 ? System.IO.Path.Combine(outputFolder, OnTheDisc.Tidied(output.Label))
                 : outputFolder;
 
+            // Narrowed with its add-ons, not only its games. Cut down to the
+            // games alone, every disc of a disc-each build offered the first
+            // game's add-ons on its menu and none of its own.
             Outcome<BuiltDiscs> one = await Make(
-                project with { Label = output.Label, Games = output.Games },
-                output.Games,
-                output.Layout,
-                output.Label,
-                medium,
-                where,
-                progress,
-                ct);
+                project.KeepingOnly(output.Games, output.Label), output.Layout, medium, where, progress, ct);
 
             if (one is Outcome<BuiltDiscs>.No stopped)
             {
@@ -111,21 +102,55 @@ public sealed class DiscBuilder(
             made.AddRange(((Outcome<BuiltDiscs>.Ok)one).Value.Discs);
         }
 
+        WriteTheProjectFile(project, medium, outputFolder);
+
         return new BuiltDiscs(made);
     }
 
+    /// <summary>
+    /// Writes <c>discproject.json</c> beside the discs, so what was built can
+    /// be opened again.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Once per build and for the whole project, at the top of the output
+    /// folder, which is where v1 put it and therefore where "Open one you
+    /// built" looks. It was a step in each disc's pipeline, so a build of
+    /// several games that each got a disc wrote one into every game's own
+    /// folder, each describing that one game, and nothing at the top: the
+    /// compilation could not be opened again, and each of those files carried
+    /// every add-on pointed at the wrong game.
+    /// </para>
+    /// <para>
+    /// Beside the discs and not on one. A disc is a copy of a game; the
+    /// project is the recipe, and a recipe on the disc is a file on every copy
+    /// nobody asked for. After the discs, because nothing written before this
+    /// point can be opened again without it, and a build that stops part way
+    /// leaves no recipe for discs that were never made.
+    /// </para>
+    /// </remarks>
+    private void WriteTheProjectFile(DiscProject project, Medium medium, string outputFolder)
+    {
+        if (outputFolder.Length == 0)
+        {
+            return;
+        }
+
+        writer.WriteText(
+            System.IO.Path.Combine(outputFolder, TheProjectAsJson.FileName),
+            TheProjectAsJson.Of(project, madeBy, medium.Key, outputFolder, (now ?? (() => DateTimeOffset.UtcNow))()));
+    }
+
     private async Task<Outcome<BuiltDiscs>> Make(
-        DiscProject project,
-        IReadOnlyList<GameFolder> games,
+        DiscProject forThisDisc,
         DiscLayout layout,
-        string label,
         Medium medium,
         string outputFolder,
         IProgress<BuildProgress>? progress,
         CancellationToken ct)
     {
-        DiscProject forThisDisc = project with { Label = label, Games = games };
-        BuildPipeline pipeline = new(StepsFor(medium, outputFolder));
+        string label = forThisDisc.Label;
+        BuildPipeline pipeline = new(StepsFor());
         List<BuiltDisc> made = [];
 
         foreach (PlannedDisc disc in layout.Discs)
@@ -212,57 +237,6 @@ public sealed class DiscBuilder(
                 SetManifest.For(project.Label, entries, disc.Number, made.Count, medium.Name, DateTimeOffset.Now));
         }
     }
-    /// Where one game's file sits on a disc.
-    /// </summary>
-    /// <remarks>
-    /// One game has the disc to itself and keeps its own shape. Several games
-    /// go into numbered folders, because two games are perfectly entitled to
-    /// both contain a <c>Data</c> folder and the second one must not land on
-    /// top of the first.
-    /// </remarks>
-    private static string WhereItGoes(IReadOnlyList<GameFolder> games, GameFolder game, ListedFile file)
-    {
-        string folder = OnTheDisc.FolderFor(games.ToList().IndexOf(game) + 1, game.Name, games.Count, game.Files.Select(file => file.RelativePath));
-
-        return folder.Length == 0 ? file.RelativePath : System.IO.Path.Combine(folder, file.RelativePath);
-    }
-    /// What the manual, the extras folder and the loose files come to.
-    /// </summary>
-    /// <remarks>
-    /// Weighed apart from the game because they land on ONE disc of a set
-    /// rather than on all of them, which is what lets the planner put them
-    /// where the slack already is instead of pushing a file onto a disc that
-    /// did not need to exist. Music is not here: it rides every disc, so it is
-    /// in the overhead.
-    /// </remarks>
-    private long ExtrasBytes(DiscProject project)
-    {
-        DiscExtras? extras = project.Extras;
-
-        if (extras is null)
-        {
-            return 0;
-        }
-
-        long bytes = 0;
-
-        if (extras.ManualPath is not null)
-        {
-            bytes += SizeOf(extras.ManualPath);
-        }
-
-        if (extras.ExtrasFolderPath is not null)
-        {
-            bytes += SizeOf(extras.ExtrasFolderPath);
-        }
-
-        foreach (string item in extras.Loose)
-        {
-            bytes += SizeOf(item);
-        }
-
-        return bytes;
-    }
 
     /// <summary>
     /// A path from the checksum list, which writes forward slashes, back as
@@ -270,30 +244,6 @@ public sealed class DiscBuilder(
     /// </summary>
     private static string WithBackslashes(string path) =>
         path.Replace('/', '\\');
-    /// Every add-on of the games being planned, with where it lands on the disc.
-    /// </summary>
-    /// <remarks>
-    /// Beside its game in an <c>Add-ons</c> folder, so a disc holding four
-    /// games keeps each one's patches with it rather than in one pile at the
-    /// root where nobody can tell which belongs to what.
-    /// </remarks>
-    private static IEnumerable<(string RelativePath, string Source, long Bytes)> AddOnsOf(
-        DiscProject project, IReadOnlyList<GameFolder> games)
-    {
-        for (int at = 0; at < games.Count; at++)
-        {
-            string folder = OnTheDisc.FolderFor(at + 1, games[at].Name, games.Count, games[at].Files.Select(file => file.RelativePath));
-            int which = project.Games.ToList().IndexOf(games[at]);
-
-            foreach (AddOn addOn in project.AddOnsFor(which))
-            {
-                string landing = System.IO.Path.Combine(
-                    folder, AddOn.Folder, System.IO.Path.GetFileName(addOn.Path));
-
-                yield return (landing, addOn.Path, addOn.Bytes);
-            }
-        }
-    }
 
     private long SizeOf(string path)
     {

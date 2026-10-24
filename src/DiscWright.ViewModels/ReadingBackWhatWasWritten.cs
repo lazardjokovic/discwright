@@ -166,11 +166,16 @@ public abstract record WhichDisc
     /// </remarks>
     public BuiltDisc? OutOf(IReadOnlyList<BuiltDisc> discs) => this switch
     {
-        OfASet(int number, _) => discs.FirstOrDefault(disc => disc.Number == number),
+        // Of the set, and not of a disc that stands alone beside it. A build
+        // of several games that would not share a disc holds several discs
+        // all numbered one, and one of them can be a set in its own right.
+        OfASet(int number, _) => discs.FirstOrDefault(disc => disc.OfDiscs > 1 && disc.Number == number),
 
+        // Tidied the way the image's name is tidied, so a label with a colon
+        // in it still answers to its own image.
         TheImageCalled(string path) when System.IO.Path.GetFileNameWithoutExtension(path) is string name =>
             discs.FirstOrDefault(disc => string.Equals(
-                disc.OfDiscs > 1 ? $"{disc.Label} D{disc.Number}" : disc.Label,
+                disc.OfDiscs > 1 ? $"{OnTheDisc.Tidied(disc.Label)} D{disc.Number}" : OnTheDisc.Tidied(disc.Label),
                 name,
                 StringComparison.OrdinalIgnoreCase)),
 

@@ -67,7 +67,10 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : I
 
         foreach (PlannedOutput output in planned.Outputs)
         {
-            DiscProject forThisOne = project with { Label = output.Label, Games = output.Games };
+            // Narrowed with its add-ons, not only its games. Cut down to the
+            // games alone, every disc of a disc-each build offered the
+            // first game's add-ons.
+            DiscProject forThisOne = project.KeepingOnly(output.Games, output.Label);
 
             foreach (PlannedDisc disc in output.Layout.Discs)
             {

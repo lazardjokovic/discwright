@@ -1171,6 +1171,29 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public BuiltDiscs? Made { get; private set; }
 
     /// <summary>
+    /// The images of the one set the last build made, in the order its discs
+    /// are burned, or nothing when it made no set.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A set is the discs that continue one another, and only those. The
+    /// window took any build with more than one disc for a set, so several
+    /// games that each got a disc of their own were walked as "disc 1 of 3,
+    /// disc 2 of 3", and from the second disc on each was read back against
+    /// the first game's folder and called wrong. Here rather than in the
+    /// window, where that decision could not be tested.
+    /// </para>
+    /// <para>
+    /// Discs that stand alone are burned one at a time, chosen from whatever
+    /// images are in the folder, which is the ordinary way to burn one disc.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> TheSetToBurn =>
+        Made is null
+            ? []
+            : [.. Made.Discs.Where(disc => disc.OfDiscs > 1).OrderBy(disc => disc.Number).Select(TheImageOf.That)];
+
+    /// <summary>
     /// Something the image had to say that did not stop it, or null.
     /// </summary>
     public string? AboutTheImage { get; private set; }
@@ -1750,7 +1773,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         foreach (string gone in new[]
         {
-            nameof(Made), nameof(AboutTheImage), nameof(ItWentWrong), nameof(HowTheDiscCameOut),
+            nameof(Made), nameof(TheSetToBurn), nameof(AboutTheImage), nameof(ItWentWrong), nameof(HowTheDiscCameOut),
             nameof(HowTheSetWent), nameof(TheImages), nameof(HasAnythingOnIt)
         })
         {
@@ -2686,6 +2709,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(Doing));
         Tell(nameof(HowFar));
         Tell(nameof(Made));
+        Tell(nameof(TheSetToBurn));
         Tell(nameof(ItWentWrong));
         Tell(nameof(CanMakeIt));
         Tell(nameof(CanBurn));

@@ -196,6 +196,21 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void Says_how_many_discs_when_one_of_the_games_needs_a_set_of_its_own()
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+        window.Medium = ADiscHolding(1500);
+        window.Add(AGame("Big", 1000, parts: 2));
+        window.Add(AGame("Two", 1000));
+
+        // "A disc each" only when it is true. Big is three files of 1000
+        // bytes on a disc holding 1500, so it is a set of three beside Two's
+        // one.
+        Assert.Equal("2 games on 4 discs", window.WhatItWillMake);
+    }
+
+    [Fact]
     public void Changes_its_answer_when_the_disc_changes()
     {
         MakeADisc window = New();
@@ -573,6 +588,83 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(3, images.Made);
         Assert.Equal(3, images.Paths.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         Assert.All(images.Paths, path => Assert.EndsWith(".iso", path, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Offers_the_discs_of_a_set_to_burn_in_order()
+    {
+        MakeADisc window = New(builder: new ABuilderThatMakesASet(), images: new ImagesThatWork());
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("A Big Game", 1000));
+
+        Assert.Empty(window.TheSetToBurn);
+
+        await window.MakeIt();
+
+        Assert.Equal(
+            [@"C:\out\A BIG GAME D1.iso", @"C:\out\A BIG GAME D2.iso", @"C:\out\A BIG GAME D3.iso"],
+            window.TheSetToBurn);
+    }
+
+    [Fact]
+    public async Task Offers_no_set_when_several_games_each_got_a_disc_of_their_own()
+    {
+        MakeADisc window = New(builder: new ABuilderThatMakesADiscEach(), images: new ImagesThatWork());
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("One", 1000));
+        window.Add(AGame("Two", 1000));
+
+        await window.MakeIt();
+
+        // Three discs that do not continue one another are not a set. The
+        // window took any build with more than one disc for one, walked them
+        // as "disc 1 of 3, disc 2 of 3", and read the second one back against
+        // the first game's folder, which called a perfect disc wrong.
+        Assert.Equal(3, window.Made!.Discs.Count);
+        Assert.Empty(window.TheSetToBurn);
+    }
+
+    [Fact]
+    public async Task Offers_only_the_set_when_one_game_needed_one_beside_discs_that_stand_alone()
+    {
+        MakeADisc window = New(builder: new ABuilderThatMakesADiscEachAndOneSet(), images: new ImagesThatWork());
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("Small", 1000));
+        window.Add(AGame("Big", 1000));
+
+        await window.MakeIt();
+
+        Assert.Equal([@"C:\out\Big\Big D1.iso", @"C:\out\Big\Big D2.iso"], window.TheSetToBurn);
+    }
+
+    [Fact]
+    public async Task Tells_the_window_about_the_set_to_burn_when_a_build_ends_and_when_it_starts_again()
+    {
+        MakeADisc window = New(builder: new ABuilderThatMakesASet(), images: new ImagesThatWork());
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("A Big Game", 1000));
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        await window.MakeIt();
+        Assert.Contains(nameof(MakeADisc.TheSetToBurn), told);
+
+        told.Clear();
+        window.StartAgain();
+        Assert.Contains(nameof(MakeADisc.TheSetToBurn), told);
+        Assert.Empty(window.TheSetToBurn);
+    }
+
+    [Fact]
+    public void The_window_burns_the_set_the_screen_names_and_decides_nothing_itself()
+    {
+        // Read off disk, like the other guards over the code behind. The
+        // decision about what counts as a set was in the window and wrong.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("IReadOnlyList<string> set = _screen.TheSetToBurn;", code, StringComparison.Ordinal);
+        Assert.DoesNotContain("Discs.Count: > 1", code, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -3427,6 +3519,39 @@ public class TheMainWindowWithoutAWindow
                 new BuiltDisc(project.Label, 1, 3, System.IO.Path.Combine(outputFolder, "disc D1"), 1000),
                 new BuiltDisc(project.Label, 2, 3, System.IO.Path.Combine(outputFolder, "disc D2"), 1000),
                 new BuiltDisc(project.Label, 3, 3, System.IO.Path.Combine(outputFolder, "disc D3"), 1000)
+            ]));
+    }
+
+    /// <summary>
+    /// A build of several games that would not share a disc: a disc each,
+    /// every one numbered one, each in a folder of its own.
+    /// </summary>
+    private sealed class ABuilderThatMakesADiscEach : IBuildDiscs
+    {
+        public Task<Outcome<BuiltDiscs>> Build(
+            DiscProject project, Medium medium, string outputFolder,
+            IProgress<BuildProgress>? progress, CancellationToken ct) =>
+            Task.FromResult<Outcome<BuiltDiscs>>(new BuiltDiscs(
+            [
+                new BuiltDisc("One", 1, 1, System.IO.Path.Combine(outputFolder, "One", "disc"), 1000),
+                new BuiltDisc("Two", 1, 1, System.IO.Path.Combine(outputFolder, "Two", "disc"), 1000),
+                new BuiltDisc("Three", 1, 1, System.IO.Path.Combine(outputFolder, "Three", "disc"), 1000)
+            ]));
+    }
+
+    /// <summary>
+    /// A disc each where one of the games needed a set of its own.
+    /// </summary>
+    private sealed class ABuilderThatMakesADiscEachAndOneSet : IBuildDiscs
+    {
+        public Task<Outcome<BuiltDiscs>> Build(
+            DiscProject project, Medium medium, string outputFolder,
+            IProgress<BuildProgress>? progress, CancellationToken ct) =>
+            Task.FromResult<Outcome<BuiltDiscs>>(new BuiltDiscs(
+            [
+                new BuiltDisc("Small", 1, 1, System.IO.Path.Combine(outputFolder, "Small", "disc"), 100),
+                new BuiltDisc("Big", 1, 2, System.IO.Path.Combine(outputFolder, "Big", "disc D1"), 1000),
+                new BuiltDisc("Big", 2, 2, System.IO.Path.Combine(outputFolder, "Big", "disc D2"), 1000)
             ]));
     }
 

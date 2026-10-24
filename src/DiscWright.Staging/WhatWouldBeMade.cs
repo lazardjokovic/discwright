@@ -188,7 +188,11 @@ public sealed record PlannedBuild(IReadOnlyList<PlannedOutput> Outputs)
         {
             if (Outputs.Count > 1)
             {
-                return $"{Outputs.Count} games, a disc each";
+                // "A disc each" only when it is true. One of them can need a
+                // set of its own, and then four games are five discs.
+                return Outputs.All(output => output.Layout.Discs.Count == 1)
+                    ? $"{Outputs.Count} games, a disc each"
+                    : $"{Outputs.Count} games on {Discs} discs";
             }
 
             int discs = Outputs[0].Layout.Discs.Count;

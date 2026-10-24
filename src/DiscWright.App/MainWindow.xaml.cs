@@ -403,7 +403,7 @@ public partial class MainWindow : Window
         // A set is written as a set: disc 1, then ask, disc 2, then ask.
         // Burning one disc of three and calling it done is the thing most
         // likely to go wrong, so it is not offered.
-        IReadOnlyList<string> set = TheWholeSet();
+        IReadOnlyList<string> set = _screen.TheSetToBurn;
 
         try
         {
@@ -462,24 +462,6 @@ public partial class MainWindow : Window
                 MessageBoxButton.OK,
                 check.Good ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
-    }
-
-    /// <summary>
-    /// The images of one set, in order, or nothing when this is not a set.
-    /// </summary>
-    /// <remarks>
-    /// Taken from what was just built rather than from what is lying in the
-    /// folder, because a folder can hold the leftovers of three different
-    /// discs and only the build knows which belong together.
-    /// </remarks>
-    private IReadOnlyList<string> TheWholeSet()
-    {
-        if (_screen.Made is not { Discs.Count: > 1 } made)
-        {
-            return [];
-        }
-
-        return [.. made.Discs.OrderBy(disc => disc.Number).Select(TheImageOf.That)];
     }
 
     /// <summary>
