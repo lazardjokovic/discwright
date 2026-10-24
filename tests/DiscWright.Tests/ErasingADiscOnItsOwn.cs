@@ -60,7 +60,11 @@ public class ErasingADiscOnItsOwn
             }
         };
 
-        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+        // Heard the way the window hears it: on one thread, in order. Posted
+        // to the pool, a late report from the drive could land on top of
+        // "D: is blank again" between its announcement and this listener
+        // reading it, which is what happened once in a full suite.
+        await OnTheWindowsThread.Run(() => window.EraseADisc(could => Task.FromResult<Recorder?>(could[0])));
 
         List<string> said;
 
@@ -110,7 +114,7 @@ public class ErasingADiscOnItsOwn
             }
         };
 
-        await window.EraseADisc(could => Task.FromResult<Recorder?>(could[0]));
+        await OnTheWindowsThread.Run(() => window.EraseADisc(could => Task.FromResult<Recorder?>(could[0])));
 
         List<double> far;
 
@@ -358,13 +362,9 @@ public class ErasingADiscOnItsOwn
 
             if (untilHeard is not null)
             {
-                for (DateTime until = DateTime.UtcNow.AddSeconds(10);
-                     !untilHeard() && DateTime.UtcNow < until;)
-                {
-                    Thread.Sleep(1);
-                }
-
-                Assert.True(untilHeard(), "the erase reported and nothing heard it");
+                // Delivering while it waits when it is on the thread that
+                // delivers, which under OnTheWindowsThread it is.
+                Assert.True(OnTheWindowsThread.WaitUntil(untilHeard), "the erase reported and nothing heard it");
             }
 
             andSoTheDiscIsBlank?.Invoke();

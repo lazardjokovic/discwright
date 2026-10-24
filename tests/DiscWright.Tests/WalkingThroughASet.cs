@@ -627,8 +627,9 @@ public class WalkingThroughASet
             }
         };
 
-        await window.BurnTheSet(
-            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+        // Heard on one thread, in order, the way the window hears it.
+        await OnTheWindowsThread.Run(() => window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn));
 
         lock (said)
         {
@@ -737,22 +738,15 @@ public class WalkingThroughASet
 
             progress.Report(step);
 
-            DateTime until = DateTime.UtcNow.AddSeconds(10);
-
-            while (DateTime.UtcNow < until)
+            bool heard = OnTheWindowsThread.WaitUntil(() =>
             {
-                lock (said)
-                {
-                    if (said.Count > before)
-                    {
-                        return;
-                    }
-                }
+                lock (said) { return said.Count > before; }
+            });
 
-                Thread.Sleep(1);
+            if (!heard)
+            {
+                throw new InvalidOperationException($"The burn said \"{step.Doing}\" and nothing heard it.");
             }
-
-            throw new InvalidOperationException($"The burn said \"{step.Doing}\" and nothing heard it.");
         }
     }
 

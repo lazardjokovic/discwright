@@ -3327,7 +3327,8 @@ public class TheMainWindowWithoutAWindow
         window.Add(AGame("A Game", 1000));
         window.OutputFolder = @"C:\out";
 
-        await window.MakeIt();
+        // Heard on one thread, in order, the way the window hears it.
+        await OnTheWindowsThread.Run(() => window.MakeIt());
 
         // It says so before the first step reports anything, because a
         // builder takes a moment to get going and a window saying nothing is
@@ -3448,13 +3449,9 @@ public class TheMainWindowWithoutAWindow
         {
             progress?.Report(new BuildProgress(1, 2, "copying the files"));
 
-            for (DateTime until = DateTime.UtcNow.AddSeconds(10);
-                 !heardTheHalfWay() && DateTime.UtcNow < until;)
-            {
-                Thread.Sleep(1);
-            }
-
-            Assert.True(heardTheHalfWay(), "the build reported and nothing heard it");
+            // Delivering while it waits when it is on the thread that delivers,
+            // which under OnTheWindowsThread it is.
+            Assert.True(OnTheWindowsThread.WaitUntil(heardTheHalfWay), "the build reported and nothing heard it");
 
             progress?.Report(new BuildProgress(2, 2, "writing the menu"));
 
