@@ -12,10 +12,18 @@ Every step says what to expect, so nothing is left to judgement.
 | | |
 |---|---|
 | **D:** ASUS DRW-24D5MT | shuts its own tray. The ordinary case. |
-| **E:** HL-DT-ST BD-RE BU40N | **never** shuts its own tray, so it is the only way to reach the code that waits for a hand. |
+| **E:** HL-DT-ST BD-RE BU40N | **never** shuts its own tray, so it is the only way to reach the code that waits for a hand. It lives on a USB cable. |
 
 That difference is the whole reason E: is in these cases. It is not a fault, it
 is the rig.
+
+**Give E: a minute after plugging it in.** Asked straight away it answers
+nonsense and then worse nonsense: on 2026-10-24 it reported a blank CD-RW as
+"not blank, erasing would help", then "this drive cannot write data discs" with
+nothing readable, and only after the app let go of it and it had settled did it
+report what was actually in it, which was a blank CD-RW all along. The program
+is right to refuse a drive that says it cannot write, so twenty minutes went
+into a drive that was still waking up. Ask it twice before believing it.
 
 ## What to have ready
 
@@ -82,8 +90,13 @@ and **never** "Nothing was written" about a blank that is spent.
 ## 3. Erasing a real rewritable
 
 1. Put a **used CD-RW in D:** (one of the discs from case 1 will do).
-2. **Expect:** *Erase a disc* lights up on its own, and the line under
-   WHAT SIZE OF DISC says what is in the drive.
+2. **Expect:** *Erase a disc* lights up on its own.
+
+   > The line under WHAT SIZE OF DISC says nothing here, and that is right.
+   > It only ever speaks when the disc and the chosen size **disagree**, and
+   > putting a CD-RW in moves the size to CD-R 700 MB by itself, so they
+   > agree. This step used to expect that line and it was the document that
+   > was wrong, not the program.
 3. Press it.
 
 **Expect:** it names the disc and the drive and asks before doing anything. Say
@@ -181,6 +194,30 @@ proves the game starts.
 folder. **Expect on the disc:** exactly that, and no attempt to run anything.
 
 ---
+
+## What the last pass found, and when
+
+**2026-10-24, on this machine**, with two CD-RWs. Cases 1, 2 and 3 were judged
+and all three pass. The rest still want a second machine, or the menu, which no
+amount of driving the window will cover.
+
+| | |
+|---|---|
+| **1** a disc really reads back | **pass.** D:, 1.8 MB written at 10x in 51 seconds, the drive reported ten times while it wrote, it shut its own tray, and all three files hashed back off the disc matching what was built. |
+| **2** a tray that will not shut | **pass.** Built "a set of 2 discs" from the 1.2 GB fixture with splitting on, asked which drive because both held blanks, wrote disc 1 to E: in eight minutes and read it back, then said *"Disc 1 is done. Put a blank in for disc 2 of 2."* with *"waiting for a blank disc for disc 2 of 2"* on the bar, and touched nothing until the blank was in. It picked up the moment it was told, wrote disc 2, and finished with *"All 2 discs are written and every file checked."* The note beside the discs says **done** against both. |
+| **3** erasing a real rewritable | **pass.** *Erase a disc* lit on its own, the question named both discs by letter and by drive model, Cancel left both alone, and after saying yes the disc came back blank and the button went grey. |
+| **D12** *Use that one* with nothing picked | **confirmed**, and already known: it closes as if you had cancelled. |
+
+Two things worth knowing for the next pass, both about how to watch rather than
+what to watch:
+
+- **The sentence about the whole set arrives in a `MessageBox`**, which is a
+  separate top-level window. Anything reading "the window" through UI
+  Automation is blind to it, and it waits for OK, so a watcher that only polls
+  the main window sees the run stop dead and nothing more.
+- **The question between discs and the question about the tray are different
+  questions.** Watching for the words "blank" or "next" catches the first and
+  misses the second.
 
 ## When something here fails
 
