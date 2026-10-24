@@ -527,6 +527,39 @@ public sealed class TheMenuScript : IDisposable
             Ask(@"whereToCopyTo('C:\\Users\\somebody', '" + name + "')"));
     }
 
+    [Theory]
+    [InlineData("Command & Conquer: Red Alert", "Command & Conquer  Red Alert")]
+    [InlineData("What/Who?", "What Who")]
+    [InlineData("", "Game")]
+    public void Names_the_folder_the_same_way_wherever_the_game_is_put(string name, string expected)
+    {
+        // The suggestion tidied the name and the folder made from the one
+        // somebody picked did not, so a game with a colon in its name, which
+        // is most of the ones with a subtitle, could not be copied at all.
+        // One function, so the two cannot disagree again.
+        Assert.Equal(expected, Ask($"folderNameFor('{name}')"));
+    }
+
+    // ---------------------------------------------------- the window's size
+
+    [Fact]
+    public void Asks_for_a_window_big_enough_to_show_the_whole_stage()
+    {
+        // resizeTo sets the outer size, so a 480 tall window has a client area
+        // 480 less the title bar, and the bottom of the stage was under the
+        // frame by about 38 pixels on a real disc.
+        Assert.Equal("518", Ask("sizeToShowAllOf(760, 480, 760, 442).height"));
+        Assert.Equal("776", Ask("sizeToShowAllOf(760, 480, 744, 442).width"));
+    }
+
+    [Fact]
+    public void Never_asks_for_a_window_smaller_than_the_stage()
+    {
+        // A client area already bigger than the stage is nothing to shrink.
+        Assert.Equal("760", Ask("sizeToShowAllOf(760, 480, 770, 490).width"));
+        Assert.Equal("480", Ask("sizeToShowAllOf(760, 480, 770, 490).height"));
+    }
+
     [Fact]
     public void Runs_what_the_disc_named_once_the_copy_has_landed()
     {

@@ -148,10 +148,10 @@ Put it in a machine and check, in this order:
 - [ ] **Manual** and **Extras** are there and open the right things
 - [ ] **Exit** closes it and the music stops with it
 
-> Known and not worth reporting: the backdrop is cropped by about 38 pixels at
-> the bottom, because the stage and the window are both 480 tall and the window
-> has a title bar. Anything at the bottom of the panel is invisible, which is
-> why the music control is at the top.
+- [ ] **the whole backdrop shows**, down to its bottom edge. It used to be
+      cropped by about 38 pixels, the height of the title bar, because the
+      window was asked to be 480 tall outside and the stage is 480 tall inside.
+      The menu measures itself now and asks for the difference.
 
 ---
 

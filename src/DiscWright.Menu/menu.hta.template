@@ -86,6 +86,33 @@ window.moveTo(
 // letter it will be given, so the attribute alone leaves this window wearing
 // Windows' default. The absolute path comes from the page's own address, the
 // same way the launcher at the top of the disc finds the menu.
+// The window sized again, now that there is a body to measure.
+//
+// The head above asks for 760 by 480 so that mshta does not show its own
+// default window first, and that is the outer size: the title bar comes out
+// of it, and the bottom of the stage was under the frame by about 38 pixels
+// on a real disc. The arithmetic is in menu.js, where cscript can check it.
+function fitTheWindow() {
+    try {
+        // The document's client size, not the body's. Everything on this page
+        // is positioned absolutely, so the body has no height of its own in
+        // standards mode and answered 0: measured, that asked for a window
+        // 960 tall, twice the stage.
+        var viewport = document.documentElement && document.documentElement.clientHeight
+            ? document.documentElement
+            : document.body;
+        var fit = sizeToShowAllOf(760, 480, viewport.clientWidth, viewport.clientHeight);
+
+        window.resizeTo(fit.width, fit.height);
+        window.moveTo(
+            Math.max(0, Math.floor((screen.availWidth - fit.width) / 2)),
+            Math.max(0, Math.floor((screen.availHeight - fit.height) / 2)));
+    } catch (cannotSize) {
+        // Nothing turns on it. A window with its bottom under the frame still
+        // works, which is how every disc before this one worked.
+    }
+}
+
 function wearTheRightIcon() {
     try {
         discwright.icon = onTheDisc(theDisc(), DISC.icon);
@@ -101,6 +128,7 @@ function start() {
         thisIsAPreview();
     }
 
+    fitTheWindow();
     wearTheRightIcon();
     startTheMusic();
 
@@ -271,7 +299,7 @@ function copyItAndPlayIt(game, fromFolder) {
             makeTheWholePath(files, destination);
         }
     } catch (cannotMake) {
-        alert("That folder could not be made:" + destination);
+        alert("That folder could not be made: " + destination);
         return;
     }
 
@@ -311,7 +339,9 @@ function askWhereToPutIt(game) {
             return null;
         }
 
-        return onTheDisc(picked.Self.Path, game ? game.name : "Game");
+        // Tidied the way the suggestion is, or a game with a colon in its
+        // name, which is most of the ones with a subtitle, cannot be copied.
+        return onTheDisc(picked.Self.Path, folderNameFor(game ? game.name : "Game"));
     } catch (noBrowser) {
         // No folder picker is not a reason to refuse. The suggestion is a
         // perfectly good answer and the person is told where it went.
@@ -566,11 +596,12 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 /* Top left, away from the panel, because it is about the window rather than
    about the game. Hidden until there is a tune to turn off.
 
-   TOP, NOT BOTTOM. The stage is 480 tall and so is the window, and the window
-   has a title bar, so the stage runs off the bottom of the client area by the
-   height of that bar. Anchored to the bottom this sat below the edge and was
-   invisible: the page reported it displayed and nothing was on screen, which
-   is how it passed a reading of the DOM and failed a photograph. */
+   TOP, NOT BOTTOM. Anchored to the bottom this sat under the window's frame
+   and was invisible: the page reported it displayed and nothing was on
+   screen, which is how it passed a reading of the DOM and failed a
+   photograph. fitTheWindow puts the whole stage on screen now, and this
+   stays at the top because the top is where a control about the window
+   belongs. */
 #mute { position: absolute; left: 16px; top: 16px; width: 28px; height: 28px;
         line-height: 28px; text-align: center; font-size: 15px; cursor: default;
         color: #CBD6DB; border: 1px solid #27353B;

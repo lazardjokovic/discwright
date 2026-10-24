@@ -623,7 +623,17 @@ function openTheFolder(where) {
 // from a folder it cannot write to cannot save, which is the whole reason it
 // is being copied off the disc in the first place.
 function whereToCopyTo(home, name) {
-    var tidy = String(name || "Game").replace(/[\\/:*?"<>|]/g, " ");
+    return onTheDisc(onTheDisc(String(home || ""), "Games"), folderNameFor(name));
+}
+
+// A game's name as a folder Windows will make.
+//
+// On its own because two places need it and only one of them had it: the
+// suggestion above tidied the name, and the folder actually made from the
+// one somebody picked did not, so a game with a colon in its name, which is
+// most of the ones with a subtitle, could not be copied off the disc at all.
+function folderNameFor(name) {
+    var tidy = String(name || "Game").replace(/[\/:*?"<>|]/g, " ");
 
     // Trailing dots and spaces are legal in a string and not in a folder name.
     while (tidy.length > 0 && (tidy.charAt(tidy.length - 1) === "." || tidy.charAt(tidy.length - 1) === " ")) {
@@ -634,7 +644,31 @@ function whereToCopyTo(home, name) {
         tidy = "Game";
     }
 
-    return onTheDisc(onTheDisc(String(home || ""), "Games"), tidy);
+    return tidy;
+}
+
+// How big to make the window so that all of the stage shows.
+//
+// resizeTo sets the OUTER size, frame and title bar included, so a window
+// asked to be 480 tall has a client area 480 less the title bar, and the
+// bottom of a 480 tall stage is under the frame. Measured on a real disc at
+// about 38 pixels, which was enough to hide anything at the bottom of the
+// panel. Handed what the page is and what it wants, this says what to ask
+// for: the difference added on, and never less than was asked for, because
+// a client area already bigger than the stage is nothing to shrink.
+function sizeToShowAllOf(wantedWidth, wantedHeight, clientWidth, clientHeight) {
+    var dw = wantedWidth - clientWidth;
+    var dh = wantedHeight - clientHeight;
+
+    if (dw < 0) {
+        dw = 0;
+    }
+
+    if (dh < 0) {
+        dh = 0;
+    }
+
+    return { width: wantedWidth + dw, height: wantedHeight + dh };
 }
 
 // What to run once a game has been copied, or nothing.

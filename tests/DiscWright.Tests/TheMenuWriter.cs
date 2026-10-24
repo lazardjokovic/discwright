@@ -72,6 +72,39 @@ public class TheMenuWriter
     }
 
     [Fact]
+    public void Sizes_the_window_again_once_there_is_a_body_to_measure()
+    {
+        string page = MenuWriter.MenuPage(Facts());
+
+        // The head's size is the outer size, title bar included, so the
+        // bottom of the stage was under the frame. Once the body exists the
+        // page measures what it got and asks for the difference, with the
+        // arithmetic in menu.js where cscript checks it.
+        int body = page.IndexOf("<body", StringComparison.Ordinal);
+        int start = page.IndexOf("function start()", StringComparison.Ordinal);
+
+        Assert.True(start > 0 && start < body);
+        Assert.Contains("fitTheWindow();", page[start..body], StringComparison.Ordinal);
+        Assert.Contains("sizeToShowAllOf(760, 480, viewport.clientWidth, viewport.clientHeight)", page, StringComparison.Ordinal);
+
+        // The document's size and not the body's. Everything on the page is
+        // positioned absolutely, so the body has no height in standards mode
+        // and answered 0, which asked for a window twice the stage.
+        Assert.Contains("document.documentElement.clientHeight", page[..body], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Makes_the_folder_a_game_is_copied_into_from_a_tidied_name()
+    {
+        string page = MenuWriter.MenuPage(Facts());
+
+        // The suggested folder tidied the name and the one actually made did
+        // not, so a game with a colon in its name could not be copied at all.
+        Assert.Contains("folderNameFor(game ? game.name : \"Game\")", page, StringComparison.Ordinal);
+        Assert.Contains("could not be made: \"", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Keeps_one_disc_menu_at_a_time_and_lets_previews_pile_up()
     {
         Assert.Contains("singleinstance=\"yes\"", MenuWriter.MenuPage(Facts(onlyOne: true)), StringComparison.Ordinal);
