@@ -555,6 +555,19 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         SayWhatIsInTheDrives(drives);
 
+        // Remembered BEFORE the list is replaced, because replacing the list
+        // is what loses it. The picker is bound two ways to the drive and to
+        // the list, and a fresh look hands it a list of fresh records: a
+        // record is a photograph of a drive at a moment, so none of them is
+        // equal to the one that was picked, the picker finds its selection
+        // gone and writes null straight back into TheDrive. All of that
+        // happens inside the announcement below, before anything after it
+        // runs, which is how a drive chosen before a burn was forgotten the
+        // moment a blank went in. Measured with a window bound exactly this
+        // way: the setter was called with null during Tell(Drives) every
+        // time the list changed.
+        Recorder? chosen = _theDrive;
+
         Drives = drives;
         Tell(nameof(Drives));
 
@@ -564,22 +577,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(CanErase));
         Tell(nameof(WhatTheDrivesAreDoing));
 
-        if (_theDrive is not null)
+        if (chosen is not null)
         {
-            // Through the setter when it has gone, because losing the drive
-            // changes the tray warning and the line about the disc in it, and
-            // the setter is what says all of that. Kept as a field when it is
-            // still there, because the record is only a fresher photograph of
-            // the same drive.
-            if (WhatTheDrivesMean.TheSameDriveAgain(_theDrive, drives) is Recorder again)
-            {
-                _theDrive = again;
-                Tell(nameof(TheDrive));
-            }
-            else
-            {
-                TheDrive = null;
-            }
+            // Through the setter, after the list, so that the choice is put
+            // back over whatever the picker did to it. The same drive again
+            // when it is still there, which is a fresher photograph of the
+            // drive somebody picked, and nothing when it has gone, because
+            // losing the drive changes the tray warning and the line about
+            // the disc in it, and the setter is what says all of that.
+            TheDrive = WhatTheDrivesMean.TheSameDriveAgain(chosen, drives);
         }
 
         _traysThatShut = shut;

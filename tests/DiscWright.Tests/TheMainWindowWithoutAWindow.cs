@@ -1408,6 +1408,33 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task Keeps_the_chosen_drive_when_the_window_drops_it_as_the_list_is_replaced()
+    {
+        MakeADisc window = New(drives: new TwoDrives());
+        await window.LookAtTheDrives();
+        window.TheDrive = window.Drives.First(each => each.Drive == "E:");
+
+        // What the real picker does. It is bound two ways to the drive and
+        // to the list, and a fresh look hands it fresh records, none equal to
+        // the one picked, so inside the announcement of the list it finds its
+        // selection gone and writes null straight back. Measured with a
+        // window bound exactly the way the main window is, and this is why
+        // a drive chosen before a burn was forgotten the moment a blank went
+        // in.
+        window.PropertyChanged += (_, what) =>
+        {
+            if (what.PropertyName == nameof(MakeADisc.Drives))
+            {
+                window.TheDrive = null;
+            }
+        };
+
+        await window.LookAtTheDrives();
+
+        Assert.Equal("E:", window.TheDrive?.Drive);
+    }
+
+    [Fact]
     public async Task Forgets_a_drive_that_has_been_unplugged()
     {
         ADriveHolding one = new(3, true, 359_847);
