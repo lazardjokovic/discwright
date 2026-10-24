@@ -999,6 +999,40 @@ function setScan(rows, joins, discIn, sizeOf) {
     return scan;
 }
 
+// The rows that are the game, with the disc's own files taken out.
+//
+// The set file lists every file on every disc, the menu and the autorun
+// included, because that is what it is for: any one disc can say what the
+// whole set should be. None of that belongs in the folder the game is put
+// back into. Found on the first real set: AUTORUN, Start Here.hta and
+// autorun.inf would have been copied in beside the installer, and the
+// installer has to run in a folder holding nothing but the game.
+//
+// ours is the list the disc carries of its own names, the same one that
+// keeps them out of a copy of a game that stands alone.
+function theGamesPartOf(rows, ours) {
+    var kept = [];
+    var i, k, top, mine;
+
+    for (i = 0; i < rows.length; i++) {
+        top = String(rows[i].path).split("/")[0].toLowerCase();
+        mine = false;
+
+        for (k = 0; k < (ours || []).length; k++) {
+            if (String(ours[k]).toLowerCase() === top) {
+                mine = true;
+                break;
+            }
+        }
+
+        if (!mine) {
+            kept.push(rows[i]);
+        }
+    }
+
+    return kept;
+}
+
 // The rows that belong to one disc.
 function setRowsOf(rows, disc) {
     var mine = [];

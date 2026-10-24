@@ -65,12 +65,27 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         File.WriteAllText(Path.Combine(disc2, "setup_big.exe.dwpart02"), "DEFG");
         File.WriteAllText(Path.Combine(disc2, "data", "more file.dat"), "12");
 
+        // And the disc's own files, which the set file lists like everything
+        // else and which must not come along.
+        foreach (string disc in new[] { disc1, disc2 })
+        {
+            File.WriteAllText(Path.Combine(disc, "autorun.inf"), "[autorun]");
+            File.WriteAllText(Path.Combine(disc, "Start Here.hta"), "<hta/>");
+            File.WriteAllText(Path.Combine(disc, "AUTORUN", "menu.hta"), "<hta/>");
+        }
+
         SetEntry[] entries =
         [
             new(1, "setup_big.exe.dwpart01", "a1", 3),
             new(1, "readme.txt", "b2", 5),
+            new(1, "autorun.inf", "f6", 9),
+            new(1, "Start Here.hta", "g7", 6),
+            new(1, "AUTORUN/menu.hta", "h8", 6),
             new(2, "setup_big.exe.dwpart02", "c3", 4),
-            new(2, "data/more file.dat", "d4", 2)
+            new(2, "data/more file.dat", "d4", 2),
+            new(2, "autorun.inf", "f6", 9),
+            new(2, "Start Here.hta", "g7", 6),
+            new(2, "AUTORUN/menu.hta", "h8", 6)
         ];
         SetJoin[] joins = [new("setup_big.exe", "e5", 7, ["setup_big.exe.dwpart01", "setup_big.exe.dwpart02"])];
 
@@ -134,8 +149,11 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.False(File.Exists(Path.Combine(dest, "setup_big.exe.dwpart01")), "the pieces go once the file is whole");
         Assert.False(File.Exists(Path.Combine(dest, "setup_big.exe.dwpart02")));
 
-        // And nothing of the disc's own came along with the game.
+        // And nothing of the disc's own came along with the game, although
+        // the set file listed every one of them.
         Assert.False(File.Exists(Path.Combine(dest, SetManifest.FileName)));
+        Assert.False(File.Exists(Path.Combine(dest, "autorun.inf")));
+        Assert.False(File.Exists(Path.Combine(dest, "Start Here.hta")));
         Assert.False(Directory.Exists(Path.Combine(dest, "AUTORUN")));
     }
 

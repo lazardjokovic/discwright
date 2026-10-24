@@ -776,6 +776,29 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Leaves_the_disc_s_own_files_out_of_the_game()
+    {
+        // The set file lists the menu and the autorun too, because any one
+        // disc has to be able to say what the whole set is. None of that
+        // goes into the folder the game is put back into. Found on the first
+        // real set, where AUTORUN and Start Here.hta would have landed beside
+        // the installer.
+        const string rows = "[{disc: 1, path: 'setup.exe'}, {disc: 1, path: 'AUTORUN/menu.hta'}, {disc: 1, path: 'autorun.inf'},"
+            + " {disc: 1, path: 'Start Here.hta'}, {disc: 2, path: 'data/more file.dat'}, {disc: 2, path: 'Disc set.txt'}]";
+        const string ours = "['autorun.inf', 'checksums.sha256', 'Start Here.hta', 'Disc set.txt', 'AUTORUN']";
+
+        Assert.Equal(
+            "setup.exe,data/more file.dat",
+            Ask("(function () { var kept = theGamesPartOf(" + rows + ", " + ours + "); var names = [];"
+                + " for (var i = 0; i < kept.length; i++) { names.push(kept[i].path); } return names.join(','); })()"));
+
+        // A game's own folder called AUTORUN, deeper in, is the game's.
+        Assert.Equal(
+            "1",
+            Ask("theGamesPartOf([{disc: 1, path: 'game/AUTORUN/theirs.dat'}], ['AUTORUN']).length"));
+    }
+
+    [Fact]
     public void Reads_the_cut_files_and_their_pieces_in_order()
     {
         Assert.Equal("1", Ask("setJoinsFrom('" + ASetFile + "').length"));

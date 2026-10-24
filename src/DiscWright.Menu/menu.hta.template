@@ -531,7 +531,7 @@ function loadTheSet() {
     var text = readTheSetFile();
 
     return {
-        rows: setRowsFrom(text),
+        rows: theGamesPartOf(setRowsFrom(text), DISC.oursNotTheGame),
         joins: setJoinsFrom(text),
         discIn: whichDiscTheSetFileSays(text) || DISC.discNumber,
         of: DISC.discsInSet,
