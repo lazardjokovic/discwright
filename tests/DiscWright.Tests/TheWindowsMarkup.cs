@@ -672,6 +672,27 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void What_the_image_and_the_drive_had_to_say_is_on_the_window()
+    {
+        // The screen worked both of these out from the first day, the older
+        // file systems left off because one file is too big for them and how
+        // many times the drive reported while it wrote, and the tests heard
+        // both announced. Nothing on the window showed either, so the one
+        // warning that a disc asked to be readable on an old machine is not
+        // reached nobody.
+        XElement said = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "AboutTheImage");
+
+        Assert.Equal("{Binding AboutTheImage}", (string?)said.Attribute("Text"));
+        Assert.Equal("{StaticResource Aside}", (string?)said.Attribute("Style"));
+
+        Assert.Equal(
+            "{Binding AboutTheImage, Converter={StaticResource WhenAnything}}",
+            (string?)said.Attribute("Visibility"));
+    }
+
+    [Fact]
     public void The_header_row_carries_a_rule_under_it()
     {
         // Whatever is in it, the header is a band the full width of the

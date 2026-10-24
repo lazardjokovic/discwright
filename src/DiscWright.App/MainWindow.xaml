@@ -723,6 +723,21 @@
                                Visibility="{Binding IsWorking, Converter={StaticResource WhenNot}}"
                                AutomationProperties.AutomationId="WhatTheButtonsMean" />
 
+                    <!-- What the image or the drive had to say that stopped
+                         nothing: the older file systems left off because one
+                         file is too big for them, and how many times the
+                         drive reported while it wrote. The screen worked both
+                         out from the first day, the tests heard both
+                         announced, and nothing on the window ever showed
+                         them, so the one warning that a disc asked to be
+                         readable on an old machine is not reached nobody. -->
+                    <TextBlock Style="{StaticResource Aside}"
+                               Margin="0,6,0,0"
+                               TextWrapping="Wrap"
+                               Text="{Binding AboutTheImage}"
+                               Visibility="{Binding AboutTheImage, Converter={StaticResource WhenAnything}}"
+                               AutomationProperties.AutomationId="AboutTheImage" />
+
                     <!-- Collapsed when there is nothing to say. An empty line
                          still takes the height of a line, and two of them were
                          most of the gap at the bottom of this window. -->

@@ -879,6 +879,37 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task Counts_the_size_an_opened_project_names_as_chosen()
+    {
+        // A blank CD in the drive, which would move the size on its own.
+        MakeADisc window = New(drives: new ADriveHolding(2, true, 359_847));
+
+        window.OpenThis(AReopenedDisc());
+        Assert.Equal(Media.Dvd9, window.Medium);
+
+        await window.LookAtTheDrives();
+
+        // The size it was saved with was somebody's answer once, so the
+        // drives only comment on it. Without this the next disc to go in or
+        // come out moved the size the file had just chosen.
+        Assert.Equal(Media.Dvd9, window.Medium);
+    }
+
+    [Fact]
+    public async Task Lets_the_drives_choose_when_an_opened_project_was_saved_on_automatic()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(2, true, 359_847));
+
+        window.OpenThis(AReopenedDisc() with { Medium = null });
+
+        await window.LookAtTheDrives();
+
+        // A project saved on automatic chose nothing, so a disc in the drive
+        // is still the best answer.
+        Assert.Equal(Media.Cd, window.Medium);
+    }
+
+    [Fact]
     public void Leaves_the_disc_size_alone_when_the_file_was_saved_on_automatic()
     {
         MakeADisc window = New();

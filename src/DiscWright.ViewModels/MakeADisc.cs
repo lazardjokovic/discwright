@@ -2431,6 +2431,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
         if (back.Medium is Medium chosen)
         {
             _medium = chosen;
+
+            // And it counts as somebody choosing, which the setter would have
+            // said and this bypass of it did not. The size a project was
+            // saved with was somebody's answer once, so the drives only
+            // comment on it from here. Without this line the next disc to
+            // go in or come out moved the size the file had just chosen.
+            _theSizeWasChosen = true;
         }
 
         Tell(nameof(Label));
