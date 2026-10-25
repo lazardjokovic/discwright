@@ -130,6 +130,9 @@ public class BurningOneDiscAndWatchingIt
             "it did not say both that it had started and that it had stopped");
 
         Assert.Contains(nameof(MakeADisc.HowTheDiscCameOut), watched.WhatWasAnnounced());
+
+        // And the line the window keeps, which follows it.
+        Assert.Contains(nameof(MakeADisc.HowTheBurnWent), watched.WhatWasAnnounced());
     }
 
     [Fact]

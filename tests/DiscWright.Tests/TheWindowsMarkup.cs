@@ -693,6 +693,34 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void How_the_last_burn_came_out_stays_on_the_window()
+    {
+        // It arrived in a message box and was gone at OK, and it is the one
+        // sentence somebody holding the disc wants to look at twice. A line
+        // under the buttons, in the aside style, in worry ink when the disc
+        // or the set is not right.
+        XElement said = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "HowTheBurnWent");
+
+        Assert.Equal("{Binding HowTheBurnWent}", (string?)said.Attribute("Text"));
+        Assert.Equal(
+            "{Binding HowTheBurnWent, Converter={StaticResource WhenAnything}}",
+            (string?)said.Attribute("Visibility"));
+
+        XElement style = said.Descendants(Xaml + "Style").Single();
+        Assert.Equal("{StaticResource Aside}", (string?)style.Attribute("BasedOn"));
+
+        XElement worry = style.Descendants(Xaml + "DataTrigger").Single();
+        Assert.Equal("{Binding TheBurnWentBadly}", (string?)worry.Attribute("Binding"));
+        Assert.Equal("True", (string?)worry.Attribute("Value"));
+
+        XElement ink = worry.Elements(Xaml + "Setter").Single();
+        Assert.Equal("Foreground", (string?)ink.Attribute("Property"));
+        Assert.Equal("{StaticResource WorryInk}", (string?)ink.Attribute("Value"));
+    }
+
+    [Fact]
     public void A_game_opens_and_the_folders_inside_it_stay_shut()
     {
         // Every row used to open, and a folder of game files is three

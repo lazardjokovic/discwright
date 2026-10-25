@@ -1064,6 +1064,84 @@ public class TheMainWindowWithoutAWindow
         Assert.True(window.HowTheDiscCameOut.Good);
     }
 
+    // ------------------------------------- the line about the last burn
+
+    [Fact]
+    public async Task Leaves_how_the_disc_came_out_on_the_window()
+    {
+        MakeADisc window = await Built(drives: new TheseDrives(ABlankIn("E:")));
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        // The one sentence somebody holding the disc wants to look at twice,
+        // so it is a line that stays rather than a box that is gone at OK.
+        Assert.Equal(window.HowTheDiscCameOut?.InWords, window.HowTheBurnWent);
+        Assert.StartsWith("All ", window.HowTheBurnWent, StringComparison.Ordinal);
+        Assert.False(window.TheBurnWentBadly);
+    }
+
+    [Fact]
+    public async Task Says_nothing_about_a_burn_before_there_has_been_one()
+    {
+        MakeADisc window = await Built(drives: new TheseDrives(ABlankIn("E:")));
+
+        Assert.Equal(string.Empty, window.HowTheBurnWent);
+        Assert.False(window.TheBurnWentBadly);
+    }
+
+    [Fact]
+    public async Task Starting_a_new_disc_takes_the_line_about_the_last_burn_with_it()
+    {
+        MakeADisc window = await Built(drives: new TheseDrives(ABlankIn("E:")));
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        List<string> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        window.StartAgain();
+
+        Assert.Equal(string.Empty, window.HowTheBurnWent);
+        Assert.Contains(nameof(MakeADisc.HowTheBurnWent), told);
+    }
+
+    [Fact]
+    public async Task Building_again_takes_the_line_about_the_last_burn_with_it()
+    {
+        MakeADisc window = await Built(drives: new TheseDrives(ABlankIn("E:")));
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        List<string> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        // The discs this line was about are about to be built again, so it
+        // goes the way the drive's note goes, and says so.
+        await window.MakeIt();
+
+        Assert.Equal(string.Empty, window.HowTheBurnWent);
+        Assert.Null(window.HowTheDiscCameOut);
+        Assert.Contains(nameof(MakeADisc.HowTheBurnWent), told);
+        Assert.Contains(nameof(MakeADisc.HowTheDiscCameOut), told);
+    }
+
+    [Fact]
+    public void The_burn_button_leaves_its_verdict_on_the_window_rather_than_in_a_box()
+    {
+        // The screen says how the disc or the set came out and the window
+        // shows it as a line that stays. Nothing in this project can reference
+        // the code behind, so the handler is read off disk, like the markup
+        // guards, and must put up no box of its own about it.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        int from = code.IndexOf("async void BurnIt(", StringComparison.Ordinal);
+        Assert.True(from >= 0, "The window no longer has a Burn handler.");
+
+        string handler = code[from..];
+        handler = handler[..handler.IndexOf(Environment.NewLine + "    }", StringComparison.Ordinal)];
+
+        Assert.DoesNotContain("MessageBox", handler, StringComparison.Ordinal);
+        Assert.DoesNotContain("HowTheDiscCameOut", handler, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task Checks_the_disc_that_was_burned_not_whichever_was_built_first()
     {
@@ -1216,6 +1294,10 @@ public class TheMainWindowWithoutAWindow
         await window.BurnIt(@"C:\out\A GAME D2.iso", NeverAsked, NeverAskedAboutErasing, Closes);
 
         Assert.False(window.HowTheDiscCameOut?.Good);
+
+        // And the line that stays says so, in worry ink.
+        Assert.Contains("came back different", window.HowTheBurnWent, StringComparison.Ordinal);
+        Assert.True(window.TheBurnWentBadly);
 
         // The whole point of the note is that it is believed later. One
         // written for a disc that did not read back would send somebody away

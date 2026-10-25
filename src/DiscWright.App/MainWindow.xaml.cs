@@ -466,31 +466,13 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_screen.HowTheSetWent is TheSetSoFar went)
-        {
-            MessageBox.Show(
-                this,
-                went.InWords,
-                "DiscWright",
-                MessageBoxButton.OK,
-                went.Whole ? MessageBoxImage.Information : MessageBoxImage.Warning);
-
-            return;
-        }
-
-        if (_screen.ItWentWrong is Refusal refusal)
+        // How the disc or the set came out is HowTheBurnWent, a line under
+        // the buttons that stays, rather than a box that is gone at OK. A
+        // set's line already carries the reason it stopped, so a refusal is
+        // explained on its own only for a disc burned on its own.
+        if (_screen.HowTheSetWent is null && _screen.ItWentWrong is Refusal refusal)
         {
             Explain(refusal);
-        }
-
-        if (_screen.HowTheDiscCameOut is DiscCheck check)
-        {
-            MessageBox.Show(
-                this,
-                check.InWords,
-                "DiscWright",
-                MessageBoxButton.OK,
-                check.Good ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
     }
 

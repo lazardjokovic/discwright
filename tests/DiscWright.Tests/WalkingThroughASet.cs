@@ -32,6 +32,54 @@ public class WalkingThroughASet
     }
 
     [Fact]
+    public async Task The_sets_sentence_is_the_line_that_stays_on_the_window()
+    {
+        List<string> announced = [];
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers());
+        window.PropertyChanged += (sender, about) => announced.Add(about.PropertyName ?? string.Empty);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // Over the last disc's own result, because the set's is about all of
+        // them. It arrived in a message box and was gone at OK.
+        Assert.Equal(window.HowTheSetWent?.InWords, window.HowTheBurnWent);
+        Assert.StartsWith("All 3 discs", window.HowTheBurnWent, StringComparison.Ordinal);
+        Assert.False(window.TheBurnWentBadly);
+        Assert.Contains(nameof(MakeADisc.HowTheBurnWent), announced);
+        Assert.Contains(nameof(MakeADisc.TheBurnWentBadly), announced);
+    }
+
+    [Fact]
+    public async Task A_disc_burned_on_its_own_after_a_set_speaks_for_itself()
+    {
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers());
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+        await window.BurnIt(ThreeImages[1], OnlyOneDrive, NeverErases, Closes);
+
+        // The set's sentence would otherwise sit over a disc it says nothing
+        // about, because only walking a set ever cleared it.
+        Assert.Null(window.HowTheSetWent);
+        Assert.Equal(window.HowTheDiscCameOut?.InWords, window.HowTheBurnWent);
+        Assert.StartsWith("All ", window.HowTheBurnWent, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_set_that_stopped_is_bad_news_on_the_window()
+    {
+        MakeADisc window = await ASetOf(2, new ABurnerThatRemembers(), disk: new ADiskWithNothingLeftBesideIt());
+
+        await window.BurnTheSet(
+            [@"C:\out\A SET D1.iso", @"C:\out\A SET D2.iso"],
+            OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        Assert.Contains("stopped at disc 1 of 2", window.HowTheBurnWent, StringComparison.Ordinal);
+        Assert.True(window.TheBurnWentBadly);
+    }
+
+    [Fact]
     public async Task Asks_for_a_blank_between_discs_and_not_before_the_first()
     {
         List<int> askedFor = [];

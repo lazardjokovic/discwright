@@ -1282,6 +1282,8 @@ A wrong size is checked before hashing, because it is the same answer for none o
 
 **A disc that cannot be read back is not reported as a success.** The disc may well be perfect; what is missing is the proof, and saying "done" without it would be claiming something nobody checked.
 
+**The verdict stays on the window.** It arrived in a message box and was gone at OK, and it is the one sentence somebody holding the disc wants to look at twice. `HowTheBurnWent` is a line under the buttons: the set's sentence when a set was written, because it is about all of the discs and carries the one that stopped it, otherwise the disc's own, and while a set is still being written the last disc's result shows under the bar. `TheBurnWentBadly` puts it in worry ink. A burn or a build starting clears it, the way the drive's note is cleared, and the walk holds it to announcing every move. Refusals still arrive as boxes, because a refusal wants answering.
+
 ### Nine arguments became one machine
 
 `TheMachine` carries everything the screen needs from the machine it happens to be running on: the encoding, the builder, the image maker, the drives, the burner, the eraser, the disk and the hasher. They arrived one at a time as the program grew, and a constructor somebody has to count the commas in is a constructor nobody reads.

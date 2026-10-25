@@ -751,6 +751,29 @@
                                Visibility="{Binding AboutTheImage, Converter={StaticResource WhenAnything}}"
                                AutomationProperties.AutomationId="AboutTheImage" />
 
+                    <!-- How the last burn came out, left where it can be read
+                         again. It arrived in a message box and was gone at
+                         OK, and it is the one sentence somebody holding the
+                         disc wants to look at twice. Worry ink when the disc
+                         or the set is not right, the same ink as a disc of the
+                         wrong size, and the style sits here for the reason
+                         given beside that one. -->
+                    <TextBlock Margin="0,6,0,0"
+                               TextWrapping="Wrap"
+                               Text="{Binding HowTheBurnWent}"
+                               Visibility="{Binding HowTheBurnWent, Converter={StaticResource WhenAnything}}"
+                               AutomationProperties.AutomationId="HowTheBurnWent">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Aside}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding TheBurnWentBadly}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource WorryInk}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
                     <!-- Collapsed when there is nothing to say. An empty line
                          still takes the height of a line, and two of them were
                          most of the gap at the bottom of this window. -->

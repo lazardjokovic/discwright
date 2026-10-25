@@ -1255,6 +1255,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Made = null;
         ItWentWrong = null;
         AboutTheImage = null;
+
+        // The line about the last burn is about discs this build is about to
+        // replace, so it goes with the drive's note rather than staying under
+        // a bar that has started again.
+        HowTheDiscCameOut = null;
+        HowTheSetWent = null;
         HowFar = 0;
         Doing = "Starting";
         Started();
@@ -1402,6 +1408,35 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public DiscCheck? HowTheDiscCameOut { get; private set; }
 
     /// <summary>
+    /// How the last burn came out, in one line that stays on the window, or
+    /// nothing when no disc has been burned since the window last changed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It used to arrive in a message box and be gone at OK, and it is the
+    /// one sentence somebody holding the disc wants to look at twice.
+    /// Everything else the window has to say is a quiet line that stays, and
+    /// this is the line that most deserved to.
+    /// </para>
+    /// <para>
+    /// A set's sentence over a single disc's, because the set's is about all
+    /// of them and already carries the disc that stopped it. While a set is
+    /// still being written the last disc's own result shows, so the line
+    /// under the bar says how disc 1 came out while disc 2 writes.
+    /// </para>
+    /// </remarks>
+    public string HowTheBurnWent =>
+        HowTheSetWent?.InWords ?? HowTheDiscCameOut?.InWords ?? string.Empty;
+
+    /// <summary>
+    /// Whether that line is bad news, so the window can colour it the way it
+    /// colours a disc of the wrong size. A disc that could not be checked at
+    /// all is a refusal, not this.
+    /// </summary>
+    public bool TheBurnWentBadly =>
+        HowTheSetWent is TheSetSoFar set ? !set.Whole : HowTheDiscCameOut is { Good: false };
+
+    /// <summary>
     /// Writes an image to a disc, and reads the disc back afterwards.
     /// </summary>
     /// <param name="image">Which image, out of whatever is in the folder.</param>
@@ -1434,6 +1469,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         IsWorking = true;
         ItWentWrong = null;
         HowTheDiscCameOut = null;
+        HowTheSetWent = null;
         Doing = "looking at the drives";
         HowFar = 0;
         Started();
@@ -2018,7 +2054,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 HowFar = 0;
             }
 
-            Tell(nameof(HowTheSetWent));
+            TellHowTheBurnWent();
             Started();
         }
     }
@@ -2135,7 +2171,25 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 break;
         }
 
+        TellHowTheBurnWent();
+    }
+
+    /// <summary>
+    /// Says that how the last burn came out has changed, in all four of the
+    /// ways the window reads it: the two records, the line and its colour.
+    /// </summary>
+    /// <remarks>
+    /// One place, because the line follows two records and whichever of them
+    /// moves, the line has moved. Said from every start and every end through
+    /// <see cref="Started"/>, and from the middle of a set when a disc has
+    /// just been read back, which is the one change that happens between.
+    /// </remarks>
+    private void TellHowTheBurnWent()
+    {
         Tell(nameof(HowTheDiscCameOut));
+        Tell(nameof(HowTheSetWent));
+        Tell(nameof(HowTheBurnWent));
+        Tell(nameof(TheBurnWentBadly));
     }
 
     /// <summary>One line about what is happening, and how far through it is.</summary>
@@ -2865,6 +2919,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         //
         // Found by the walk, once it could press Make and Burn.
         Tell(nameof(AboutTheImage));
+
+        // And the line about the last burn, which every start clears and
+        // every end settles.
+        TellHowTheBurnWent();
     }
 
     private void Told()

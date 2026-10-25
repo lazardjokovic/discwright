@@ -261,10 +261,12 @@ amount of driving the window will cover.
 Two things worth knowing for the next pass, both about how to watch rather than
 what to watch:
 
-- **The sentence about the whole set arrives in a `MessageBox`**, which is a
+- **The sentence about the whole set arrived in a `MessageBox`**, which is a
   separate top-level window. Anything reading "the window" through UI
   Automation is blind to it, and it waits for OK, so a watcher that only polls
-  the main window sees the run stop dead and nothing more.
+  the main window sees the run stop dead and nothing more. Since #121 it is a
+  line on the window, `HowTheBurnWent`, and a watcher can read it there; the
+  refusals still arrive as boxes.
 - **The question between discs and the question about the tray are different
   questions.** Watching for the words "blank" or "next" catches the first and
   misses the second.
