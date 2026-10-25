@@ -71,7 +71,10 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
     /// <param name="WhatElseIsInThere">
     /// Given the game and what the folder held beyond it: the game as it
     /// should now be, and whatever is to be attached to it. Not asked when
-    /// the folder left nothing behind.
+    /// the folder left nothing behind. Nothing at all when the question was
+    /// closed rather than answered, and then the folder is left alone: the X
+    /// is not "none of them", because leaving files off is a decision and
+    /// only the button that says so can make it.
     /// </param>
     /// <param name="WhicheverStartsIt">
     /// Given a folder of files with more than one plausible launcher: the game
@@ -82,7 +85,7 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
     public sealed record TheQuestions(
         Func<string, IReadOnlyList<string>, int, bool> AddingThemSeparately,
         Func<GameFolder, bool> LeavingItForItsGame,
-        Func<GameFolder, IReadOnlyList<LeftBehind>, (GameFolder Game, IReadOnlyList<LeftBehind> AddOns)> WhatElseIsInThere,
+        Func<GameFolder, IReadOnlyList<LeftBehind>, (GameFolder Game, IReadOnlyList<LeftBehind> AddOns)?> WhatElseIsInThere,
         Func<GameFolder, GameFolder> WhicheverStartsIt)
     {
         /// <summary>
@@ -182,15 +185,26 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
                     // that appears to say there is nothing to tell you is
                     // worse than silence. The dialog guards this too; the
                     // decision belongs here, where it can be tested.
-                    (GameFolder with, IReadOnlyList<LeftBehind> asAddOns) =
+                    (GameFolder Game, IReadOnlyList<LeftBehind> AddOns)? answer =
                         left.Count > 0 ? asking.WhatElseIsInThere(game, left) : (game, []);
+
+                    // Closed rather than answered. The folder is left alone,
+                    // the whole of it: the game does not go on without the
+                    // files beside it, because that is what "none of them"
+                    // means and nobody pressed it. Nothing is lost, because
+                    // nothing happened, and the folder can be pointed at
+                    // again.
+                    if (answer is not (GameFolder taken, IReadOnlyList<LeftBehind> asAddOns))
+                    {
+                        break;
+                    }
 
                     // Asked only with something to choose between. With one
                     // plausible launcher the menu runs it, with none it copies
                     // the folder and opens it, and a dialog offering a choice
                     // of one is a dialog nobody should see.
                     yield return new WhatToDo.PutItOn(
-                        with.LauncherCandidates.Count >= 2 ? asking.WhicheverStartsIt(with) : with,
+                        taken.LauncherCandidates.Count >= 2 ? asking.WhicheverStartsIt(taken) : taken,
                         asAddOns);
                     break;
 

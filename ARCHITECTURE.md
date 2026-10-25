@@ -1077,6 +1077,8 @@ So when a folder holds more than the game, the window asks, listing everything w
 
 **Everything starts ticked**, because the surprise worth avoiding is losing a file rather than gaining one.
 
+**The X is not an answer.** Closing the question used to count as *None of them*, so somebody who wanted out of a dialog lost every file beside the game in silence, which is the one thing the dialog exists to prevent. *None of them* is a decision taken by somebody who read the list, and only that button makes it. Closed with the X, the question answers nothing and the folder is left alone, game and all: nothing is lost because nothing happened, and the folder can be pointed at again. The next folder in the same pick still goes on.
+
 **Nothing is asked when nothing was left behind**, which is every folder of game files and many downloads. A dialog that appears to say "there is nothing to tell you" is worse than silence.
 
 This is also the first way into the add-on work: until now nothing on the window could attach one.

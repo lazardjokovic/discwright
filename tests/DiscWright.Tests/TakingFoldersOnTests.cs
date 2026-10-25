@@ -69,6 +69,45 @@ public class TakingFoldersOnTests
             two => Assert.Equal("Celeste", Assert.IsType<Step.PutItOn>(two).Game.Name));
     }
 
+    [Fact]
+    public void A_question_closed_rather_than_answered_leaves_the_folder_alone()
+    {
+        ADisk disk = new();
+        disk.Holds(
+            @"C:\g\Hollow Knight",
+            ("setup_hollow_knight.exe", 900_000_000),
+            ("patch_hollow_knight_1.0_to_1.1.exe", 50_000));
+        disk.Holds(@"C:\g\Celeste", ("setup_celeste.exe", 1000));
+
+        WhatWasAsked asked = new() { AnswerAboutWhatElse = (game, left) => null };
+
+        List<Step> steps = [.. Taking(disk).From([@"C:\g\Hollow Knight", @"C:\g\Celeste"], asked.Questions)];
+
+        // The X is not "none of them". Leaving files off is a decision, and
+        // only the button that says so can make it; closing the question
+        // leaves the whole folder alone, game and all, so nothing is lost
+        // because nothing happened. The next folder still goes on.
+        Assert.Equal("Celeste", Assert.IsType<Step.PutItOn>(Assert.Single(steps)).Game.Name);
+        Assert.Equal(["what else: Hollow Knight, 1 left behind"], asked.InOrder);
+    }
+
+    [Fact]
+    public void The_dialog_tells_the_X_from_none_of_them()
+    {
+        // ShowDialog answers false for both, and nothing in this project can
+        // press either, so the code behind is read off disk: both buttons
+        // mark the question answered, and an unanswered question hands back
+        // nothing rather than an empty answer.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "WhatElseIsInThere.xaml.cs"));
+
+        Assert.Equal(2, code.Split("_answered = true;").Length - 1);
+        Assert.Contains("if (!asking._answered)", code, StringComparison.Ordinal);
+
+        string unanswered = code[code.IndexOf("if (!asking._answered)", StringComparison.Ordinal)..];
+        unanswered = unanswered[..unanswered.IndexOf('}')];
+        Assert.Contains("return null;", unanswered, StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------- the same folder again
 
     [Fact]
@@ -484,7 +523,7 @@ public class TakingFoldersOnTests
 
         public bool LeaveTheAddOn { get; init; }
 
-        public Func<GameFolder, IReadOnlyList<LeftBehind>, (GameFolder, IReadOnlyList<LeftBehind>)>?
+        public Func<GameFolder, IReadOnlyList<LeftBehind>, (GameFolder, IReadOnlyList<LeftBehind>)?>?
             AnswerAboutWhatElse { get; init; }
 
         public Func<GameFolder, GameFolder>? AnswerAboutTheLauncher { get; init; }

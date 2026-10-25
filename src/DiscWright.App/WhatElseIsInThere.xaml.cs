@@ -10,6 +10,19 @@ namespace DiscWright.App;
 /// </summary>
 public partial class WhatElseIsInThere : Window
 {
+    /// <summary>
+    /// Whether one of the two buttons was pressed, as against the window
+    /// being closed with the X.
+    /// </summary>
+    /// <remarks>
+    /// ShowDialog answers false for both, and they are not the same thing.
+    /// "None of them" is a decision to leave files off, taken by somebody who
+    /// read the list. The X is somebody wanting out of the question, and
+    /// treating it as the decision dropped every file in silence, which is
+    /// the one thing this dialog exists to prevent.
+    /// </remarks>
+    private bool _answered;
+
     private WhatElseIsInThere(IReadOnlyList<LeftBehind> left)
     {
         Files = [.. left.Select(each => new OneOfThem(each))];
@@ -30,14 +43,15 @@ public partial class WhatElseIsInThere : Window
 
     /// <summary>
     /// Asks about the files a folder held beyond the game, and answers with
-    /// the game as it should now be and whatever is to be attached to it.
+    /// the game as it should now be and whatever is to be attached to it, or
+    /// with nothing when the question was closed rather than answered.
     /// </summary>
     /// <remarks>
     /// Nothing is asked when nothing was left behind, which is every folder of
     /// game files and most downloads. A dialog that appears to say "there is
     /// nothing to tell you" is worse than silence.
     /// </remarks>
-    internal static (GameFolder Game, IReadOnlyList<LeftBehind> AddOns) Ask(
+    internal static (GameFolder Game, IReadOnlyList<LeftBehind> AddOns)? Ask(
         Window owner, GameFolder game, IReadOnlyList<LeftBehind> left)
     {
         if (left.Count == 0)
@@ -47,7 +61,16 @@ public partial class WhatElseIsInThere : Window
 
         WhatElseIsInThere asking = new(left) { Owner = owner };
 
-        if (asking.ShowDialog() != true)
+        bool? said = asking.ShowDialog();
+
+        // The X, which is neither answer. The folder is left alone and can be
+        // pointed at again.
+        if (!asking._answered)
+        {
+            return null;
+        }
+
+        if (said != true)
         {
             return (game, []);
         }
@@ -62,9 +85,17 @@ public partial class WhatElseIsInThere : Window
     private static int Treat(WhatElseIsInThere asking, LeftBehind one) =>
         asking.Files.First(each => each.What == one).Treatment;
 
-    private void TakeThem(object sender, RoutedEventArgs e) => DialogResult = true;
+    private void TakeThem(object sender, RoutedEventArgs e)
+    {
+        _answered = true;
+        DialogResult = true;
+    }
 
-    private void NoneOfThem(object sender, RoutedEventArgs e) => DialogResult = false;
+    private void NoneOfThem(object sender, RoutedEventArgs e)
+    {
+        _answered = true;
+        DialogResult = false;
+    }
 }
 
 /// <summary>One file in the list, and what is to become of it.</summary>
