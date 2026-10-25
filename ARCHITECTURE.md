@@ -108,6 +108,15 @@ public sealed record Remedy(string Label, RemedyKind Kind);  // "Use a double la
 // disc", "rename that folder" or "choose somewhere else", and it would have
 // grown a case per refusal for ever. Framed as capabilities it is closed,
 // because it is a list of what one window can be asked to do.
+//
+// A remedy carries no subject, so the screen supplies it where it can. For
+// ChangeMedium the screen plans the same disc on each size up and offers the
+// smallest that works, by name: "Use DVD5 4.7 GB instead". With no such size
+// nothing is offered, because a word that does nothing when pressed is worse
+// than the red line alone. PickFolder opens the chooser, FocusField puts the
+// cursor in the name with its text selected, and a worry's own FocusField is
+// a second quiet link under the worry. ChangeOption is still not offered: it
+// does not say which option.
 
 public abstract record Outcome<T>
 {

@@ -363,7 +363,7 @@ public class TheWindowChecksItself
 
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(36);
+        int which = dice.Next(37);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -471,6 +471,10 @@ public class TheWindowChecksItself
             // game, so what it changes has to be announced like everything
             // else.
             35 => new($"add the folder of game {row} again", desk => desk.AddTheSameFolderAgain(row)),
+
+            // The way out of a size refusal, which the screen carries out
+            // itself: aiming at the larger disc it named.
+            36 => new("use the larger disc the refusal names", desk => desk.Screen.UseTheLargerDisc()),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -793,6 +797,24 @@ public class TheWindowChecksItself
         if ((screen.TheWayOut is not null) != (screen.WhatTheWayOutIsCalled.Length > 0))
         {
             return "The way out and the words on it disagree about whether there is one.";
+        }
+
+        // A larger disc is offered only when there is one, and it is larger.
+        if (screen.TheWayOut is RemedyKind.ChangeMedium
+            && (screen.TheLargerDiscThatWouldDo is not Medium larger || larger.Capacity <= screen.Medium.Capacity))
+        {
+            return "The way out names a larger disc that is not there or not larger.";
+        }
+
+        if (screen.TheLargerDiscThatWouldDo is not null && screen.WhyNot is null)
+        {
+            return "There is a larger disc on offer with nothing refused.";
+        }
+
+        // A worry's way out belongs to a worry.
+        if ((screen.WhatTheWorrysWayOutIsCalled.Length > 0) != (screen.Worry?.Remedy is { Kind: RemedyKind.FocusField }))
+        {
+            return "The worry's way out and the worry disagree about whether there is one.";
         }
 
         // A preview is a menu for a set, so it needs a set.

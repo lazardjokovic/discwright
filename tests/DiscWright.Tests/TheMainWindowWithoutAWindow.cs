@@ -3082,20 +3082,124 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
-    public void Offers_no_way_out_it_cannot_actually_carry_out()
+    public void Offers_the_smallest_larger_disc_that_would_do()
     {
         MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
         window.Medium = Media.Cd;
         window.Add(AGame("Hollow Knight", 1_000_000_000));
 
-        // This one is put right by ticking the box or choosing a bigger
-        // disc, and a remedy carries no subject with it: ChangeOption does
-        // not say which option. A word that did nothing when pressed would
-        // be worse than the red line on its own.
+        // "Use a larger disc" carried no subject, so nothing could act on it
+        // and the red line stood alone. The screen has the plan, so it can
+        // say which disc: the smallest one up on which this would plan.
+        Assert.Equal("One file is bigger than a whole disc", window.WhyNot?.Headline);
+        Assert.Equal(RemedyKind.ChangeMedium, window.TheWayOut);
+        Assert.Equal(Media.Dvd5, window.TheLargerDiscThatWouldDo);
+        Assert.Equal("Use DVD5 4.7 GB instead", window.WhatTheWayOutIsCalled);
+    }
+
+    [Fact]
+    public void Skips_the_sizes_that_would_not_do_either()
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+        window.Medium = Media.Cd;
+
+        // Bigger than a DVD5 as well, so that is no answer.
+        ListedFile huge = new("setup_big.exe", 5_000_000_000L);
+        window.Add(new GameFolder(@"C:\games\Big", GameKind.GogInstaller, "Big", "Big", huge, [huge], [], null));
+
+        Assert.Equal(Media.Dvd9, window.TheLargerDiscThatWouldDo);
+        Assert.Equal("Use DVD9 8.5 GB (dual layer) instead", window.WhatTheWayOutIsCalled);
+    }
+
+    [Fact]
+    public void Offers_no_larger_disc_when_none_this_program_aims_at_would_do()
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+
+        ListedFile vast = new("setup_vast.exe", 200_000_000_000L);
+        window.Add(new GameFolder(@"C:\games\Vast", GameKind.GogInstaller, "Vast", "Vast", vast, [vast], [], null));
+
+        // A word that did nothing when pressed would be worse than the red
+        // line on its own.
         Assert.Equal("One file is bigger than a whole disc", window.WhyNot?.Headline);
         Assert.NotNull(window.WhyNot?.Remedy);
+        Assert.Null(window.TheLargerDiscThatWouldDo);
         Assert.Null(window.TheWayOut);
         Assert.Equal(string.Empty, window.WhatTheWayOutIsCalled);
+    }
+
+    [Fact]
+    public void Taking_the_larger_disc_aims_at_it_as_a_choice_and_clears_the_refusal()
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+        window.Medium = Media.Cd;
+        window.Add(AGame("Hollow Knight", 1_000_000_000));
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.UseTheLargerDisc();
+
+        Assert.Equal(Media.Dvd5, window.Medium);
+        Assert.Null(window.WhyNot);
+        Assert.Null(window.TheWayOut);
+        Assert.Null(window.TheLargerDiscThatWouldDo);
+        Assert.Contains(nameof(MakeADisc.Medium), told);
+        Assert.Contains(nameof(MakeADisc.TheSizeChosen), told);
+        Assert.Contains(nameof(MakeADisc.TheWayOut), told);
+        Assert.Contains(nameof(MakeADisc.TheLargerDiscThatWouldDo), told);
+    }
+
+    [Fact]
+    public void Taking_the_larger_disc_does_nothing_when_none_is_offered()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        window.UseTheLargerDisc();
+
+        // The refusal here is about the folder, and the size is not touched.
+        Assert.Equal(Media.Dvd5, window.Medium);
+        Assert.Equal(RemedyKind.PickFolder, window.TheWayOut);
+    }
+
+    [Fact]
+    public void Offers_to_name_a_disc_that_has_none()
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("Hollow Knight", 1000));
+        window.Label = string.Empty;
+
+        Assert.Equal("The disc needs a name", window.WhyNot?.Headline);
+        Assert.Equal(RemedyKind.FocusField, window.TheWayOut);
+        Assert.Equal("Name the disc", window.WhatTheWayOutIsCalled);
+    }
+
+    [Fact]
+    public void The_worry_about_the_name_offers_a_rename()
+    {
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("Hollow Knight", 1000));
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.Label = "\u0414\u0430\u043d\u043d\u044b\u0435";
+
+        Assert.NotNull(window.Worry);
+        Assert.Equal("Rename the disc", window.WhatTheWorrysWayOutIsCalled);
+        Assert.Contains(nameof(MakeADisc.WhatTheWorrysWayOutIsCalled), told);
+
+        window.Label = "HOLLOW KNIGHT";
+
+        Assert.Null(window.Worry);
+        Assert.Equal(string.Empty, window.WhatTheWorrysWayOutIsCalled);
     }
 
     // --------------------------------------------------- seeing it first
@@ -4775,8 +4879,20 @@ public class TheMainWindowWithoutAWindow
         string handler = code[from..];
         handler = handler[..handler.IndexOf(Environment.NewLine + "    }", StringComparison.Ordinal)];
 
-        Assert.Contains("_screen.TheWayOut is RemedyKind.PickFolder", handler, StringComparison.Ordinal);
+        Assert.Contains("RemedyKind.PickFolder", handler, StringComparison.Ordinal);
         Assert.Contains("ChooseWhereItGoes(", handler, StringComparison.Ordinal);
+
+        // The two that were computed and never carried out: a name to put
+        // the cursor in, and a larger disc to aim at.
+        Assert.Contains("RemedyKind.FocusField", handler, StringComparison.Ordinal);
+        Assert.Contains("PutTheCursorOnTheName(", handler, StringComparison.Ordinal);
+        Assert.Contains("RemedyKind.ChangeMedium", handler, StringComparison.Ordinal);
+        Assert.Contains("_screen.UseTheLargerDisc(", handler, StringComparison.Ordinal);
+
+        // And the worry's, which is about the name too.
+        int worry = code.IndexOf("void TakeTheWorrysWayOut", StringComparison.Ordinal);
+        Assert.True(worry >= 0, "The window no longer does anything about a worry.");
+        Assert.Contains("PutTheCursorOnTheName(", code[worry..], StringComparison.Ordinal);
     }
 
     [Fact]

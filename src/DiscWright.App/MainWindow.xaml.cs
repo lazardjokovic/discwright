@@ -371,10 +371,42 @@ public partial class MainWindow : Window
     /// </remarks>
     private void TakeTheWayOut(object sender, RoutedEventArgs e)
     {
-        if (_screen.TheWayOut is RemedyKind.PickFolder)
+        switch (_screen.TheWayOut)
         {
-            ChooseWhereItGoes(sender, e);
+            case RemedyKind.PickFolder:
+                ChooseWhereItGoes(sender, e);
+                break;
+
+            case RemedyKind.FocusField:
+                PutTheCursorOnTheName();
+                break;
+
+            case RemedyKind.ChangeMedium:
+                _screen.UseTheLargerDisc();
+                break;
         }
+    }
+
+    /// <summary>
+    /// The worry's way out, which is always about the name: Windows cannot
+    /// show it, and the fix is to type another.
+    /// </summary>
+    private void TakeTheWorrysWayOut(object sender, RoutedEventArgs e)
+    {
+        if (_screen.Worry?.Remedy is { Kind: RemedyKind.FocusField })
+        {
+            PutTheCursorOnTheName();
+        }
+    }
+
+    /// <summary>
+    /// Puts the cursor in the name and selects what is there, so that typing
+    /// replaces it. FocusField is what every remedy about a name asks for.
+    /// </summary>
+    private void PutTheCursorOnTheName()
+    {
+        TheName.Focus();
+        TheName.SelectAll();
     }
 
     private void ChooseWhereItGoes(object sender, RoutedEventArgs e)

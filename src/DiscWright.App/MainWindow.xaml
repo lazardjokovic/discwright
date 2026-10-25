@@ -460,7 +460,8 @@
                           Padding="0,0,6,0">
             <StackPanel>
                 <TextBlock Style="{StaticResource Step}" Text="WHAT IT IS CALLED" />
-                <TextBox Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
+                <TextBox x:Name="TheName"
+                         Text="{Binding Label, UpdateSourceTrigger=PropertyChanged}"
                          CharacterCasing="Upper"
                          MaxLength="32"
                          IsEnabled="{Binding NothingIsRunning}"
@@ -879,6 +880,17 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- What to do about the worry, which is the one way out
+                         that was computed and never shown: "Rename the disc",
+                         beside the name the disc will really show. -->
+                    <Button Content="{Binding WhatTheWorrysWayOutIsCalled}"
+                            Style="{StaticResource Quietly}"
+                            Margin="0,4,0,0"
+                            IsEnabled="{Binding NothingIsRunning}"
+                            Visibility="{Binding WhatTheWorrysWayOutIsCalled, Converter={StaticResource WhenAnything}}"
+                            Click="TakeTheWorrysWayOut"
+                            AutomationProperties.AutomationId="TheWorrysWayOut" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">

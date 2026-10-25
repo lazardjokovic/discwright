@@ -560,6 +560,35 @@ public class TheWindowsMarkup
         Assert.Equal("WhyNot", IdOf(found.ElementsBeforeSelf().Last()));
     }
 
+    [Fact]
+    public void The_way_out_of_a_worry_sits_under_its_figures()
+    {
+        // "Rename the disc" beside the name the disc will really show, which
+        // was computed from the first day and never shown.
+        XElement found = Window()
+            .Descendants(Xaml + "Button")
+            .Single(each => IdOf(each) == "TheWorrysWayOut");
+
+        Assert.Equal("{Binding WhatTheWorrysWayOutIsCalled}", (string?)found.Attribute("Content"));
+        Assert.Equal("TakeTheWorrysWayOut", (string?)found.Attribute("Click"));
+        Assert.Equal(
+            "{Binding WhatTheWorrysWayOutIsCalled, Converter={StaticResource WhenAnything}}",
+            (string?)found.Attribute("Visibility"));
+        Assert.Equal("WorryFigures", IdOf(found.ElementsBeforeSelf().Last()));
+    }
+
+    [Fact]
+    public void The_name_can_be_found_by_the_code_that_puts_the_cursor_in_it()
+    {
+        // FocusField is what every remedy about the name asks for, and the
+        // code behind reaches the box by this name.
+        XElement box = Window()
+            .Descendants(Xaml + "TextBox")
+            .Single(each => IdOf(each) == "Label");
+
+        Assert.Equal("TheName", (string?)box.Attribute(XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")));
+    }
+
     [Theory]
     [InlineData("Games")]
     [InlineData("Label")]

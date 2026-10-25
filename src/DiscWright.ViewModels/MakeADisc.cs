@@ -69,6 +69,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     private bool _theFolderWasSuggested;
     private Medium _medium = Media.Dvd5;
+
+    /// <summary>
+    /// The smallest larger disc the last plan would have fitted on, settled
+    /// with the plan and read through <see cref="TheLargerDiscThatWouldDo"/>.
+    /// </summary>
+    private Medium? _theLargerDisc;
     private bool _theSizeWasChosen;
     private bool _lookingAtTheDrives;
 
@@ -745,19 +751,68 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </para>
     /// <para>
     /// Only the kinds the window can really act on. RemedyKind is written as
-    /// what a window can DO rather than why a refusal happened, but a remedy
-    /// carries no subject with it: ChangeMedium does not say which size and
-    /// ChangeOption does not say which option, so there is nothing yet for
-    /// the window to act on. Offering a word that did nothing when pressed
-    /// would be worse than the red line on its own.
+    /// what a window can DO rather than why a refusal happened, and a remedy
+    /// carries no subject with it: ChangeMedium does not say which size. So
+    /// the subject is worked out here, where the plan is: the smallest disc
+    /// larger than the one aimed at on which the same disc would plan, which
+    /// is <see cref="TheLargerDiscThatWouldDo"/>. With no such size there is
+    /// no way out to offer, and a word that did nothing when pressed would be
+    /// worse than the red line on its own. ChangeOption still says nothing
+    /// about which option, and is not offered.
     /// </para>
     /// </remarks>
-    public RemedyKind? TheWayOut =>
-        WhyNot?.Remedy is { Kind: RemedyKind.PickFolder } ? RemedyKind.PickFolder : null;
+    public RemedyKind? TheWayOut => WhyNot?.Remedy?.Kind switch
+    {
+        RemedyKind.PickFolder => RemedyKind.PickFolder,
+        RemedyKind.FocusField => RemedyKind.FocusField,
+        RemedyKind.ChangeMedium when _theLargerDisc is not null => RemedyKind.ChangeMedium,
+        _ => null
+    };
 
-    /// <summary>What that way out is called, or nothing when there is none.</summary>
-    public string WhatTheWayOutIsCalled =>
-        TheWayOut is null ? string.Empty : WhyNot!.Remedy!.Label;
+    /// <summary>
+    /// What that way out is called, or nothing when there is none. A larger
+    /// disc is named, because "use a larger disc" leaves the person to find
+    /// out which, and the screen already knows.
+    /// </summary>
+    public string WhatTheWayOutIsCalled => TheWayOut switch
+    {
+        null => string.Empty,
+        RemedyKind.ChangeMedium => $"Use {_theLargerDisc!.Name} instead",
+        _ => WhyNot!.Remedy!.Label
+    };
+
+    /// <summary>
+    /// The smallest disc larger than the one aimed at on which what is on
+    /// the window would plan, or nothing: when nothing is refused, when the
+    /// refusal is not about the size, or when no size this program aims at
+    /// would do.
+    /// </summary>
+    /// <remarks>
+    /// Worked out when the plan is, rather than every time it is read,
+    /// because finding it means planning the disc again for each size up and
+    /// the window reads its properties far more often than the list changes.
+    /// </remarks>
+    public Medium? TheLargerDiscThatWouldDo => _theLargerDisc;
+
+    /// <summary>
+    /// Takes the way out a size refusal offers: aims at the larger disc, as a
+    /// choice, so the drives stop moving it.
+    /// </summary>
+    public void UseTheLargerDisc()
+    {
+        if (TheWayOut is RemedyKind.ChangeMedium && _theLargerDisc is Medium larger)
+        {
+            Medium = larger;
+        }
+    }
+
+    /// <summary>
+    /// What a worry offers to be put right by, or nothing. A worry carries a
+    /// remedy the way a refusal does, and the one that matters says "Rename
+    /// the disc" beside the name Windows will really show.
+    /// </summary>
+    public string WhatTheWorrysWayOutIsCalled =>
+        Worry?.Remedy is { Kind: RemedyKind.FocusField } remedy ? remedy.Label : string.Empty;
 
     /// <summary>
     /// Every size of disc that can be aimed at, worded as the list shows them.
@@ -2717,6 +2772,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
     {
         Worry = Label.Length == 0 ? null : DiscLabel.WhatWindowsWillMakeOfIt(Label, _machine.Encoding);
 
+        // Settled below with the plan, and nothing until then.
+        _theLargerDisc = null;
+
         if (_games.Count == 0)
         {
             // Not a refusal. Somebody who has not added a game yet has not done
@@ -2778,10 +2836,36 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 WhatItWillMake = string.Empty;
                 WhatSplittingWouldDo = string.Empty;
                 _thePlanIsSound = false;
+
+                if (refused.Refusal.Remedy is { Kind: RemedyKind.ChangeMedium })
+                {
+                    _theLargerDisc = TheSmallestLargerDiscThatWouldDo();
+                }
+
                 break;
         }
 
         Told();
+    }
+
+    /// <summary>
+    /// The smallest size this program aims at, above the one aimed at now,
+    /// on which what is on the window would plan, or nothing when none would.
+    /// </summary>
+    /// <remarks>
+    /// Planned for real on each size up rather than compared against the
+    /// largest file, because what refuses a size is the whole plan: the menu
+    /// and the artwork take room on every disc, and the extras may be what
+    /// does not fit. Sizes are walked smallest first, so the answer is the
+    /// smallest that works, the way a recommendation walks them.
+    /// </remarks>
+    private Medium? TheSmallestLargerDiscThatWouldDo()
+    {
+        DiscProject project = AsAProject();
+
+        return Media.All
+            .Where(size => size.Capacity > Medium.Capacity)
+            .FirstOrDefault(size => WhatWouldBeMade.For(project, size, _machine.HowBigIs) is Outcome<PlannedBuild>.Ok);
     }
 
     /// <summary>
@@ -2937,9 +3021,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(Worry));
         Tell(nameof(CanMakeIt));
 
-        // With the refusal, because it is part of the refusal.
+        // With the refusal, because it is part of the refusal. The worry's
+        // too, because it is part of the worry.
         Tell(nameof(TheWayOut));
         Tell(nameof(WhatTheWayOutIsCalled));
+        Tell(nameof(TheLargerDiscThatWouldDo));
+        Tell(nameof(WhatTheWorrysWayOutIsCalled));
 
         // A name typed, a game added, a tune chosen: all of them end here,
         // and every one of them is something to start again FROM.
