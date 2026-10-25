@@ -4,9 +4,18 @@ namespace DiscWright.Core;
 /// What a drive means when it says the disc in it is a number.
 /// </summary>
 /// <remarks>
+/// <para>
 /// These are IMAPI's physical media types. The numbers come back from the drive
 /// and mean nothing on their own, and a report saying "media type 9" is a
 /// report nobody can act on.
+/// </para>
+/// <para>
+/// <strong>The ROM types are not only factory discs.</strong> A CD-R that has
+/// been finalised comes back as type 1, the same number as a disc pressed from
+/// a mould: on 2026-10-25 the slim drive called Hollow Knight disc 2, burned
+/// the night before, a CD-ROM. So the names say what is true of both, that
+/// nothing more can be written, and do not say "pressed".
+/// </para>
 /// </remarks>
 public static class OpticalMedia
 {
@@ -17,10 +26,10 @@ public static class OpticalMedia
         new()
         {
             [0] = ("no disc", false, false, MediaFamily.Nothing),
-            [1] = ("CD-ROM, pressed", false, false, MediaFamily.Cd),
+            [1] = ("CD-ROM, read only", false, false, MediaFamily.Cd),
             [2] = ("CD-R", true, false, MediaFamily.Cd),
             [3] = ("CD-RW", true, true, MediaFamily.Cd),
-            [4] = ("DVD-ROM, pressed", false, false, MediaFamily.Dvd),
+            [4] = ("DVD-ROM, read only", false, false, MediaFamily.Dvd),
             [5] = ("DVD-RAM", true, true, MediaFamily.Dvd),
             [6] = ("DVD+R", true, false, MediaFamily.Dvd),
             [7] = ("DVD+RW", true, true, MediaFamily.Dvd),
@@ -33,7 +42,7 @@ public static class OpticalMedia
             [14] = ("HD DVD-ROM", false, false, MediaFamily.HdDvd),
             [15] = ("HD DVD-R", true, false, MediaFamily.HdDvd),
             [16] = ("HD DVD-RAM", true, true, MediaFamily.HdDvd),
-            [17] = ("BD-ROM, pressed", false, false, MediaFamily.BluRay),
+            [17] = ("BD-ROM, read only", false, false, MediaFamily.BluRay),
             [18] = ("BD-R", true, false, MediaFamily.BluRay),
             [19] = ("BD-RE", true, true, MediaFamily.BluRay)
         };

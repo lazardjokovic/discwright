@@ -84,7 +84,7 @@ public static class TheDiscsThatAreIn
         }
 
         // The disc that can actually be written to is the one worth naming. A
-        // pressed film somebody left in the other drive is not the point.
+        // read only disc somebody left in the other drive is not the point.
         Recorder worth = holding.FirstOrDefault(drive => OpticalMedia.CanBeWritten(drive.MediaType))
             ?? holding[0];
 

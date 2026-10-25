@@ -139,7 +139,7 @@ public class TheDiscThatIsActuallyIn
         ],
             Media.Dvd5);
 
-        // A pressed film somebody left in the other drive is not the point.
+        // A read only disc somebody left in the other drive is not the point.
         Assert.Equal("The disc in E: is a CD-RW, and this is being built for DVD5 4.7 GB.", said);
     }
 
@@ -215,7 +215,7 @@ public class TheDiscThatIsActuallyIn
         string? said = TheDiscsThatAreIn.WhatIsWorthSaying(
             [ADrive("D:", 17, false, 0)], Media.Dvd5);
 
-        Assert.Equal("The disc in D: is a BD-ROM, pressed, and this is being built for DVD5 4.7 GB.", said);
+        Assert.Equal("The disc in D: is a BD-ROM, read only, and this is being built for DVD5 4.7 GB.", said);
     }
 
     // ---------------------------------------------------------- the tray

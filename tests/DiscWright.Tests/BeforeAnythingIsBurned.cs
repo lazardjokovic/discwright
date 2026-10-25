@@ -15,10 +15,11 @@ public class BeforeAnythingIsBurned
     [Theory]
     [InlineData(2, "CD-R", true, false)]
     [InlineData(3, "CD-RW", true, true)]
-    [InlineData(1, "CD-ROM, pressed", false, false)]
+    [InlineData(1, "CD-ROM, read only", false, false)]
     [InlineData(18, "BD-R", true, false)]
     [InlineData(19, "BD-RE", true, true)]
-    [InlineData(4, "DVD-ROM, pressed", false, false)]
+    [InlineData(4, "DVD-ROM, read only", false, false)]
+    [InlineData(17, "BD-ROM, read only", false, false)]
     public void Knows_what_the_drive_means_by_a_number(int type, string name, bool writable, bool rewritable)
     {
         // A report that says "media type 9" is a report nobody can act on.
