@@ -349,4 +349,17 @@ public static class Refusals
     public static Refusal TheDriveCouldNotWriteIt(string drive, string windowsSaid) =>
         new($"{drive} could not write the disc",
             "The disc in it may now be unusable. Windows said: " + windowsSaid);
+
+    /// <summary>
+    /// The folder is on the list already, with everything it holds.
+    /// </summary>
+    /// <remarks>
+    /// Said rather than done, because the other thing that could happen is
+    /// the same game going on twice: two entries with one name, the installer
+    /// carried twice and two Install buttons on the menu, with nobody told.
+    /// </remarks>
+    public static Refusal ItIsAlreadyOnTheDisc(string name) =>
+        new($"{name} is already on the disc",
+            "Everything in that folder is on it, so there is nothing to add. Adding it again would put the "
+                + "same game on twice.");
 }

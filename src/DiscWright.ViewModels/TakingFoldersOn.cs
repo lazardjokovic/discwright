@@ -45,6 +45,13 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
         /// <summary>Carry these files on the disc, belonging to no game.</summary>
         public sealed record AlsoOnTheDisc(IReadOnlyList<string> Paths) : WhatToDo;
 
+        /// <summary>
+        /// The folder is on the list already. Here is what it holds now, so
+        /// whatever was taken off can be offered back rather than the same
+        /// game going on twice.
+        /// </summary>
+        public sealed record ItIsOnAlready(GameFolder Game, IReadOnlyList<LeftBehind> Left) : WhatToDo;
+
         /// <summary>Say why this folder is not going on.</summary>
         public sealed record Explain(Refusal Refusal) : WhatToDo;
     }
@@ -93,17 +100,32 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
     /// <summary>
     /// Works out what to do about each folder, asking as it goes.
     /// </summary>
-    public IEnumerable<WhatToDo> From(IEnumerable<string> folders, TheQuestions asking)
+    /// <param name="folders">The folders somebody pointed at.</param>
+    /// <param name="asking">How each question is put.</param>
+    /// <param name="isOnAlready">
+    /// Whether a folder is on the list already, by its path. One that is
+    /// comes back as <see cref="WhatToDo.ItIsOnAlready"/> with nothing asked,
+    /// so the screen can offer back whatever was taken off instead of the
+    /// same game going on twice. Nothing is on the list when nothing is given.
+    /// </param>
+    public IEnumerable<WhatToDo> From(
+        IEnumerable<string> folders, TheQuestions asking, Func<string, bool>? isOnAlready = null)
     {
         foreach (string folder in folders)
         {
             FolderListing listing = disk.List(folder);
 
+            // Settled before the folder is taken apart. A folder of several
+            // games that went on as one game is on the list by its own path,
+            // and asking again whether to add them separately would only
+            // lead to each of them going on beside it.
+            bool onAlready = isOnAlready?.Invoke(folder) ?? false;
+
             // Pointing at the folder that HOLDS the downloads rather than at
             // one of them. Never refused, because a real game can have an
             // installer buried in it too, and taking that whole is better than
             // turning it away.
-            IReadOnlyList<string> inside = GamesInside.Of(listing);
+            IReadOnlyList<string> inside = onAlready ? [] : GamesInside.Of(listing);
 
             if (inside.Count > 1)
             {
@@ -115,7 +137,7 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
 
                 if (asking.AddingThemSeparately(folder, inside, loose.Length))
                 {
-                    foreach (WhatToDo step in From([.. inside.Select(each => Path.Combine(folder, each))], asking))
+                    foreach (WhatToDo step in From([.. inside.Select(each => Path.Combine(folder, each))], asking, isOnAlready))
                     {
                         yield return step;
                     }
@@ -128,6 +150,17 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
             switch (reader.Read(listing))
             {
                 case Outcome<GameFolder>.Ok(GameFolder game):
+                    // On the list already. What the folder holds goes back
+                    // whole, with everything that sat beside the game, and
+                    // nothing is asked here: the only question is whether to
+                    // put back what was taken off, and the screen words that,
+                    // because only the screen knows what is missing.
+                    if (onAlready)
+                    {
+                        yield return new WhatToDo.ItIsOnAlready(game, WhatWasLeftBehind.In(listing, game));
+                        break;
+                    }
+
                     // Something that installs onto a game, with no game. It
                     // still goes on if somebody wants it to; it just must not
                     // go on silently, because on the disc it becomes a game in

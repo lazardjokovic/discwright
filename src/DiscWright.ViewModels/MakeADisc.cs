@@ -2220,6 +2220,108 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Reconsider();
     }
 
+    /// <summary>Whether that folder is on the list already, by its path.</summary>
+    /// <remarks>
+    /// By path and nothing else. Two different folders can hold the same game,
+    /// and somebody may well want both on one disc, an original and a
+    /// re-release. The same folder twice is the thing nobody wants.
+    /// </remarks>
+    public bool IsOnAlready(string folder) => WhereIs(folder) >= 0;
+
+    /// <summary>
+    /// What a folder that is on the list already holds that the disc does
+    /// not, or nothing when the folder is not on the list at all.
+    /// </summary>
+    /// <remarks>
+    /// Against what was found when the folder went on, less what has been
+    /// taken off since, which is what Remove changes. An unticked row is not
+    /// missing: it is still on the window and one click from coming back.
+    /// </remarks>
+    /// <param name="fresh">The folder as it reads now.</param>
+    /// <param name="left">What sat beside the game in it, as it reads now.</param>
+    public TheSameFolderAgain? WhatIsMissingFrom(GameFolder fresh, IReadOnlyList<LeftBehind> left)
+    {
+        int at = WhereIs(fresh.Path);
+
+        if (at < 0)
+        {
+            return null;
+        }
+
+        GameFolder known = _asFound[at];
+
+        ListedFile[] files = [.. fresh.Files.Where(file => !known.Holds(file.RelativePath))];
+
+        LeftBehind[] beside =
+        [
+            .. left.Where(each =>
+                !known.Holds(each.File.RelativePath)
+                && !_addOnsAsFound.Any(addOn =>
+                    addOn.BelongsTo == at
+                    && string.Equals(
+                        addOn.Path,
+                        System.IO.Path.Combine(known.Path, each.File.RelativePath),
+                        StringComparison.OrdinalIgnoreCase)))
+        ];
+
+        return new TheSameFolderAgain(at, known.Name, files, beside);
+    }
+
+    /// <summary>
+    /// Puts back what a folder holds that the disc does not: the game's own
+    /// files as its files, and what sat beside it the way it would have gone
+    /// on the first time, an add-on as an add-on and the rest with the game.
+    /// </summary>
+    /// <remarks>
+    /// Exactly what was missing and nothing else, so nothing goes on twice.
+    /// The game's branch of the tree is built again from what it now holds,
+    /// the same way a row coming off rebuilds it, which is the only way the
+    /// tree and the list cannot drift apart.
+    /// </remarks>
+    public void PutBack(TheSameFolderAgain missing)
+    {
+        int at = missing.At;
+
+        if (at < 0 || at >= _asFound.Count)
+        {
+            return;
+        }
+
+        GameFolder known = _asFound[at];
+
+        _asFound[at] = WhatWasLeftBehind.Taking(
+            known with { Files = [.. known.Files, .. missing.Files] },
+            missing.Left.Where(each => each.Kind == LeftBehindKind.LooksLikeSomethingToKeep));
+
+        foreach (LeftBehind each in missing.Left.Where(each => each.Kind == LeftBehindKind.LooksLikeAnAddOn))
+        {
+            _addOnsAsFound.Add(new AddOn(
+                at,
+                System.IO.Path.Combine(known.Path, each.File.RelativePath),
+                each.AsAnAddOn,
+                each.Bytes));
+        }
+
+        _tree[at] = TheTreeOfWhatGoesOn.For(
+            _asFound[at],
+            _addOnsAsFound.Where(addOn => addOn.BelongsTo == at),
+            TakeTheTicksAsTheAnswer);
+
+        TakeTheTicksAsTheAnswer();
+    }
+
+    private int WhereIs(string folder) => _asFound.FindIndex(game => TheSamePlace(game.Path, folder));
+
+    /// <summary>
+    /// Whether two paths name one folder, however they were typed: a trailing
+    /// separator and the case of the letters are not a different folder.
+    /// </summary>
+    private static bool TheSamePlace(string one, string other) =>
+        string.Equals(
+            one.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar),
+            other.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Takes one thing off the list: the one that is picked, and nothing else.
     /// </summary>

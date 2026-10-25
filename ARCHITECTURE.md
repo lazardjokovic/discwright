@@ -1131,6 +1131,14 @@ A patch is certain, because `patch_x_to_y` says so outright. The rest is a guess
 
 It still goes on if somebody wants it to. It just must not go on in silence.
 
+### The same folder, added again
+
+A game goes on with its patches, two of the patches come off with Remove, and the folder is added again to get them back. That used to put the same game on twice: two entries with one name, the installer carried twice, the size doubled and two Install buttons on the menu, with nobody told.
+
+A folder is known by its **path**, and nothing else, because two different folders can hold the same game and somebody may well want both on one disc. The screen answers `IsOnAlready`, and `TakingFoldersOn` asks it first, before the folder is taken apart, so a folder of several games that went on as one is not asked about splitting a second time. A folder that is on comes back as `ItIsOnAlready` with everything it holds now, and nothing else is asked on the way, because the one question left is the screen's to word.
+
+`WhatIsMissingFrom` is that question: what the folder holds that the list does not, against what was found when the folder went on, less what Remove has taken off since. **Unticked is not missing.** An unticked row is still on the window and one click from coming back; a removed row is gone, and this is the way it comes back. A file beside the game that was never taken on counts too, because from the folder's side it is the same thing. The window puts the question with the names in it, *Put them back* the likely answer, and `PutBack` adds exactly those: the game's own files as its files, an add-on as an add-on, the rest with the game, the way they would have gone on the first time. With nothing missing it says so and adds nothing.
+
 ## The image
 
 Every disc that gets built gets an image too, every time. The folder is what somebody checks and the image is what they burn, and having to ask for the second one is a step nobody wants.

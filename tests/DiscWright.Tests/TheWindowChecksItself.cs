@@ -363,7 +363,7 @@ public class TheWindowChecksItself
 
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(35);
+        int which = dice.Next(36);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -465,6 +465,12 @@ public class TheWindowChecksItself
                 desk => desk.Screen.LookAtTheDrives().GetAwaiter().GetResult()),
 
             34 => new($"pick drive {row}, or none", desk => desk.PickTheDrive(row)),
+
+            // The same folder added again, which used to put the same game on
+            // twice. It is the one door that puts rows back without adding a
+            // game, so what it changes has to be announced like everything
+            // else.
+            35 => new($"add the folder of game {row} again", desk => desk.AddTheSameFolderAgain(row)),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -941,6 +947,29 @@ public class TheWindowChecksItself
             if (Screen.WhatGoesOnIt.Count > 0)
             {
                 Screen.TakeOff(Screen.WhatGoesOnIt[which % Screen.WhatGoesOnIt.Count]);
+            }
+        }
+
+        /// <summary>
+        /// Adds a folder that is on the list already, reading one more file
+        /// in it and a patch beside it, the way somebody adds a folder again
+        /// to get back what they took off. The second time round nothing is
+        /// missing, so both answers get walked.
+        /// </summary>
+        internal void AddTheSameFolderAgain(int which)
+        {
+            if (Screen.Games.Count == 0)
+            {
+                return;
+            }
+
+            GameFolder known = Screen.Games[which % Screen.Games.Count];
+            GameFolder fresh = known with { Files = [.. known.Files, new ListedFile("one more.txt", 10)] };
+
+            if (Screen.WhatIsMissingFrom(fresh, [AnAddOn(9)]) is TheSameFolderAgain missing
+                && !missing.NothingIsMissing)
+            {
+                Screen.PutBack(missing);
             }
         }
 

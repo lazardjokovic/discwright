@@ -178,7 +178,7 @@ public partial class MainWindow : Window
             (game, left) => WhatElseIsInThere.Ask(this, game, left),
             WhicheverStartsIt);
 
-        foreach (TakingFoldersOn.WhatToDo step in new TakingFoldersOn(_disk, _reader).From(folders, asking))
+        foreach (TakingFoldersOn.WhatToDo step in new TakingFoldersOn(_disk, _reader).From(folders, asking, _screen.IsOnAlready))
         {
             switch (step)
             {
@@ -190,10 +190,40 @@ public partial class MainWindow : Window
                     _screen.AlsoOnTheDisc(paths);
                     break;
 
+                case TakingFoldersOn.WhatToDo.ItIsOnAlready(GameFolder game, IReadOnlyList<LeftBehind> left):
+                    OfferBackWhatIsMissing(game, left);
+                    break;
+
                 case TakingFoldersOn.WhatToDo.Explain(Refusal refusal):
                     Explain(refusal);
                     break;
             }
+        }
+    }
+
+    /// <summary>
+    /// A folder that is on the list already: offers back whatever it holds
+    /// that the disc does not, or says that there is nothing more in it.
+    /// </summary>
+    /// <remarks>
+    /// What is missing and the words are the screen's, so a test can read
+    /// them. What is left here is one dialog, and the one answer that puts
+    /// things back.
+    /// </remarks>
+    private void OfferBackWhatIsMissing(GameFolder game, IReadOnlyList<LeftBehind> left)
+    {
+        if (_screen.WhatIsMissingFrom(game, left) is not TheSameFolderAgain missing)
+        {
+            return;
+        }
+
+        if (missing.NothingIsMissing)
+        {
+            Explain(missing.AlreadyWhole);
+        }
+        else if (Ask(missing.Question))
+        {
+            _screen.PutBack(missing);
         }
     }
 

@@ -3460,7 +3460,7 @@ public class TheMainWindowWithoutAWindow
         }
     }
 
-    private static MakeADisc New(
+    internal static MakeADisc New(
         IBuildDiscs? builder = null,
         IMakeImages? images = null,
         IFindRecorders? drives = null,
@@ -4713,9 +4713,10 @@ public class TheMainWindowWithoutAWindow
         Type[] kinds = [.. typeof(TakingFoldersOn.WhatToDo).GetNestedTypes()
             .Where(each => each.IsSubclassOf(typeof(TakingFoldersOn.WhatToDo)))];
 
-        // Three today. The count is asserted so a fourth cannot arrive and be
-        // handled nowhere while this still reads as covering everything.
-        Assert.Equal(3, kinds.Length);
+        // Four today, the fourth being the same folder added again. The count
+        // is asserted so a fifth cannot arrive and be handled nowhere while
+        // this still reads as covering everything.
+        Assert.Equal(4, kinds.Length);
 
         foreach (Type kind in kinds)
         {

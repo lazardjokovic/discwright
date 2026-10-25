@@ -69,6 +69,64 @@ public class TakingFoldersOnTests
             two => Assert.Equal("Celeste", Assert.IsType<Step.PutItOn>(two).Game.Name));
     }
 
+    // ------------------------------------------------- the same folder again
+
+    [Fact]
+    public void A_folder_on_the_list_already_comes_back_whole_with_nothing_asked()
+    {
+        ADisk disk = new();
+        disk.Holds(
+            @"C:\g\Hollow Knight",
+            ("setup_hollow_knight.exe", 900_000_000),
+            ("patch_1.1.exe", 1000),
+            ("read me.txt", 10));
+
+        WhatWasAsked asked = new();
+
+        List<Step> steps = [.. Taking(disk).From([@"C:\g\Hollow Knight"], asked.Questions, folder => true)];
+
+        Step.ItIsOnAlready again = Assert.IsType<Step.ItIsOnAlready>(Assert.Single(steps));
+
+        Assert.Equal("Hollow Knight", again.Game.Name);
+        Assert.Equal(["patch_1.1.exe", "read me.txt"], again.Left.Select(each => each.Name).Order());
+
+        // Not even what else is in there. Only the screen knows what is
+        // missing, so the one question is the screen's to put.
+        Assert.Empty(asked.InOrder);
+    }
+
+    [Fact]
+    public void A_folder_of_games_that_went_on_as_one_is_not_taken_apart_the_second_time()
+    {
+        ADisk disk = new();
+        disk.Holds(@"C:\downloads", ("readme.txt", 200));
+        disk.Holds(@"C:\downloads\Celeste", ("setup_celeste.exe", 1000));
+        disk.Holds(@"C:\downloads\Hades", ("setup_hades.exe", 2000));
+
+        WhatWasAsked asked = new() { Separately = true };
+
+        List<Step> steps = [.. Taking(disk).From(
+            [@"C:\downloads"],
+            asked.Questions,
+            folder => string.Equals(folder, @"C:\downloads", StringComparison.OrdinalIgnoreCase))];
+
+        // Added separately the first time, each game is on by its own path and
+        // the holding folder is not, so this is the folder that went on as one.
+        Assert.IsType<Step.ItIsOnAlready>(Assert.Single(steps));
+        Assert.Empty(asked.InOrder);
+    }
+
+    [Fact]
+    public void Nothing_is_on_the_list_when_nobody_can_say()
+    {
+        ADisk disk = new();
+        disk.Holds(@"C:\g\Hollow Knight", ("setup_hollow_knight.exe", 900_000_000));
+
+        List<Step> steps = [.. Taking(disk).From([@"C:\g\Hollow Knight"], new WhatWasAsked().Questions)];
+
+        Assert.IsType<Step.PutItOn>(Assert.Single(steps));
+    }
+
     // ----------------------------------------- a folder that holds the games
 
     [Fact]

@@ -68,6 +68,13 @@ public sealed record GameFolder(
         };
 
     /// <summary>
+    /// Whether a file is among the game's files, by the path it has inside
+    /// the folder, the same way <see cref="Without"/> finds one to take off.
+    /// </summary>
+    public bool Holds(string relativePath) =>
+        Files.Any(file => string.Equals(file.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
     /// The largest single file, which is what the ISO9660 ceiling is measured
     /// against and what decides whether one file is too big for a whole disc.
     /// </summary>
