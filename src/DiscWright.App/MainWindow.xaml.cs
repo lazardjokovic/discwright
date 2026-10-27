@@ -70,6 +70,19 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Read before anybody is asked to give anything up for it. A file
+        // this cannot open, the PowerShell DiscWright's among them, is refused
+        // here with the window untouched and nobody having said yes to
+        // replacing an afternoon's work with it.
+        Outcome<OpenedProject> read = AProjectFile.Read(
+            System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(asking.FileName)));
+
+        if (read is Outcome<OpenedProject>.No refused)
+        {
+            Explain(refused.Refusal);
+            return;
+        }
+
         // Asked before anything is replaced, because what is on the window may
         // be somebody's afternoon. Anything at all, the same rule Start a new
         // disc keeps: a name typed, a cover chosen and a manual attached are an
@@ -82,15 +95,6 @@ public partial class MainWindow : Window
             "Open it",
             "Leave this alone"))
         {
-            return;
-        }
-
-        Outcome<OpenedProject> read = AProjectFile.Read(
-            System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(asking.FileName)));
-
-        if (read is Outcome<OpenedProject>.No refused)
-        {
-            Explain(refused.Refusal);
             return;
         }
 

@@ -17,8 +17,7 @@ namespace DiscWright.Core;
 /// </remarks>
 /// <param name="Version">The schema it was written at.</param>
 /// <param name="MadeBy">Which DiscWright wrote it, when it says.</param>
-/// <param name="WantsTheSetFile">Whether it was built as a set.</param>
-/// <param name="WantsLinuxInfo">Whether the disc carries the file that names it on Linux.</param>
+/// <param name="MusicPath">The tune the menu plays, when one was chosen.</param>
 public sealed record OpenedProject(
     int Version,
     string? MadeBy,
@@ -30,10 +29,8 @@ public sealed record OpenedProject(
     string? ManualPath,
     string? ExtrasFolderPath,
     IReadOnlyList<string> LooseExtras,
-    bool WantsTheSetFile,
-    bool WantsLinuxInfo,
-    ProjectArtwork Artwork,
-    ProjectLook Look)
+    string? MusicPath,
+    ProjectArtwork Artwork)
 {
     /// <summary>The games, without the things that install onto them.</summary>
     public IEnumerable<ProjectEntry> Games => Entries.Where(entry => !entry.IsAnAddOn);
@@ -61,8 +58,6 @@ public sealed record OpenedProject(
 /// <param name="WasAGogDownload">
 /// Whether it was recognised as a GOG download rather than a folder of files.
 /// </param>
-/// <param name="Manual">Its own manual, when it had one of its own.</param>
-/// <param name="Extras">Its own extras, when it had any of its own.</param>
 public sealed record ProjectEntry(
     string Folder,
     string? Name,
@@ -70,9 +65,7 @@ public sealed record ProjectEntry(
     string? Installer,
     bool IsAnAddOn,
     int BelongsTo,
-    bool WasAGogDownload,
-    string? Manual,
-    string? Extras);
+    bool WasAGogDownload);
 
 /// <summary>The pictures a project pointed at.</summary>
 public sealed record ProjectArtwork(
@@ -82,15 +75,3 @@ public sealed record ProjectArtwork(
     bool BackgroundAsItIs,
     string? CoverPath,
     string? DiscFacePath);
-
-/// <summary>How the menu on the disc was set to look.</summary>
-public sealed record ProjectLook(
-    string PanelSide,
-    string ButtonStyle,
-    bool Divider,
-    bool ShowTitle,
-    string TitleText,
-    bool WindowBorder,
-    bool ShowCaption,
-    string? MusicFile,
-    IReadOnlyList<string> Buttons);

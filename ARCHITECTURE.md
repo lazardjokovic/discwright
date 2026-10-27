@@ -1303,7 +1303,7 @@ Every one of them is an interface, and not one of them is Windows as far as `Vie
 
 ## Opening a disc
 
-Every disc DiscWright has ever built carries `discproject.json`. Somebody who finds one in a drawer should be able to open it, change one thing and build it again, and **that is the promise a rewrite has to keep**. So this reads every version back to the first rather than only the one being written now.
+Every disc DiscWright has ever built carries `discproject.json`. Somebody who finds one in a drawer should be able to open it, change one thing and build it again, and **that is the promise a rewrite has to keep**, for every disc this version built. A disc the PowerShell DiscWright built is another matter, below.
 
 The rule throughout: **a field that is not there is not an error, it is an older file**, and what it meant then is what it means now. Every default is the behaviour of the version that lacked the field, not a value that seemed sensible.
 
@@ -1311,15 +1311,19 @@ The rule throughout: **a field that is not there is not an error, it is an older
 |---|---|---|
 | `Games` | one game from `SourceFolder` | Version 1 held it there |
 | `Kind`, `Parent` | every entry a plain game | Version 3 added add-ons |
-| `Manual`, `Extras` per game | none of its own | Version 4; the menu then falls back to the disc-wide ones, as those discs behaved |
 | `MediaKey` | automatic | Version 5; the automatic setting is what those projects described |
 | `MatchName` | whatever the folder gives now | Version 6; so a project renamed under older code **repairs itself on opening** |
 | `Source` | a GOG download | Version 9; anything older could only hold those |
-| `ShowCaption` | **true** | The one that is not false. Every disc made before the option showed a caption |
 
 ### The mark at the front
 
 Every project file on every disc begins `ef bb bf`. Windows PowerShell writes a byte order mark and **v1 is Windows PowerShell**, so a reader that will not look past it can open none of them. Found by reading the real files rather than inventing some.
+
+### A disc the PowerShell DiscWright built is refused by name
+
+Every project file v1 ever wrote carries the look of its menu: the panel side, the button style, the title, the caption, the divider, the border and its own list of buttons, written unconditionally since 0.1.0, along with the Linux naming and a manual and extras per game. The menu this version makes has none of those, and until 2026-10-27 all of it was read and thrown away, so a v1 disc opened here and built again was not the disc its file described, with nobody told. **Settled with the owner that day: the file is recognised and refused**, saying which version wrote it and that it cannot be opened here, rather than the old look being carried into this menu or dropped in silence.
+
+The look is the one thing that tells the two programs apart. This version carries on v1's version numbers, both write schema 14, and both begin with the mark, so `AppVersion` and `Version` say nothing; any one of the look keys is the other program's hand, whatever it is set to. The file is read before the window asks whether to replace what is on it, so a refusal costs nobody that answer. None of the look is read any more, and nothing carries it.
 
 ### Reading the file is only half of it
 
@@ -1329,7 +1333,7 @@ The file holds paths. The games behind them are read again, which is the only wa
 
 **The file counts entries and a disc counts games**, and they stop being the same number the moment an add-on sits anywhere but last. The entry number is mapped to the game number rather than used as one.
 
-Proved on the eleven discs in the testing kit, ten at version 14 and one deliberately at 11: all of them open, and all of their games come back off the disk.
+The eleven discs in the testing kit, ten at version 14 and one deliberately at 11, are all v1's, and every one is recognised as such and refused by name, ten naming 0.10.0 and the older one 0.9.2. The rules for reading this version's own files are proved on text, and on a file written and read back in the same test.
 
 ### The button, and what it carries
 

@@ -108,7 +108,7 @@ public static class ReopenAProject
                 opened.ManualPath,
                 opened.ExtrasFolderPath,
                 opened.LooseExtras,
-                opened.Look.MusicFile),
+                opened.MusicPath),
             AddOns: addOns);
 
         return new Reopened(project, opened.Medium, opened.OutputFolder, gone, trouble);

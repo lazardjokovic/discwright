@@ -228,6 +228,25 @@ public static class Refusals
             "It was read, and there is nothing in it to put on a disc. The file may have been written by "
                 + "something else, or cut short.");
 
+    /// <remarks>
+    /// Recognised and refused by name, rather than opened with the look it
+    /// describes thrown away. The PowerShell DiscWright's menu has a panel
+    /// side, a button style, a title, a caption, a divider, a border and its
+    /// own list of buttons, and the menu this version makes has none of those,
+    /// so a disc built from such a file here would not be the disc the file
+    /// describes. Settled with the owner on 2026-10-27: say so, and open
+    /// nothing.
+    /// </remarks>
+    public static Refusal ThatProjectIsFromThePowerShellApp(string? madeBy) =>
+        new("That project is from the PowerShell DiscWright",
+            (madeBy is null
+                ? "It was written by the PowerShell version of DiscWright, "
+                : $"It was written by DiscWright {madeBy}, the PowerShell version, ")
+                + "and it cannot be opened here. Its menu has a panel side, a button style, a title, a caption, "
+                + "a divider, a border and its own list of buttons, and the menu this version makes has none of "
+                + "those, so a disc built from it here would not be the disc it describes. Open it in the version "
+                + "that wrote it.");
+
     // ---------------------------------------------------------------- burning
 
     public static Refusal ThereIsNoDiscWriter() =>

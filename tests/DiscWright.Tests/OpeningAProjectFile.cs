@@ -8,7 +8,8 @@ namespace DiscWright.Tests;
 /// <remarks>
 /// Every default here is the behaviour of the version that lacked the field,
 /// not a value that seemed sensible, so each of these is really a question
-/// about a disc somebody already owns.
+/// about a disc somebody already owns. The discs the PowerShell DiscWright
+/// built are the other kind of question: recognised, and refused by name.
 /// </remarks>
 public class OpeningAProjectFile
 {
@@ -110,18 +111,6 @@ public class OpeningAProjectFile
     }
 
     [Fact]
-    public void Gives_an_entry_no_manual_of_its_own_when_the_file_predates_the_idea()
-    {
-        // Version 4. The menu then falls back to the disc-wide manual and
-        // extras, exactly as those discs behaved.
-        OpenedProject opened = Open("""{ "Games": [{ "Folder": "D:\\a" }] }""");
-
-        ProjectEntry game = Assert.Single(opened.Entries);
-        Assert.Null(game.Manual);
-        Assert.Null(game.Extras);
-    }
-
-    [Fact]
     public void Leaves_the_disc_size_automatic_when_the_file_never_chose_one()
     {
         // Version 5. Absent is the automatic setting, which is what those
@@ -132,26 +121,100 @@ public class OpeningAProjectFile
         Assert.Null(opened.Medium);
     }
 
-    [Fact]
-    public void Shows_the_caption_on_a_disc_made_before_the_option_existed()
-    {
-        // The one default that is NOT false when the field is missing. Taking
-        // it as false would turn the caption off on every disc made before the
-        // option, every one of which showed one.
-        OpenedProject older = Open("""{ "Games": [{ "Folder": "D:\\a" }] }""");
-        OpenedProject chose = Open("""{ "Games": [{ "Folder": "D:\\a" }], "ShowCaption": false }""");
+    // ------------------------------------- a disc the PowerShell DiscWright built
 
-        Assert.True(older.Look.ShowCaption);
-        Assert.False(chose.Look.ShowCaption);
+    [Fact]
+    public void Refuses_a_project_the_PowerShell_app_wrote_and_says_which_one_wrote_it()
+    {
+        // Shaped as v1 writes it, with the look of its menu in it, which this
+        // version's menu has no home for. Until 2026-10-27 all of that was
+        // read and thrown away, and the disc that came back was not the disc
+        // the file described.
+        Outcome<OpenedProject> read = AProjectFile.Read("""
+            {
+              "Version": 14, "AppVersion": "0.10.0", "SavedUtc": "2026-10-18T09:00:00",
+              "Games": [{ "Folder": "D:\\games\\Hollow Knight", "GameName": "Hollow Knight",
+                          "Kind": "Game", "Source": "GOG", "Parent": -1, "Manual": null, "Extras": null }],
+              "Label": "HOLLOW KNIGHT",
+              "PanelSide": "Right", "Divider": false, "ShowTitle": false, "TitleText": "",
+              "WindowBorder": true, "ButtonStyle": "Bordered", "ShowCaption": true,
+              "Buttons": ["Install", "Manual", "Exit"],
+              "Menu": true, "LinuxInfo": false, "MediaKey": "DVD5"
+            }
+            """);
+
+        Refusal why = Assert.IsType<Outcome<OpenedProject>.No>(read).Refusal;
+
+        Assert.Equal("That project is from the PowerShell DiscWright", why.Headline);
+        Assert.Contains("written by DiscWright 0.10.0, the PowerShell version", why.Because, StringComparison.Ordinal);
+        Assert.Contains("cannot be opened here", why.Because, StringComparison.Ordinal);
+        Assert.Null(why.Remedy);
+    }
+
+    [Theory]
+    [InlineData("PanelSide", "\"Right\"")]
+    [InlineData("ButtonStyle", "\"Bordered\"")]
+    [InlineData("Buttons", "[]")]
+    [InlineData("Divider", "false")]
+    [InlineData("ShowTitle", "false")]
+    [InlineData("TitleText", "\"\"")]
+    [InlineData("WindowBorder", "true")]
+    [InlineData("ShowCaption", "true")]
+    public void Knows_the_PowerShell_app_by_any_one_key_of_the_look_it_writes(string key, string value)
+    {
+        // v1 writes all of them, every time, since 0.1.0; this version writes
+        // none, because its menu has none. Any one is the other program's hand,
+        // whatever it is set to: a file with the default look in it is still
+        // a file describing a look.
+        Outcome<OpenedProject> read = AProjectFile.Read(
+            $$"""{ "Games": [{ "Folder": "D:\\a" }], "{{key}}": {{value}} }""");
+
+        Assert.Contains("PowerShell", Assert.IsType<Outcome<OpenedProject>.No>(read).Refusal.Headline, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Draws_a_menu_the_way_the_versions_without_those_fields_drew_it()
+    public void Says_the_PowerShell_version_wrote_it_even_when_the_file_does_not_say_which()
     {
-        OpenedProject opened = Open("""{ "Games": [{ "Folder": "D:\\a" }] }""");
+        Outcome<OpenedProject> read = AProjectFile.Read("""{ "Games": [{ "Folder": "D:\\a" }], "PanelSide": "Left" }""");
 
-        Assert.Equal("Right", opened.Look.PanelSide);
-        Assert.Equal("Bordered", opened.Look.ButtonStyle);
+        string because = Assert.IsType<Outcome<OpenedProject>.No>(read).Refusal.Because;
+
+        Assert.Contains("written by the PowerShell version of DiscWright", because, StringComparison.Ordinal);
+        Assert.DoesNotContain("DiscWright ,", because, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Names_the_PowerShell_app_before_anything_else_it_might_say_about_the_file()
+    {
+        // No games in it either, and that is the lesser fact: a file from the
+        // other program is named as one however else it is shaped.
+        Outcome<OpenedProject> read = AProjectFile.Read("""{ "Version": 14, "Games": [], "ButtonStyle": "Flat" }""");
+
+        Assert.Contains("PowerShell", Assert.IsType<Outcome<OpenedProject>.No>(read).Refusal.Headline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Does_not_mistake_a_file_this_version_wrote_for_the_PowerShell_apps()
+    {
+        // The two programs stamp the same schema and carry on the same version
+        // numbers, so the only thing telling them apart is the look, and this
+        // writer must go on writing none of it. Written and read back here,
+        // so that the writer gaining a look key fails this rather than
+        // refusing every disc this version has built.
+        DiscProject project = new(
+            "GOTHIC",
+            [new GameFolder(
+                @"D:\games\Gothic", GameKind.GogInstaller, "Gothic", "Gothic",
+                new ListedFile("setup_gothic.exe", 1000), [new ListedFile("setup_gothic.exe", 1000)], [], null)],
+            new DiscOptions(),
+            Extras: new DiscExtras(null, null, [], @"D:\tune.mp3"));
+
+        string json = TheProjectAsJson.Of(project, "0.12.0", "DVD5", @"D:\out", DateTimeOffset.UnixEpoch);
+
+        OpenedProject back = Open(json);
+
+        Assert.Equal("0.12.0", back.MadeBy);
+        Assert.Equal(@"D:\tune.mp3", back.MusicPath);
     }
 
     [Fact]

@@ -10,14 +10,22 @@ namespace DiscWright.Core;
 /// Every disc DiscWright has ever built carries <c>discproject.json</c>, and
 /// somebody who finds one in a drawer should be able to open it, change one
 /// thing and build it again. <strong>That is the promise a rewrite has to
-/// keep</strong>, and it is why this reads every version back to the first
-/// rather than only the one being written now.
+/// keep</strong>, for every disc this version built.
 /// </para>
 /// <para>
-/// The rule throughout: <strong>a field that is not there is not an error, it
-/// is an older file</strong>, and what it meant then is what it means now. Each
-/// default below is the behaviour of the version that lacked the field, not a
-/// value that seemed sensible.
+/// <strong>A disc the PowerShell DiscWright built is recognised and refused by
+/// name.</strong> Its file describes a menu look this version does not have,
+/// a panel side, a button style, a title, a caption, a divider, a border and a
+/// list of buttons, and until 2026-10-27 all of it was read and thrown away,
+/// so the disc that came back was not the disc the file described. Saying so
+/// is the honest answer, and the owner chose it over carrying the old look
+/// into this menu.
+/// </para>
+/// <para>
+/// The rule for everything else: <strong>a field that is not there is not an
+/// error, it is an older file</strong>, and what it meant then is what it
+/// means now. Each default below is the behaviour of the version that lacked
+/// the field, not a value that seemed sensible.
 /// </para>
 /// <para>
 /// It reads text, not a path. What comes out describes what somebody chose, and
@@ -54,6 +62,14 @@ public static class AProjectFile
                 return Refusals.ThatIsNotAProjectFile("The file does not hold a project at all.");
             }
 
+            // Before anything else is read, so that a file from the other
+            // program is named as one however else it is shaped, with no
+            // games in it included.
+            if (WasWrittenByThePowerShellApp(root))
+            {
+                return Refusals.ThatProjectIsFromThePowerShellApp(Text(root, "AppVersion"));
+            }
+
             List<ProjectEntry> entries = [.. EntriesIn(root)];
 
             if (entries.Count == 0)
@@ -84,34 +100,35 @@ public static class AProjectFile
                 ManualPath: Text(root, "ManualPath"),
                 ExtrasFolderPath: Text(root, "ExtrasPath"),
                 LooseExtras: [.. Strings(root, "ExtraItems")],
-                WantsTheSetFile: Yes(root, "DiscSet"),
-                WantsLinuxInfo: Yes(root, "LinuxInfo"),
+                MusicPath: Text(root, "MusicFile"),
                 Artwork: new ProjectArtwork(
                     IconPath: Text(root, "IconPath"),
                     IconIsAlreadyAnIcon: Yes(root, "IconIsIco"),
                     BackgroundPath: Text(root, "BgPath"),
                     BackgroundAsItIs: Yes(root, "BgAsIs"),
                     CoverPath: Text(root, "CoverPath"),
-                    DiscFacePath: Text(root, "DiscArtPath")),
-                Look: new ProjectLook(
-                    // Right and Bordered are what the versions without these
-                    // fields drew.
-                    PanelSide: Text(root, "PanelSide") ?? "Right",
-                    ButtonStyle: Text(root, "ButtonStyle") ?? "Bordered",
-                    Divider: Yes(root, "Divider"),
-                    ShowTitle: Yes(root, "ShowTitle"),
-                    TitleText: Text(root, "TitleText") ?? string.Empty,
-                    WindowBorder: Yes(root, "WindowBorder"),
-
-                    // The one default that is NOT false when the field is
-                    // missing. Taking it as false would turn the caption off on
-                    // every disc made before the option existed, every one of
-                    // which showed one.
-                    ShowCaption: Yes(root, "ShowCaption", whenMissing: true),
-                    MusicFile: Text(root, "MusicFile"),
-                    Buttons: [.. Strings(root, "Buttons")]));
+                    DiscFacePath: Text(root, "DiscArtPath")));
         }
     }
+
+    /// <summary>
+    /// The keys the PowerShell DiscWright writes into every project file and
+    /// this version never does, because they describe a menu look its menu
+    /// does not have.
+    /// </summary>
+    /// <remarks>
+    /// v1 has written the panel side, the button style and the list of buttons
+    /// since 0.1.0, unconditionally, so every file it ever wrote carries them.
+    /// The version it stamps cannot tell the two programs apart, because this
+    /// one carries on v1's numbering, and <c>Version</c> is the schema, which
+    /// both write as 14. The look is the one thing only the other program
+    /// writes.
+    /// </remarks>
+    private static readonly string[] TheLookOnlyThePowerShellAppWrites =
+        ["PanelSide", "ButtonStyle", "Buttons", "Divider", "ShowTitle", "TitleText", "WindowBorder", "ShowCaption"];
+
+    private static bool WasWrittenByThePowerShellApp(JsonElement root) =>
+        TheLookOnlyThePowerShellAppWrites.Any(key => root.TryGetProperty(key, out _));
 
     /// <summary>
     /// The games, however the file happens to list them.
@@ -153,13 +170,7 @@ public static class AProjectFile
 
                     // Version 9. Anything older could only hold GOG downloads,
                     // so a file without it describes one.
-                    WasAGogDownload: Text(game, "Source") != "Files",
-
-                    // Version 4. Absent reads back as an entry with none of its
-                    // own, and the menu then falls back to the disc-wide manual
-                    // and extras, exactly as those discs behaved.
-                    Manual: Text(game, "Manual"),
-                    Extras: Text(game, "Extras"));
+                    WasAGogDownload: Text(game, "Source") != "Files");
             }
 
             yield break;
@@ -167,7 +178,7 @@ public static class AProjectFile
 
         if (Text(root, "SourceFolder") is string only)
         {
-            yield return new ProjectEntry(only, Text(root, "GameName"), null, null, false, -1, true, null, null);
+            yield return new ProjectEntry(only, Text(root, "GameName"), null, null, false, -1, true);
         }
     }
 

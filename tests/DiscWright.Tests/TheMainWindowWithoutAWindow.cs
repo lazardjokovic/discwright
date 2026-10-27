@@ -668,6 +668,25 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void The_window_reads_a_project_file_before_asking_whether_to_give_anything_up_for_it()
+    {
+        // Read off disk, like the other guards over the code behind. The
+        // question used to come first, so somebody said yes to replacing an
+        // afternoon's work and only then met the refusal, with nothing opened
+        // and that answer spent.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        int read = code.IndexOf("Outcome<OpenedProject> read = AProjectFile.Read(", StringComparison.Ordinal);
+        int asked = code.IndexOf("\"Replace what is on the window?\"", StringComparison.Ordinal);
+
+        Assert.True(read > 0 && asked > 0, "The open handler is not where this looks for it.");
+        Assert.True(
+            read < asked,
+            "The file is read after the question about replacing the window, so a file that is then refused "
+                + "cost somebody that answer.");
+    }
+
+    [Fact]
     public async Task Says_why_the_image_stopped_even_though_the_disc_was_built()
     {
         MakeADisc window = Ready(new BuilderThatWorks(), new ImagesThatRefuse());

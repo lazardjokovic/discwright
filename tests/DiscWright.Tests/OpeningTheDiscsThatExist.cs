@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DiscWright.Core;
 
 namespace DiscWright.Tests;
@@ -8,9 +9,13 @@ namespace DiscWright.Tests;
 /// <remarks>
 /// <para>
 /// Eleven discs built by v1, ten at the current schema and one deliberately
-/// older. They are the only cases that prove this reads what DiscWright
-/// actually wrote rather than what somebody imagined it wrote, and the first
-/// run of them found that every one begins with a byte order mark.
+/// older. They are the only cases that prove this recognises what the
+/// PowerShell DiscWright actually wrote rather than what somebody imagined it
+/// wrote, and the first run of them found that every one begins with a byte
+/// order mark. Every one of them is refused by name now, with the version
+/// that wrote it: the look of v1's menu is in each file, this menu has none
+/// of it, and the owner chose saying so over opening the disc as something
+/// else.
 /// </para>
 /// <para>
 /// The kit lives outside the repository and is not on the test VM, so these
@@ -36,7 +41,7 @@ public class OpeningTheDiscsThatExist(Xunit.Abstractions.ITestOutputHelper says)
         "2 DISCS - open these");
 
     [Fact]
-    public void Opens_every_disc_in_the_kit()
+    public void Refuses_every_disc_in_the_kit_by_name()
     {
         if (!Directory.Exists(TheKit))
         {
@@ -68,67 +73,40 @@ public class OpeningTheDiscsThatExist(Xunit.Abstractions.ITestOutputHelper says)
             switch (AProjectFile.Read(json))
             {
                 case Outcome<OpenedProject>.Ok(OpenedProject opened):
-                    says.WriteLine(
-                        $"  {Path.GetFileName(disc),-46} v{opened.Version,-3} "
-                            + $"{opened.Games.Count()} game(s), {opened.Entries.Count - opened.Games.Count()} add-on(s), "
-                            + $"label '{opened.Label}', {(opened.Medium?.Key ?? "automatic")}");
+                    wrong.Add($"{Path.GetFileName(disc)}: opened as v{opened.Version} by {opened.MadeBy}");
                     break;
 
-                case Outcome<OpenedProject>.No refused:
-                    wrong.Add($"{Path.GetFileName(disc)}: {refused.Refusal.Headline}");
+                case Outcome<OpenedProject>.No(Refusal refusal):
+                    says.WriteLine($"  {Path.GetFileName(disc),-46} {refusal.Headline}");
+
+                    // Refused as the other program's, not as something that
+                    // is not a project: a file this cannot read past its mark
+                    // would land in the other refusal, and so would a file
+                    // the recogniser no longer knows.
+                    if (refusal.Headline != "That project is from the PowerShell DiscWright")
+                    {
+                        wrong.Add($"{Path.GetFileName(disc)}: {refusal.Headline}");
+                    }
+
+                    // And it names the version that wrote it, read straight
+                    // off the file here so the test cannot agree with the
+                    // reader by accident.
+                    string wroteIt = JsonDocument.Parse(json.TrimStart((char)0xFEFF)).RootElement.GetProperty("AppVersion").GetString()!;
+
+                    if (!refusal.Because.Contains($"written by DiscWright {wroteIt}, the PowerShell version", StringComparison.Ordinal))
+                    {
+                        wrong.Add($"{Path.GetFileName(disc)}: does not say {wroteIt} wrote it: {refusal.Because}");
+                    }
+
                     break;
             }
         }
 
-        Assert.True(wrong.Count == 0, "These would not open: " + string.Join("; ", wrong));
+        Assert.True(wrong.Count == 0, "These were not refused by name: " + string.Join("; ", wrong));
     }
 
     [Fact]
-    public void Finds_the_games_of_every_disc_in_the_kit_still_on_the_disk()
-    {
-        if (!Directory.Exists(TheKit))
-        {
-            says.WriteLine("The kit is not on this machine, so nothing was reopened.");
-            return;
-        }
-
-        GameFolderReader reader = GameFolderReader.InTheUsualOrder(new DiscWright.Platform.FileVersionFacts());
-        DiscWright.Platform.WindowsFileSystem disk = new();
-
-        List<string> wrong = [];
-
-        foreach (string disc in Directory.GetDirectories(TheKit).Order(StringComparer.OrdinalIgnoreCase))
-        {
-            string file = Path.Combine(disc, "discproject.json");
-
-            if (!File.Exists(file))
-            {
-                continue;
-            }
-
-            OpenedProject opened = Assert.IsType<Outcome<OpenedProject>.Ok>(
-                AProjectFile.Read(System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(file)))).Value;
-
-            Reopened back = ReopenAProject.From(
-                opened, reader, disk, path => File.Exists(path) ? new FileInfo(path).Length : 0);
-
-            says.WriteLine($"  {Path.GetFileName(disc),-46} {back.InWords}");
-
-            // The kit's source folders are all still where they were, so every
-            // one of these should come back whole. A disc that does not is
-            // either a reader that is wrong or a kit that has moved, and both
-            // are worth knowing.
-            if (!back.WholeAgain)
-            {
-                wrong.Add($"{Path.GetFileName(disc)}: {back.InWords}");
-            }
-        }
-
-        Assert.True(wrong.Count == 0, "These did not come back whole: " + string.Join("; ", wrong));
-    }
-
-    [Fact]
-    public void Reads_the_older_one_as_an_older_one()
+    public void Names_the_older_version_that_wrote_the_older_one()
     {
         string file = Path.Combine(TheKit, "11 an older project (schema 11)", "discproject.json");
 
@@ -138,22 +116,14 @@ public class OpeningTheDiscsThatExist(Xunit.Abstractions.ITestOutputHelper says)
             return;
         }
 
-        OpenedProject opened = Assert.IsType<Outcome<OpenedProject>.Ok>(
-            AProjectFile.Read(System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(file)))).Value;
+        Refusal refusal = Assert.IsType<Outcome<OpenedProject>.No>(
+            AProjectFile.Read(System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(file)))).Refusal;
 
-        says.WriteLine($"  version {opened.Version}, label '{opened.Label}'");
+        says.WriteLine($"  {refusal.Because}");
 
         // It is in the kit precisely because it predates four of the options,
-        // and what it describes is a disc built without them.
-        Assert.Equal(11, opened.Version);
-        // ArtworkOnDisc was read here until the option went. The artwork
-        // goes on the disc either way now, so an old project saying no is
-        // opened as the disc it would be built as today rather than as the
-        // disc it was.
-        Assert.False(opened.Options.CutFiles);
-        Assert.False(opened.WantsTheSetFile);
-
-        // And the caption, which is the one that would have gone the wrong way.
-        Assert.True(opened.Look.ShowCaption);
+        // and the look of the menu predates all of them: v1 wrote it from
+        // 0.1.0, so the older disc is known the same way as the rest.
+        Assert.Contains("DiscWright 0.9.2, the PowerShell version", refusal.Because, StringComparison.Ordinal);
     }
 }

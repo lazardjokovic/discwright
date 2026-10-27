@@ -146,7 +146,7 @@ public class TheProjectFileComesBack
         Assert.Equal(@"C:\extras\manual.pdf", back.ManualPath);
         Assert.Equal(@"C:\extras\more", back.ExtrasFolderPath);
         Assert.Equal([@"C:\extras\map.png"], back.LooseExtras);
-        Assert.Equal(@"C:\extras\theme.mp3", back.Look.MusicFile);
+        Assert.Equal(@"C:\extras\theme.mp3", back.MusicPath);
     }
 
     [Fact]
