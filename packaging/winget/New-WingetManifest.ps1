@@ -52,6 +52,13 @@ if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Forc
 # "DiscWright" against the schema, which wants Publisher.Package.
 $id  = 'DiscWright.DiscWright'
 
+# Schema 1.28.0 in all three manifests, and in all three $schema lines with it.
+# A moderator asked for it on microsoft/winget-pkgs#433767, where 1.12.0 was
+# still being accepted and merged, so this is the newer specification rather
+# than a fix. `winget validate` on client 1.29.380 accepts both. The number
+# appears six times in this file and a half done bump is the easy mistake, so
+# the tests hold all six to each other.
+
 # No provenance comment in the generated files. They are submitted into
 # microsoft/winget-pkgs, where a line pointing at a path in this repository is
 # noise to whoever reviews it.
@@ -63,12 +70,12 @@ if ($sha.Length -ne 64) { throw "Sha256 does not look like a SHA256: '$Sha256'" 
 
 # ---------------------------------------------------------------- version --
 @"
-# yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.12.0.schema.json
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.version.1.28.0.schema.json
 PackageIdentifier: $id
 PackageVersion: $Version
 DefaultLocale: en-US
 ManifestType: version
-ManifestVersion: 1.12.0
+ManifestVersion: 1.28.0
 "@ | Set-Content -LiteralPath (Join-Path $OutDir "$id.yaml") -Encoding UTF8
 
 # -------------------------------------------------------------- installer --
@@ -86,7 +93,7 @@ ManifestVersion: 1.12.0
 # uninstall. Inno Setup registers its uninstall entry as "<AppId>_is1", so this
 # has to stay in step with AppId in packaging/DiscWright.iss.
 @"
-# yaml-language-server: `$schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.installer.1.28.0.schema.json
 PackageIdentifier: $id
 PackageVersion: $Version
 InstallerLocale: en-US
@@ -104,15 +111,21 @@ Installers:
   InstallerUrl: $url
   InstallerSha256: $sha
 ManifestType: installer
-ManifestVersion: 1.12.0
+ManifestVersion: 1.28.0
 "@ | Set-Content -LiteralPath (Join-Path $OutDir "$id.installer.yaml") -Encoding UTF8
 
 # ----------------------------------------------------------------- locale --
 #
 # ShortDescription is the line the store front and `winget search` show, so it
 # says what the tool does rather than what it is built with.
+#
+# In quotes, and it has to be. The line carries a colon, and an unquoted YAML
+# value containing a colon and a space is not a string, it is a mapping, so all
+# three manifests stopped parsing the moment 0.9.0 reworded it. Nothing after
+# 0.7.1 had been submitted to winget, so it sat broken for six weeks and was
+# found by running `winget validate` rather than by reading it.
 @"
-# yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
+# yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.28.0.schema.json
 PackageIdentifier: $id
 PackageVersion: $Version
 PackageLocale: en-US
@@ -124,7 +137,7 @@ PackageUrl: https://discwright.com
 License: MIT
 LicenseUrl: https://github.com/lazardjokovic/discwright/blob/main/LICENSE
 Copyright: Copyright (c) 2026 lazardjokovic
-ShortDescription: Turn a GOG offline installer into a real game disc: the game's own icon and title in This PC, a menu when you double-click it, printed cover art, and burning with every file checked afterwards.
+ShortDescription: "Turn a GOG offline installer into a real game disc: the game's own icon and title in This PC, a menu when you double-click it, printed cover art, and burning with every file checked afterwards."
 Description: |-
   DiscWright turns a folder of GOG offline installers into a burnable ISO that
   behaves like a game disc from a box: the drive carries the game's own icon and
@@ -159,7 +172,7 @@ Tags:
 - backup
 ReleaseNotesUrl: https://github.com/lazardjokovic/discwright/releases/tag/v$Version
 ManifestType: defaultLocale
-ManifestVersion: 1.12.0
+ManifestVersion: 1.28.0
 "@ | Set-Content -LiteralPath (Join-Path $OutDir "$id.locale.en-US.yaml") -Encoding UTF8
 
 Write-Host "wrote three manifests to $OutDir"
