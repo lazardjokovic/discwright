@@ -5348,6 +5348,100 @@ Describe 'Executable files stay pure ASCII' -Tag 'Unit' {
     }
 }
 
+Describe 'The winget manifests the generator writes' -Tag 'Unit' {
+
+    # Run rather than read. What goes into microsoft/winget-pkgs is the file
+    # this script writes, and the one bug it has had was invisible in the
+    # source: the wording of a description made the YAML unparseable.
+    BeforeAll {
+        $script:WingetRoot = Split-Path $PSScriptRoot -Parent
+        $script:WingetOut  = Join-Path ([IO.Path]::GetTempPath()) ('winget-' + [guid]::NewGuid().ToString('N'))
+
+        & (Join-Path $script:WingetRoot 'packaging\winget\New-WingetManifest.ps1') -Version '9.9.9' -Sha256 ('A' * 64) -OutDir $script:WingetOut | Out-Null
+
+        $script:WingetFiles = @(Get-ChildItem -LiteralPath $script:WingetOut -Filter *.yaml)
+    }
+
+    AfterAll {
+        if ($script:WingetOut -and (Test-Path -LiteralPath $script:WingetOut)) {
+            Remove-Item -LiteralPath $script:WingetOut -Recurse -Force
+        }
+    }
+
+    It 'writes the three files a multi file manifest is' {
+        ($script:WingetFiles.Name | Sort-Object) -join ', ' |
+            Should -Be 'DiscWright.DiscWright.installer.yaml, DiscWright.DiscWright.locale.en-US.yaml, DiscWright.DiscWright.yaml'
+    }
+
+    It 'quotes every value that carries a colon' {
+        # ShortDescription was reworded in 0.9.0 to "a real game disc: the
+        # game's own icon", and an unquoted YAML value holding a colon and a
+        # space is a mapping rather than a string, so every manifest the script
+        # wrote from then on failed to parse at the first line of real content.
+        # Nothing after 0.7.1 had been submitted, so it went unnoticed for six
+        # weeks and turned up only when winget validate was finally run.
+        $unsafe = foreach ($file in $script:WingetFiles) {
+            $number = 0
+            foreach ($line in [IO.File]::ReadAllLines($file.FullName)) {
+                $number++
+                if ($line -notmatch '^\s*([A-Za-z][\w-]*):\s+(\S.*)$') { continue }
+
+                $value = $Matches[2]
+
+                # Already a quoted scalar, or a block scalar, which may carry
+                # anything at all.
+                if ($value -match '^[''"|>]') { continue }
+
+                if ($value -match ':\s') { "$($file.Name) line $number" }
+            }
+        }
+
+        $unsafe | Should -BeNullOrEmpty
+    }
+
+    It 'names the identifier that cannot be renamed, and the publisher to match' {
+        # DiscWright.DiscWright, filed the way Git.Git and 7zip.7zip are,
+        # because the publisher is the project. winget will not rename an
+        # identifier once it has accepted one, only deprecate it, and the
+        # publisher has to be what the installer itself declares or the
+        # submission gets asked about it, which is what happened on #433767.
+        $declared = (Select-String -Path (Join-Path $script:WingetRoot 'packaging\DiscWright.iss') -Pattern '^#define AppPublisher\s+"([^"]+)"').Matches[0].Groups[1].Value
+
+        $declared | Should -Be 'DiscWright'
+
+        foreach ($file in $script:WingetFiles) {
+            [IO.File]::ReadAllText($file.FullName) | Should -Match 'PackageIdentifier: DiscWright\.DiscWright'
+        }
+
+        [IO.File]::ReadAllText((Join-Path $script:WingetOut 'DiscWright.DiscWright.locale.en-US.yaml')) |
+            Should -Match ('Publisher: ' + [regex]::Escape($declared))
+    }
+
+    It 'says one manifest version, in every manifest and every schema line' {
+        # Six places carry the number and a half done bump is the easy
+        # mistake: three ManifestVersion lines and three $schema URLs.
+        $versions = foreach ($file in $script:WingetFiles) {
+            $text = [IO.File]::ReadAllText($file.FullName)
+
+            ([regex]::Matches($text, 'ManifestVersion:\s*([\d.]+)') | ForEach-Object { $_.Groups[1].Value })
+            ([regex]::Matches($text, 'winget-manifest\.[A-Za-z]+\.([\d.]+)\.schema\.json') | ForEach-Object { $_.Groups[1].Value })
+        }
+
+        @($versions).Count | Should -Be 6
+        ($versions | Sort-Object -Unique) | Should -Be '1.28.0'
+    }
+
+    It 'passes winget validate' -Skip:(-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+        # The real thing, which is the only reason the colon was ever found.
+        # Skipped where winget is not installed, which includes the CI runner,
+        # so the test above stands in for it there.
+        $said = (winget validate --manifest $script:WingetOut 2>&1 | Out-String)
+
+        $said | Should -Not -Match 'validation failed'
+        $said | Should -Match 'succeeded'
+    }
+}
+
 Describe 'A disc of game files, not installers' -Tag 'Unit' {
 
     # Found by burning one and looking at the screen: PLAY was greyed out with
