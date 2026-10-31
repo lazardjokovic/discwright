@@ -142,7 +142,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "var before = window.timers.length; doTheThing(); out.push('press again=' + (window.timers.length - before));\n"
                 + "document.URL = " + AsJScript(new Uri(Path.Combine(disc2, "AUTORUN", "menu.hta")).AbsoluteUri) + ";\n"
                 + "WHERE = null;\n"
-                + "pump(function () { return closed; });\n"
+                + "drain();\n"
                 + "out.push('title=' + document.title);\n"
                 + "said();\n"
                 + "out.push('alerts=' + alerts.length + (alerts.length ? ' ' + alerts.join(' / ') : ''));\n"
@@ -228,7 +228,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "var installedNow = false; isInstalled = function () { return installedNow; };\n"
                 + "doTheThing();\n"
                 + "installedNow = true;\n"
-                + "pump(function () { return closed; });\n"
+                + "drain();\n"
                 + "out.push('button=' + document.getElementById('doIt').innerText);\n"
                 + "out.push('line=' + document.getElementById('stillWanted').innerText);\n"
                 + "out.push('offer=' + document.getElementById('removeTheCopy').innerText + ' shown=' + document.getElementById('removeTheCopy').style.display);\n"
@@ -272,7 +272,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "startIt = function (what, from) { out.push('start ' + what + ' in ' + from); return null; };\n"
                 + "doTheThing();\n"
                 + "out.push('while=' + document.getElementById('doIt').innerText.replace(String.fromCharCode(8230), '...') + ' ' + document.getElementById('doIt').parentNode.className);\n"
-                + "pump(function () { return closed; });\n"
+                + "drain();\n"
                 + "out.push('after=' + document.getElementById('doIt').innerText + ' ' + document.getElementById('doIt').parentNode.className);\n"
                 + "out.push('line=' + document.getElementById('stillWanted').innerText);\n"
                 + "out.push('closed=' + closed + ' alerts=' + alerts.length);\n"
@@ -323,6 +323,34 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.False(Directory.Exists(Path.Combine(_folder, "never made")));
     }
 
+    [Fact]
+    public void Says_so_when_the_page_stops_before_what_was_waited_for_happens()
+    {
+        // About the waiting loop rather than the page, and the only test here
+        // whose run is meant to fail.
+        //
+        // The loop used to stop as soon as the page had nothing queued,
+        // whether or not what it was waiting for had happened, and the caller
+        // then compared two long lists built from whatever was on the page.
+        // The set test lost that race on a hosted runner once in fourteen,
+        // and the failure pointed at the lists rather than at the page having
+        // stopped, which cost an evening to understand. Waiting for something
+        // that cannot happen now says exactly that instead.
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Big Game", "DiscWright.Test", 1, 2, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Big Game", "setup_big.exe", string.Empty)])),
+            menuUrl: new Uri(Path.Combine(_folder, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test: "pump(function () { return false; });\n",
+            mustSucceed: false);
+
+        Assert.Contains("the page stopped with nothing left to run", went, StringComparison.Ordinal);
+
+        // And not by running out of patience, which is the other way out and
+        // would pass this test while meaning something else entirely.
+        Assert.DoesNotContain("the page never settled", went, StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /// <summary>
@@ -369,16 +397,50 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         + "    setTimeout: function (fn, ms) { window.timers.push(fn); }\n"
         + "};\n"
 
-        // Runs what the page queued, in order, until there is nothing left or
-        // the condition holds. A job that is not finished queues itself again,
-        // so this is also what waits for robocopy. A page that never settles
-        // is a failure after a minute rather than a test that never ends:
-        // with a fault planted in the scan, the page would ask for disc 1
-        // again for ever.
+        // Runs what the page queued, in order, until the condition holds. A
+        // job that is not finished queues itself again, so this is also what
+        // waits for robocopy.
+        //
+        // It gives up two ways and says which. A page that never settles is a
+        // failure after a minute rather than a test that never ends: with a
+        // fault planted in the scan, the page would ask for disc 1 again for
+        // ever. A page that runs out of work before getting there is a
+        // failure too, which it did not used to be.
+        //
+        // That second one was the whole trouble. The loop asked
+        // "while (window.timers.length && !until())", so an empty queue
+        // ended the wait whether or not what it was waiting for had happened,
+        // and the caller went on to compare two long lists built from
+        // whatever the page was showing. On a two core runner the set test
+        // lost that race once in fourteen, and it read as a list mismatch
+        // rather than as a page that stopped early, which is the most
+        // expensive kind of flake there is. Nothing can change the page while
+        // a pump is running except the timers it runs, so an empty queue
+        // means the condition can no longer come true, and saying so is free.
         + "function pump(until) {\n"
         + "    var deadline = (new Date()).getTime() + 60 * 1000;\n"
-        + "    while (window.timers.length && !until()) {\n"
+        + "    while (!until()) {\n"
         + "        if ((new Date()).getTime() > deadline) { throw new Error('the page never settled: ' + out.join(' | ')); }\n"
+        + "        if (!window.timers.length) { throw new Error('the page stopped with nothing left to run, before what this was waiting for happened: ' + out.join(' | ')); }\n"
+        + "        WScript.Sleep(10);\n"
+        + "        (window.timers.shift())();\n"
+        + "    }\n"
+        + "}\n"
+
+        // Runs everything the page has queued and stops when it has nothing
+        // left, which is a different question from waiting for something.
+        //
+        // Three tests used to ask for it as pump(function () { return closed; })
+        // and none of them ever reached that condition: the page starts the
+        // installer and then waits for a process that a stood-in startIt
+        // never makes, so it queues nothing more and never closes. The wait
+        // was satisfied by the empty queue instead, which is exactly the
+        // confusion this pair of functions now avoids. One of those tests
+        // records closed as a result, and it is false.
+        + "function drain() {\n"
+        + "    var deadline = (new Date()).getTime() + 60 * 1000;\n"
+        + "    while (window.timers.length) {\n"
+        + "        if ((new Date()).getTime() > deadline) { throw new Error('the page never ran out of work: ' + out.join(' | ')); }\n"
         + "        WScript.Sleep(10);\n"
         + "        (window.timers.shift())();\n"
         + "    }\n"
@@ -388,7 +450,12 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         + "    out.push('line=' + document.getElementById('stillWanted').innerText);\n"
         + "}\n";
 
-    private string Run(string pageScript, string menuUrl, string test)
+    /// <summary>Runs the page under cscript and hands back all it said.</summary>
+    /// <param name="mustSucceed">
+    /// False for the one test that is about the waiting loop giving up, which
+    /// can only be shown by a run that is meant to fail.
+    /// </param>
+    private string Run(string pageScript, string menuUrl, string test, bool mustSucceed = true)
     {
         File.Copy(TheMenuWriter.MenuScriptInTheSourceTree(), Path.Combine(_folder, "menu.js"), overwrite: true);
         File.WriteAllText(Path.Combine(_folder, "standins.js"), StandIns(menuUrl), new UTF8Encoding(false));
@@ -425,7 +492,14 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         string output = running.StandardOutput.ReadToEnd() + running.StandardError.ReadToEnd();
         running.WaitForExit(120_000);
 
-        Assert.True(running.ExitCode == 0, "cscript failed:\n" + output);
+        if (mustSucceed)
+        {
+            Assert.True(running.ExitCode == 0, "cscript failed:\n" + output);
+        }
+        else
+        {
+            Assert.True(running.ExitCode != 0, "this run was meant to fail and did not:\n" + output);
+        }
 
         return output;
     }
