@@ -4,10 +4,11 @@
 # The markup test proves the ids are WRITTEN. Only this proves they ARRIVE,
 # which is the single reason WPF was chosen over another go at WinForms.
 
-# Which build to open. Smart App Control is on and enforcing on this machine,
-# and it blocks the freshly built Debug assemblies outright: the app dies on
-# startup with 0x800711C7 before a window exists. A published Release copy gets
-# through, so that is worth being able to point this at.
+# Which build to open. The Debug build runs here now. Until 2026-10-16 Smart
+# App Control blocked those freshly built assemblies outright and the app died
+# on startup with 0x800711C7 before a window existed, which is why this can be
+# pointed at a published Release copy instead. That is still worth doing: it is
+# what somebody downloading a release actually gets.
 #
 # param comes FIRST. Put after anything else it is not a parse error, it is a
 # call to a command called param, which the parser is perfectly happy with and

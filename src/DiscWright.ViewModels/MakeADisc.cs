@@ -43,10 +43,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private readonly List<AddOn> _addOns = [];
     private readonly List<string> _loose = [];
 
-    // Carried rather than chosen. There is no artwork or manual on the window
-    // yet, and a disc opened from a file has both; dropping them because this
-    // cannot edit them would mean rebuilding a disc without the cover somebody
-    // picked, which is a worse answer than carrying something untouched.
+    // Carried as well as chosen. The window picks these now, in
+    // WhatElseGoesOnIt, and a disc opened from a project file arrives with
+    // them already set; either way they are kept rather than dropped, because
+    // rebuilding a disc without the cover somebody picked is the one outcome
+    // nobody wants.
     private DiscArtwork? _artwork;
     private string? _manual;
     private string? _extrasFolder;

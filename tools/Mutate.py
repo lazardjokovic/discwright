@@ -91,8 +91,10 @@ def run_the_suite(tries=4):
             # It ran, it finished, and nothing objected.
             return "survived"
 
-        # It did not run. Usually Smart App Control refusing the rebuilt
-        # assembly, which is nothing to do with the mutant.
+        # It did not run, which is nothing to do with the mutant. Until
+        # 2026-10-16 this was usually Smart App Control refusing the rebuilt
+        # assembly; the check stays, because a machine that has it on still
+        # does exactly that.
         why = "blocked by Application Control" if any(w in out for w in BLOCKED) else "did not report a result"
         print("      attempt %d %s, trying again" % (attempt + 1, why))
 

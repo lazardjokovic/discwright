@@ -9,8 +9,9 @@
 
 [CmdletBinding()]
 # -Exe points this at a build to drive. The default is the Debug build, which
-# on a machine with Smart App Control enforcing is an exe beside loose DLLs and
-# is refused outright, so a single-file publish is what actually runs here.
+# runs here. On a machine with Smart App Control enforcing it is an exe beside
+# loose DLLs and is refused outright, so point this at a single-file publish to
+# drive what such a machine would actually run.
 param(
     [string] $Exe,
     [string] $Game = (Join-Path $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' }) '1 SOURCES - add these\A - GOG download (Hollow Knight)'),

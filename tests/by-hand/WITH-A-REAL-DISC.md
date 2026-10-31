@@ -1,4 +1,4 @@
-# The seven things only a real disc can answer
+# The eight things only a real disc can answer
 
 Everything else in this folder is covered by the suite. These are not, and no
 amount of faking will cover them, because what they test is whether the real

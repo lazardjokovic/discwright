@@ -11,11 +11,16 @@
     whole project and says what fraction the suite objects to, which is the
     only honest answer to "are these tests worth anything".
 
-    IT RUNS ON THE VM, and that is not a preference. Stryker rebuilds the test
-    assembly for every batch of mutants, and Smart App Control on the
-    development machine refuses to load a freshly built unsigned one
+    IT DEFAULTS TO THE VM. That was not a preference: Stryker rebuilds the
+    test assembly for every batch of mutants, and Smart App Control on the
+    development machine refused to load a freshly built unsigned one
     (0x800711C7). A blocked run looks exactly like a suite that caught nothing,
     which is the trap Mutate.py carries a whole paragraph about.
+
+    Smart App Control was turned off there on 2026-10-16, so that reason has
+    gone and a run here would complete. It still defaults to the VM because a
+    mutation run occupies a machine for a long time, and the one being worked
+    on is the worse choice.
 
 .PARAMETER Project
     Which project to mutate. The view models hold most of the decisions, so

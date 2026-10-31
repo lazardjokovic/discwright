@@ -8,7 +8,7 @@ Open `DiscWright.slnx` in Visual Studio and keep this file open beside it. Doubl
 
 Everything is arranged around one sentence. **Arrows point inward, and the middle points at nothing.**
 
-`DiscWright.Core` is pure. It knows no COM, no disc, no file, no window. Everything else may use `Core`; `Core` may use nothing of ours. That is why 54 tests run in under a second without touching a disk.
+`DiscWright.Core` is pure. It knows no COM, no disc, no file, no window. Everything else may use `Core`; `Core` may use nothing of ours. That is why the tests over `Core` need no disc, no window and no COM, and nothing in them waits for hardware.
 
 It is enforced twice: `Core` targets `net10.0` while the edges target `net10.0-windows`, so a Windows API is literally out of its reach, and `TheArchitecture` reads the project files and fails if any dependency appears that the plan does not allow.
 
@@ -147,9 +147,9 @@ Five tests that read the `.csproj` files and fail if the dependency rule is brok
 
 | | Do this | What you learn |
 |---|---|---|
-| 1 | **Test → Test Explorer**, Run All | 54 green in under a second |
+| 1 | **Test → Test Explorer**, Run All | all of them green, in about half a minute |
 | 2 | Debug `Cuts_a_file_too_big_for_one_disc_when_it_is_allowed_to` | the cutting loop, one step at a time |
-| 3 | Change `PartSuffix` from `".dwpart"` to `".part"`, Run All | **4 tests go red.** Undo. |
+| 3 | Change `PartSuffix` from `".dwpart"` to `".part"`, Run All | **six go red**, in `ThePlanner` and `BuildingADisc`. Undo. |
 | 4 | Rename a private field from `_was` to `was` | VS underlines it, and the build refuses it |
 | 5 | Set `DiscWright.App` as startup, press `F5` | an empty window, because the UI is step 7 |
 

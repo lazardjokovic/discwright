@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace DiscWright.Tests;
@@ -141,6 +142,73 @@ public class TheTestMatrix
         Assert.Contains("<meta charset=\"utf-8\">", matrix, StringComparison.Ordinal);
         Assert.Contains("<title>", matrix, StringComparison.Ordinal);
         Assert.Contains("</html>", matrix, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Lists_every_file_in_the_folder_it_describes()
+    {
+        // The heading said "The three files here" above a table of four, in a
+        // folder holding seven besides the README, and three of them went
+        // undescribed for as long as they have existed. Nothing read that
+        // document, so nothing minded.
+        // A row of its own, not a mention. The first version of this asked
+        // whether the name appeared anywhere in the file, and a planted fault
+        // walked through it: the row describing a-disc.pict was deleted and
+        // the name was still there, inside the row about the script that
+        // reads it.
+        string[] rows =
+        [
+            .. File
+                .ReadAllLines(Repository.File("tests", "by-hand", "README.md"))
+                .Select(line => line.TrimStart())
+                .Where(line => line.StartsWith("| `", StringComparison.Ordinal)),
+        ];
+
+        string[] missing =
+        [
+            .. Directory
+                .GetFiles(Repository.File("tests", "by-hand"))
+                .Select(Path.GetFileName)
+                .OfType<string>()
+                .Where(name => !name.Equals("README.md", StringComparison.OrdinalIgnoreCase))
+                .Where(name => !rows.Any(row => row.StartsWith("| `" + name + "`", StringComparison.Ordinal)))
+                .Order(),
+        ];
+
+        Assert.True(
+            missing.Length == 0,
+            "tests/by-hand/README.md has no row of its own for: " + string.Join(", ", missing));
+    }
+
+    [Fact]
+    public void Counts_the_cases_that_need_a_disc_the_same_way_twice()
+    {
+        // Its own title said seven above eight of them, and the README beside
+        // it agreed with the title rather than with the list. A number written
+        // in words in two places and counted in neither is going to be wrong.
+        string[] lines = File.ReadAllLines(Repository.File("tests", "by-hand", "WITH-A-REAL-DISC.md"));
+
+        int cases = lines.Count(line => Regex.IsMatch(line, @"^## [0-9]+\. "));
+
+        string[] words =
+        [
+            "zero", "one", "two", "three", "four", "five", "six", "seven",
+            "eight", "nine", "ten", "eleven", "twelve",
+        ];
+
+        Assert.True(cases > 0 && cases < words.Length, $"Counted {cases} cases, which this test cannot put in words.");
+
+        string said = words[cases];
+
+        Assert.True(
+            lines[0].Contains(said, StringComparison.OrdinalIgnoreCase),
+            $"WITH-A-REAL-DISC.md holds {cases} cases and its title says: {lines[0]}");
+
+        string readme = File.ReadAllText(Repository.File("tests", "by-hand", "README.md"));
+
+        Assert.True(
+            readme.Contains("the " + said + " that need a disc", StringComparison.OrdinalIgnoreCase),
+            $"There are {cases} cases needing a disc, and tests/by-hand/README.md does not say \"the {said}\".");
     }
 
     private static bool Mentions(string matrix, string id) =>

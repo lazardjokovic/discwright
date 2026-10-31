@@ -1,11 +1,12 @@
 <#
     Runs the test suite on the Windows VM.
 
-    Smart App Control is on and enforcing on the development machine, and it
-    refuses to load our own freshly built, unsigned assemblies. Anything that
-    touches DiscWright.Platform fails here with 0x800711C7 and passes there,
-    where Smart App Control is in Evaluation and only audits. ARCHITECTURE.md
-    has the whole story and the reason that machine is left strict on purpose.
+    This existed because Smart App Control was on and enforcing on the
+    development machine and refused to load our own freshly built, unsigned
+    assemblies: anything touching DiscWright.Platform failed there with
+    0x800711C7 and passed here. It was turned off on 2026-10-16 and the whole
+    suite now runs on either machine, so this is a second machine rather than
+    the only one that can finish. ARCHITECTURE.md has the whole story.
 
     It copies the WORKING TREE, not the last commit, because the point of a
     test loop is to run the code as it is on disk this second.

@@ -356,13 +356,13 @@ So the encoding is the port's business, not `Core`'s: a step hands over text and
 
 ## Smart App Control, and why 2.0 may need signing
 
-**This machine has Smart App Control ON and enforcing**, which is the default on a clean Windows 11. It refuses code it cannot attribute to a known publisher, and on 2026-10-14 it refused *ours*: Visual Studio's MSBuild was blocked loading our own freshly built class libraries during WPF markup compilation, logged as CodeIntegrity events 3033 and 3077, naming each referenced project in turn.
+**This machine had Smart App Control ON and enforcing** until 2026-10-16, which is the default on a clean Windows 11. It refuses code it cannot attribute to a known publisher, and on 2026-10-14 it refused *ours*: Visual Studio's MSBuild was blocked loading our own freshly built class libraries during WPF markup compilation, logged as CodeIntegrity events 3033 and 3077, naming each referenced project in turn.
 
 The build still succeeded, and the immediate cause is gone: the window referenced all seven projects while using none of them, so the references were removed until it actually needs them. They go back one at a time, as it starts using them.
 
 **The lesson is about shipping, not about building.** What this project publishes is a self-contained, unsigned executable. v1 is a PowerShell script started by a `.vbs`, and it runs here today; an unsigned `.exe` is a different kind of thing to Windows, and on a machine configured like this one it may simply be refused. Nobody would discover that until somebody downloaded a release.
 
-So, before 2.0 ships: **run the published exe on this machine, with Smart App Control left on**, because that is what a careful stranger's machine does. If it is refused, the answer is a code signing certificate, which is a cost and a lead time rather than a line of code. It is the same question the disc already faces if a helper binary ever ships on it.
+So, before 2.0 ships: **run the published exe on a Windows with Smart App Control on**, because that is what a careful stranger's machine does. That can no longer be this one, and the test VM only audits, so it means a fresh Windows 11. If it is refused, the answer is a code signing certificate, which is a cost and a lead time rather than a line of code. It is the same question the disc already faces if a helper binary ever ships on it.
 
 ### Later the same day, it blocked the tests as well
 
@@ -375,11 +375,11 @@ An Application Control policy has blocked this file. (0x800711C7)
 
 Nine tests, repeatably, on every run. The other 72 pass, because they stay inside `Core`, and why `Core` is allowed to load while `Platform` is refused is not understood. Both are equally unsigned and built seconds apart.
 
-**So the suite runs on the test VM** through `tools/Invoke-TestsOnTheVM.ps1`, where Smart App Control is in *Evaluation*: it audits and does not block. That script sends the working tree rather than the last commit, and stamps each run with the local commit and the time, which the VM echoes back and the script checks, because a result from a run that never fired reads exactly like a pass. The window suite in v1 learned that when `job.done` survived a run that never started. The same commit passes everything there. Running it here is still worth doing, because the 72 that need no machine are the ones worth running constantly, and they are unaffected.
+**So the suite ran on the test VM** through `tools/Invoke-TestsOnTheVM.ps1`, where Smart App Control is in *Evaluation*: it audits and does not block. That script sends the working tree rather than the last commit, and stamps each run with the local commit and the time, which the VM echoes back and the script checks, because a result from a run that never fired reads exactly like a pass. The window suite in v1 learned that when `job.done` survived a run that never started. The same commit passes everything there. **Since 2026-10-16 the whole suite runs here as well**, so the VM is a second machine rather than the only one that can finish it, and the stamping stays worth having whatever the reason for reaching for the VM.
 
-That split is not a workaround to be embarrassed about. It leaves this machine as the honest answer to the only question that matters at release: **what does a careful stranger's Windows do with an unsigned build of DiscWright?** Today the answer is "refuses to load part of it", and that will not change by itself.
+That split was not a workaround to be embarrassed about. It left this machine as the honest answer to the only question that matters at release: **what does a careful stranger's Windows do with an unsigned build of DiscWright?** On 2026-10-14 the answer was "refuses to load part of it". It cannot be asked here any more.
 
-**Do not turn Smart App Control off to make development quieter.** It cannot be turned back on without reinstalling Windows, and a machine that is strict about unsigned code is the most useful test environment this project has.
+**Smart App Control was turned off here on 2026-10-16**, and it cannot be turned back on without reinstalling Windows. The gain is that the whole suite runs on this machine. The cost is that neither machine is strict about unsigned code any more, the VM being in Evaluation, so the release question above now needs a Windows that has it on, and getting one means a fresh install.
 
 ## The two machines, as they stand
 
@@ -391,8 +391,8 @@ Both prepared 2026-10-14.
 | WindowsDesktop runtime | 8.0.31 and 10.0.12 | 10.0.13 |
 | Visual Studio | 18.10.3 | none, and needs none |
 | git | 2.53.0 | 2.55.0 |
-| Smart App Control | **ON, enforcing** | Evaluation, audits only |
-| Runs the whole suite | no, 72 of 81 | **yes** |
+| Smart App Control | off since 2026-10-16, was ON and enforcing | Evaluation, audits only |
+| Runs the whole suite | **yes**, since 2026-10-16 | **yes** |
 
 Two things came out of preparing them, both worth knowing before the first commit.
 
@@ -734,7 +734,7 @@ It asks first, but **only when there is something to lose**. Confirming an empty
 
 ### The markup is a tested thing
 
-`TheWindowsMarkup` reads `MainWindow.xaml` **as XML from the source tree**, rather than loading the built window. Nothing may reference the window project, including the tests; and Smart App Control on this machine refuses to load our own unsigned assemblies into a test host, so a test that instantiated a window would pass on the VM and fail here.
+`TheWindowsMarkup` reads `MainWindow.xaml` **as XML from the source tree**, rather than loading the built window. Nothing may reference the window project, including the tests, which is reason enough on its own. Until 2026-10-16 there was a second reason: Smart App Control here refused to load our own unsigned assemblies into a test host, so a test that instantiated a window passed on the VM and failed here.
 
 It guards six things: every interactive control carries an id, no two ids are the same, the window is still the size the design was drawn at, exactly one button wears the accent colour, no colour is written out in figures instead of named, and the button that makes the disc is **dead rather than hidden** when it cannot be pressed.
 
@@ -746,7 +746,7 @@ That the ids **arrive**. `tools/See-TheWindow.ps1` opens the real window, asks U
 
 A collapsed `Expander` hides its contents from the automation tree, which is correct: they are not on screen to be clicked either. The script opens it and asks again, which is what a window test will have to do.
 
-**It also showed something about Smart App Control.** The app itself runs here, although the test host cannot load the same assemblies. That is almost certainly because a locally built exe carries no Mark of the Web, so it says nothing either way about a downloaded release, which will carry one. **The signing problem is unchanged.**
+**It also showed something about Smart App Control.** The app itself ran here even then, although the test host could not load the same assemblies. That is almost certainly because a locally built exe carries no Mark of the Web, so it says nothing either way about a downloaded release, which will carry one. **The signing problem is unchanged.**
 
 ### The buttons do things now
 
@@ -906,7 +906,7 @@ Leaving the installer off is allowed, because this window refuses by explaining 
 
 #### A mutation run has to prove it ran
 
-`tools\Mutate.py` refuses to draw a conclusion without seeing `Passed!` or `Failed!`. Smart App Control blocks a freshly rebuilt unsigned test assembly here, `0x800711C7`, so the run never starts, there is no `[FAIL]` anywhere, and a harness looking only for failure calls that a survivor. A `caught` verdict is always sound; only `SURVIVED` is suspect. A mutant that stays inconclusive gets planted and run on the VM, which has no Application Control.
+`tools\Mutate.py` refuses to draw a conclusion without seeing `Passed!` or `Failed!`. Until 2026-10-16 Smart App Control blocked a freshly rebuilt unsigned test assembly here, `0x800711C7`, so the run never started, there was no `[FAIL]` anywhere, and a harness looking only for failure called that a survivor. A `caught` verdict is always sound; only `SURVIVED` is suspect. A mutant that stays inconclusive gets planted and run on the VM, which has no Application Control.
 
 #### The Microsoft Store route is open
 

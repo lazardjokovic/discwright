@@ -10,10 +10,11 @@ namespace DiscWright.Tests;
 /// <remarks>
 /// <para>
 /// These read <c>MainWindow.xaml</c> as XML from the source tree rather than
-/// loading the built window, for two reasons. Nothing may reference the window
-/// project, including this; and Smart App Control on the machine this is written
-/// on refuses to load our own unsigned assemblies, so a test that instantiated
-/// a WPF window would pass on the test VM and fail here.
+/// loading the built window. Nothing may reference the window project,
+/// including this, which is reason enough on its own. Until 2026-10-16 there
+/// was a second reason: Smart App Control on the machine this is written on
+/// refused to load our own unsigned assemblies, so a test that instantiated a
+/// WPF window passed on the test VM and failed here.
 /// </para>
 /// <para>
 /// <strong>This is the test that stops v1 happening again.</strong> v1's window

@@ -130,7 +130,7 @@ public class TheArchitecture
         // both: it compiles for whoever wrote it and nobody else runs it.
         Assert.True(
             missing.Length == 0,
-            "These projects are not in DiscWright.sln: " + string.Join(", ", missing));
+            "These projects are not in DiscWright.slnx: " + string.Join(", ", missing));
     }
 
     private static IEnumerable<(string Project, string[] References)> ProjectsUnderSource()
