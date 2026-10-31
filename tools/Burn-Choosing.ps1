@@ -6,7 +6,7 @@
 param(
     [Parameter(Mandatory)] [string] $Pick,
     [string] $Game = (Join-Path $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' }) '1 SOURCES - add these\A - GOG download (Hollow Knight)'),
-    [string] $Into = 'C:\Users\lazar\DiscWright-Lab\burn-choosing'
+    [string] $Into = "$env:USERPROFILE\DiscWright-Lab\burn-choosing"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -16,7 +16,7 @@ $UIA = [System.Windows.Automation.AutomationElement]
 $Deep = [System.Windows.Automation.TreeScope]::Descendants
 $Kids = [System.Windows.Automation.TreeScope]::Children
 
-$exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe'
+$exe = (Join-Path (Split-Path -Parent $PSScriptRoot) 'src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe')
 
 function ById($root, $id, $sec = 10) {
     $want = New-Object System.Windows.Automation.PropertyCondition($UIA::AutomationIdProperty, $id)

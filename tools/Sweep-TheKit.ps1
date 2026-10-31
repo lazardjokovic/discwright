@@ -11,8 +11,8 @@
 [CmdletBinding()]
 param(
     [string] $Kit = (Join-Path $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' }) '1 SOURCES - add these'),
-    [string] $Into = 'C:\Users\lazar\DiscWright-Lab\kit-sweep',
-    [string] $Report = 'C:\Users\lazar\DiscWright-Lab\kit-sweep.md',
+    [string] $Into = "$env:USERPROFILE\DiscWright-Lab\kit-sweep",
+    [string] $Report = "$env:USERPROFILE\DiscWright-Lab\kit-sweep.md",
 
     # The two sparse ones are 4.3 GB and 6.2 GB. What the window SAYS about
     # them is the interesting part, and copying them would take the run from
@@ -41,7 +41,7 @@ $UIA = [System.Windows.Automation.AutomationElement]
 $Kids = [System.Windows.Automation.TreeScope]::Children
 $Deep = [System.Windows.Automation.TreeScope]::Descendants
 
-$exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe'
+$exe = (Join-Path (Split-Path -Parent $PSScriptRoot) 'src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe')
 if (-not (Test-Path $exe)) { throw "No app at $exe" }
 
 if (Test-Path $Into) { Remove-Item $Into -Recurse -Force }
@@ -306,7 +306,7 @@ $lines = @(
     "",
     "Every folder in ``1 SOURCES - add these``, opened in the real DiscWright and built, driven through UI Automation.",
     "",
-    "Run $(Get-Date -Format 'yyyy-MM-dd HH:mm'), against $((git -C 'C:\Users\lazar\Projects\discwright-csharp' rev-parse --short HEAD)), every folder aimed at $Size",
+    "Run $(Get-Date -Format 'yyyy-MM-dd HH:mm'), against $((git -C (Split-Path -Parent $PSScriptRoot) rev-parse --short HEAD)), every folder aimed at $Size",
     "",
     "| Folder | Size | Named it | Says it will make | Games | Also had | Built | Files | Add-ons | Note |",
     "|---|---|---|---|---|---|---|---|---|---|"

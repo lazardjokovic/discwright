@@ -14,8 +14,8 @@ param(
     [string] $Drive = 'E:',
     [switch] $Packaged,
     [string] $Game,
-    [string] $Into = 'C:\Users\lazar\DiscWright-Lab\burn-from-window',
-    [string] $Exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe'
+    [string] $Into = "$env:USERPROFILE\DiscWright-Lab\burn-from-window",
+    [string] $Exe = (Join-Path (Split-Path -Parent $PSScriptRoot) 'src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe')
 )
 
 # The kit is found rather than written down, so this works on this PC, on the

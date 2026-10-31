@@ -14,8 +14,8 @@
 param(
     [string] $Exe,
     [string] $Game = (Join-Path $(if ($env:DISCWRIGHT_KIT) { $env:DISCWRIGHT_KIT } else { Join-Path $env:USERPROFILE 'DiscWright-Kit' }) '1 SOURCES - add these\A - GOG download (Hollow Knight)'),
-    [string] $Into = 'C:\Users\lazar\DiscWright-Lab\driven-by-the-window',
-    [string] $Shots = 'C:\Users\lazar\DiscWright-Lab'
+    [string] $Into = "$env:USERPROFILE\DiscWright-Lab\driven-by-the-window",
+    [string] $Shots = "$env:USERPROFILE\DiscWright-Lab"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,7 +24,7 @@ Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, Sy
 $UIA = [System.Windows.Automation.AutomationElement]
 $Scope = [System.Windows.Automation.TreeScope]::Descendants
 
-if (-not $Exe) { $Exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe' }
+if (-not $Exe) { $Exe = (Join-Path (Split-Path -Parent $PSScriptRoot) 'src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe') }
 $exe = $Exe
 if (-not (Test-Path $exe)) { throw "No app at $exe" }
 if (-not (Test-Path $Game)) { throw "No game folder at $Game" }

@@ -15,7 +15,7 @@ $UIA = [System.Windows.Automation.AutomationElement]
 $Deep = [System.Windows.Automation.TreeScope]::Descendants
 $Kids = [System.Windows.Automation.TreeScope]::Children
 
-if (-not $Exe) { $Exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe' }
+if (-not $Exe) { $Exe = (Join-Path (Split-Path -Parent $PSScriptRoot) 'src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe') }
 $exe = $Exe
 
 function ById($root, $id, $sec = 10) {
@@ -82,10 +82,11 @@ try {
     $bmp = New-Object System.Drawing.Bitmap ([int]$r.Width), ([int]$r.Height)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
     $g.CopyFromScreen([int]$r.X, [int]$r.Y, 0, 0, $bmp.Size)
-    $bmp.Save('C:\Users\lazar\DiscWright-Lab\opened-a-disc.png', [System.Drawing.Imaging.ImageFormat]::Png)
+    $shot = "$env:USERPROFILE\DiscWright-Lab\opened-a-disc.png"
+    $bmp.Save($shot, [System.Drawing.Imaging.ImageFormat]::Png)
     $g.Dispose(); $bmp.Dispose()
     Write-Host ""
-    Write-Host "  photographed: C:\Users\lazar\DiscWright-Lab\opened-a-disc.png"
+    Write-Host "  photographed: $shot"
 }
 finally {
     if (-not $app.HasExited) { $app.CloseMainWindow() | Out-Null; Start-Sleep -Milliseconds 500 }

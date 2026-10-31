@@ -13,14 +13,14 @@
 # call to a command called param, which the parser is perfectly happy with and
 # which fails the moment the script is actually run.
 param(
-    [string] $Exe = 'C:\Users\lazar\Projects\discwright-csharp\src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe'
+    [string] $Exe = (Join-Path (Split-Path -Parent $PSScriptRoot) 'src\DiscWright.App\bin\Debug\net10.0-windows\DiscWright.App.exe')
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, System.Windows.Forms
 
 $exe = $Exe
-$shot = 'C:\Users\lazar\DiscWright-Lab\the-window.png'
+$shot = "$env:USERPROFILE\DiscWright-Lab\the-window.png"
 
 if (-not (Test-Path $exe)) { throw "No app at $exe" }
 New-Item -ItemType Directory -Force -Path (Split-Path $shot) | Out-Null
