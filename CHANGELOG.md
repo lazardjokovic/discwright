@@ -520,20 +520,22 @@ is why so much of this release is a fix rather than a feature.
 ### Thanks
 
 - To [xniwo](https://github.com/xniwo) on GitHub, whose
-  [issue #98](https://github.com/lazardjokovic/discwright/issues/98) is still the
-  only report here from somebody who came to this application without having built
-  it. Eight of the changes above are his: the disc set itself, which was item 1 on
-  his list; cutting a file so it fits, which he asked for twice, and he worked out
-  the risk before anybody else did and asked whether it would need "a database of
-  some sort to remember a game's original state", which it does, and `Disc set.txt`
-  already was one; handing the ISO to whatever else can burn it; the one click
-  checksum verification in the menu; three labels that said something other than
-  what they set; covers at the size of the case the disc goes in; the spine
-  lettering, which he put as "slightly off centre to the right (not a major
-  issue)" and which measured at eleven per cent of the band; and the hand wrapped
-  sentence in the print dialog, noticed in the same comment. The ninth, counting a
-  stock of blank discs, is the one thing on his list that was turned down, and the
-  reasons are written into the roadmap rather than left in a thread. Thank you.
+  [issue #98](https://github.com/lazardjokovic/discwright/issues/98) is still
+  the only report here from somebody who came to this application without having
+  built it. Nine of the changes above are his: the disc set itself, which was
+  item 1 on his list; cutting a file so it fits, which he asked for twice, and
+  he worked out the risk before anybody else did and asked whether it would need
+  "a database of some sort to remember a game's original state", which it does,
+  and `Disc set.txt` already was one; handing the ISO to whatever else can burn
+  it; both artwork notes appearing at once, each saying what shape it wanted;
+  the one click checksum verification in the menu; three labels that said
+  something other than what they set; covers at the size of the case the disc
+  goes in; the spine lettering, which he put as "slightly off centre to the
+  right (not a major issue)" and which measured at eleven per cent of the band;
+  and the hand wrapped sentence in the print dialog, noticed in the same
+  comment. The tenth, counting a stock of blank discs, is the one thing on his
+  list that was turned down, and the reasons are written into the roadmap rather
+  than left in a thread. Thank you.
 
 ## [0.10.0] — 2026-10-03
 
