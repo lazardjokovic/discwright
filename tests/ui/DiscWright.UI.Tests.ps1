@@ -310,7 +310,7 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     It 'leaves <_> greyed until there is something for it to act on' -ForEach @(
         'Add-on*', 'Change*', 'Remove', 'Show disc folder', 'Preview menu', 'New disc',
-        'Print artwork*', 'Burn to disc*'
+        'Burn to disc*'
     ) {
         Test-CtlEnabled $script:Win $_ | Should -BeFalse
     }
@@ -320,7 +320,7 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
     }
 
     It 'shows <_> without the window being scrolled' -ForEach @(
-        'Print artwork', 'Burn to disc...', 'Burn with...'
+        'Burn to disc...', 'Burn with...'
     ) {
         # The one that was reported. These three were laid out at y=1100 in a
         # window 953 pixels tall: enabled, correct, and 189 pixels below the
@@ -340,13 +340,13 @@ Describe 'The window as it opens' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
         $r.Top | Should -BeGreaterOrEqual $w.Top -Because $why
     }
 
-    It 'does not stack the three of them on top of each other' {
+    It 'does not stack the two of them on top of each other' {
         # The window-wide overlap test cannot answer this one. A control laid
         # out exactly on top of another is not reported as a clash, because UI
         # Automation hands back the one in front and the covered one simply is
         # not there.
         $rs = @()
-        foreach ($n in 'Print artwork', 'Burn to disc...', 'Burn with...') {
+        foreach ($n in 'Burn to disc...', 'Burn with...') {
             $rs += [pscustomobject]@{ Name = $n; R = (Find-Ctl $script:Win $n).Current.BoundingRectangle }
         }
         for ($i = 0; $i -lt $rs.Count; $i++) {
@@ -430,10 +430,10 @@ Describe 'Opening a disc that was already built' -Tag 'UI' -Skip:(-not $script:H
         Test-CtlEnabled $script:Win 'Add-on*'          | Should -BeTrue
         Test-CtlEnabled $script:Win 'Show disc folder' | Should -BeTrue
         Test-CtlEnabled $script:Win 'Preview menu'     | Should -BeTrue
-        # Artwork comes from the plan rather than from the ISO, so it is
-        # available as soon as there is a game and somewhere to write to,
-        # build or no build.
-        Test-CtlEnabled $script:Win 'Print artwork*'   | Should -BeTrue
+    }
+
+    It 'has no Print artwork button, since the artwork goes on the disc as it is' {
+        Find-Ctl $script:Win 'Print artwork*' | Should -BeNullOrEmpty
     }
 
     It 'keeps Change... and Remove greyed while no row is selected' {

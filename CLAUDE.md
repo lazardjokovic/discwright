@@ -172,18 +172,15 @@ path back as `D:\`.
 
 `burn\README.md` carries the full checklist, including what is still unproven.
 
-## Rendered output, and looking at it
+## The artwork is copied, not drawn
 
-`print\New-SampleSet.ps1` renders every row of the format tables into
-`%USERPROFILE%\DiscWright-Lab`, outside the repository and outside OneDrive,
-with a `.preview.jpg` beside every PDF. Generated files are not source, they are
-regenerated on every run, and nothing there is edited by hand.
-
-Run it after changing anything that draws, then open a combination nobody has
-looked at. That is not ceremony. It is how the CD jewel insert was caught being
-drawn as two half-width panels either side of a spine with no width, with the
-whole suite passing. A renderer that has only ever run for one row has something
-wrong with it for the others.
+Since 0.11.0 nothing here prints. The cover and the disc face somebody chose
+go onto every disc in `ARTWORK` exactly as they were given, renamed `cover` and
+`disc face` with their own extension, beside a `READ ME.txt` that is word for
+word what the C# version writes. No option, no case sizes, no shape check, and
+the menu background is never used as a cover. `print\` and its tests are gone,
+the installer deletes an old `{app}\print` on upgrade, and the project file
+still writes `ArtworkOnDisc` as true for 0.10.0 and older, which read it.
 
 ## The menu knows where an entry came from
 
@@ -227,8 +224,8 @@ The Linux port carries a copy of the menu template and has not had this change.
   inside a function taking `[string]$Accent` converted the Color straight back
   to the string `Color [A=255, R=27...]`, and the error arrived later and
   elsewhere, as a constructor refusing to convert a Color to a Color. Give the
-  local its own name. `print/DiscWright.Print.ps1` has the comment and
-  `tests/DiscWright.Print.Tests.ps1` has the pixel test that catches it.
+  local its own name. It was found in the print module, which went in 0.11.0,
+  and the trap is still live anywhere else in PowerShell.
 - **`New-Object` picks the wrong overload for `RectangleF`.** It chose the
   `Rectangle` overload of `LinearGradientBrush` and then reported the failure as
   a bad colour. `[Type]::new(...)` with explicit `[single]` casts resolves it.
@@ -237,8 +234,8 @@ The Linux port carries a copy of the menu template and has not had this change.
   `BeforeAll`.** Data loaded in `BeforeAll` does not exist yet, so the loop
   iterates over nothing, every block it would have made silently vanishes, and
   the run still reports all green with a smaller number nobody reads. Three
-  "every combination" loops in `tests/DiscWright.Print.Tests.ps1` ran zero
-  times this way. Dot-source what the loop reads at the top of the file, and
+  "every combination" loops in the print module's tests, gone since 0.11.0,
+  ran zero times this way. Dot-source what the loop reads at the top of the file, and
   pass each row with `-ForEach` so the run phase can see it; a bare `foreach`
   inside an `It` body is fine, since that is only assertions.
 

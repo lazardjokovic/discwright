@@ -50,11 +50,11 @@ $payload = @(
     'Run DiscWright.cmd'
     'README.md'
     'LICENSE'
-    # The two modules the app dot-sources when their buttons are pressed. Left
-    # out, Print artwork and Burn to disc are dead ends for everybody who takes
-    # the zip, which is the main download. The installer's list already carried
-    # them and this one did not, so the zip shipped half an app once.
-    'print\DiscWright.Print.ps1'
+    # The module the app dot-sources when Burn to disc is pressed. Left out, the
+    # button is a dead end for everybody who takes the zip, which is the main
+    # download. The installer's list already carried it and this one did not,
+    # so the zip shipped half an app once. The print module that sat beside it
+    # went in 0.11.0, when the artwork stopped being printed here.
     'burn\DiscWright.Burn.ps1'
 )
 

@@ -594,39 +594,6 @@ function Get-SmallestFromSetPlans($all) {
     return $null
 }
 
-# Which case a disc goes in, and how big the front of that case is, so a cover
-# is asked for at the shape of the thing it will be slipped into.
-#
-# xniwo: "With 'Target disc' in DW chosen, perhaps this could sync with specific
-# 'Cover picture' measurements (eg for cd dvd bluray cases)". Every cover was
-# asked for at DVD size before this, so somebody printing for a Blu-ray case was
-# told to make a picture 19 mm too tall, and somebody with a CD jewel case was
-# told to make a tall rectangle for a square insert.
-#
-# A DVD9 is still one disc in one standard case. The double case in the print
-# module holds two discs and nothing here makes two.
-#
-# The numbers are the print module's, repeated rather than imported because the
-# form has to open on an install with no print\ folder: that module is reached
-# into and never reaches back, which is what keeps the ISO builder able to ship
-# without it. A test loads both and fails if they drift apart.
-function Get-CaseForMedia([string]$mediaKey) {
-    switch -Regex ("$mediaKey") {
-        '^CD' { return @{ Case = 'cd';     WidthMm = 120.0; HeightMm = 120.0 } }
-        '^BD' { return @{ Case = 'bluray'; WidthMm = 129.0; HeightMm = 164.0 } }
-        default { return @{ Case = 'dvd';  WidthMm = 129.5; HeightMm = 183.0 } }
-    }
-}
-
-# The same thing in the pixels the renderer draws at, which is what the fit note
-# compares a chosen picture against.
-function Get-CoverPixels([string]$mediaKey) {
-    $c = Get-CaseForMedia $mediaKey
-    return @{ W = [int][Math]::Round($c.WidthMm / 25.4 * 300)
-              H = [int][Math]::Round($c.HeightMm / 25.4 * 300) }
-}
-
-
 # Recommend the smallest media that fits the payload.
 function Get-MediaRec([double]$bytes) {
     $gib = $bytes/1GB
@@ -1336,12 +1303,19 @@ function Get-ItemsSize($items) {
 }
 
 # Every disc carries these whatever else is on it: the menu, the icon, the
-# background and the music.
+# background, the music, and the cover and disc face in ARTWORK.
+#
+# The two pictures count once and at their own size, because they are copied
+# exactly as they were given. They were left out of the sum while they were
+# optional and drawn small, which was fine until somebody chose a 60 MB scan of
+# a sleeve and the last disc of a set came up short.
 function Get-DiscOverheadBytes([hashtable]$s) {
     $b  = [double]2MB
     $b += 2 * (Get-ItemsSize @($s.IconPath))
     $b += 2 * (Get-ItemsSize @($s.BgPath))
     $b += (Get-ItemsSize @($s.MusicFile))
+    $b += (Get-ItemsSize @($s.CoverPath))
+    $b += (Get-ItemsSize @($s.DiscArtPath))
     return $b
 }
 
@@ -1453,7 +1427,7 @@ function Get-DiscIconName([string]$label) {
 # Names the build pipeline owns at the disc root - extra content may not use them.
 # 'disc.ico' stays reserved even when unused, so extra content cannot collide with
 # discs built before the icon was named after the game.
-# Where the rest of DiscWright lives, print\ in particular.
+# Where the rest of DiscWright lives.
 #
 # $PSScriptRoot inside a function is empty when the suite lifts that function
 # out of the file and runs it on its own, which is how every logic test here
@@ -4521,35 +4495,6 @@ public class ISOFile {
 
 # =================== PROJECT SAVE / REOPEN ===================
 
-# How much of a picture survives being fitted to a panel, and whether that is
-# worth saying out loud. A menu background is wide and a cover is tall, so the
-# usual answer is that most of the width goes. Printing costs paper and ink, so
-# the warning belongs before it rather than in the result.
-function Get-ArtFitNote([string]$imagePath, [double]$panelW, [double]$panelH, [string]$what) {
-    if (-not $imagePath -or -not (Test-Path -LiteralPath $imagePath)) { return '' }
-    try {
-        $img = [System.Drawing.Image]::FromFile((Resolve-Path -LiteralPath $imagePath).Path)
-        try { $w = $img.Width; $h = $img.Height } finally { $img.Dispose() }
-    } catch { return '' }
-    if ($w -le 0 -or $h -le 0) { return '' }
-
-    # Nothing is cropped or stretched any more, so the question is no longer how
-    # much is lost. It is whether the picture is the shape of the thing being
-    # printed. Close enough and it is printed exactly as it is; anything else is
-    # not cover art, and a plain label is printed instead with the picture left
-    # alone.
-    $want = $panelW / $panelH
-    $pw = [int]$panelW; $ph = [int]$panelH
-    $have = $w / [double]$h
-    $off = [int][Math]::Round(100 * [Math]::Abs($have - $want) / $want)
-    if ($off -le 6) { return "$what ${w}x${h}, the right shape: printed exactly as it is." }
-    # "any size at 1.00 to 1" is a long way of saying square, and the disc
-    # face is always square.
-    $shape = $(if ([Math]::Abs($want - 1) -lt 0.01) { "or any square picture" }
-               else { "or any size at {0:N2} to 1" -f $want })
-    return "$what ${w}x${h} is not that shape, so a plain label is printed instead. It wants about ${pw}x${ph}, $shape."
-}
-
 function Save-Project([hashtable]$s,[string]$outDir) {
     $games = @($s.Games)
     $o = [ordered]@{
@@ -4658,7 +4603,10 @@ function Save-Project([hashtable]$s,[string]$outDir) {
         LinuxInfo    = [bool]$s.LinuxInfo
         LegacyFs     = [bool]$s.LegacyFs
         Checksums    = [bool]$s.Checksums
-        ArtworkOnDisc = [bool]$s.ArtworkOnDisc
+        # Always true. The option is gone and what it named always happens now,
+        # but 0.10.0 and older still read this field, and a file saying false
+        # would open there as a disc without its artwork. Nothing here reads it.
+        ArtworkOnDisc = $true
         DiscSet      = [bool]$s.DiscSet
         CutFiles     = [bool]$s.CutFiles
         ShowCaption  = $(if ($null -eq $s.ShowCaption) { $true } else { [bool]$s.ShowCaption })
@@ -4713,7 +4661,6 @@ function Import-Project([string]$jsonPath) {
             LinuxInfo=[bool]$j.LinuxInfo
             LegacyFs=[bool]$j.LegacyFs
             Checksums=[bool]$j.Checksums; DiscSet=[bool]$j.DiscSet; CutFiles=[bool]$j.CutFiles
-            ArtworkOnDisc=[bool]$j.ArtworkOnDisc
             ShowCaption=$(if ($null -eq $j.ShowCaption) { $true } else { [bool]$j.ShowCaption })
             Menu=[bool]$j.Menu; BgPath=$j.BgPath; BgAsIs=[bool]$j.BgAsIs
             CoverPath=$j.CoverPath; DiscArtPath=$j.DiscArtPath
@@ -4813,6 +4760,68 @@ function Get-IsoPath([string]$outDir, [string]$label) {
     $name = ($label -replace '[^A-Za-z0-9_\- ]','_').Trim()
     if ([string]::IsNullOrWhiteSpace($name)) { return '' }
     return (Join-Path $outDir ($name + '.iso'))
+}
+
+# The pictures somebody chose for the printed cover and the printed disc face,
+# copied into ARTWORK as they are, with a readme that needs no program.
+#
+# Resizing them would be deciding what somebody's printer can do, from here,
+# years early, so they keep their size and their format, and only the name
+# changes: cover and disc face, with the extension the picture came with. A
+# picture that has gone since it was chosen is a note in the log rather than a
+# failed build, because nobody should lose a disc over a cover image. Nothing
+# chosen means no folder at all: the menu background is not a cover.
+function Write-ArtworkFolder([hashtable]$s, [string]$stage, [scriptblock]$log) {
+    $wanted = @(
+        @{ From = [string]$s.CoverPath;   As = 'cover' }
+        @{ From = [string]$s.DiscArtPath; As = 'disc face' }
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_.From) }
+    if (-not @($wanted).Count) { return }
+
+    $artDir = Join-Path $stage 'ARTWORK'
+    $copied = @()
+    foreach ($w in @($wanted)) {
+        if (-not (Test-Path -LiteralPath $w.From -PathType Leaf)) {
+            & $log "NOTE: the $($w.As) picture is not there any more, so it is not on the disc: $($w.From)"
+            continue
+        }
+        $ext = [IO.Path]::GetExtension($w.From).ToLowerInvariant()
+        if (-not $ext) { $ext = '.png' }
+        if (-not (Test-Path -LiteralPath $artDir)) { New-Item -ItemType Directory -Force -Path $artDir | Out-Null }
+        $to = Join-Path $artDir ($w.As + $ext)
+        Copy-Item -LiteralPath $w.From -Destination $to -Force
+        # A picture picked off a disc arrives read-only, and a read-only file in
+        # the staging folder is one the next build cannot write over.
+        (Get-Item -LiteralPath $to).IsReadOnly = $false
+        $copied += ('ARTWORK' + [char]92 + $w.As + $ext)
+    }
+    if (-not $copied.Count) { return }
+
+    [IO.File]::WriteAllText((Join-Path $artDir 'READ ME.txt'), (Get-ArtworkReadme $s.Label),
+                            (New-Object System.Text.UTF8Encoding $false))
+    & $log ('Artwork on the disc, as it was given: ' + ($copied -join ' and '))
+}
+
+# Written for somebody who has never heard of this program, because in ten years
+# that is who will be reading it. Word for word what the C# version writes, so a
+# disc reads the same whichever of the two made it.
+function Get-ArtworkReadme([string]$label) {
+    $lines = @(
+        "The printed artwork for $label"
+        ''
+        'cover       the sleeve, for the case'
+        'disc face   the label for the disc itself'
+        ''
+        'These are ordinary picture files. Open them with anything, print them'
+        'from anything. Nothing here needs the program that made this disc, and'
+        'that is deliberate: a disc that can only be reprinted by one program is'
+        'a disc that stops being printable the day that program stops running.'
+        ''
+        'Print them at their own size rather than fitting them to the page, or'
+        'the sleeve comes out slightly too small for the case.'
+        ''
+    )
+    return ($lines -join "`r`n")
 }
 
 function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$null) {
@@ -5209,51 +5218,19 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     # Last, because it hashes what is on the disc and everything has to be on
     # it by now: the games, the menu, the icon, the launcher.
     # Before the checksum list, so the list covers this file too.
-    # The cover and the disc face, onto the disc itself.
+    # The cover and the disc face, onto the disc itself, exactly as they were
+    # given. Before the set file and the checksum list, so both cover them.
     #
-    # Asked for on 12 October: "artwork for disc and cover rn only exists as
-    # optional i people want that burned to disc also". It is the same argument
-    # as the checksum list and the set file. A disc should be able to explain
-    # itself with nothing else to hand, and that includes being reprintable by
-    # whoever is holding it in ten years, when the project file and the
-    # original picture are long gone.
-    #
-    # Before the set file and the checksum list, so both cover it.
-    #
-    # print\ is a separate module on purpose: this reaches into it and it never
-    # reaches back, so a copy of DiscWright without it still builds discs. A
-    # missing module, or artwork that will not render, is a note in the log and
-    # not a failed build: nobody should lose a disc over a picture.
-    if ($s.ArtworkOnDisc) {
-        $root = Get-AppRoot
-        $printer = if ($root) { Join-Path $root 'print\DiscWright.Print.ps1' } else { '' }
-        if (-not $printer -or -not (Test-Path $printer)) {
-            & $log 'NOTE: the artwork files are not installed, so no artwork was put on the disc.'
-        } else {
-            try {
-                . $printer
-                $artDir = Join-Path $stage 'ARTWORK'
-                New-Item -ItemType Directory -Force -Path $artDir | Out-Null
-                $artNames = @($s.Games | Where-Object { $_.Kind -ne 'AddOn' } |
-                              ForEach-Object { $_.GameName })
-                $artAddOns = @($s.Games | Where-Object { $_.Kind -eq 'AddOn' }).Count
-                # A picture chosen for the cover wins over the menu background,
-                # which was chosen to sit behind buttons rather than to be a
-                # cover. Same order as the Print artwork button uses.
-                $artCover = if ($s.CoverPath) { $s.CoverPath } else { $s.BgPath }
-                $artFace = if ($s.DiscArtPath) { $s.DiscArtPath } else { $artCover }
-                $art = New-ArtworkForDisc -Title $(if ($s.TitleText) { $s.TitleText } else { $s.Label }) `
-                                          -Label $s.Label -Games $artNames -AddOnCount $artAddOns `
-                                          -CoverImage $artCover -DiscImage $artFace `
-                                          -OutDir $artDir `
-                                          -Case (Get-CaseForMedia $s.MediaKey).Case
-                & $log ("Artwork on the disc: ARTWORK\{0} and ARTWORK\{1}" -f
-                        (Split-Path $art.Wrap -Leaf), (Split-Path $art.DiscFace -Leaf))
-            } catch {
-                & $log "NOTE: the artwork could not be made, so none is on the disc: $($_.Exception.Message)"
-            }
-        }
-    }
+    # Nothing is printed, drawn or resized. Asked for on 12 October: "artwork
+    # for disc and cover rn only exists as optional i people want that burned
+    # to disc also". It is the same argument as the checksum list and the set
+    # file: a disc should explain itself with nothing else to hand, and that
+    # includes being reprintable in ten years by whoever is holding it, without
+    # this program, without the project file and without the original picture.
+    # Which is why it is a plain folder of ordinary pictures with a readme
+    # beside them, written always, with no option, and the same on every disc
+    # this program and the C# one make.
+    Write-ArtworkFolder $s $stage $log
 
     if ($s.SetManifest) {
         [IO.File]::WriteAllText((Join-Path $stage (Get-DiscSetFileName)), [string]$s.SetManifest,
@@ -5378,7 +5355,7 @@ if (Test-Path -LiteralPath $icoSelf) {
 # 1024 rather than 992, which is what makes room for the row of disc buttons
 # below the log. The client area is this less the caption and the borders, 39
 # pixels, so 985 is what there is to lay out in before something needs
-# scrolling to. Keep Print artwork, Burn to disc and Burn with inside it: a
+# scrolling to. Keep Burn to disc and Burn with inside it: a
 # button below that line is a button nobody can see, and that is how this was
 # reported, from the middle of a real burn. "There is no burn button anywhere
 # so I can try again."
@@ -5645,15 +5622,6 @@ $btnEx=New-Object System.Windows.Forms.Button; $btnEx.Text='Browse...'; $btnEx.L
 
 $lblStyle=New-Object System.Windows.Forms.Label; $lblStyle.Text='Look:'; $lblStyle.Location=New-Object System.Drawing.Point(15,250); $lblStyle.Size=New-Object System.Drawing.Size(130,20); $grp.Controls.Add($lblStyle)
 $chkDivider=New-Object System.Windows.Forms.CheckBox; $chkDivider.Text='Divider line'; $chkDivider.Location=New-Object System.Drawing.Point(150,248); $chkDivider.Size=New-Object System.Drawing.Size(100,22); $grp.Controls.Add($chkDivider)
-# Off by default: it is a few megabytes on the disc and most people print the
-# artwork rather than carry it. The ones who want it want it badly, because it
-# is the only copy that travels with the disc.
-$chkArtOnDisc=New-Object System.Windows.Forms.CheckBox
-$chkArtOnDisc.Text='artwork on disc'
-$chkArtOnDisc.Checked=$false
-$chkArtOnDisc.Location=New-Object System.Drawing.Point(620,342)
-$chkArtOnDisc.Size=New-Object System.Drawing.Size(130,22)
-$grp.Controls.Add($chkArtOnDisc)
 $chkWinBorder=New-Object System.Windows.Forms.CheckBox; $chkWinBorder.Text='Window border'; $chkWinBorder.Checked=$false; $chkWinBorder.Location=New-Object System.Drawing.Point(255,248); $chkWinBorder.Size=New-Object System.Drawing.Size(115,22); $grp.Controls.Add($chkWinBorder)
 $lblBtnStyle=New-Object System.Windows.Forms.Label; $lblBtnStyle.Text='Buttons:'; $lblBtnStyle.Location=New-Object System.Drawing.Point(380,250); $lblBtnStyle.Size=New-Object System.Drawing.Size(55,20); $grp.Controls.Add($lblBtnStyle)
 $cmbBtnStyle=New-Object System.Windows.Forms.ComboBox; $cmbBtnStyle.DropDownStyle='DropDownList'; $cmbBtnStyle.Location=New-Object System.Drawing.Point(438,247); $cmbBtnStyle.Size=New-Object System.Drawing.Size(100,24); [void]$cmbBtnStyle.Items.AddRange(@('Minimal','Bordered')); $cmbBtnStyle.SelectedIndex=0; $grp.Controls.Add($cmbBtnStyle)
@@ -5684,19 +5652,18 @@ $txtLog=New-Object System.Windows.Forms.TextBox; $txtLog.Multiline=$true; $txtLo
 # directly beneath at the same left edge. That is not only for the look. The
 # window tests find a step's box by that geometry, and a label beside its box
 # is invisible to them.
-AddLabel '7)  Printed artwork (optional):' 15 976 540 | Out-Null
-$lblCoverPic = AddLabel 'Cover picture: the finished front of the case, 130 x 183 mm' 15 1000 420
+AddLabel '7)  Artwork for the disc (optional):' 15 976 540 | Out-Null
+AddLabel 'Cover picture: the finished front of the case' 15 1000 420 | Out-Null
 $txtCover = AddText 15 1022 525
 $btnCover = AddBtn 'Browse...' 545 1022 110
-AddLabel 'Disc face picture: the finished face of the disc, 118 mm across' 15 1048 420 | Out-Null
+AddLabel 'Disc face picture: the finished face of the disc' 15 1048 420 | Out-Null
 $txtDiscArt = AddText 15 1070 525
 $btnDiscArt = AddBtn 'Browse...' 545 1070 110
-$lblArtNote = AddLabel '' 15 1098 645
-# Two lines, because there are two pictures and either can be the wrong
-# shape. On one line the second note ran off the end of the label and was
-# simply not there - reported from outside, where it reads as the warning
-# being cut off mid-sentence.
-$lblArtNote.Size = New-Object System.Drawing.Size(645, 68)
+# What happens to them, said once and never changing. Nothing here prints,
+# resizes or judges a picture: both go onto every disc in ARTWORK as they are,
+# for whoever holds the disc to print from anything, the same as the C# app.
+$lblArtNote = AddLabel 'Choosing them is not printing them. They go on the disc in an ARTWORK folder, exactly as they are, to print later.' 15 1098 645
+$lblArtNote.Size = New-Object System.Drawing.Size(645, 36)
 $lblArtNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
 # Directly under the log, where they are visible without scrolling, and above
 # step 7 rather than below it. They were at y=1100 in a window whose client area
@@ -5704,11 +5671,10 @@ $lblArtNote.ForeColor = [System.Drawing.Color]::FromArgb(90, 90, 90)
 # edge, which from outside is no button at all.
 #
 # These are also the right way round now. Step 7 is something you fill in; these
-# three are things you do once the disc is built, so they belong beside BUILD
-# ISO and not past the last text box on the form.
-$btnArtwork = AddBtn 'Print artwork' 15 938 150
-$btnBurn    = AddBtn 'Burn to disc...' 180 938 150
-$btnHandoff = AddBtn 'Burn with...' 345 938 150
+# two are things you do once the disc is built, so they belong beside BUILD ISO
+# and not past the last text box on the form.
+$btnBurn    = AddBtn 'Burn to disc...' 15 938 150
+$btnHandoff = AddBtn 'Burn with...' 180 938 150
 
 $pbBuild=New-Object System.Windows.Forms.ProgressBar; $pbBuild.Location=New-Object System.Drawing.Point(15,894); $pbBuild.Size=New-Object System.Drawing.Size(150,14); $pbBuild.Minimum=0; $pbBuild.Maximum=1000; $pbBuild.Visible=$false; $form.Controls.Add($pbBuild)
 $lblElapsed=New-Object System.Windows.Forms.Label; $lblElapsed.Location=New-Object System.Drawing.Point(15,914); $lblElapsed.Size=New-Object System.Drawing.Size(160,20); $lblElapsed.ForeColor=[System.Drawing.Color]::DimGray; $form.Controls.Add($lblElapsed)
@@ -5782,7 +5748,8 @@ function Get-PayloadBytes {
 function Get-PlanInputs([hashtable]$payload=$null) {
     $p = $(if ($payload) { $payload } else { Get-PayloadBytes })
     $o = Get-DiscOverheadBytes @{ IconPath=$state.IconPath; BgPath=$state.BgPath
-                                  MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null}) }
+                                  MusicFile=$(if($chkMusic.Checked){$state.MusicFile}else{$null})
+                                  CoverPath=$state.CoverPath; DiscArtPath=$state.DiscArtPath }
     # The disc-wide manual and extras are overhead like the menu: one disc, one
     # copy of them. This used to split into "on every disc" and "on disc 1 alone",
     # a distinction only a set could have.
@@ -6130,19 +6097,6 @@ $tips.SetToolTip($cbExit, (
 $tips.SetToolTip($chkWinBorder, (
     "Draws a thin line around the edge of the menu window, which separates" + [Environment]::NewLine +
     "it from whatever is behind it."))
-$tips.SetToolTip($chkArtOnDisc, (
-    "Writes the case wrap and the disc face into ARTWORK on the disc," + [Environment]::NewLine +
-    "beside the game." + [Environment]::NewLine +
-    "" + [Environment]::NewLine +
-    "The same two files the Print artwork button makes, and the same" + [Environment]::NewLine +
-    "pictures: a cover if one was chosen, otherwise the menu background." + [Environment]::NewLine +
-    "" + [Environment]::NewLine +
-    "It costs a few megabytes. What it buys is a disc that can be" + [Environment]::NewLine +
-    "reprinted by whoever is holding it, years after the project file" + [Environment]::NewLine +
-    "and the original picture have gone." + [Environment]::NewLine +
-    "" + [Environment]::NewLine +
-    "Needs the print folder. Without it the build says so and carries on."))
-
 $tips.SetToolTip($chkSums, (
     "Writes checksums.sha256 at the disc root: the SHA-256 of every other" + [Environment]::NewLine +
     "file on the disc." + [Environment]::NewLine +
@@ -6233,7 +6187,9 @@ function Test-AlreadyBuilt([string]$outDir, [string]$label) {
 # would do nothing visible and look broken.
 function Test-FormDirty {
     if (@($state.Games).Count) { return $true }
-    foreach ($box in $txtLabel,$txtIcon,$txtBg,$txtMusic,$txtMan,$txtEx,$txtTitle) {
+    # The two pictures count: a cover somebody went and found is an afternoon
+    # too, and New disc lit for every other picture on the form and not these.
+    foreach ($box in $txtLabel,$txtIcon,$txtBg,$txtMusic,$txtMan,$txtEx,$txtTitle,$txtCover,$txtDiscArt) {
         if ($box.Text.Trim()) { return $true }
     }
     if ($lstExtra.Items.Count) { return $true }
@@ -6253,35 +6209,6 @@ function Test-FormDirty {
 
 # Grey out the two inspect buttons when there is nothing for them to open, and
 # make the build button say what it will actually do.
-# The cover panel is 129.5 x 183 mm and the disc face is a 118 mm circle, both
-# at 300 dpi. Those are the shapes a picture has to survive, and saying so here
-# is cheaper than saying it after somebody has printed one.
-function Update-ArtNote {
-    if (-not $lblArtNote) { return }
-    $cover = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
-    $face  = if ($state.DiscArtPath) { $state.DiscArtPath } else { $cover }
-    $notes = @()
-    # The label above the box, so somebody is told the size before they go and
-    # make a picture rather than after. Guarded because the logic tests drive
-    # this with stand-in controls.
-    if ($lblCoverPic -is [System.Windows.Forms.Control]) {
-        $cm = Get-CaseForMedia (Get-SelectedMediaKey)
-        $lblCoverPic.Text = "Cover picture: the finished front of the case, {0:N0} x {1:N0} mm" -f $cm.WidthMm, $cm.HeightMm
-    }
-    # Measured against the case the chosen disc goes in, which is not always a
-    # DVD's: a Blu-ray front is 19 mm shorter and a CD insert is square.
-    $cpx = Get-CoverPixels (Get-SelectedMediaKey)
-    $n = Get-ArtFitNote $cover $cpx.W $cpx.H 'Cover'
-    if ($n) { $notes += $n }
-    $n = Get-ArtFitNote $face 1394 1394 'Disc face'
-    if ($n) { $notes += $n }
-    if (-not $notes.Count) {
-        $notes += if ($state.BgPath) { 'Empty means the menu background is used.' }
-                  else { 'Left empty, the panels print in a plain colour with the title on them.' }
-    }
-    $lblArtNote.Text = $notes -join [Environment]::NewLine
-}
-
 function Update-ActionButtons {
     $t = $txtOut.Text.Trim()
     $hasOut  = $t -and (Test-Path $t)
@@ -6294,12 +6221,6 @@ function Update-ActionButtons {
     $canPreview = $chkMenu.Checked -and ((Get-Games).Count -gt 0)
     $isDirty = Test-FormDirty
     $btnOpenDisc.Enabled = [bool]$hasOut
-    # Artwork needs a name to print and somewhere to put it, and nothing else.
-    # It does not need a build: the wrap and the face come from the plan, not
-    # from the ISO, so they can be printed and trimmed while the disc is still
-    # being written.
-    $canArt = [bool]$hasOut -and (Get-Games).Count -gt 0
-    $btnArtwork.Enabled = $canArt
     # An ISO on disk is the only precondition worth checking here. Whether a
     # recorder exists and what is in it is asked at the moment of pressing,
     # because a disc can be put in after the window opened and asking the
@@ -6322,8 +6243,6 @@ function Update-ActionButtons {
         "Lists what this machine already has: Windows' own burner, whatever is" + [Environment]::NewLine +
         "registered for .iso, and mounting it to look inside without spending a" + [Environment]::NewLine +
         "disc. Nothing to set up.")}else{'Build an ISO first'}))
-    $tips.SetToolTip($btnArtwork, $(if($canArt){'Make the case wrap and the disc face for this disc, ready to print'}
-                                    else{'Add a game and set an output folder first'}))
     $tips.SetToolTip($btnBurn, $(if($canBurn){'Write the built ISO to a blank disc, then check every file against what was built'}
                                  else{'Build an ISO first - there is nothing in the output folder to burn'}))
 
@@ -7033,7 +6952,9 @@ function Reset-Form {
     $chkDivider.Checked = $false
     $chkWinBorder.Checked = $false
     $chkSums.Checked = $true
-    $chkArtOnDisc.Checked = $false
+    # Both go on every disc now, so left here the next game is burned wearing
+    # the last one's cover. The handlers clear the state behind the boxes.
+    $txtCover.Clear(); $txtDiscArt.Clear()
     $cmbBtnStyle.SelectedIndex = 0
 
     $lstExtra.Items.Clear(); $state.ExtraItems = @()
@@ -7117,7 +7038,6 @@ function Open-Project([string]$folder) {
     $chkLinux.Checked = [bool]$p.LinuxInfo
     $chkLegacy.Checked = [bool]$p.LegacyFs
     $chkSums.Checked = [bool]$p.Checksums
-    $chkArtOnDisc.Checked = [bool]$p.ArtworkOnDisc
     $chkSet.Checked = [bool]$p.DiscSet
     # No box of its own: it is answered when a build asks, and it rides with the
     # project so the answer is not asked again every time.
@@ -7130,8 +7050,8 @@ function Open-Project([string]$folder) {
     $chkTitle.Checked     = [bool]$p.ShowTitle
     $txtTitle.Text        = [string]$p.TitleText
     # Setting the boxes is enough: their TextChanged handlers put the paths back
-    # into the state and refresh the note. Written in version 10, so anything
-    # older leaves them empty and falls back to the background as it always did.
+    # into the state. Written in version 10, so anything older leaves them empty
+    # and the disc carries no ARTWORK folder.
     $txtCover.Text   = [string]$p.CoverPath
     $txtDiscArt.Text = [string]$p.DiscArtPath
     $chkWinBorder.Checked = [bool]$p.WindowBorder
@@ -7191,7 +7111,7 @@ $btnNew.Add_Click({
 $btnCover.Add_Click({
     $f = New-Object System.Windows.Forms.OpenFileDialog
     $f.Filter = 'Pictures|*.png;*.jpg;*.jpeg;*.bmp|All files|*.*'
-    $f.Title = 'Picture for the printed cover'
+    $f.Title = 'Picture for the cover, copied onto the disc as it is'
     $seed = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
     if ($seed) { $f.InitialDirectory = Split-Path $seed -Parent }
     if ($f.ShowDialog() -eq 'OK') { $txtCover.Text = $f.FileName }
@@ -7199,15 +7119,16 @@ $btnCover.Add_Click({
 $btnDiscArt.Add_Click({
     $f = New-Object System.Windows.Forms.OpenFileDialog
     $f.Filter = 'Pictures|*.png;*.jpg;*.jpeg;*.bmp|All files|*.*'
-    $f.Title = 'Picture for the printed disc face'
+    $f.Title = 'Picture for the disc face, copied onto the disc as it is'
     $seed = if ($state.DiscArtPath) { $state.DiscArtPath } else { $state.BgPath }
     if ($seed) { $f.InitialDirectory = Split-Path $seed -Parent }
     if ($f.ShowDialog() -eq 'OK') { $txtDiscArt.Text = $f.FileName }
 })
 # The boxes are the truth, so the state follows them. Typing a path by hand has
-# to work exactly as well as browsing for one.
-$txtCover.Add_TextChanged({ $state.CoverPath = $txtCover.Text.Trim(); Update-ArtNote })
-$txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Update-ArtNote })
+# to work exactly as well as browsing for one. Both pictures go onto every disc,
+# so changing one changes the room left, and the line under the list says so.
+$txtCover.Add_TextChanged({ $state.CoverPath = $txtCover.Text.Trim(); Update-MediaLabel })
+$txtDiscArt.Add_TextChanged({ $state.DiscArtPath = $txtDiscArt.Text.Trim(); Update-MediaLabel })
 
 # Hand the ISO to something else, rather than burning it here.
 #
@@ -8180,69 +8101,6 @@ $btnOpenDisc.Add_Click({
     Show-Warn "Nothing has been built here yet - there is no 'disc' staging folder in:`r`n`r`n$t`r`n`r`nOpening the output folder instead."
     Start-Process explorer.exe $t
 })
-$btnArtwork.Add_Click({
-    $t = $txtOut.Text.Trim()
-    if (-not $t) { Show-Warn "No output folder is set yet.`r`n`r`nPick one in step 6."; return }
-
-    # print\ is a separate module on purpose: this reaches into it, it never
-    # reaches back, so the ISO builder stays able to ship without it. A missing
-    # copy is a broken install, and saying which file is missing beats failing
-    # with nothing.
-    $printer = Join-Path (Get-AppRoot) 'print\DiscWright.Print.ps1'
-    if (-not (Test-Path $printer)) {
-        Show-Warn "The artwork files are not installed:`r`n`r`n$printer`r`n`r`nReinstall DiscWright, or run it from a full copy of the folder."
-        return
-    }
-
-    try {
-        $entries = Get-Games
-        $names   = @($entries | Where-Object { $_.Kind -ne 'AddOn' } | ForEach-Object { $_.GameName })
-        $addOns  = @($entries | Where-Object { $_.Kind -eq 'AddOn' }).Count
-
-        # Read straight off the form. Writing the project file first and reading
-        # it back would overwrite a saved project with whatever is on screen,
-        # which is not what a button called Print artwork should ever do.
-        . $printer
-        $out = Join-Path $t 'artwork'
-        # A picture chosen for the cover wins over the menu background, which was
-        # chosen to sit behind buttons rather than to be a cover.
-        $coverPic = if ($state.CoverPath) { $state.CoverPath } else { $state.BgPath }
-        $facePic  = if ($state.DiscArtPath) { $state.DiscArtPath } else { $coverPic }
-
-        $art = New-ArtworkForDisc -Title $(if($txtTitle.Text.Trim()){$txtTitle.Text.Trim()}else{$txtLabel.Text.Trim()}) `
-                                  -Label $txtLabel.Text.Trim() -Games $names -AddOnCount $addOns `
-                                  -CoverImage $coverPic -DiscImage $facePic `
-                                  -OutDir $out `
-                                  -Case (Get-CaseForMedia (Get-SelectedMediaKey)).Case
-
-        # Say which way it was made. Somebody who handed over a finished cover
-        # needs to know it was printed untouched, and somebody who did not needs
-        # to know a layout was built for them.
-        $cover = if ($art.WrapFromArtwork) {
-                     'Your cover was printed as it is, at exact size with crop marks. Nothing was added to it.'
-                 } elseif ($art.UsedCover) {
-                     'No finished cover was given, so one was built around your picture.'
-                 } else {
-                     'No picture was given, so the panels are a plain colour with the title on them.'
-                 }
-        if ($art.FaceFromArtwork) { $cover += "`r`nYour disc art was printed as it is, with the hub left clear." }
-        [System.Windows.Forms.MessageBox]::Show(
-            ("Artwork for $($art.Title):`r`n`r`n" +
-             "$(Split-Path $art.Wrap -Leaf)`r`n" +
-             "    The case wrap. Print at 100% with scaling off, then cut to the marks.`r`n`r`n" +
-             "$(Split-Path $art.DiscFace -Leaf)`r`n" +
-             # One line, wrapped by the dialog rather than by hand. Broken here it
-             # read as "which sets the / diameters", which xniwo noticed: a hand
-             # wrap is set to one width and the box is whatever width Windows gives it.
-             "    The disc face. Open it in your printer's disc software, which sets the diameters and lines the tray up.`r`n`r`n" +
-             $cover),
-            'Artwork ready', [System.Windows.Forms.MessageBoxButtons]::OK,
-            [System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
-        Start-Process explorer.exe $out
-    } catch {
-        Show-Warn "The artwork could not be made:`r`n`r`n$($_.Exception.Message)"
-    }
-})
 $btnPreview.Add_Click({
     $h = New-PreviewMenu
     if (-not $h) { return }
@@ -8697,7 +8555,7 @@ $btnBuild.Add_Click({
          Buttons=$buttons; ManualPath=$(if($cbMan.Checked){$state.ManualPath}else{$null}); ExtrasPath=$(if($cbExtra.Checked){$state.ExtrasPath}else{$null});
          ExtraItems=@($lstExtra.Items); OutDir=$txtOut.Text.Trim(); MediaKey=$mediaKey
          LinuxInfo=$chkLinux.Checked; LegacyFs=$chkLegacy.Checked; Checksums=$chkSums.Checked
-         ArtworkOnDisc=$chkArtOnDisc.Checked; CoverPath=$state.CoverPath; DiscArtPath=$state.DiscArtPath
+         CoverPath=$state.CoverPath; DiscArtPath=$state.DiscArtPath
          DiscSet=$chkSet.Checked; CutFiles=[bool]$state.CutFiles }
     $btnBuild.Enabled=$false
     Set-FormBusy $true
