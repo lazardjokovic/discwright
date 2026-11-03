@@ -176,17 +176,12 @@ stays the technical one.
 
 ## Later
 
-**Artwork fetched rather than hunted for.** Half of this shipped in 0.9.0: the case
-wrap and the disc face are built at their true sizes, and artwork you already have is
-printed exactly as it is. What is left is where that artwork comes from. Scraping a store
+**Artwork fetched rather than hunted for.** The cover and the disc face somebody already
+has go onto the disc exactly as they are, since 0.11.0, and printing them is left to the
+printer's own software. What is left is where that artwork comes from. Scraping a store
 page adds a dependency that breaks whenever the site is redesigned, on a tool whose whole
 point is that it runs offline with nothing installed, so artwork lifted out of the
 installer itself may be the better trade.
-
-**Label sheets.** Adhesive disc labels sit at brand-specific positions on an A4 sheet.
-The format table has a row waiting for them, and the positions should be measured off a
-real sheet rather than taken from a web page, which is how every other measurement in
-that table was settled.
 
 ## Considering
 
@@ -209,6 +204,15 @@ that table was settled.
   with `/unsafe`, so it no longer needs `Add-Type -CompilerParameters`. Whether anything
   else stops it — WinForms, the COM interop, apartment state — has not been tested, and
   the startup guard still refuses PowerShell 7 until somebody actually tries it.
+- **A stop before a daft number of discs.** xniwo's example was a 700 MB CD chosen for a
+  15 GB game, which is twenty-two of them. The number is not hidden: with a set asked for,
+  the line under the installer list says how many discs the set comes to before anything
+  is burned, and when no set fits it names the file that decided it and the blank that
+  would work. What is missing is anything that treats a big number as a question rather
+  than a fact. The threshold is the hard part, because any count picked here is arbitrary,
+  and the useful version is probably not a count at all but a comparison: that a bigger
+  blank, already ticked, would do it in three. Asked once, so it waits for somebody to ask
+  again.
 
 ## Not planned
 
@@ -232,6 +236,15 @@ built.
   is worse than no number, because it gets believed. It would also be the only thing the
   app remembers that belongs to the person rather than to a project or to a disc, which
   is a new kind of state for the sake of a figure you can see by opening the drawer.
+
+- **Printing the artwork.** Shipped in 0.9.0 and taken out in 0.11.0. DiscWright drew a
+  case wrap as a PDF at its true size and a disc face as a 300 dpi PNG, sized the cover to
+  the case the chosen disc goes in, and warned about a picture of the wrong shape. All of
+  that is the printer's own software's job, which knows the case, the paper and the tray,
+  and none of it is what makes a disc last. What does is the disc carrying the pictures
+  themselves, so the cover and the disc face somebody chose go onto every disc in
+  `ARTWORK` exactly as they are, the same as the C# version writes them. Label sheets,
+  which waited on a row of the print module's format table, went with it.
 
 ### Installing a game straight off a set of discs
 

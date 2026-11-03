@@ -345,14 +345,13 @@ Describe 'The Burn to disc button' -Tag 'Unit' {
     It 'is shipped by the installer, or the button would be a dead end' {
         $iss = Get-Content -Raw -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'packaging\DiscWright.iss')
         $iss | Should -Match ([regex]::Escape('..\burn\DiscWright.Burn.ps1'))
-        $iss | Should -Match ([regex]::Escape('..\print\DiscWright.Print.ps1'))
     }
 
     It 'does not reach back into the app from the modules it loads' {
-        # The whole reason print\ and burn\ are separate folders: the app may
-        # use them, they may not use the app, so the ISO builder can still be
-        # shipped without either.
-        foreach ($mod in 'print\DiscWright.Print.ps1', 'burn\DiscWright.Burn.ps1') {
+        # The whole reason burn\ is a separate folder: the app may use it,
+        # it may not use the app, so the ISO builder can still be shipped
+        # without it.
+        foreach ($mod in @('burn\DiscWright.Burn.ps1')) {
             $text = Get-Content -Raw -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) $mod)
             $text | Should -Not -Match 'Show-Warn'
             $text | Should -Not -Match 'Set-FormBusy'

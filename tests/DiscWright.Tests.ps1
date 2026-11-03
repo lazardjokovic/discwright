@@ -5114,99 +5114,6 @@ Describe "The installer's choice of launcher" -Tag 'Unit' {
     }
 }
 
-Describe 'Saying whether a picture is the right shape' -Tag 'Unit' {
-
-    # This used to report how much of a picture would be cut off, back when a
-    # picture was fitted into a layout. Nothing is cropped or stretched any
-    # more, so the question changed: is the picture the shape of the thing being
-    # printed? Close enough and it is printed exactly as it is. Anything else is
-    # not cover art, and a plain label is printed with the picture left alone.
-    #
-    # The change was found by regenerating a real project's artwork and looking
-    # at it: a 16:9 menu background was being printed across the whole wrap as
-    # though it were a finished cover.
-
-    BeforeAll {
-        Add-Type -AssemblyName System.Drawing
-        $src = Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1'
-        $ast = [System.Management.Automation.Language.Parser]::ParseFile($src, [ref]$null, [ref]$null)
-        $fn = $ast.Find({
-            param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
-                      $n.Name -eq 'Get-ArtFitNote'
-        }, $true)
-        $fn | Should -Not -BeNullOrEmpty
-        . ([scriptblock]::Create($fn.Extent.Text))
-
-        $script:ArtDir = Join-Path ([IO.Path]::GetTempPath()) ('dwart_' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
-        New-Item -ItemType Directory -Force -Path $script:ArtDir | Out-Null
-
-        function New-SizedPicture([int]$w, [int]$h) {
-            $path = Join-Path $script:ArtDir "pic-${w}x${h}.png"
-            $bmp = New-Object System.Drawing.Bitmap $w, $h
-            $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Png)
-            $bmp.Dispose()
-            return $path
-        }
-
-        # The real panel and the real disc face, in pixels at 300 dpi.
-        $script:PanelW = 1530
-        $script:PanelH = 2161
-    }
-
-    AfterAll {
-        if ($script:ArtDir -and (Test-Path $script:ArtDir)) {
-            Remove-Item -LiteralPath $script:ArtDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
-    }
-
-    It 'says a 16:9 background is not a cover shape, and that a label is printed instead' {
-        $note = Get-ArtFitNote (New-SizedPicture 1920 1080) $script:PanelW $script:PanelH 'Cover'
-        $note | Should -Match '1920x1080'
-        $note | Should -Match 'not that shape'
-        $note | Should -Match 'plain label'
-    }
-
-    It 'says the same of the menu background size DiscWright itself asks for' {
-        $note = Get-ArtFitNote (New-SizedPicture 760 480) $script:PanelW $script:PanelH 'Cover'
-        $note | Should -Match 'not that shape'
-    }
-
-    It 'says a cover-shaped picture is printed exactly as it is' {
-        $note = Get-ArtFitNote (New-SizedPicture 1000 1420) $script:PanelW $script:PanelH 'Cover'
-        $note | Should -Match 'right shape'
-        $note | Should -Match 'exactly as it is'
-        $note | Should -Not -Match 'plain label'
-    }
-
-    It 'accepts a square picture for a round disc face' {
-        $note = Get-ArtFitNote (New-SizedPicture 1200 1200) 1394 1394 'Disc face'
-        $note | Should -Match 'right shape'
-    }
-
-    It 'refuses a wide picture for a disc face, which is round' {
-        $note = Get-ArtFitNote (New-SizedPicture 1920 1080) 1394 1394 'Disc face'
-        $note | Should -Match 'not that shape'
-    }
-
-    It 'allows a few per cent either way, because a real cover is rarely exact' {
-        # 1530x2161 is the panel itself; 1500x2120 is a couple of per cent out
-        # and is plainly the same thing.
-        (Get-ArtFitNote (New-SizedPicture 1500 2120) $script:PanelW $script:PanelH 'Cover') |
-            Should -Match 'right shape'
-    }
-
-    It 'says nothing at all when there is no picture to talk about' {
-        Get-ArtFitNote '' $script:PanelW $script:PanelH 'Cover' | Should -Be ''
-        Get-ArtFitNote 'Z:\gone.png' $script:PanelW $script:PanelH 'Cover' | Should -Be ''
-    }
-
-    It 'says nothing rather than throwing when the file is not a picture' {
-        $notPic = Join-Path $script:ArtDir 'notapicture.png'
-        Set-Content -LiteralPath $notPic -Value 'this is not a png'
-        Get-ArtFitNote $notPic $script:PanelW $script:PanelH 'Cover' | Should -Be ''
-    }
-}
-
 Describe 'Keeping the printed pictures in the project' -Tag 'Unit' {
 
     It 'writes both paths, so reopening a disc does not ask again' {
@@ -5272,29 +5179,34 @@ Describe 'What the installer promises to ship' -Tag 'Unit' {
         $missing.Count | Should -Be 0 -Because "these are named but not in the repo: $($missing -join ', ')"
     }
 
-    It 'ships the two modules the buttons depend on' {
-        # Print artwork and Burn to disc dot-source these at the moment they are
-        # pressed. Left out of the installer, both buttons are dead on an
-        # installed copy while working perfectly from a checkout.
-        $script:IssText | Should -Match ([regex]::Escape('..\print\DiscWright.Print.ps1'))
+    It 'ships the module Burn to disc depends on' {
+        # Burn to disc dot-sources this at the moment it is pressed. Left out of
+        # the installer, the button is dead on an installed copy while working
+        # perfectly from a checkout.
         $script:IssText | Should -Match ([regex]::Escape('..\burn\DiscWright.Burn.ps1'))
     }
 
-    It 'puts them where the app looks for them' {
-        # The app builds the path from $PSScriptRoot, so the folder names in the
-        # install have to match the folder names in the repo.
-        $script:IssText | Should -Match 'DestDir:\s*"\{app\}\\print"'
+    It 'puts it where the app looks for it' {
+        # The app builds the path from $PSScriptRoot, so the folder name in the
+        # install has to match the folder name in the repo.
         $script:IssText | Should -Match 'DestDir:\s*"\{app\}\\burn"'
     }
 
-    It 'matches the paths the app actually dot-sources' {
+    It 'matches the path the app actually dot-sources' {
         $app = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'DiscWright.ps1')
-        # print\ is reached through Get-AppRoot, which answers $PSScriptRoot
-        # except where the suite has lifted a function out of the file and
-        # $PSScriptRoot inside it is empty. The installer still has to ship it.
-        $app | Should -Match ([regex]::Escape("Join-Path (Get-AppRoot) 'print\DiscWright.Print.ps1'"))
-        $app | Should -Match ([regex]::Escape("'print\DiscWright.Print.ps1'"))
         $app | Should -Match ([regex]::Escape("Join-Path `$PSScriptRoot 'burn\DiscWright.Burn.ps1'"))
+    }
+
+    It 'ships no print module, and takes the old one away' {
+        # The artwork stopped being printed here in 0.11.0, so nothing loads a
+        # print module and none ships. Installing over 0.10.0 would still leave
+        # that version's folder behind, so the installer deletes it.
+        $script:IssText | Should -Not -Match ([regex]::Escape('DiscWright.Print.ps1'))
+        $script:IssText | Should -Match '\[InstallDelete\]'
+        $script:IssText | Should -Match ([regex]::Escape('Type: filesandordirs; Name: "{app}\print"'))
+        $app = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'DiscWright.ps1')
+        $app | Should -Not -Match ([regex]::Escape('DiscWright.Print.ps1'))
+        Test-Path -LiteralPath (Join-Path $script:Root 'print') | Should -BeFalse
     }
 }
 
@@ -5529,8 +5441,8 @@ Describe 'What the zip ships' -Tag 'Unit' {
 
     # The installer's file list was tested and the zip's was not, so the zip
     # went out holding half an app: Print artwork and Burn to disc both
-    # dot-source a module at the moment they are pressed, and neither module
-    # was in it. Found by unpacking the built artifact during a release, which
+    # dot-sourced a module at the moment they were pressed, and neither module
+    # was in it. Print artwork went in 0.11.0, and its module with it. Found by unpacking the built artifact during a release, which
     # is late. The same mistake in the installer is what 0.8.1 exists to fix.
 
     BeforeAll {
@@ -5566,9 +5478,13 @@ Describe 'What the zip ships' -Tag 'Unit' {
         }
     }
 
+    It 'ships no print module, since nothing prints any more' {
+        @($script:Payload | Where-Object { $_ -match 'Print' }).Count | Should -Be 0
+    }
+
     It 'ships the same modules the installer does' {
         $iss = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'packaging\DiscWright.iss')
-        foreach ($mod in 'print\DiscWright.Print.ps1', 'burn\DiscWright.Burn.ps1') {
+        foreach ($mod in @('burn\DiscWright.Burn.ps1')) {
             $script:Payload | Should -Contain $mod
             # The .iss writes its sources relative to packaging\, so the path
             # there carries a leading ..\ that the payload list does not.
@@ -6459,7 +6375,7 @@ Describe 'The buttons for a disc that is already built' -Tag 'Unit' {
     }
 
     It 'puts <_> where it can be seen without scrolling' -ForEach @(
-        'Print artwork', 'Burn to disc...', 'Burn with...'
+        'Burn to disc...', 'Burn with...'
     ) {
         $y = $script:BtnY[$_]
         $y | Should -Not -BeNullOrEmpty -Because "$_ has to be laid out by AddBtn to be found at all"
@@ -6470,27 +6386,35 @@ Describe 'The buttons for a disc that is already built' -Tag 'Unit' {
 
     It 'leaves them above step 7 rather than after it' {
         # The other half of the same point. Step 7 is a box to fill in; these
-        # three are what you do once the disc is built, so they belong beside
+        # two are what you do once the disc is built, so they belong beside
         # BUILD ISO and not past the last text box on the form.
         $seven = [int][regex]::Match($script:FoldSrc,
-            "AddLabel '7\)  Printed artwork \(optional\):' \d+ (\d+)").Groups[1].Value
+            "AddLabel '7\)  Artwork for the disc \(optional\):' \d+ (\d+)").Groups[1].Value
         $seven | Should -BeGreaterThan 0
         $script:BtnY['Burn to disc...'] | Should -BeLessThan $seven
     }
 
+    It 'has no Print artwork button any more' {
+        # The artwork goes onto the disc as it was given and is printed from
+        # there, by anything, so a button that drew a case wrap here is gone.
+        $script:BtnY.ContainsKey('Print artwork') | Should -BeFalse
+        $script:FoldSrc | Should -Not -Match '\$btnArtwork'
+    }
+
     It 'does not let the artwork note run back over them' {
-        # lblArtNote is 68 pixels tall and was at y=1074, which put it straight
+        # lblArtNote was 68 pixels tall and at y=1074, which put it straight
         # through the buttons at 1100 and in front of them in z-order. Nobody
         # ever saw it: the whole band was off screen, and the overlap test
         # could not see it either, because UI Automation reports no rectangle
         # for a control that is scrolled out of view, so it skipped both and
-        # found the layout clean.
-        $noteY = [int][regex]::Match($script:FoldSrc, "\`$lblArtNote = AddLabel '' \d+ (\d+) \d+").Groups[1].Value
+        # found the layout clean. It carries fixed text since 0.11.0, so the
+        # pattern takes whatever is between the quotes.
+        $noteY = [int][regex]::Match($script:FoldSrc, "\`$lblArtNote = AddLabel '[^']*' \d+ (\d+) \d+").Groups[1].Value
         $noteH = [int][regex]::Match($script:FoldSrc,
             "\`$lblArtNote\.Size = New-Object System\.Drawing\.Size\(\d+, (\d+)\)").Groups[1].Value
         $noteY | Should -BeGreaterThan 0
         $noteH | Should -BeGreaterThan 0
-        foreach ($n in 'Print artwork', 'Burn to disc...', 'Burn with...') {
+        foreach ($n in 'Burn to disc...', 'Burn with...') {
             $top = $script:BtnY[$n]
             $why = "$n is at $top..$($top + 24) and the note covers $noteY..$($noteY + $noteH)"
             ($noteY -ge ($top + 24) -or ($noteY + $noteH) -le $top) | Should -BeTrue -Because $why
@@ -7020,7 +6944,7 @@ Describe 'Nothing is added to the form and then forgotten' -Tag 'Unit' {
                 WindowBorder=$false; ButtonStyle='Bordered'; MusicFile='C:\a\music.mp3'
                 Buttons=@('Play','Exit'); ManualPath='C:\a\manual.pdf'; ExtrasPath='C:\a\extras'
                 ExtraItems=@('C:\a\readme.txt'); MediaKey='DVD'; LinuxInfo=$true
-                LegacyFs=$true; Checksums=$true; ArtworkOnDisc=$true
+                LegacyFs=$true; Checksums=$true
                 DiscSet=$true; CutFiles=$true }
         Save-Project $s $dir
         $json = Get-Content -Raw (Join-Path $dir 'discproject.json') | ConvertFrom-Json
@@ -7028,8 +6952,10 @@ Describe 'Nothing is added to the form and then forgotten' -Tag 'Unit' {
 
         # Everything else in the file is bookkeeping or belongs to a game entry,
         # and a new one has to be added here on purpose rather than by accident.
+        # ArtworkOnDisc is written for 0.10.0 and older, which read it, and is
+        # read by nothing here: the artwork always goes on the disc now.
         $notSettings = @('Version','AppVersion','SavedUtc','SourceFolder','GameName',
-                         'Games','OutDir','CoverPath','DiscArtPath')
+                         'Games','OutDir','CoverPath','DiscArtPath','ArtworkOnDisc')
         $checked = 0
         foreach ($k in $json.PSObject.Properties.Name) {
             if ($notSettings -contains $k) { continue }
@@ -8314,6 +8240,10 @@ Describe 'A disc that carries its own artwork' -Tag 'Build' {
     # should be able to explain itself with nothing else to hand, and that
     # includes being reprintable by whoever is holding it in ten years, when
     # the project file and the original picture are long gone.
+    #
+    # Since 0.11.0 nothing is printed or drawn here. The pictures chosen go on
+    # every disc exactly as they were given, with a readme, always, the same as
+    # the C# version: no option, no case sizes, no judging a picture's shape.
 
     BeforeAll {
         $script:ArtBox = Join-Path $script:Sandbox 'artdisc'
@@ -8328,19 +8258,43 @@ Describe 'A disc that carries its own artwork' -Tag 'Build' {
             GameName = 'Art Game'; SetupExe = [IO.FileInfo](Join-Path $script:ArtSrc 'setup_art_game_1.0_(1).exe')
             Files = @(Get-ChildItem -File $script:ArtSrc); Buttons = @('Install')
         }
-        $script:ArtBg = New-FixturePng (Join-Path $script:ArtBox 'cover.png') 1280 720
+        $script:ArtBg = New-FixturePng (Join-Path $script:ArtBox 'background.png') 1280 720
+
+        # A wide picture for the cover, which 0.10.0 refused to print as one, to
+        # show that nothing here judges a picture's shape any more. And a disc
+        # face saved as a JPEG with its extension in capitals, to show the kind
+        # of picture is kept and only the name changes.
+        $script:ArtCover = New-FixturePng (Join-Path $script:ArtBox 'sleeve scan.png') 1920 1080
+        $bmp = New-Object System.Drawing.Bitmap(700, 700)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.Clear([System.Drawing.Color]::DarkRed); $g.Dispose()
+        $script:ArtFace = Join-Path $script:ArtBox 'Face.JPG'
+        $bmp.Save($script:ArtFace, [System.Drawing.Imaging.ImageFormat]::Jpeg); $bmp.Dispose()
+        # Read-only, the way a picture copied off a disc arrives.
+        (Get-Item -LiteralPath $script:ArtFace).IsReadOnly = $true
+
+        function Get-FileHashText([string]$path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash }
     }
 
-    Context 'when it is asked for' {
+    AfterAll {
+        if ($script:ArtFace -and (Test-Path -LiteralPath $script:ArtFace)) {
+            (Get-Item -LiteralPath $script:ArtFace).IsReadOnly = $false
+        }
+    }
+
+    Context 'with a cover and a disc face chosen' {
 
         BeforeAll {
             $s = New-BuildSettings -Games @($script:ArtGame) -Label 'ART DISC' -OutDir $script:ArtOut
             $s.MediaKey = 'CD'
             $s.BgPath = $script:ArtBg
-            $s.ArtworkOnDisc = $true
+            $s.CoverPath = $script:ArtCover
+            $s.DiscArtPath = $script:ArtFace
             $s.Checksums = $true
-            $script:ArtResult = Invoke-Build $s $script:LogSink
+            $script:ArtSaid = @()
+            $script:ArtResult = Invoke-Build $s { param($m) $script:ArtSaid += [string]$m }
             $script:ArtStage = Join-Path $script:ArtOut 'disc'
+            $script:ArtDir = Join-Path $script:ArtStage 'ARTWORK'
         }
 
         It 'builds' {
@@ -8352,16 +8306,47 @@ Describe 'A disc that carries its own artwork' -Tag 'Build' {
             Test-Path -LiteralPath $script:ArtResult | Should -BeTrue -Because 'the ISO is the whole point'
         }
 
-        It 'puts the artwork on the disc, in a folder of its own' {
-            $dir = Join-Path $script:ArtStage 'ARTWORK'
-            Test-Path $dir | Should -BeTrue
-            @(Get-ChildItem $dir -File).Count | Should -BeGreaterThan 1 -Because 'a cover and a disc face'
+        It 'puts the two pictures and a readme in a folder of their own, and nothing else' {
+            # Joined and compared exactly, because Should -Be ignores case and
+            # the picture arrived as Face.JPG: the kind of picture is kept and
+            # the name is ours, in lower case, the same as the C# version.
+            (@(Get-ChildItem -LiteralPath $script:ArtDir -File | ForEach-Object Name | Sort-Object) -join '|') |
+                Should -BeExactly 'cover.png|disc face.jpg|READ ME.txt'
         }
 
-        It 'makes files worth carrying, not empty ones' {
-            foreach ($f in Get-ChildItem (Join-Path $script:ArtStage 'ARTWORK') -File) {
-                $f.Length | Should -BeGreaterThan 1000 -Because "$($f.Name) is meant to be printable"
-            }
+        It 'copies each picture byte for byte, whatever its shape' {
+            Get-FileHashText (Join-Path $script:ArtDir 'cover.png') | Should -Be (Get-FileHashText $script:ArtCover)
+            Get-FileHashText (Join-Path $script:ArtDir 'disc face.jpg') | Should -Be (Get-FileHashText $script:ArtFace)
+        }
+
+        It 'leaves no copy read-only, so the next build can write over it' {
+            (Get-Item -LiteralPath (Join-Path $script:ArtDir 'disc face.jpg')).IsReadOnly | Should -BeFalse
+        }
+
+        It 'writes the readme the C# version writes, needing no program to read' {
+            $bytes = [IO.File]::ReadAllBytes((Join-Path $script:ArtDir 'READ ME.txt'))
+            $bytes[0] | Should -Not -Be 0xEF -Because 'no mark at the front: it is for anything that can open a text file'
+            $text = [Text.Encoding]::UTF8.GetString($bytes)
+            # Typed out here rather than asked of the app, so the text cannot
+            # drift from the C# version's by both sides changing together. This
+            # is CopyTheArtworkStep.Readme in discwright-csharp, word for word.
+            $want = @(
+                'The printed artwork for ART DISC'
+                ''
+                'cover       the sleeve, for the case'
+                'disc face   the label for the disc itself'
+                ''
+                'These are ordinary picture files. Open them with anything, print them'
+                'from anything. Nothing here needs the program that made this disc, and'
+                'that is deliberate: a disc that can only be reprinted by one program is'
+                'a disc that stops being printable the day that program stops running.'
+                ''
+                'Print them at their own size rather than fitting them to the page, or'
+                'the sleeve comes out slightly too small for the case.'
+                ''
+            ) -join "`r`n"
+            $text | Should -BeExactly $want
+            ($text -split "`n" | Where-Object { $_ -and -not $_.EndsWith("`r") }).Count | Should -Be 0 -Because 'every line ends CRLF'
         }
 
         It 'is covered by the checksum list, which is why it goes on first' {
@@ -8369,12 +8354,16 @@ Describe 'A disc that carries its own artwork' -Tag 'Build' {
             # so the list the disc carries describes everything on the disc. A
             # file the list does not mention cannot be checked by anybody.
             $sums = Get-Content (Join-Path $script:ArtStage (Get-ChecksumFileName)) -Raw
-            $sums | Should -Match 'ARTWORK/'
+            $sums | Should -Match 'ARTWORK/cover\.png'
+            $sums | Should -Match 'ARTWORK/disc face\.jpg'
         }
 
+        It 'says in the log what went on' {
+            ($script:ArtSaid -join "`n") | Should -Match ([regex]::Escape('ARTWORK\cover.png and ARTWORK\disc face.jpg'))
+        }
     }
 
-    Context 'when it is not' {
+    Context 'with only a menu background' {
 
         BeforeAll {
             $out2 = Join-Path $script:ArtBox 'out2'
@@ -8382,14 +8371,99 @@ Describe 'A disc that carries its own artwork' -Tag 'Build' {
             $s = New-BuildSettings -Games @($script:ArtGame) -Label 'PLAIN DISC' -OutDir $out2
             $s.MediaKey = 'CD'
             $s.BgPath = $script:ArtBg
-            $s.ArtworkOnDisc = $false
             $script:PlainStage = Join-Path $out2 'disc'
             $null = Invoke-Build $s $script:LogSink
         }
 
-        It 'puts nothing there' {
+        It 'puts nothing there, because a background is not a cover' {
+            # 0.10.0 printed the background as the cover when none was chosen.
+            # Nothing is drawn here any more, so a disc carries what somebody
+            # chose for the cover or nothing at all.
             Test-Path (Join-Path $script:PlainStage 'ARTWORK') | Should -BeFalse
         }
+    }
+
+    Context 'with a cover that has gone since it was chosen' {
+
+        BeforeAll {
+            $out3 = Join-Path $script:ArtBox 'out3'
+            New-Item -ItemType Directory -Force -Path $out3 | Out-Null
+            $s = New-BuildSettings -Games @($script:ArtGame) -Label 'GONE DISC' -OutDir $out3
+            $s.MediaKey = 'CD'
+            $s.CoverPath = Join-Path $script:ArtBox 'moved away.png'
+            $s.DiscArtPath = $script:ArtFace
+            $script:GoneSaid = @()
+            $script:GoneIso = Invoke-Build $s { param($m) $script:GoneSaid += [string]$m }
+            $script:GoneDir = Join-Path (Join-Path $out3 'disc') 'ARTWORK'
+        }
+
+        It 'still builds, because nobody should lose a disc over a cover image' {
+            $script:GoneIso | Should -Not -BeNullOrEmpty
+            Test-Path -LiteralPath $script:GoneIso | Should -BeTrue
+        }
+
+        It 'carries what is still there, and says what is not' {
+            (@(Get-ChildItem -LiteralPath $script:GoneDir -File | ForEach-Object Name | Sort-Object) -join '|') |
+                Should -BeExactly 'disc face.jpg|READ ME.txt'
+            ($script:GoneSaid -join "`n") | Should -Match 'NOTE: the cover picture is not there any more'
+        }
+    }
+}
+
+Describe 'The room a disc needs for its artwork' -Tag 'Unit' {
+
+    # Copied exactly as given, so a 60 MB scan of a sleeve is 60 MB on every
+    # disc. While the artwork was optional and drawn small it was left out of
+    # the sum, which would now let the last disc of a set come up short.
+
+    BeforeAll {
+        $script:RoomDir = Join-Path $script:Sandbox 'artroom'
+        New-Item -ItemType Directory -Force -Path $script:RoomDir | Out-Null
+        $script:RoomCover = Join-Path $script:RoomDir 'cover.png'
+        $script:RoomFace = Join-Path $script:RoomDir 'face.png'
+        $fs = [IO.File]::Create($script:RoomCover); $fs.SetLength(3MB); $fs.Close()
+        $fs = [IO.File]::Create($script:RoomFace); $fs.SetLength(1MB); $fs.Close()
+    }
+
+    It 'counts the cover and the disc face once each, at their own size' {
+        $bare = Get-DiscOverheadBytes @{}
+        (Get-DiscOverheadBytes @{ CoverPath = $script:RoomCover }) - $bare | Should -Be 3MB
+        (Get-DiscOverheadBytes @{ DiscArtPath = $script:RoomFace }) - $bare | Should -Be 1MB
+        (Get-DiscOverheadBytes @{ CoverPath = $script:RoomCover; DiscArtPath = $script:RoomFace }) - $bare | Should -Be 4MB
+    }
+
+    It 'counts what the window has chosen, not only what a build is handed' {
+        # The line under the installer list plans from the form, through
+        # Get-PlanInputs, and the boxes redraw it when they change.
+        $src = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $plan = [regex]::Match($src, '(?s)function Get-PlanInputs.*?\n}').Value
+        $plan | Should -Match ([regex]::Escape('CoverPath=$state.CoverPath; DiscArtPath=$state.DiscArtPath'))
+        $src | Should -Match ([regex]::Escape('$state.CoverPath = $txtCover.Text.Trim(); Update-MediaLabel'))
+        $src | Should -Match ([regex]::Escape('$state.DiscArtPath = $txtDiscArt.Text.Trim(); Update-MediaLabel'))
+    }
+}
+
+Describe 'Starting a new disc, and the pictures for the last one' -Tag 'Unit' {
+
+    # New disc cleared the icon and the background and left the cover and the
+    # disc face. That did no harm while they went on a disc only when a box was
+    # ticked; they go on every disc now, so the next game would have been
+    # burned wearing the last one's cover.
+
+    BeforeAll {
+        $script:NewSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+    }
+
+    It 'clears both picture boxes' {
+        $reset = [regex]::Match($script:NewSrc, '(?s)function Reset-Form.*?\n}').Value
+        $reset | Should -Match ([regex]::Escape('$txtCover.Clear(); $txtDiscArt.Clear()'))
+    }
+
+    It 'counts a chosen picture as something to lose' {
+        # So New disc lights for a cover the way it lights for every other
+        # picture on the form, and asks before throwing it away.
+        $dirty = [regex]::Match($script:NewSrc, '(?s)function Test-FormDirty.*?\n}').Value
+        $dirty | Should -Match ([regex]::Escape('$txtTitle,$txtCover,$txtDiscArt'))
     }
 }
 
@@ -8409,18 +8483,34 @@ Describe 'What the disc builds, and what somebody added' -Tag 'Unit' {
 
 Describe 'Remembering whether the artwork goes on the disc' -Tag 'Unit' {
 
-    It 'survives being written and read back' {
+    # There is no choice to remember any more: the artwork always goes on the
+    # disc. The field is still written, as true, because 0.10.0 and older read
+    # it, and a file saying false would open there as a disc without artwork.
+
+    It 'is written as true, whatever it is handed' {
         $dir = Join-Path $script:Sandbox 'artproject'
         New-Item -ItemType Directory -Force -Path $dir | Out-Null
-        Save-Project @{ Games = @(); Label = 'Art'; ArtworkOnDisc = $true } $dir
-        [bool](Import-Project (Join-Path $dir 'discproject.json')).ArtworkOnDisc | Should -BeTrue
+        Save-Project @{ Games = @(); Label = 'Art'; ArtworkOnDisc = $false } $dir
+        $raw = Get-Content (Join-Path $dir 'discproject.json') -Raw | ConvertFrom-Json
+        $raw.ArtworkOnDisc | Should -BeTrue
     }
 
-    It 'is off in a project that predates it' {
+    It 'is read by nothing, so an old project that said no still gets its artwork' {
         $dir = Join-Path $script:Sandbox 'artproject2'
         New-Item -ItemType Directory -Force -Path $dir | Out-Null
-        Save-Project @{ Games = @(); Label = 'Art' } $dir
-        [bool](Import-Project (Join-Path $dir 'discproject.json')).ArtworkOnDisc | Should -BeFalse
+        $old = [ordered]@{
+            Version = 14; AppVersion = '0.10.0'; Label = 'OLD'; Games = @(); OutDir = $dir
+            ArtworkOnDisc = $false; CoverPath = 'C:\art\cover.png'
+        }
+        $old | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $dir 'discproject.json') -Encoding UTF8
+        $read = Import-Project (Join-Path $dir 'discproject.json')
+        $read.ContainsKey('ArtworkOnDisc') | Should -BeFalse
+        $read.CoverPath | Should -Be 'C:\art\cover.png'
+    }
+
+    It 'has no box on the window' {
+        $src = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $src | Should -Not -Match 'chkArtOnDisc'
     }
 }
 
@@ -9587,83 +9677,6 @@ Describe 'One disc, written and then read back' -Tag 'Unit' {
         $r = Invoke-DiscBurnAndCheck $script:Iso $script:Stage { param($m) }
         $r.Ok | Should -BeTrue
         $r.Why | Should -Match 'all 9 files match'
-    }
-}
-
-Describe 'The warning about artwork that is the wrong shape' -Tag 'Unit' {
-
-    # Reported from outside: with an unsuitable picture in BOTH the cover and
-    # the disc face, the "is not that shape, so a..." line cut off mid-sentence.
-    # Two notes were joined onto one 645px label with three spaces between
-    # them, so the second one ran off the end and was simply not there.
-    #
-    # And the half he asked for next: a warning that says the shape is wrong
-    # without saying which shape would be right leaves somebody to guess.
-
-    BeforeAll {
-        Add-Type -AssemblyName System.Drawing
-        $script:ArtDir = Join-Path $script:Sandbox 'artnote'
-        New-Item -ItemType Directory -Force -Path $script:ArtDir | Out-Null
-        function New-Pic([string]$name, [int]$w, [int]$h) {
-            $b = New-Object System.Drawing.Bitmap($w, $h)
-            $g = [System.Drawing.Graphics]::FromImage($b)
-            $g.Clear([System.Drawing.Color]::SlateGray); $g.Dispose()
-            $p = Join-Path $script:ArtDir $name
-            $b.Save($p, [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose()
-            return $p
-        }
-        $script:Wide = New-Pic 'wide.png' 1280 1024
-        $script:Cover = New-Pic 'cover.png' 1530 2161
-        $script:Face = New-Pic 'face.png' 1394 1394
-    }
-
-    It 'says what shape it wanted, not only that this one is wrong' {
-        $n = Get-ArtFitNote $script:Wide 1530 2161 'Cover'
-        $n | Should -Match '1280x1024'
-        $n | Should -Match '1530x2161'
-        $n | Should -Match '0\.71 to 1'
-    }
-
-    It 'calls a square a square' {
-        # "any size at 1.00 to 1" is a long way round.
-        $n = Get-ArtFitNote $script:Wide 1394 1394 'Disc face'
-        $n | Should -Match 'any square picture'
-        $n | Should -Not -Match '1\.00 to 1'
-    }
-
-    It 'says nothing about shape when the picture is the right one' {
-        $n = Get-ArtFitNote $script:Cover 1530 2161 'Cover'
-        $n | Should -Match 'the right shape'
-        $n | Should -Not -Match 'wants about'
-    }
-
-    It 'puts the two notes on separate lines' {
-        # The actual defect. Both notes are long, and on one line the second is
-        # past the end of the label.
-        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
-        $src | Should -Match '\$lblArtNote\.Text = \$notes -join \[Environment\]::NewLine'
-        $src | Should -Not -Match "\`$lblArtNote\.Text = \`$notes -join '   '"
-    }
-
-    It 'gives the label room for both of them' {
-        # Joining with a newline changes nothing on a label one line tall, and
-        # two lines is not enough either once each warning names a shape.
-        $src = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1') -Raw
-        $src | Should -Match '\$lblArtNote\.Size = New-Object System\.Drawing\.Size\(645, 68\)'
-    }
-
-    It 'both warnings together still fit the two lines they are given' {
-        # The thing that was actually reported, measured: two notes at the
-        # label's own width and font, wrapped, must come to two lines or fewer.
-        $a = Get-ArtFitNote $script:Wide 1530 2161 'Cover'
-        $b = Get-ArtFitNote $script:Wide 1394 1394 'Disc face'
-        $text = $a + [Environment]::NewLine + $b
-        $f = New-Object System.Drawing.Font('Segoe UI', 9)
-        $bmp = New-Object System.Drawing.Bitmap(1, 1)
-        $g = [System.Drawing.Graphics]::FromImage($bmp)
-        $size = $g.MeasureString($text, $f, 645)
-        $g.Dispose(); $bmp.Dispose(); $f.Dispose()
-        $size.Height | Should -BeLessOrEqual 68 -Because "it measured $([int]$size.Height)px in a 68px label"
     }
 }
 
@@ -12309,10 +12322,10 @@ Describe 'Fields that say which thing they are for' -Tag 'Unit' {
     # pattern) and not the main text, but realised it was for a fully finished
     # image."
     #
-    # So both picture fields say what they want and how big it is. The sizes
-    # are not decoration: they are the panel and the disc the build asks for,
-    # 1530 x 2161 and 1394 x 1394 at 300 dpi, and a label that disagreed with
-    # those would be worse than no label.
+    # So both picture fields say what they want. They said how big as well
+    # while the build drew the artwork at those sizes. Since 0.11.0 nothing is
+    # drawn: the pictures go on the disc as they were given, so no size is
+    # asked for and none is quoted.
 
     BeforeAll {
         $script:FormSrc = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
@@ -12323,36 +12336,22 @@ Describe 'Fields that say which thing they are for' -Tag 'Unit' {
         $script:FormSrc | Should -Not -Match 'Title on artwork'
     }
 
-    It 'says a cover picture is a finished front, and how big' {
-        $script:FormSrc | Should -Match ([regex]::Escape('Cover picture: the finished front of the case, 130 x 183 mm'))
+    It 'says a cover picture is a finished front' {
+        $script:FormSrc | Should -Match ([regex]::Escape("AddLabel 'Cover picture: the finished front of the case' "))
     }
 
-    It 'says a disc face is the face of the disc, and how big' {
-        $script:FormSrc | Should -Match ([regex]::Escape('Disc face picture: the finished face of the disc, 118 mm across'))
+    It 'says a disc face is the face of the disc' {
+        $script:FormSrc | Should -Match ([regex]::Escape("AddLabel 'Disc face picture: the finished face of the disc' "))
     }
 
-    It 'quotes sizes that are the ones the build actually asks for' {
-        # A label that disagreed with the renderer would send somebody away to
-        # make a picture of the wrong size, which is worse than saying nothing.
-        #
-        # The cover is no longer one fixed size: it follows the case the chosen
-        # disc goes in, so what is checked is that the label is BUILT from the
-        # same place the renderer asks from, and that a DVD still comes out at
-        # the size this test used to hardcode.
-        $script:FormSrc | Should -Match ([regex]::Escape('$cpx = Get-CoverPixels (Get-SelectedMediaKey)'))
-        $script:FormSrc | Should -Match ([regex]::Escape('Get-ArtFitNote $cover $cpx.W $cpx.H'))
-        $script:FormSrc | Should -Match ([regex]::Escape('$cm = Get-CaseForMedia (Get-SelectedMediaKey)'))
+    It 'quotes no size, because nothing asks for one' {
+        $script:FormSrc | Should -Not -Match '130 x 183 mm'
+        $script:FormSrc | Should -Not -Match '118 mm across'
+        $script:FormSrc | Should -Not -Match 'Get-CoverPixels|Get-CaseForMedia|Get-ArtFitNote'
+    }
 
-        # The disc face does not follow the case: a Blu-ray disc is the same
-        # 120 mm circle as a DVD, so this one stays fixed.
-        $script:FormSrc | Should -Match ([regex]::Escape('Get-ArtFitNote $face 1394 1394'))
-        [Math]::Round(1394 / 300 * 25.4) | Should -Be 118
-
-        # And the starting label, which is what somebody sees before touching
-        # the dropdown, is the DVD one.
-        $script:FormSrc | Should -Match ([regex]::Escape('Cover picture: the finished front of the case, 130 x 183 mm'))
-        [Math]::Round(1530 / 300 * 25.4) | Should -Be 130
-        [Math]::Round(2161 / 300 * 25.4) | Should -Be 183
+    It 'says what happens to them instead' {
+        $script:FormSrc | Should -Match ([regex]::Escape('Choosing them is not printing them. They go on the disc in an ARTWORK folder, exactly as they are, to print later.'))
     }
 
     It 'keeps the menu title label clear of the box beside it' {
