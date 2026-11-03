@@ -204,6 +204,15 @@ installer itself may be the better trade.
   with `/unsafe`, so it no longer needs `Add-Type -CompilerParameters`. Whether anything
   else stops it — WinForms, the COM interop, apartment state — has not been tested, and
   the startup guard still refuses PowerShell 7 until somebody actually tries it.
+- **A stop before a daft number of discs.** xniwo's example was a 700 MB CD chosen for a
+  15 GB game, which is twenty-two of them. The number is not hidden: with a set asked for,
+  the line under the installer list says how many discs the set comes to before anything
+  is burned, and when no set fits it names the file that decided it and the blank that
+  would work. What is missing is anything that treats a big number as a question rather
+  than a fact. The threshold is the hard part, because any count picked here is arbitrary,
+  and the useful version is probably not a count at all but a comparison: that a bigger
+  blank, already ticked, would do it in three. Asked once, so it waits for somebody to ask
+  again.
 
 ## Not planned
 
