@@ -1744,11 +1744,18 @@ Describe 'The question a folder with no GOG installer asks' -Tag 'UI' -Skip:(-no
     }
 }
 
-Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+Describe 'The cover and disc face fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
-    # The fields were covered only by a roll call: present, and greyed. What
-    # they are for is saying what a picture will cost before it is printed, and
-    # that had never been driven.
+    # These fields used to feed a printer, and this block drove the notes that
+    # said what a picture would cost before it was printed: the shape it wanted,
+    # what would be cropped, whether it would be dropped for a plain label.
+    # Nothing is printed or reshaped now. Whatever is chosen goes onto the disc
+    # as it is, so there is no shape to be wrong about and no note to draw, and
+    # five tests that drove those notes went with the module that drew them.
+    #
+    # What is worth holding instead is the opposite claim: that the app says
+    # nothing about the shape of a picture. A note about shape would be a
+    # promise it no longer keeps.
 
     BeforeAll {
         $script:App = Start-DiscWright -AppPath $script:AppPath
@@ -1763,14 +1770,13 @@ Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop)
             $b.Save($path, [System.Drawing.Imaging.ImageFormat]::Png); $b.Dispose()
             return $path
         }
+        # Wide enough that it would have been refused for a cover and for a
+        # disc face both, back when either had a shape to be refused against.
         $script:WidePic = New-Pic 1920 1080 'wide'
-        $script:TallPic = New-Pic 1000 1420 'tall'
-        $script:SquarePic = New-Pic 1200 1200 'square'
 
-        # The note is one label holding a clause per picture, separated by a run
-        # of spaces. Asserting on the whole string would let the disc face's
-        # words answer a question about the cover, which is exactly what the
-        # first version of these tests did.
+        # Any label naming a picture and then a dimension. The note the old
+        # fields drew was the only thing in the window that matched, so this
+        # coming back empty is what says no shape is being claimed.
         function Get-ArtNote {
             $all = $script:Win.FindAll(
                 [System.Windows.Automation.TreeScope]::Descendants,
@@ -1785,14 +1791,13 @@ Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop)
             }
             return ''
         }
-        function Get-NoteClause([string]$which) {
-            # Split on a line break as well as a run of spaces. The note went from
-            # one line to several when it started measuring both pictures, and a
-            # newline is two characters, so a split on three-or-more whitespace
-            # stopped separating the clauses and handed back the whole note.
-            foreach ($part in ((Get-ArtNote) -split '?
-|\s{3,}')) {
-                if ($part.Trim().StartsWith($which)) { return $part.Trim() }
+
+        function Get-FieldLabel([string]$like) {
+            $kids = $script:Win.FindAll(
+                [System.Windows.Automation.TreeScope]::Children,
+                [System.Windows.Automation.Condition]::TrueCondition)
+            for ($i = 0; $i -lt $kids.Count; $i++) {
+                try { if ($kids.Item($i).Current.Name -like $like) { return $kids.Item($i).Current.Name } } catch {}
             }
             return ''
         }
@@ -1817,49 +1822,34 @@ Describe 'The printed artwork fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop)
         Get-BoxAfter $script:Win 'Disc face picture*' | Should -Not -BeNullOrEmpty
     }
 
-    It 'says a wide picture is the wrong shape for a tall cover, and prints a label instead' {
-        # Nothing is cropped any more, so the note no longer says how much is
-        # lost. It says the picture is not that shape and will be left alone.
-        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Cover picture*') -Text $script:WidePic
+    It 'says nothing about the shape of a picture, whatever shape it is' {
+        $cover = Get-BoxAfter $script:Win 'Cover picture*'
+        $face = Get-BoxAfter $script:Win 'Disc face picture*'
+        Set-CtlText -Ctl $cover -Text $script:WidePic
+        Set-CtlText -Ctl $face -Text $script:WidePic
         Start-Sleep -Milliseconds 600
-        $cover = Get-NoteClause 'Cover'
-        $cover | Should -Match '1920x1080'
-        $cover | Should -Match 'is not that shape'
-        $cover | Should -Match 'plain label'
-        $cover | Should -Not -Match 'cut off'
+
+        # The positive half first, and it is not decoration. Asserting only
+        # that no note appeared would pass just as well against a window
+        # where the typing never landed, which is how this test could rot
+        # into proving nothing at all. A WinForms box reports its contents
+        # as its accessible name, so the path can be read straight back.
+        $cover.Current.Name | Should -Be $script:WidePic
+        $face.Current.Name | Should -Be $script:WidePic
+
+        Get-ArtNote | Should -BeNullOrEmpty
     }
 
-    It 'is content once a cover-shaped picture is chosen instead' {
-        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Cover picture*') -Text $script:TallPic
-        Start-Sleep -Milliseconds 600
-        $cover = Get-NoteClause 'Cover'
-        $cover | Should -Match 'the right shape'
-        $cover | Should -Match 'printed exactly as it is'
-        $cover | Should -Not -Match 'plain label'
-    }
-
-    It 'treats the disc face as its own question, because a circle is not a cover' {
-        # The same tall picture that suits a cover is wrong for a disc, and the
-        # app has to say so about the face while leaving the cover alone.
-        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Disc face picture*') -Text $script:TallPic
-        Start-Sleep -Milliseconds 600
-        (Get-NoteClause 'Disc face') | Should -Match 'is not that shape'
-        (Get-NoteClause 'Cover')     | Should -Match 'the right shape'
-    }
-
-    It 'is content with a square picture on a round disc' {
-        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Disc face picture*') -Text $script:SquarePic
-        Start-Sleep -Milliseconds 600
-        (Get-NoteClause 'Disc face') | Should -Match 'the right shape'
-    }
-
-    It 'claims nothing about a path that is not a picture at all' {
-        Set-CtlText -Ctl (Get-BoxAfter $script:Win 'Cover picture*') -Text 'Z:\gone\missing.png'
-        Start-Sleep -Milliseconds 600
-        # No file, no measurement. The app must not pretend to have opened
-        # something it could not, and the disc face clause stands untouched.
-        (Get-NoteClause 'Cover')     | Should -BeNullOrEmpty
-        (Get-NoteClause 'Disc face') | Should -Match 'the right shape'
+    It 'labels both fields by the picture it wants, and quotes no size' {
+        # The sizes used to be on these labels, and they were right only while
+        # something here laid a cover out. A label quoting a size nothing asks
+        # for sends somebody off to make a picture for no reason.
+        $cover = Get-FieldLabel 'Cover picture*'
+        $face = Get-FieldLabel 'Disc face picture*'
+        $cover | Should -Be 'Cover picture: the finished front of the case'
+        $face | Should -Be 'Disc face picture: the finished face of the disc'
+        $cover | Should -Not -Match 'mm'
+        $face | Should -Not -Match 'mm'
     }
 }
 
