@@ -1,7 +1,7 @@
 # Manual checks before a release
 
-The automated suite is 468 logic tests and 92 window tests, and it runs in about
-six minutes:
+The automated suite is 1,001 logic tests and 139 window tests, and it runs in
+about ten minutes on the test machine:
 
 ```
 .\tests\Invoke-Tests.ps1
@@ -17,7 +17,8 @@ What is left here is the short list a machine cannot do: things only a person ca
 judge, and things only a person can trigger.
 
 **Start DiscWright** by double-clicking `Run DiscWright.cmd` in the repo root, or
-the `DiscWright.lnk` shortcut.
+`DiscWright.vbs` for the same thing without a console window. There is no
+`DiscWright.lnk` in the repository: shortcuts are gitignored.
 
 ## Finding things in the window
 
