@@ -254,18 +254,24 @@ The Linux port carries a copy of the menu template and has not had this change.
 
 ## Where things stand
 
-**0.8.1, released 2026-09-27.** The Linux port is caught up with 0.8.0's feature
-and carries the same reserved-name notes. The installer is now tested on a clean
-Windows before every release.
+**0.11.0, released 2026-11-03.** A game too big for one disc is written across a
+set, a file bigger than any blank is cut between discs and joined back together
+on the other side, and DiscWright burns a set itself one disc at a time. The
+printed artwork went the other way: the cover and the disc face go onto the disc
+exactly as they were given, in `ARTWORK`, and laying them out for a printer is the
+printer software's job.
 
 Open, and waiting on people rather than on code:
 
-- **winget** has not had 0.8.x submitted. The 0.7.1 submission,
-  microsoft/winget-pkgs#433767, has been open since 12 September, and it is one
-  version at a time.
+- **winget is a version behind.** One version at a time is the rule, and the
+  0.10.0 submission was still unmerged when 0.11.0 was cut, so nothing for this
+  release has been submitted. That submission's number is not recorded here.
 - **The VBScript-present branch** of the installer's shortcut choice is covered
-  by tests over `packaging/DiscWright.iss` rather than end to end: Smart App
-  Control refuses to run the installer on the development machine, and the
-  sandbox could not fetch the Feature on Demand to put VBScript back.
-- **The Linux port has never been seen on a real Linux desktop.** Its
-  `docs/testing-on-linux.md` is the list, and Kubuntu is the machine.
+  by tests over `packaging/DiscWright.iss` rather than end to end. Smart App
+  Control has been off on this machine since 2026-10-16, so the installer runs
+  here now, but the sandbox could not fetch the Feature on Demand to put
+  VBScript back, which is the half that was never driven.
+- **Whether the Linux port carries this release has not been checked.** The
+  suite does run on a real Linux desktop now, on the Kubuntu test machine, which
+  the 0.8.1 note here said had never happened. What is unknown is parity: disc
+  sets and the artwork change have not been looked at there.

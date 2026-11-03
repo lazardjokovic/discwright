@@ -7,7 +7,7 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
-## [Unreleased]
+## [0.11.0] — 2026-11-03
 
 A game that will not fit on one disc is now written across several, and a file
 bigger than any blank is cut between them and joined back together on the other
@@ -1619,7 +1619,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/lazardjokovic/discwright/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/lazardjokovic/discwright/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/lazardjokovic/discwright/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/lazardjokovic/discwright/compare/v0.8.1...v0.9.1
