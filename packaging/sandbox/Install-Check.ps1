@@ -124,16 +124,19 @@ if ($dir -and (Test-Path $dir)) {
                 Select-Object -First 1).Matches.Groups[1].Value
     $null = Check "the installed copy names its version" ($version -ne '') $version
 
-    # The Print artwork and Burn to disc buttons dot-source these when pressed.
-    # Left out of the installer they are dead ends on an installed copy while
-    # working perfectly from a checkout, which is the shape of the defect that
-    # shipped in 0.8.0 and had to be fixed in 0.8.1.
-    $printMod = Join-Path $dir 'print\DiscWright.Print.ps1'
+    # Burn to disc dot-sources this when pressed. Left out of the installer it
+    # is a dead end on an installed copy while working perfectly from a
+    # checkout, which is the shape of the defect that shipped in 0.8.0 and had
+    # to be fixed in 0.8.1.
     $burnMod  = Join-Path $dir 'burn\DiscWright.Burn.ps1'
-    $null = Check "the print module is installed, or Print artwork is a dead button" `
-        (Test-Path $printMod) $printMod
     $null = Check "the burn module is installed, or Burn to disc is a dead button" `
         (Test-Path $burnMod) $burnMod
+    # And the print module is not, which on a machine that had 0.10.0 or older
+    # means the installer took the old folder away rather than leaving a module
+    # nothing loads.
+    $printDir = Join-Path $dir 'print'
+    $null = Check "no print folder is left behind, since nothing prints any more" `
+        (-not (Test-Path $printDir)) $printDir
 } else {
     $null = Check "the app itself is there, as scripts rather than an exe" $false 'no install location'
 }

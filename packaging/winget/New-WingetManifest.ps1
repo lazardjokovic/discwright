@@ -156,10 +156,9 @@ Description: |-
   that ends without an error is not the same thing as a disc holding the right
   bytes.
 
-  And it prints the artwork: a case wrap as a PDF at its true size with crop
-  marks, and a disc face as a 300 dpi PNG with the hub left clear. Artwork you
-  already have is printed exactly as it is, placed at exact trim with nothing
-  added, cropped or stretched.
+  A cover and a disc face you already have go onto the disc in a folder of
+  their own, exactly as they are, so whoever holds the disc can reprint them
+  from anything, years later, without DiscWright.
 Moniker: discwright
 Tags:
 - gog

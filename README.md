@@ -1,6 +1,6 @@
 # DiscWright
 
-Turn a GOG offline installer into a real game disc — one that shows the game's own icon and title in This PC, and opens a menu when you double-click it. DiscWright builds the image, prints the cover and the disc face, burns the disc and then checks every file on it.
+Turn a GOG offline installer into a real game disc — one that shows the game's own icon and title in This PC, and opens a menu when you double-click it. DiscWright builds the image, puts your cover and disc face on it, burns the disc and then checks every file on it.
 
 The way PC games came in a box.
 
@@ -30,7 +30,6 @@ Play knows whether the game is already installed and greys itself out until it i
 - **Windows 10 or 11**
 - **Windows PowerShell 5.1** — the one that ships with Windows. DiscWright checks on startup and tells you if you launch it the wrong way. PowerShell 7 is refused: it may well work now that the ISO builder no longer needs a compiler option PowerShell 6 removed, but nobody has tried it, so the check stays until somebody does.
 - **A blank disc and a burner**, if you want a disc rather than an image. DiscWright burns it for you and checks the result, and any other burning tool works just as well on the ISO it writes.
-- **A printer**, only if you want the cover and the disc face. Everything else works without one.
 
 No installation. No dependencies. It is a single PowerShell script.
 
@@ -348,34 +347,26 @@ Most burning software asks which you meant. The answer is the contents. Burning 
 
 **Check the link, not the label.** A USB 3.0 drive in a USB 3.0 port with a USB 3.0 cable can still negotiate a USB 2.0 link, and nothing in Windows will tell you unless you go looking. Your burning software's log usually names the bus it actually got.
 
-## Printing the cover and the disc face
+## The cover and the disc face
 
-![A case wrap and a disc face made by DiscWright: the wrap shows a back panel listing what is on the disc, a spine, and a front with the title; the disc face is a circle with the hub left clear](docs/printed-artwork.png)
+Step 7 has two boxes, one for a picture of the cover and one for a picture of the
+disc face. Whatever you choose goes onto the disc in a folder called `ARTWORK`,
+**exactly as it is**: the same file at the same size, renamed `cover` and
+`disc face`, with a short `READ ME.txt` beside them. Nothing is printed, drawn,
+resized or cropped, and no size or shape is asked for.
 
-**Print artwork** makes two things for the disc you have planned: a case wrap, as
-a PDF at its true size with crop marks, and a disc face, as a 300 dpi PNG with
-the hub left clear. A PDF because the page carries its real physical size, so
-"print at 100%, no scaling" is something the driver can honour. A PNG for the
-disc because that is what printer software for printable discs wants: you hand it
-a picture and it keeps the diameters and lines the tray up, which is the part
-that ruins discs when a tool guesses at it.
+The point is the disc, not the printer. Whoever is holding it in ten years can
+reprint the sleeve and the label from those files with anything that opens a
+picture, without DiscWright, without the project file and without the folder it
+was built from. Leave both boxes empty and the disc has no `ARTWORK` folder at
+all. The pictures count towards the room on every disc, because they are on
+every disc, and the checksum list covers them.
 
-**Artwork you already have is printed exactly as it is.** People make covers for
-games and share them, and somebody who has found or drawn one does not want a
-layout imposed on it. Point DiscWright at one and it places it at exact trim,
-carries its own edges outwards to make the bleed it has not got, and puts crop
-marks outside that. Nothing is added, nothing is cropped off, and nothing is
-stretched. With no picture at all you get a plain label with the title on it,
-which is still worth having on an unmarked disc in a stack.
-
-Two boxes in step 7 hold the pictures, one for the cover and one for the disc
-face, because a cover is tall and a disc face is a circle and one picture rarely
-suits both. Under them a line says what each picture will cost before anything is
-printed: a 16:9 wallpaper loses about 60% of its width on a cover panel, and
-being told that beforehand beats finding out on paper.
-
-DiscWright does not align anything to a printer tray. That belongs to the printer
-software, it differs by printer, and getting it wrong wastes a disc.
+This is the same folder the C# version of DiscWright writes, so a disc reads the
+same whichever of the two made it. Until 0.11.0 DiscWright printed a case wrap
+and a disc face itself, and put them on the disc only when asked. Laying a cover
+out for a printer is a job for the printer's own software, which knows the case,
+the paper and the tray.
 
 ## Known limitations
 
