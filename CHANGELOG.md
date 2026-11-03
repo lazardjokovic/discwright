@@ -481,12 +481,15 @@ is why so much of this release is a fix rather than a feature.
 ### Internal
 
 - **The suite has roughly doubled.** The logic file has gone from 494 tests to
-  1,001 and the window file from 110 to 142, counted as written; the last full run
-  before this release reported 1,447 green through the runner, which counts cases
-  rather than blocks. The code the disc menu runs is tested by running it under
-  cscript against real folders rather than by reading its source, including a five
-  disc install with four swaps, where the drive is a junction and a swap repoints
-  it.
+  1,001 and the window file from 110 to 139, counted as written. Counted as the
+  runner counts them, which is cases rather than blocks, a full run on the test
+  machine is 1,303 logic and 145 window green with nothing failed. That number
+  depends on the machine it was taken on: five cases move from skipped to run
+  for every GOG download folder the machine has, so the same commit reports
+  1,298 logic cases on CI, which has none. The code the disc menu runs is tested
+  by running it under cscript against real folders rather than by reading its
+  source, including a five disc install with four swaps, where the drive is a
+  junction and a swap repoints it.
 
 - **Three ways the runner could report green on a run that had not happened.** A
   block whose setup fails is counted nowhere near the failure count, so the summary
