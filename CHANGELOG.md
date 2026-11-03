@@ -189,19 +189,16 @@ is why so much of this release is a fix rather than a feature.
   tail would verify what it still mentioned and report every one of them right,
   which is the one way a checksum list can mislead.
 
-- **A disc can carry its own artwork.** Ticked, the build writes an ARTWORK folder
-  holding the case wrap and the disc face, the same two files the Print artwork
-  button makes, from the same pictures, written before the hashing so the checksum
-  list covers them. Off by default, because it costs a few megabytes and most
-  people print rather than carry. A missing print folder is a note in the log and
-  never a failed build: nobody should lose a disc over a cover image.
-
-- **A cover is asked for at the size of the case the disc goes in.** Every cover
-  used to be drawn at DVD size, so somebody printing for a Blu-ray case was told
-  to make a picture 19 mm too tall and somebody with a CD jewel case was told to
-  make a tall rectangle for a square insert. CD is 120 by 120 mm, DVD is 129.5 by
-  183 mm and unchanged, Blu-ray is 129 by 164 mm. The disc face deliberately does
-  not follow the case, because a Blu-ray disc is the same 120 mm circle as a DVD.
+- **A disc carries the artwork it was given.** The cover and the disc face
+  chosen for the build go into an ARTWORK folder on every disc, renamed cover
+  and disc face with whatever extension the picture arrived with, beside a
+  READ ME.txt that is word for word the one the desktop version writes, so a
+  disc reads the same whichever of the two made it. No tick and no option: if a
+  picture was chosen it goes on, as it is. They are written before the set file
+  and the checksum list, so both cover them, and they count towards the room on
+  every disc, because that is where they are, so the line under the list redraws
+  when either picture changes. Choosing neither means no folder at all, because
+  the menu background is not a cover.
 
 ### Changed
 
@@ -213,22 +210,20 @@ is why so much of this release is a fix rather than a feature.
   that way again by **New disc**, because a default that only applies to the first
   disc of a session is not a default.
 
-- **Print artwork, Burn to disc and Burn with are above the bottom edge of the
-  window.** They were laid out at y=1100 and the client area is 953 pixels tall on
-  a 1080p screen: present, enabled, correct, and 189 pixels past the bottom, which
-  from the outside is no button at all. Reported from the middle of a real burn as
+- **Burn to disc and Burn with are above the bottom edge of the window.** They
+  were laid out at y=1100 and the client area is 953 pixels tall on a 1080p
+  screen: present, enabled, correct, and 189 pixels past the bottom, which from
+  the outside is no button at all. Reported from the middle of a real burn as
   "there is no burn button anywhere so I can try again". They sit under the log
-  now, which is also the right way round, since they are what you do once the disc
-  is built.
+  now, which is also the right way round, since they are what you do once the
+  disc is built.
 
-- **Three fields say what they are for.** "Title on artwork" sets text on the menu
-  and said artwork, which pointed at the wrong half of the form entirely once
-  there was real printed artwork: it is **Title on the menu** now. Both picture
-  fields say what they want and how big, the finished front of the case at 130 by
-  183 mm and the finished face of the disc at 118 mm across, and a test holds
-  those sizes to what the renderer actually asks for, because a label quoting a
-  size the build does not want sends somebody off to make a picture that cannot be
-  used.
+- **Three fields say what they are for.** "Title on artwork" sets text on the
+  menu and said artwork, which pointed at the wrong half of the form entirely:
+  it is **Title on the menu** now. Both picture fields say which picture they
+  want, the finished front of the case and the finished face of the disc,
+  because a label that can be read two ways sends somebody off to make the wrong
+  picture.
 
 - **The line under the installer list says what the set would be.** It used to go
   orange and say "3.76 GB too big for a DVD5", which is the one thing that stops
@@ -289,21 +284,12 @@ is why so much of this release is a fix rather than a feature.
   which is flatly wrong with a CD-RW in the drive, and it is the sentence somebody
   reads immediately before committing a disc.
 
-- **The spine lettering is centred by its ink.** Measured at 1.48 mm off centre on
-  a 14 mm spine, which is eleven per cent of the band. Centring a string in a
-  rectangle centres the line box, ascent plus descent, and a title in capitals
-  uses none of the descent, so the ink rides high in the box, and on a spine,
-  which is rotated a quarter turn, high reads as right. Now 0.04 mm.
-
-- **The print dialog wraps its own sentences.** One was hand wrapped, and a hand
-  wrap is set to one width while a message box is whatever width Windows gives it.
-
-- **Both artwork warnings are shown, and they say what shape was wanted.** With an
-  unsuitable picture in both fields the second note was simply not there: the two
-  were joined onto one 645 pixel label and the second ran off the end. They go on
-  separate lines now, in a label measured at four lines rather than guessed at two,
-  and each names the size it wants: "it wants about 1530x2161, or any size at 0.71
-  to 1". A square is called a square.
+- **New disc left the cover and the disc face behind.** It cleared the icon and
+  the background and not these two, which mattered little while they were only
+  ever printed and matters a great deal now they go onto the disc: the next game
+  would have been burned wearing the last one's cover. Both are cleared now, and
+  both count as something to lose, so the question about unsaved work knows
+  about them.
 
 - **The project file is at schema 14.** Schema 13 adds the disc set tick and 14
   adds the cut. Both read back as off in a project written by an older version,
@@ -318,6 +304,19 @@ is why so much of this release is a fix rather than a feature.
   discs is the one request on the list that was turned down, and the reasoning is
   written into Not planned so the next person to ask gets an answer rather than
   silence.
+
+### Removed
+
+- **The print module, and with it the Print artwork button.** Laying a cover out
+  for a printer is the printer software's job. Doing it here meant a second
+  renderer, its own dialog, its own case sizes and its own opinion about what
+  shape a picture had to be, all to produce a file somebody then had to print
+  somewhere else. The module, its two helper scripts and its test file are gone,
+  about 2,700 lines. The pictures still reach the disc, as they were given. The
+  project file still writes ArtworkOnDisc as true so that 0.10.0 and older can
+  still read it, and nothing here reads it back. Installing over 0.10.0 or older
+  deletes the print folder it would otherwise leave behind, and the sandbox
+  check says so.
 
 ### Fixed
 
@@ -482,7 +481,7 @@ is why so much of this release is a fix rather than a feature.
 ### Internal
 
 - **The suite has roughly doubled.** The logic file has gone from 494 tests to
-  1,001 and the window file from 110 to 141, counted as written; the last full run
+  1,001 and the window file from 110 to 142, counted as written; the last full run
   before this release reported 1,447 green through the runner, which counts cases
   rather than blocks. The code the disc menu runs is tested by running it under
   cscript against real folders rather than by reading its source, including a five
@@ -522,20 +521,15 @@ is why so much of this release is a fix rather than a feature.
 - To [xniwo](https://github.com/xniwo) on GitHub, whose
   [issue #98](https://github.com/lazardjokovic/discwright/issues/98) is still
   the only report here from somebody who came to this application without having
-  built it. Nine of the changes above are his: the disc set itself, which was
+  built it. Five of the changes above are his: the disc set itself, which was
   item 1 on his list; cutting a file so it fits, which he asked for twice, and
   he worked out the risk before anybody else did and asked whether it would need
   "a database of some sort to remember a game's original state", which it does,
   and `Disc set.txt` already was one; handing the ISO to whatever else can burn
-  it; both artwork notes appearing at once, each saying what shape it wanted;
-  the one click checksum verification in the menu; three labels that said
-  something other than what they set; covers at the size of the case the disc
-  goes in; the spine lettering, which he put as "slightly off centre to the
-  right (not a major issue)" and which measured at eleven per cent of the band;
-  and the hand wrapped sentence in the print dialog, noticed in the same
-  comment. The tenth, counting a stock of blank discs, is the one thing on his
-  list that was turned down, and the reasons are written into the roadmap rather
-  than left in a thread. Thank you.
+  it; the one click checksum verification in the menu; and three labels that
+  said something other than what they set. Counting a stock of blank discs is
+  the one thing on his list that was turned down, and the reasons are written
+  into the roadmap rather than left in a thread. Thank you.
 
 ## [0.10.0] — 2026-10-03
 
