@@ -7119,6 +7119,39 @@ Describe 'The installer check tells the truth about what it tested' -Tag 'Unit' 
         $script:HostSrc | Should -Match 'Could not test'
         $script:HostSrc | Should -Match 'exit 2'
     }
+
+    It 'finds the window by enumerating the process, not by its main window title' {
+        # MainWindowTitle is whichever ownerless, visible top-level window comes
+        # first in Z-order, and a tooltip's drop shadow is one of those: class
+        # SysShadow, no title at all. The app opens under the pointer when that is
+        # where the pointer was left, so a control with a tooltip beneath it puts a
+        # shadow ahead of the form and the title reads empty.
+        #
+        # That made this gate depend on where somebody left the mouse. It passed
+        # for 0.10.0 and failed for 0.11.0 on the same machine four minutes apart,
+        # because the artwork change moved the layout and a different control sat
+        # under that one coordinate. Both builds opened their window correctly and
+        # this check called one of them broken.
+        #
+        # Comments are stripped first, because the ones above name the property
+        # this is making sure nothing reads.
+        $code = ($script:CheckSrc -split "`r?`n" |
+            Where-Object { $_ -notmatch '^\s*#' }) -join [Environment]::NewLine
+        $code | Should -Not -Match 'MainWindowTitle' -Because 'a tooltip shadow makes it empty'
+        $script:CheckSrc | Should -Match 'Get-ProcessWindowTitles'
+        $script:CheckSrc | Should -Match 'EnumWindows'
+        $script:CheckSrc | Should -Match 'SysShadow' -Because 'the reason belongs next to the code'
+    }
+
+    It 'waits for the window rather than sleeping once and looking once' {
+        # One flat sleep then a single look reads a slow start as a failure, and
+        # spends the whole wait even when the window is up in three seconds.
+        $watch = [regex]::Match($script:CheckSrc,
+            '(?s)(function Start-And-Watch.*?\r?\n\})').Groups[1].Value
+        $watch | Should -Not -BeNullOrEmpty
+        $watch | Should -Match 'do \{'
+        $watch | Should -Match 'while \(-not \$seen'
+    }
 }
 
 Describe 'Handing the ISO to another program' -Tag 'Unit' {

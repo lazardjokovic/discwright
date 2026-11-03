@@ -174,6 +174,53 @@ $null = Check -Always "mshta and JScript are on this image, which every disc's m
 #    and directly, which says whether the app itself is fine when the launcher
 #    chain is not there. Closed afterwards, since a window nobody closes would
 #    hold the sandbox open until the timeout.
+#    The window is found by enumerating each new process's top-level windows,
+#    not by reading Process.MainWindowTitle. MainWindowTitle returns the first
+#    ownerless, visible top-level window in Z-order, and a tooltip's drop
+#    shadow is one of those: class SysShadow, no title at all. The app opens
+#    wherever it opens, which is under the pointer if that is where the pointer
+#    was left, so a control with a tooltip beneath it puts a shadow ahead of
+#    the form and MainWindowTitle comes back empty.
+#
+#    That made a release check depend on where somebody left the mouse. It
+#    passed for 0.10.0 and failed for 0.11.0 on the same machine minutes
+#    apart, purely because the layout had moved and a different control sat
+#    under the pointer. Both builds opened their window correctly, and this
+#    check said one of them did not.
+if (-not ('Dw.Win' -as [type])) {
+    Add-Type -Namespace Dw -Name Win -MemberDefinition @'
+[DllImport("user32.dll")]
+public static extern bool EnumWindows(EnumProc cb, System.IntPtr p);
+[DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern int GetWindowTextW(System.IntPtr h, System.Text.StringBuilder s, int n);
+[DllImport("user32.dll")]
+public static extern int GetWindowThreadProcessId(System.IntPtr h, out int procId);
+public delegate bool EnumProc(System.IntPtr h, System.IntPtr p);
+'@
+}
+
+# Every titled top-level window belonging to any of these processes. Script
+# scope rather than a closure: a scriptblock handed to EnumWindows as a
+# delegate does not reliably see a local from the enclosing function.
+function Get-ProcessWindowTitles([int[]]$ids) {
+    $script:dwIds = $ids
+    $script:dwTitles = New-Object System.Collections.ArrayList
+    $cb = [Dw.Win+EnumProc]{
+        param($h, $unused)
+        $procId = 0
+        [void][Dw.Win]::GetWindowThreadProcessId($h, [ref]$procId)
+        if ($script:dwIds -contains $procId) {
+            $sb = New-Object System.Text.StringBuilder 512
+            [void][Dw.Win]::GetWindowTextW($h, $sb, 512)
+            $t = $sb.ToString()
+            if ($t) { [void]$script:dwTitles.Add($t) }
+        }
+        return $true
+    }
+    [void][Dw.Win]::EnumWindows($cb, [System.IntPtr]::Zero)
+    return $script:dwTitles
+}
+
 function Start-And-Watch([string]$exe, [string[]]$argv, [int]$seconds = 25) {
     $before = @(Get-Process powershell -ErrorAction SilentlyContinue).Id
     # -ArgumentList refuses an empty array, and a shortcut is started with no
@@ -181,12 +228,23 @@ function Start-And-Watch([string]$exe, [string[]]$argv, [int]$seconds = 25) {
     # a sometimes-empty list.
     if ($argv -and $argv.Count) { $null = Start-Process $exe -ArgumentList $argv -PassThru }
     else                        { $null = Start-Process $exe -PassThru }
-    Start-Sleep -Seconds $seconds
+    # Polled rather than one long sleep: the window is up in about three
+    # seconds, and waiting the full time for each of these cost most of a
+    # minute of every run.
+    $deadline = (Get-Date).AddSeconds($seconds)
+    $seen = $false
+    do {
+        Start-Sleep -Seconds 2
+        $live = @(Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.Id -notin $before })
+        if ($live.Count) {
+            $titles = Get-ProcessWindowTitles @($live | ForEach-Object { $_.Id })
+            $seen = @($titles | Where-Object { $_ -like 'DiscWright*' }).Count -gt 0
+        }
+    } while (-not $seen -and (Get-Date) -lt $deadline)
     $new = @(Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.Id -notin $before })
-    $window = @($new | Where-Object { $_.MainWindowTitle -like 'DiscWright*' })
     foreach ($p in $new) { try { $p.Kill() } catch {} }
     Start-Sleep -Seconds 2
-    return $window.Count -gt 0
+    return $seen
 }
 
 if ($start) {
