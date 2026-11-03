@@ -7,6 +7,533 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [Unreleased]
+
+A game that will not fit on one disc is now written across several, and a file
+bigger than any blank is cut between them and joined back together on the other
+side. The menu on any disc of a set copies the whole set back, asks for each
+disc as it needs it, and installs the game at the end. That is how a game on
+five discs worked in 1998, and it is the measure this was asked for against.
+
+Burning grew up alongside it. DiscWright writes a set itself, one disc at a
+time, below the drive's top speed and checking every file before it asks for the
+next blank, and the window no longer freezes while it happens: the write, the
+read back and the copy all show what the drive is really doing. Most of what
+follows was found by burning real discs and restoring real games off them, which
+is why so much of this release is a fix rather than a feature.
+
+### Added
+
+- **A game too big for one disc is written as a set.** Press BUILD with a payload
+  that will not fit and DiscWright works out whether splitting it would help,
+  says how many discs it would be, and asks. Saying yes ticks the **disc set**
+  box rather than quietly building something else, so the form shows what is
+  about to happen and the project remembers it. It stays quiet whenever a set
+  would not help, because offering one that would then be refused is worse than
+  not offering.
+
+  The planner places whole files, first fit, in the order they are given. Every
+  disc carries `Disc set.txt`, which lists every file in the **whole** set with
+  its disc number, its size and its SHA-256, so the folder the discs are copied
+  into is the only state there is: what is missing, what copied badly and whether
+  the set is complete are all answered from the folder itself, with nothing
+  remembered between sessions. The manual, the extras and the loose files go on
+  one disc rather than all of them, and on the last disc rather than the first,
+  because first fit leaves the slack at the end.
+
+  Several games across a set is refused. A set splits one game that will not fit.
+  Which games belong together on a disc is a curation decision, and the earlier
+  sets feature that packed whatever order the rows sat in was deleted for making
+  it.
+
+  Real shape, filmed: Dead Space, 8.13 GB over four files, laid on two DVD5s,
+  which is the fewest possible, and built in three minutes four.
+
+- **A file bigger than any blank is cut across discs.** A set places whole files,
+  so one file bigger than the disc used to be refused by name and the answer was
+  a bigger blank. That answer runs out on a CD, which refuses every game measured
+  here, including a 1.8 GB indie game whose largest single file is bigger than a
+  whole CD, and it has no answer at all for a game that ships as one enormous
+  file.
+
+  It is off until a build asks for it. The question names the file, the pieces and
+  the discs, and says the pieces look like broken files until they are joined,
+  because handing somebody a game in pieces is a different promise from handing
+  them a game on several discs. Each piece is written by streaming a byte range
+  and hashing as it goes, the whole file's own hash is recorded once, and Install
+  does the join before anything else.
+
+  This is not the spanning the research under `docs/` refuses, and the two fail
+  for opposite reasons. Spanning runs the installer off the discs and lets it ask
+  for parts in an order nobody can predict. Cutting is tractable because
+  DiscWright decides the order, and nothing is ever installed from a disc: the
+  pieces are joined on the hard drive first. Measured on Hollow Knight,
+  1,241,037,720 bytes came back byte for byte identical to the installer GOG
+  shipped.
+
+- **One menu drives the whole set, through the disc swaps.** Press Install on disc
+  1 and it copies that disc, asks for the next one, watches the drive until it
+  turns up, carries on by itself, joins the cut file and runs the installer. No
+  second menu to open, and nothing said about folders.
+
+  Two things stood in the way and neither was the wording. Each disc's menu had
+  its number baked in at build time, so disc 1's menu believed it was disc 1 for
+  ever and reported a disc 2 as scratched. And the panel re-read the file table
+  off the disc every time it drew itself, so an open tray collapsed the menu to
+  "its list of files is missing" about a disc that was merely in somebody's hand.
+  The disc says which one it is on a line near the top, that line is what gets
+  read, and the table is read once and kept. The menu survives its own disc being
+  ejected, which is the same reason the installers that did this in 1998 copied
+  themselves to a temp folder first.
+
+  Room for the whole job is worked out before anything starts, and the figure is
+  not what the discs hold: a cut file is written out whole while its pieces are
+  all still there, so the high point is the set plus the largest finished file.
+  Proven over a five disc set with four swaps, one press of Install, nothing
+  stubbed but the document, the dialogs and the registry.
+
+- **Play, once the game is really on the machine.** A set disc used to offer
+  Install whatever had happened since, because the verb described what the disc
+  carries rather than what is on the computer. It asks GOG's own registry keys
+  now, the same way the ordinary one disc menu has for years, and the button both
+  says Play and plays. The disc does not have to remember where somebody
+  installed a game, because the machine already knows.
+
+- **A progress window for the write, the read back and the copy.** Burning used to
+  mean two long waits behind a frozen window, and in a set the read back reported
+  nothing at all: ten minutes of silence for a disc that may still turn out to be
+  a coaster. The Windows burning engine has reported progress all along and
+  nothing here listened.
+
+  It reports from a thread of its own, where there is no runspace and a PowerShell
+  scriptblock cannot run at all, so the sink only records, in C#, and the write
+  runs in a runspace of its own while the interface thread reads those numbers and
+  paints them. The main window no longer greys over during a burn. The read back
+  counts bytes rather than files, because a cut set is one enormous part file
+  beside a handful of small ones and a bar counting files jumps to 89 per cent and
+  then sits there, and it reports from inside a file as it hashes, because
+  otherwise a four and a half minute read has exactly two positions: nought, and
+  a hundred.
+
+  The log says after every disc how many times the drive reported, which is what
+  tells a quiet drive apart from a broken listener the next time a bar sits still.
+  The window offers no way to close it, because closing it would not stop the
+  burn, and a button that promises to cancel a write and does nothing of the kind
+  is worse than no button.
+
+  The copy inside the disc menu has a bar too, with an honest account of what it
+  is and is not measuring: exact about the files that are finished, an estimate
+  for the one in flight, and it never reaches 100 until the copy itself says so.
+  The position within a file being copied off a disc cannot be measured at all,
+  and the four ways of trying are written down where somebody will try them again.
+
+- **DiscWright burns a set itself, one disc at a time.** Ticking disc set used to
+  offer three other programs and not DiscWright, so a set got none of what this
+  burner does: no speed below the drive's maximum, no check afterwards. A set is
+  the case that needs both of those most, because on a cut game disc 2 is no use
+  whatever if disc 1 came out wrong.
+
+  Each disc is written and then every file on it is read back and compared by
+  SHA-256 before the next blank is asked for, and the walk stops on a bad disc
+  rather than marching on. Handing the ISO to another program is untouched and
+  still honest about what it cannot know, so that path still asks whether each
+  disc is done. This one knows, so it does not ask.
+
+- **It asks which writer, when there is more than one.** Both burn paths used to
+  take the first drive holding a usable blank, which is right on a machine with
+  one writer and silently wrong the moment there are two. A set settles it once,
+  on the first disc, and writes every disc of that set to the same drive. No
+  question is raised when only one drive could take the disc, because being asked
+  to choose between one thing is a dialog in the way.
+
+- **It offers to erase the rewritable disc that is in the way.** The app always
+  knew the disc was not blank and said so, and knowing led nowhere: right for a
+  CD-R, a wall for a CD-RW somebody is deliberately reusing. It offers now, and
+  there is exactly one function in the whole app that erases anything. It asks
+  first, names the disc and the drive, and says that everything on the disc goes.
+  A test asserts there is only one caller of it, because a second one is a second
+  place that could erase without asking. It refuses to choose between two discs
+  that could both be erased, since a wrong guess there is somebody's disc. Quick
+  erase, not full: the drive rewrites the surface afterwards anyway.
+
+- **Burn with...** lists what the machine actually has, read out of the registry
+  rather than guessed, and names each program the way the program names itself.
+  Asked for as "being able to link your software to ImgBurn or similar software
+  for an instant burn", and answered by discovery rather than by configuration,
+  so there is nothing to fill in: on the machine this was written on the
+  registered program is Nero, which is a decent argument against hardcoding
+  anybody's favourite.
+
+- **A disc can check itself against its own list.** A tick beside the mute in the
+  menu, shown only when the disc actually carries `checksums.sha256`, because a
+  control that answers "there is nothing to check" misrepresents what the disc
+  can do. It answers a different question from the set's own check: this one is
+  about the disc in your hand, and whether that burn came out right.
+
+- **Everything a disc needs is written onto the disc.** The disc outlives the
+  computer that made it, so what somebody holding one disc in ten years needs to
+  know has to be on the disc, in a file a text editor opens. `Disc set.txt` now
+  also carries a set id, which is twelve hex characters over every file in the set
+  and is how mixing disc 1 of one burn with disc 2 of a later one gets named
+  rather than merely caught; what wrote it and when, and which disc it was planned
+  for; a breakdown disc by disc with the one in your hand marked, so a set with a
+  disc missing can be read off any other disc; the rejoin on Linux and macOS as
+  well as Windows, because the Windows one assumed the machine reading the disc is
+  the one that wrote it, which is the assumption this whole application exists to
+  refuse; how to check the finished file, and why that is the check that matters;
+  and what to do when a disc has gone bad, including that a disc which only gives
+  a file up after several attempts is failing even when nothing reports an error.
+
+  The checksum list can also be caught lying now. Its header has always said how
+  many files it covers and nothing read that line, so a list that had lost its
+  tail would verify what it still mentioned and report every one of them right,
+  which is the one way a checksum list can mislead.
+
+- **A disc carries the artwork it was given.** The cover and the disc face
+  chosen for the build go into an ARTWORK folder on every disc, renamed cover
+  and disc face with whatever extension the picture arrived with, beside a
+  READ ME.txt that is word for word the one the desktop version writes, so a
+  disc reads the same whichever of the two made it. No tick and no option: if a
+  picture was chosen it goes on, as it is. They are written before the set file
+  and the checksum list, so both cover them, and they count towards the room on
+  every disc, because that is where they are, so the line under the list redraws
+  when either picture changes. Choosing neither means no folder at all, because
+  the menu background is not a cover.
+
+### Changed
+
+- **Checksums are on by default and the window border is off.** A disc set carries
+  hashes in its own file either way; the tick is what gives a disc on its own the
+  same, and it costs one hashing pass at build time and about a kilobyte on the
+  disc. What it buys is the only way to answer "did this disc come back the way it
+  went on" with nothing installed. The border nobody wanted is off. Both are set
+  that way again by **New disc**, because a default that only applies to the first
+  disc of a session is not a default.
+
+- **Burn to disc and Burn with are above the bottom edge of the window.** They
+  were laid out at y=1100 and the client area is 953 pixels tall on a 1080p
+  screen: present, enabled, correct, and 189 pixels past the bottom, which from
+  the outside is no button at all. Reported from the middle of a real burn as
+  "there is no burn button anywhere so I can try again". They sit under the log
+  now, which is also the right way round, since they are what you do once the
+  disc is built.
+
+- **Three fields say what they are for.** "Title on artwork" sets text on the
+  menu and said artwork, which pointed at the wrong half of the form entirely:
+  it is **Title on the menu** now. Both picture fields say which picture they
+  want, the finished front of the case and the finished face of the disc,
+  because a label that can be read two ways sends somebody off to make the wrong
+  picture.
+
+- **The line under the installer list says what the set would be.** It used to go
+  orange and say "3.76 GB too big for a DVD5", which is the one thing that stops
+  being true the moment the box is ticked. It says "3 discs of DVD5 4.7 GB" now,
+  in green, because at that point it is a plan and not a problem, and when no set
+  of that disc would work it names the file that decided it and what the disc in
+  your hand would do: "one file is 1.16 GB, so Build will offer to cut it: 2
+  discs". Every wording that line can produce is measured against the real font at
+  the real width in a test, because the full sentence needs 930 pixels and the
+  label has 655.
+
+- **A set disc's menu offers Install, or Play, and little else.** The panel had
+  drifted to five buttons, one honest button at a time, and the measure this
+  feature was asked for against is a game on five discs in 1998, which had
+  Install. So Install or Play sits above Game Manual, Extras and Exit, and a line
+  of small grey text saying Options opens the rest: copy this disc only, put the
+  files back together, check every file, delete the copied files, choose folder.
+  Nothing was removed. Install was already doing all of it.
+
+- **Drive speeds are read and written in sectors, the unit IMAPI speaks.** The
+  module divided by 150, the kilobytes of a 1x CD, where it should divide by 75,
+  the sectors of one. So every speed shown was half the truth and every speed
+  asked for was double what was meant, typing 8x asked for 16x, and the speed cap
+  that exists so cheap media is not written flat out had never once bitten: a 24x
+  writer looked like 12x, sailed under the cap and burned at 24x. Caught by a
+  Verbatim CD-RW rated 8 to 12x that the app called 5x, a speed no CD-RW is made
+  in. The estimate had been right by luck, two mistakes cancelling exactly, and
+  they stop cancelling the moment somebody types a speed. Blu-ray and HD DVD had
+  no base rate at all and were being measured as DVDs.
+
+- **Declining an offer is a cancellation, not an error.** Saying no to the disc set
+  offer, or to cutting a file, fell through to the refusal the offer was about and
+  wrote ERROR in the log in front of somebody who had just answered a question.
+  The refusal still runs and still says which file decided it, because declining
+  does not make the payload fit. Only the word changes.
+
+- **The menu opens at its own size.** Double-clicking a disc put a 1440 by 753
+  window on screen with nothing in it but the X, for 2.6 seconds, and then the
+  real 760 by 480 menu. One process, one window, resized late: the resize ran from
+  body onload, which waits for images, and the background is around 578 KB coming
+  off a disc. It happens as the document is parsed now. None of this shows on a
+  hard disk, which is why it was never caught.
+
+- **The menu's corner buttons are laid out from the right edge inwards.** The X,
+  the mute and the checksum tick were at fixed offsets in CSS, so a disc with no
+  music left a 36 pixel hole and the tick stood off on its own past it.
+
+- **Preview menu opens a new window every press.** Changing the background and
+  pressing Preview again showed the old background, and nothing was stale or
+  cached: the HTA carries singleinstance keyed on the application name, so Windows
+  brought the window already on screen to the front instead of launching the new
+  one. The disc's own menu stays single instance, which is what that attribute is
+  for. A preview must not be, because pressing Preview means "show me what it
+  looks like now".
+
+- **The burn confirmation tells the truth about the disc in the drive.** It said
+  "this cannot be undone and the disc is not rewritable" whatever was in there,
+  which is flatly wrong with a CD-RW in the drive, and it is the sentence somebody
+  reads immediately before committing a disc.
+
+- **New disc left the cover and the disc face behind.** It cleared the icon and
+  the background and not these two, which mattered little while they were only
+  ever printed and matters a great deal now they go onto the disc: the next game
+  would have been burned wearing the last one's cover. Both are cleared now, and
+  both count as something to lose, so the question about unsaved work knows
+  about them.
+
+- **The project file is at schema 14.** Schema 13 adds the disc set tick and 14
+  adds the cut. Both read back as off in a project written by an older version,
+  because those versions refused a payload past the biggest disc outright, and
+  reopening one of their projects must not quietly turn one disc into five.
+
+- **The documentation no longer says this cannot be done.** Three places told
+  anybody who looked that splitting a game across discs was refused. The research
+  under that refusal is sound and unchanged, because what it refuses is spanning,
+  and the roadmap entry is retitled to what it actually covers. The README now has
+  a section for disc sets with the films in it. Counting somebody's stock of blank
+  discs is the one request on the list that was turned down, and the reasoning is
+  written into Not planned so the next person to ask gets an answer rather than
+  silence.
+
+### Removed
+
+- **The print module, and with it the Print artwork button.** Laying a cover out
+  for a printer is the printer software's job. Doing it here meant a second
+  renderer, its own dialog, its own case sizes and its own opinion about what
+  shape a picture had to be, all to produce a file somebody then had to print
+  somewhere else. The module, its two helper scripts and its test file are gone,
+  about 2,700 lines. The pictures still reach the disc, as they were given. The
+  project file still writes ArtworkOnDisc as true so that 0.10.0 and older can
+  still read it, and nothing here reads it back. Installing over 0.10.0 or older
+  deletes the print folder it would otherwise leave behind, and the sandbox
+  check says so.
+
+### Fixed
+
+- **Copying a file off a real disc could not work at all.** The menu said "1 of 1
+  files would not copy from this disc. It may be scratched." about a CD-RW that
+  was twenty minutes old and had just had every byte on it hashed back
+  successfully. A disc is always a drive root, so the source path always ended in
+  a backslash, and a backslash immediately before a closing quote escapes that
+  quote: robocopy read the whole rest of the line as one argument and settled on a
+  destination inside the Windows folder. Exit code 16, nothing copied, and a
+  message blaming the person's disc. Every test before this copied from a staging
+  folder, and a folder path never ends in a backslash, which is why 875 tests,
+  three recorded films and a published GIF all missed it. It took a real disc.
+
+- **The disc menu froze itself, and then asked to be killed.** Copying 694 MB off
+  a CD with the script engine held shut produces "Stop running this script? ... If
+  it continues to run, your computer might become unresponsive." Answering Yes
+  abandons a restore halfway through, leaving a part written file and no cleanup,
+  and the person answering has no way to know that. The copy, the join and the
+  whole-set check all start their work and watch it on a timer now, and each says
+  which file it is on while it runs, because a menu that says nothing for four
+  minutes is one somebody closes.
+
+- **A copy could hang for ever with nothing on screen.** The menu started robocopy
+  through an interface that gives the child a pipe for its output, and nothing on
+  this side ever read it: robocopy prints a running percentage, the buffer fills,
+  and the writer blocks for ever. Measured on the night it happened, 692 MB had
+  copied and robocopy then sat there for five minutes with 0.2 seconds of
+  processor time over 378 seconds of life. It also put a console window on top of
+  the menu, which is the one thing somebody is meant to be reading while a disc
+  copies, and closing that window kills the copy it belongs to. Commands run
+  hidden and with no pipes now, and the regression test hangs for its full limit
+  with the old call put back.
+
+- **A copy that worked was reported as a scratched disc.** The exit code comes back
+  through a small flag file, and a redirection creates its file when it opens it,
+  so the flag existed and was held open before the code was in it. A waiter
+  landing in that window is not reading an empty file, it is refused the read
+  altogether, and the default stood in for a failure: "1 of 2 files would not copy
+  from this disc. It may be scratched." About one run in three in the suite, and
+  on one disc at a time it would read as a fluke. The code is written elsewhere
+  and renamed onto the flag, which is a single directory operation.
+
+- **A half copied file is exactly the right size.** robocopy sets the destination
+  to its full length before it writes a byte, so a copy that stopped halfway left
+  725,360,334 bytes, the size the set file asks for to the byte, with a tail of
+  nothing in it. A check on the size alone calls that file good. The flag carries
+  the exit code now, so the copy asks both questions.
+
+- **A set's project file saved the last disc's label.** Each disc's copy of the
+  settings has the disc number on the end of its label on purpose, because that is
+  what gives every disc its own ISO name and its own icon name, and Explorer
+  caches disc icons by filename. Saving that copy put the suffix into the project,
+  so reopening and building again added another: "Hollow Knight" became "Hollow
+  Knight D2" and then "Hollow Knight D2 D2". The set's own name has been on every
+  disc all along for the menu's sake, and the save reads that now.
+
+- **Burn to disc could only ever write the last disc of a set.** It took the newest
+  image in the folder, which on a set is always the last disc, written seconds
+  after the others. So burning a set one disc at a time, which is what somebody
+  does when a walk was interrupted or one disc came out bad, meant burning disc 2
+  repeatedly. It also looked for the staging folder in one fixed place, so it wrote
+  a set disc and then had nothing to check it against, which is worse than
+  refusing because the disc looks finished. The number on the image names the
+  staging folder now, and which image is asked for when the folder holds more than
+  one.
+
+- **A second writer in the machine broke the burn outright.** "Cannot convert the
+  System.Object[] value to type System.Int64", after "Disc 1 of 2". The drive list
+  is returned wrapped so that a machine with one recorder still hands back a list,
+  which makes the array an array holding an array, and two call sites had got away
+  with that for a year because the next thing each did was pipe it, and a pipe
+  unrolls one level. The first code to ask that list for a count saw one drive,
+  chose it, and handed both drives to the thing that checks whether the ISO fits.
+  On a machine with one writer nothing is wrong, which is a bad place to find out.
+
+- **A file the disc will not give back is reported, instead of ending the check on
+  a stack trace.** A CD-RW gave "Data error (cyclic redundancy check)" on a 728 MB
+  piece, twice, from two different burners, and the check died partway down the
+  disc having named no file and said nothing about whether the rest of it was any
+  good. That is the one case the check exists for: a disc that reads back different
+  bytes is the easy failure, and a disc that will not read at all is the one
+  somebody is holding when they ask whether to trust it. Unreadable is a verdict of
+  its own now, the walk carries on through the rest of the disc, and unreadable
+  files are listed first.
+
+- **The manual and the extras were copied to every disc of a set and counted on
+  none.** A game with a 2 GB extras folder would have carried 2 GB five times
+  while the arithmetic allowed for it zero times, and the disc would have
+  overflowed on write.
+
+- **Ticking disc set left the old refusal on screen.** The tick had no handler, so
+  the line under the installer list kept saying "too big for a DVD5" until
+  something else was touched. It never needed one before: until that line started
+  reading the tick, it said the same thing either way.
+
+- **The buttons on a set disc ran off the bottom of the menu.** The code that
+  shrinks them so they fit a 480 pixel window counted only the buttons, and the
+  set panel puts a block of text above them, so Choose folder sat half over the
+  edge and Exit was not drawn at all.
+
+- **Deleting the copied files threw away its own failures.** Each removal sat in a
+  catch that said nothing, and a real run left two of four files behind, still held
+  open by whatever had just copied them, while the menu reported the folder as
+  emptied.
+
+- **A set disc's first button said Install whatever the game was.** For a folder of
+  game files with nothing picked to run, it then opened Explorer, and the status
+  line had promised an install. The three kinds of entry exist everywhere else in
+  the menu, and the set panel uses the same rule now: a GOG download installs, a
+  folder of game files plays, a folder with nothing picked opens.
+
+- **Disc 2's menu said "now put disc 2 in".** It knew how many files were missing
+  and not which disc it was printed on, although the disc says so on a line near
+  the top. It ends on the thing to do next now, and one test loops over all four
+  discs of a four disc set and insists no disc's own number ever comes back as an
+  instruction to insert it, so this is pinned as a rule rather than as the one
+  wording that was noticed.
+
+- **Good news arrived wearing a warning triangle.** An alert in an HTA always draws
+  the exclamation icon, so "Every file in that folder is byte for byte what was
+  burned" looked like a problem at the one moment somebody most wants to hear that
+  everything is fine. The failures keep the triangle.
+
+- **Check every file said the set was perfect with one disc of two copied.** True
+  of the files it looked at, and it read as though the set were done. It says how
+  many it checked and how many are still to come now, and the whole-set case keeps
+  the short sentence, because that is the one people see most.
+
+- **The set panel wore the button colour.** A flat dark block in a column of flat
+  dark blocks is something a person presses, and it was painted the exact fill the
+  buttons use.
+
+- **The join line every disc carries could not be run.** The Windows one wrote the
+  path with forward slashes and quoted nothing, and cmd's copy reads both of those
+  as something other than a file name, so a piece in a subfolder gave "The syntax
+  of the command is incorrect" and a space in the name gave "The system cannot
+  find the file specified". These lines exist for the day somebody finds these
+  discs and has nothing to open them with, so they are the one part of a disc that
+  still has to work when nothing else is left. Both are run by the tests now
+  rather than read, the Windows one pasted into cmd and the other into WSL, and
+  the pasteable check the same file prints had been printed on every disc ever
+  built here and never once been run.
+
+- **The winget manifest generator had been writing invalid YAML since 0.9.0.** The
+  line the store front shows was reworded that release, and an unquoted YAML value
+  holding a colon and a space is a mapping rather than a string, so all three
+  files failed to parse at the first line of real content. It sat broken for six
+  weeks because nothing after 0.7.1 had been submitted, and reading the file is
+  exactly what would never have caught it: the wording is fine, the quoting is
+  not. The generator has tests now, where it had none, and they run it rather than
+  read it.
+
+- **The window called itself dirty the moment it opened**, once the border tick
+  defaulted to off, so New disc lit up on a window with nothing in it to clear.
+
+- **A label ran straight through three buttons.** It occupied the band from 1074 to
+  1142 and sat in front of them in z-order, and the overlap test could not see it
+  because UI Automation reports no rectangle for a control that is scrolled out of
+  view, so it skipped both and called the layout clean.
+
+### Internal
+
+- **The suite has roughly doubled.** The logic file has gone from 494 tests to
+  1,001 and the window file from 110 to 139, counted as written. Counted as the
+  runner counts them, which is cases rather than blocks, a full run on the test
+  machine is 1,303 logic and 145 window green with nothing failed. That number
+  depends on the machine it was taken on: five cases move from skipped to run
+  for every GOG download folder the machine has, so the same commit reports
+  1,298 logic cases on CI, which has none. The code the disc menu runs is tested
+  by running it under cscript against real folders rather than by reading its
+  source, including a five disc install with four swaps, where the drive is a
+  junction and a swap repoints it.
+
+- **Three ways the runner could report green on a run that had not happened.** A
+  block whose setup fails is counted nowhere near the failure count, so the summary
+  was green, the exit code was zero and nine tests had never executed: that is a
+  failure now, named, with a non-zero exit. An `It` nested inside an `It` parses
+  perfectly well and is invisible to Pester, which is the shape that fooled the
+  runner, so the suite refuses to have one. And the suite once sat at "Running
+  tests" for forty minutes because a copy of the application had been written over
+  Pester's own four line helper, which the runner now checks for and refuses to
+  start on, printing the two commands that put it back.
+
+- **A skip is decided during discovery.** A variable set in a setup block is still
+  empty when that decision is made, so tests meant to be conditional skipped
+  silently while the run reported green. It happened three separate times in this
+  release, in files that already carried a warning about it, and each time it was
+  caught only by planting a fault and watching what failed.
+
+- **The installer check on a clean Windows says BLOCKED rather than failing.**
+  Whether a Windows Sandbox comes up with Smart App Control on or in evaluation
+  varies from run to run, and only the second will run an unsigned installer at
+  all. The check reported the first as five failures, which is a lie: it had not
+  found a fault, it had declined to look. 0.9.0 and 0.9.1 shipped past it anyway,
+  which is what a gate that cries wolf actually costs.
+
+- **The demonstration films were re-recorded twice**, because a film is frozen into
+  whatever carries it: the first set showed a flow that the offer and the burn walk
+  had replaced, and the second showed wording from before the menu learned which
+  disc it was printed on.
+
+### Thanks
+
+- To [xniwo](https://github.com/xniwo) on GitHub, whose
+  [issue #98](https://github.com/lazardjokovic/discwright/issues/98) is still
+  the only report here from somebody who came to this application without having
+  built it. Five of the changes above are his: the disc set itself, which was
+  item 1 on his list; cutting a file so it fits, which he asked for twice, and
+  he worked out the risk before anybody else did and asked whether it would need
+  "a database of some sort to remember a game's original state", which it does,
+  and `Disc set.txt` already was one; handing the ISO to whatever else can burn
+  it; the one click checksum verification in the menu; and three labels that
+  said something other than what they set. Counting a stock of blank discs is
+  the one thing on his list that was turned down, and the reasons are written
+  into the roadmap rather than left in a thread. Thank you.
+
 ## [0.10.0] — 2026-10-03
 
 Almost everything in this release came from one person's list of suggestions,
