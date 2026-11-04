@@ -8,7 +8,7 @@
     with two executables worth running, a folder that holds games rather than
     being one. This builds all of them.
 
-    Nothing here is a real game. The recognisers read names, extensions and
+    Almost nothing here is a real game. The recognisers read names, extensions and
     sizes, so that is all these carry, and the big ones are sparse: a file that
     plans as 1.2 GB and costs almost nothing on the disk.
 
@@ -25,7 +25,13 @@
 
 [CmdletBinding()]
 param(
-    [string] $Into = "$env:USERPROFILE\DiscWright-Lab\fixtures"
+    [string] $Into = "$env:USERPROFILE\DiscWright-Lab\fixtures",
+
+    # A real GOG offline installer folder, for the two cases that need a game
+    # which genuinely installs. Hollow Knight is the one to reach for: it is the
+    # smallest here at 1.8 GB and the only one carrying real patches, which is
+    # exactly the add-on shape case 6 asks about.
+    [string] $RealGameFrom = "${env:ProgramFiles(x86)}\GOG Galaxy\Games\Offline Installers\hollow_knight"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -275,6 +281,45 @@ if ($ffmpeg) {
 }
 
 Words "$music\not-a-tune.mp3" 'This has a tune name and is a sentence.'
+
+# ========================================================= a game that is real
+#
+# Everything above is sparse, because the recognisers only ever measure. Two
+# cases cannot live with that. Case 6 step 3 wants an add-on to come alive AFTER
+# its game is installed, and the menu decides that by asking the machine whether
+# the game is REGISTERED, which no file of zeros will ever be. Case 7 ends in
+# "the disc runs it" three times over and wants the same.
+#
+# A padded real program is not enough either, and October already learnt that:
+# Character Map with 1.2 GB on the end starts, quits and registers nothing, so
+# the end of the flow was inferred rather than seen.
+#
+# So this one is real when the machine has something to be real with. Hard links
+# rather than copies, so 1.8 GB costs nothing and reads identically. That wants
+# the lab and the installers on one volume, and falls back to copying when they
+# are not.
+
+$real = Folder 'gog-real'
+
+if (-not (Test-Path $RealGameFrom)) {
+    Write-Warning "No real game at $RealGameFrom, so gog-real is empty. Case 6 step 3 and case 7 need one: point -RealGameFrom at a GOG offline installer folder."
+} else {
+    $took = 0
+    $copied = 0
+    foreach ($f in Get-ChildItem $RealGameFrom -File | Where-Object { $_.Extension -in '.exe', '.bin' }) {
+        $to = Join-Path $real $f.Name
+        try {
+            New-Item -ItemType HardLink -Path $to -Target $f.FullName -ErrorAction Stop | Out-Null
+        } catch {
+            Copy-Item $f.FullName $to
+            $copied++
+        }
+        $took++
+    }
+    $size = (Get-ChildItem $real -File | Measure-Object -Property Length -Sum).Sum
+    $how = if ($copied -gt 0) { "$copied copied, the rest hard linked" } else { 'all hard linked, so it costs nothing' }
+    Write-Host "  a real game: $took files, $([math]::Round($size / 1GB, 2)) GB, $how" -ForegroundColor DarkGray
+}
 
 # ================================================================ the tally
 

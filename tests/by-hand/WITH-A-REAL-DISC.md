@@ -249,9 +249,11 @@ folder is made.
 
 **2026-10-24, on this machine**, with two CD-RWs. Cases 1, 2 and 3 were judged
 and all three pass. Case 8 was judged the same day and again that evening, and
-**case 4 was judged on 2026-11-04**, which needed a DVD-R as well. What is left
-wants a second machine or the menu, which no amount of driving the window will
-cover.
+**cases 4, 5 and most of 6 were judged on 2026-11-04**. Case 4 needed a DVD-R as
+well. Cases 5 and 6 were done off one disc carrying everything, and the menu did
+turn out to be drivable after all, by coordinate and screenshot rather than by UI
+Automation. What is left is case 7, and the one step of case 6 that needs a game
+that can really be installed.
 
 | | |
 |---|---|
@@ -259,6 +261,8 @@ cover.
 | **2** a tray that will not shut | **pass.** Built "a set of 2 discs" from the 1.2 GB fixture with splitting on, asked which drive because both held blanks, wrote disc 1 to E: in eight minutes and read it back, then said *"Disc 1 is done. Put a blank in for disc 2 of 2."* with *"waiting for a blank disc for disc 2 of 2"* on the bar, and touched nothing until the blank was in. It picked up the moment it was told, wrote disc 2, and finished with *"All 2 discs are written and every file checked."* The note beside the discs says **done** against both. |
 | **3** erasing a real rewritable | **pass.** *Erase a disc* lit on its own, the question named both discs by letter and by drive model, Cancel left both alone, and after saying yes the disc came back blank and the button went grey. |
 | **4** swapping a disc while the window is open | **pass**, 2026-11-04. Empty trays said DVD5 4.7 GB and *Whichever one is ready*. A blank CD-RW into D: moved the size to CD-R 700 MB on its own, 78 seconds after the tray shut, and the drive appeared as *D: ASUS DRW-24D5MT, holding CD-RW*. A blank DVD-R in its place moved it to DVD5 4.7 GB and the drive read *holding DVD-R*, which IMAPI agreed with. With BD-R 25 GB then chosen by hand the size stayed put across another swap, and the amber line named both sides: *The disc in D: is a CD-RW, and this is being built for BD-R 25 GB.* |
+| **5** the menu on a real disc | **pass**, 2026-11-04, all eight checks. Label *EVERYTHING* with the disc's own icon, the chosen background, the tune playing and looping and silenced by the control at the top left, **Install** for a GOG game, *README.txt* opening in Notepad from **Manual**, *D:\Extras* opening from **Extras**, and **Exit** closing it with the music. |
+| **6** an add-on is dead until its game is installed | **steps 1 and 2 pass**, 2026-11-04. Both add-ons render dead with *Install the game first, then this.* underneath, and pressing each of them started no process and no window. **Step 3 is not judged**: see below. |
 | **D12** *Use that one* with nothing picked | **confirmed**, and already known: it closes as if you had cancelled. |
 
 Two things worth knowing for the next pass, both about how to watch rather than
@@ -302,6 +306,51 @@ One thing the case does not mention and should: once a size has been chosen by
 hand there is nothing on the window that says so, and nothing that gives the
 following back. The amber line is the only sign, and it reads as a complaint
 about the disc rather than a reminder of a choice.
+
+## Cases 5 and 6, judged 2026-11-04
+
+**The menu is drivable, which this case said it was not.** It opens by saying an
+HTA is invisible to UI Automation so nothing on it is testable at all. The first
+half is true and the conclusion is not: the window can be found by process and
+rectangle, pressed by coordinate, and read by screenshot. Everything here was
+judged that way except the tune, which needed ears.
+
+One disc carried the lot: `gog-with-both`, which is a GOG installer with two
+add-ons beside it, plus the icon, the 760x480 background, the extras folder with a
+subfolder in it, and the tune. 412.6 MB written to a CD-RW in 335 seconds, 558
+progress reports, and all seventeen files landed.
+
+**Check 8, the backdrop, is the one worth measuring rather than looking at.** The
+window came back 776 x 519 on the outside with a client area of exactly 760 x 480,
+so the stage is not cropped. That is the old 38 pixel bug answered by arithmetic.
+
+**Three traps for whoever drives this next.**
+
+The menu must be brought to the front and **verified** before any coordinate click.
+Two presses were lost into a terminal that had come forward, and a press that misses
+looks exactly like a button that does nothing, which is the same answer a dead
+add-on gives. `WindowFromPoint` on each button point, checked against the menu's own
+handle, is what settles it.
+
+**A dead button needs a positive control.** Pressing both add-ons started nothing,
+which is the pass, but that is indistinguishable from a click going nowhere. Press
+something that must work, here **Manual**, and see Notepad appear, before believing
+that nothing happening means anything.
+
+**SetForegroundWindow will fail on a machine in use**, because ForegroundLockTimeout
+is 200000 on anything that is not a dedicated test box. Making the window topmost
+with `SetWindowPos` is enough: the clicks land even when the window never takes focus.
+
+**Step 3 of case 6 could not be judged, and the reason is the fixture.**
+`setup_everything_1.0_(77777).exe` begins `0x0000`: it is a sparse file of zeros, not a
+program, so the game cannot actually be installed. The menu turns an add-on live
+only when `gameIsInstalled === true`, so proving it wants a disc built with a real
+installer. The October pass solved the same problem by padding Character Map out to
+size, and that is the route to take next time.
+
+One difference from this case as written, which changed nothing but will confuse
+somebody: the tune on the disc is `music.wav` rather than the `tune.mp3` named above.
+Both are real ffmpeg sines. The wav is 8 seconds, so the looping shows itself faster.
 
 ## Case 8, the swap, judged 2026-10-24
 
