@@ -248,14 +248,17 @@ folder is made.
 ## What the last pass found, and when
 
 **2026-10-24, on this machine**, with two CD-RWs. Cases 1, 2 and 3 were judged
-and all three pass. The rest still want a second machine, or the menu, which no
-amount of driving the window will cover.
+and all three pass. Case 8 was judged the same day and again that evening, and
+**case 4 was judged on 2026-11-04**, which needed a DVD-R as well. What is left
+wants a second machine or the menu, which no amount of driving the window will
+cover.
 
 | | |
 |---|---|
 | **1** a disc really reads back | **pass.** D:, 1.8 MB written at 10x in 51 seconds, the drive reported ten times while it wrote, it shut its own tray, and all three files hashed back off the disc matching what was built. |
 | **2** a tray that will not shut | **pass.** Built "a set of 2 discs" from the 1.2 GB fixture with splitting on, asked which drive because both held blanks, wrote disc 1 to E: in eight minutes and read it back, then said *"Disc 1 is done. Put a blank in for disc 2 of 2."* with *"waiting for a blank disc for disc 2 of 2"* on the bar, and touched nothing until the blank was in. It picked up the moment it was told, wrote disc 2, and finished with *"All 2 discs are written and every file checked."* The note beside the discs says **done** against both. |
 | **3** erasing a real rewritable | **pass.** *Erase a disc* lit on its own, the question named both discs by letter and by drive model, Cancel left both alone, and after saying yes the disc came back blank and the button went grey. |
+| **4** swapping a disc while the window is open | **pass**, 2026-11-04. Empty trays said DVD5 4.7 GB and *Whichever one is ready*. A blank CD-RW into D: moved the size to CD-R 700 MB on its own, 78 seconds after the tray shut, and the drive appeared as *D: ASUS DRW-24D5MT, holding CD-RW*. A blank DVD-R in its place moved it to DVD5 4.7 GB and the drive read *holding DVD-R*, which IMAPI agreed with. With BD-R 25 GB then chosen by hand the size stayed put across another swap, and the amber line named both sides: *The disc in D: is a CD-RW, and this is being built for BD-R 25 GB.* |
 | **D12** *Use that one* with nothing picked | **confirmed**, and already known: it closes as if you had cancelled. |
 
 Two things worth knowing for the next pass, both about how to watch rather than
@@ -270,6 +273,35 @@ what to watch:
 - **The question between discs and the question about the tray are different
   questions.** Watching for the words "blank" or "next" catches the first and
   misses the second.
+
+## Case 4, judged 2026-11-04
+
+**Pass, all four steps, and it answers the one thing the suite cannot.** The
+suite covers this with a fake drive that changes its mind; what no fake can say
+is whether Windows tells the program at all when a disc physically arrives. It
+does.
+
+Read through UI Automation rather than by eye, which works here because the
+window is WPF: `DiscSize`, `WhichDrive` and `AboutTheDiscInTheDrive` were polled
+every two seconds and nothing was touched between the steps.
+
+**Worth knowing before judging this one by eye: it took 78 seconds** from the
+tray shutting to the size moving. That is Windows mounting and notifying, not
+the program being slow, and anybody watching would be forgiven for deciding
+nothing had happened and reaching for the mouse.
+
+Three things it does better than this case asks for. The drive list says what
+each drive is **holding**, so `E:` read *holding nothing readable* with its tray
+open. The amber line names **both** sides rather than reporting a mismatch. And
+it appears as soon as a hand-chosen size stops matching the tray, not only after
+a swap, so the same sentence covers picking the wrong size as covers changing
+the disc. It also disappears entirely while the tray is empty, there being
+nothing left to disagree with.
+
+One thing the case does not mention and should: once a size has been chosen by
+hand there is nothing on the window that says so, and nothing that gives the
+following back. The amber line is the only sign, and it reads as a complaint
+about the disc rather than a reminder of a choice.
 
 ## Case 8, the swap, judged 2026-10-24
 
