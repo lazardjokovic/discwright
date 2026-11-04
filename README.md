@@ -10,9 +10,10 @@ It makes discs, and it has made real ones. The window reads a GOG download or a 
 
 A game too big for one disc comes out as a numbered set, and **any disc of a set can speak for the whole set**. Its menu copies what that disc holds behind a moving bar with the button dead, ejects, asks for the next disc, carries on by itself when one arrives, joins the cut files back together, runs the installer, waits for it, says Play when it closes, and then offers to remove the copy it made. The swap has been done twice on real discs, the second time with Hollow Knight's own GOG installer cut across two of them, and the game installed from the folder afterwards.
 
-Three things are not finished, and it is worth knowing which:
+**Nothing prints, and nothing will.** A disc gets an `ARTWORK` folder holding the cover and the disc face as ordinary pictures with a readme beside them, which is the ten year promise made real: somebody holding the disc needs a printer, not this program. Laying a cover out for one is the printer software's job, since it knows the case, the paper and the tray. v1 took its own printing out in 0.11.0 for the same reason.
 
-- **Nothing prints yet.** `DiscWright.Printing` is a project with no code in it. What a disc gets instead is an `ARTWORK` folder holding the cover and the disc face as ordinary pictures with a readme beside them, which is the ten year promise made real: somebody holding the disc needs a printer, not this program. Printing from the window is still to be written.
+Two things are not finished, and it is worth knowing which:
+
 - **135 of the 203 cases in the pass by hand are still a person's job**, and the suite runs the other 68. The biggest part of what is left is the menu on the disc, which is an HTA and so invisible to UI Automation, although the set flow inside it now has a test that presses its real button under cscript.
 - **The version is `0.12.0` and not 2.0.0.** It carries on from v1's numbering rather than starting again, and the round number is held back until this is something somebody can be given. It is set once, in [Directory.Build.props](Directory.Build.props).
 
@@ -33,7 +34,6 @@ Where to read next:
       +--> Platform ------------------------>+
       +--> Imaging ------------------------->+--> DiscWright.Core
       +--> Burning ------------------------->+
-                            Printing ------->+
 ```
 
 `Core` targets `net10.0` while the edge projects target `net10.0-windows`, so the rule is enforced by the compiler and not only by a test: `Core` cannot reach a Windows API even by accident.
@@ -44,12 +44,11 @@ Where to read next:
 | `DiscWright.Platform` | the answers only Windows can give: the real filesystem, hashes, icons, pictures, a file's version resource, what GitHub has released | `Core` |
 | `DiscWright.Imaging` | making an image with IMAPI, which is wanted on its own and works with no drive in the machine | `Core` |
 | `DiscWright.Burning` | writing a disc, reading the recorders and erasing a rewritable, all behind an interface | `Core` |
-| `DiscWright.Printing` | the cover and the disc face, and empty today | `Core` |
 | `DiscWright.Menu` | the menu a disc carries, as text: the page, its script and its icon, all embedded so a stale copy cannot be handed to the writer | `Core` |
 | `DiscWright.Staging` | assembling a whole disc, the image of one, and the preview of the menu before anything is burned | `Core`, `Menu` |
 | `DiscWright.ViewModels` | everything the window knows and can do, with no window in it | `Staging` |
 | `DiscWright.App` | the window. WPF, and nothing but the window: no arithmetic, no judgement, no refusal wording | `ViewModels`, `Platform`, `Imaging`, `Burning` |
-| `DiscWright.Tests` | the suite, and deliberately not the window | `Core`, `Staging`, `Menu`, `Platform`, `Imaging`, `Burning`, `Printing`, `ViewModels` |
+| `DiscWright.Tests` | the suite, and deliberately not the window | `Core`, `Staging`, `Menu`, `Platform`, `Imaging`, `Burning`, `ViewModels` |
 
 That third column is what each project **declares**, which is why `ViewModels` shows only `Staging`: it reaches `Core` through it and does not ask for it by name. `TheArchitecture` in the test project reads the same declared references and fails if any of this stops being true, because the compiler drops a reference nothing uses and a dependency that exists on paper is already a dependency. `TheReadme` holds this table to the project files, so a project added, renamed or newly referenced cannot leave the table saying what used to be true.
 

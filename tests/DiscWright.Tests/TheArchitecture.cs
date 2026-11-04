@@ -32,7 +32,6 @@ public class TheArchitecture
         ["DiscWright.Platform"] = ["DiscWright.Core"],
         ["DiscWright.Imaging"] = ["DiscWright.Core"],
         ["DiscWright.Burning"] = ["DiscWright.Core"],
-        ["DiscWright.Printing"] = ["DiscWright.Core"],
 
         // The view models are everything the window knows and can do, with no
         // window in them. They reach Staging because that is what they ask

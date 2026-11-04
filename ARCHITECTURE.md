@@ -21,7 +21,7 @@ Your example is exactly right. Burning a disc is the messiest thing this program
     DiscWright.Core           the rules. pure. knows no COM, no disc, no file.
           ^     ^     ^
           |     |     |
-     Staging  Imaging  Burning  Printing  Platform      the messy edges
+     Staging  Imaging  Burning  Platform      the messy edges
 ```
 
 `Core` is allowed to reference nothing of ours. Everyone else may reference `Core`. Nobody may reference `App`. That is the whole architecture, and it is checkable in five seconds by a human and by a test, which is below.
@@ -37,7 +37,6 @@ The reason this is worth the layering: most of what this program gets wrong is a
 | `DiscWright.Staging` | Core, **Menu** | COM, UI |
 | `DiscWright.Imaging` | Core | the recorder. it makes images, it does not write them |
 | `DiscWright.Burning` | Core | the image builder, the filesystem beyond reading a stream |
-| `DiscWright.Printing` | Core | everything else |
 | `DiscWright.Menu` | Core | the filesystem. it returns text |
 | `DiscWright.ViewModels` | Core, Staging | **WPF, Windows, Platform.** Everything the window knows, with no window in it |
 | `DiscWright.App` | ViewModels, Platform | arithmetic, judgement, any refusal wording |
@@ -1442,4 +1441,4 @@ Each step ends with something that runs and something that is tested. No step is
 8. The window, over the view models that already exist and are already tested.
 9. `Burning`, last, behind its interface, with `FakeRecorder` carrying every failure before a real disc is ever touched.
 
-Printing stays parked where the design left it, because there is still no printer here and every number on that board is a claim.
+Printing is not here and is not coming. A disc carries its cover and its disc face in `ARTWORK` as ordinary pictures, and laying them out for a printer is that software's job, which knows the case, the paper and the tray. v1 removed its own printing in 0.11.0 for the same reason.

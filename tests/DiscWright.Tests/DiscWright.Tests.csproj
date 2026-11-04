@@ -25,7 +25,6 @@
     <ProjectReference Include="..\..\src\DiscWright.Platform\DiscWright.Platform.csproj" />
     <ProjectReference Include="..\..\src\DiscWright.Imaging\DiscWright.Imaging.csproj" />
     <ProjectReference Include="..\..\src\DiscWright.Burning\DiscWright.Burning.csproj" />
-    <ProjectReference Include="..\..\src\DiscWright.Printing\DiscWright.Printing.csproj" />
     <ProjectReference Include="..\..\src\DiscWright.ViewModels\DiscWright.ViewModels.csproj" />
   </ItemGroup>
 
