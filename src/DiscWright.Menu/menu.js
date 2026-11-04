@@ -250,6 +250,25 @@ function isTheSameGame(registryName, ourName) {
     return theirs.length >= 6 && ours.indexOf(theirs) >= 0;
 }
 
+// A way into WMI that exists in the engine this menu actually runs in.
+//
+// NOT GetObject, AND THE REASON IS THE DOCUMENT MODE. menu.hta asks for
+// IE=9, because mode 9 is the only one with rgba that still applies the
+// disc's icon. GetObject is a JScript 5 host global and the mode 9 engine
+// does not expose it: every call throws ReferenceError, 'GetObject' is
+// undefined. ActiveXObject survives, which is what hid this, because the
+// FileSystemObject a line below kept working.
+//
+// What that cost: whereTheGameIs threw on its first line every time and
+// returned null, so no game was ever seen as installed, so the big button
+// always said Install and every add-on stayed dead for ever. Found on a
+// real disc on 2026-11-04, with Hollow Knight installed and registered
+// and the menu still refusing to believe it.
+function wmiFor(area) {
+    return new ActiveXObject("WbemScripting.SWbemLocator")
+        .ConnectServer(".", "root" + BACKSLASH + area);
+}
+
 // Where an installed copy of this game is, or null.
 //
 // Read through WMI rather than with WScript.Shell, because the games are under
@@ -268,8 +287,7 @@ function whereTheGameIs(match) {
 
     try {
         files = new ActiveXObject("Scripting.FileSystemObject");
-        registry = GetObject("winmgmts:" + BACKSLASH + BACKSLASH + "." + BACKSLASH
-            + "root" + BACKSLASH + "default").Get("StdRegProv");
+        registry = wmiFor("default").Get("StdRegProv");
     } catch (noRegistry) {
         // No WMI, or no permission to ask it. Not knowing is not the same as
         // knowing it is absent, but the menu has only one honest move either
@@ -1107,7 +1125,7 @@ function installerIsRunning(exeName) {
     var wmi, found;
 
     try {
-        wmi = GetObject("winmgmts:" + BACKSLASH + BACKSLASH + "." + BACKSLASH + "root" + BACKSLASH + "cimv2");
+        wmi = wmiFor("cimv2");
         found = wmi.ExecQuery("SELECT ProcessId FROM Win32_Process WHERE Name = '" + String(exeName).replace(/'/g, "''") + "'");
 
         return found.Count > 0;

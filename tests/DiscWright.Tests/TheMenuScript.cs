@@ -353,7 +353,7 @@ public sealed class TheMenuScript : IDisposable
             "(function () {"
             + " var out = [], bases = ['SOFTWARE' + BACKSLASH + 'WOW6432Node' + BACKSLASH + 'GOG.com' + BACKSLASH + 'Games',"
             + "                        'SOFTWARE' + BACKSLASH + 'GOG.com' + BACKSLASH + 'Games'];"
-            + " var reg = GetObject('winmgmts:' + BACKSLASH + BACKSLASH + '.' + BACKSLASH + 'root' + BACKSLASH + 'default').Get('StdRegProv');"
+            + " var reg = wmiFor('default').Get('StdRegProv');"
             + " for (var b = 0; b < bases.length; b++) {"
             + "   var ids = keysUnder(reg, 0x80000002, bases[b]);"
             + "   for (var k = 0; k < ids.length; k++) {"
@@ -371,6 +371,75 @@ public sealed class TheMenuScript : IDisposable
         Assert.DoesNotContain("NOT FOUND", names, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Never_calls_GetObject_because_the_engine_it_runs_in_has_none()
+    {
+        // THE BUG THIS EXISTS FOR. menu.hta asks for document mode 9, because
+        // mode 9 is the only one with rgba that still applies the disc's icon.
+        // GetObject is a JScript 5 host global and the mode 9 engine does not
+        // expose it, so every call throws ReferenceError and every caller here
+        // swallows it and returns a quiet no. For months that meant no game was
+        // ever seen as installed: the big button always said Install and every
+        // add-on stayed dead. Found on a real disc on 2026-11-04.
+        //
+        // cscript HAS GetObject, which is exactly why the rest of this file
+        // could not catch it. So this one reads the text.
+        string script = File.ReadAllText(MenuScriptInTheSourceTree());
+
+        Assert.DoesNotContain("GetObject(", script, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Reaches_WMI_in_a_host_that_has_no_GetObject()
+    {
+        // The same proof, run rather than read: GetObject is taken away before
+        // menu.js loads, which is the engine the disc really gets, and the way
+        // in must still work.
+        string says = Ask(
+            "(function () {"
+            + " try {"
+            + "   var reg = wmiFor('default').Get('StdRegProv');"
+            + "   var ids = keysUnder(reg, 0x80000002, 'SOFTWARE');"
+            + "   return ids.length > 0 ? 'reached' : 'no keys under SOFTWARE';"
+            + " } catch (e) { return 'FAILED ' + e.message; }"
+            + "}())",
+            withoutGetObject: true);
+
+        Assert.Equal("reached", says);
+    }
+
+    [Fact]
+    public void Finds_what_is_installed_even_in_the_engine_the_disc_really_gets()
+    {
+        // The twin of the test above, run in a host with no GetObject, which
+        // is what document mode 9 gives the menu on a real disc.
+        //
+        // THIS IS THE ONE THAT WOULD HAVE CAUGHT IT. The test above passes
+        // under cscript, where GetObject exists, and that is why the bug lived
+        // for months: every game the registry names came back NOT FOUND on a
+        // real disc and green here.
+        //
+        // On a machine with no GOG game, this says so and proves nothing, the
+        // same as its twin. It earns its keep on a machine that has one.
+        string names = Ask(
+            "(function () {"
+            + " var out = [], bases = ['SOFTWARE' + BACKSLASH + 'WOW6432Node' + BACKSLASH + 'GOG.com' + BACKSLASH + 'Games',"
+            + "                        'SOFTWARE' + BACKSLASH + 'GOG.com' + BACKSLASH + 'Games'];"
+            + " var reg = wmiFor('default').Get('StdRegProv');"
+            + " for (var b = 0; b < bases.length; b++) {"
+            + "   var ids = keysUnder(reg, 0x80000002, bases[b]);"
+            + "   for (var k = 0; k < ids.length; k++) {"
+            + "     var nm = oneStringFrom(reg, 0x80000002, bases[b] + BACKSLASH + ids[k], 'gameName');"
+            + "     if (nm) { out.push(nm + ' -> ' + (isInstalled({ name: nm }) ? 'found' : 'NOT FOUND')); }"
+            + "   } }"
+            + " return out.length ? out.join('; ') : 'nothing is installed here';"
+            + "}())",
+            withoutGetObject: true);
+
+        _says.WriteLine("  without GetObject: " + names);
+
+        Assert.DoesNotContain("NOT FOUND", names, StringComparison.Ordinal);
+    }
     /// <summary>
     /// A string the script can take, with the quotes it needs.
     /// </summary>
@@ -1220,22 +1289,28 @@ public sealed class TheMenuScript : IDisposable
         Assert.DoesNotContain("nothing on this disc", said, StringComparison.Ordinal);
     }
 
-    private string Ask(string expression)
+    private string Ask(string expression, bool withoutGetObject = false)
     {
-        (string output, int exitCode) = Run(expression);
+        (string output, int exitCode) = Run(expression, withoutGetObject);
 
         Assert.True(exitCode == 0, $"cscript failed for `{expression}`:\n{output}");
 
         return output.Trim();
     }
 
-    private (string Output, int ExitCode) Run(string expression)
+    private (string Output, int ExitCode) Run(string expression, bool withoutGetObject = false)
     {
         string job = Path.Combine(_folder, "ask.wsf");
 
         File.WriteAllText(
             job,
             "<job>\n"
+            // Taking it away before menu.js loads is the whole point: this is
+            // the engine the disc really gets, and cscript's own GetObject
+            // would otherwise hide a call that cannot work there.
+            + (withoutGetObject
+                ? "  <script language=\"JScript\">GetObject = undefined;</script>\n"
+                : string.Empty)
             + "  <script language=\"JScript\" src=\"menu.js\" />\n"
             + "  <script language=\"JScript\">\n"
             + "    WScript.Echo(" + expression + ");\n"

@@ -253,7 +253,7 @@ and all three pass. Case 8 was judged the same day and again that evening, and
 well. Cases 5 and 6 were done off one disc carrying everything, and the menu did
 turn out to be drivable after all, by coordinate and screenshot rather than by UI
 Automation. What is left is case 7, and the one step of case 6 that needs a game
-that can really be installed.
+that can really be installed. **Case 6 is now complete too**, and step 3 failed: it found a bug that made every add-on dead for ever.
 
 | | |
 |---|---|
@@ -262,7 +262,7 @@ that can really be installed.
 | **3** erasing a real rewritable | **pass.** *Erase a disc* lit on its own, the question named both discs by letter and by drive model, Cancel left both alone, and after saying yes the disc came back blank and the button went grey. |
 | **4** swapping a disc while the window is open | **pass**, 2026-11-04. Empty trays said DVD5 4.7 GB and *Whichever one is ready*. A blank CD-RW into D: moved the size to CD-R 700 MB on its own, 78 seconds after the tray shut, and the drive appeared as *D: ASUS DRW-24D5MT, holding CD-RW*. A blank DVD-R in its place moved it to DVD5 4.7 GB and the drive read *holding DVD-R*, which IMAPI agreed with. With BD-R 25 GB then chosen by hand the size stayed put across another swap, and the amber line named both sides: *The disc in D: is a CD-RW, and this is being built for BD-R 25 GB.* |
 | **5** the menu on a real disc | **pass**, 2026-11-04, all eight checks. Label *EVERYTHING* with the disc's own icon, the chosen background, the tune playing and looping and silenced by the control at the top left, **Install** for a GOG game, *README.txt* opening in Notepad from **Manual**, *D:\Extras* opening from **Extras**, and **Exit** closing it with the music. |
-| **6** an add-on is dead until its game is installed | **steps 1 and 2 pass**, 2026-11-04. Both add-ons render dead with *Install the game first, then this.* underneath, and pressing each of them started no process and no window. **Step 3 is not judged**: see below. |
+| **6** an add-on is dead until its game is installed | **steps 1 and 2 pass**, 2026-11-04. Both add-ons render dead with *Install the game first, then this.* underneath, and pressing each of them started no process and no window. **Step 3 FAILED on 2026-11-04 and found a real bug**: the menu could never see a game as installed, on any disc. Fixed, and passing once fixed. |
 | **D12** *Use that one* with nothing picked | **confirmed**, and already known: it closes as if you had cancelled. |
 
 Two things worth knowing for the next pass, both about how to watch rather than
@@ -341,12 +341,48 @@ that nothing happening means anything.
 is 200000 on anything that is not a dedicated test box. Making the window topmost
 with `SetWindowPos` is enough: the clicks land even when the window never takes focus.
 
-**Step 3 of case 6 could not be judged, and the reason is the fixture.**
-`setup_everything_1.0_(77777).exe` begins `0x0000`: it is a sparse file of zeros, not a
-program, so the game cannot actually be installed. The menu turns an add-on live
-only when `gameIsInstalled === true`, so proving it wants a disc built with a real
-installer. The October pass solved the same problem by padding Character Map out to
-size, and that is the route to take next time.
+## Case 6 step 3, judged 2026-11-04, and it failed
+
+**The menu could never tell that a game was installed. Not on this disc, not on
+any disc, not for any game.** The big button always said Install and every add-on
+was dead for ever, on a machine where the game was installed and registered.
+
+Getting here needed a game that really installs, which no fixture above was: they
+are sparse by design, because the recognisers only ever measure. So
+`Build-TheFixtures.ps1` now hard links a real GOG offline installer as `gog-real`,
+1.8 GB that costs nothing on the disk. Hollow Knight, because it is the smallest
+and the only one carrying real patches, which is the add-on shape this case wants.
+The app built the disc itself and claimed it as `Hollow Knight` with four add-ons
+named `Update 1.5.12618 (89712)` and so on, 1.93 GB to a DVD-R in 167 seconds.
+
+**The cause, and it is one line.** The menu asks for document mode 9, deliberately,
+because mode 9 is the only one with rgba that still applies the disc's icon.
+`GetObject` is a JScript 5 host global and the mode 9 engine does not expose it, so
+`whereTheGameIs` threw ReferenceError on its first line every single time. Its own
+catch turns that into a quiet null, which is also what an uninstalled game looks
+like, so nothing ever complained. `ActiveXObject` survives in mode 9, which is what
+hid it: the FileSystemObject a line below kept working.
+
+It was in two places. `installerIsRunning` used the same call, so the menu could
+never notice an installer finish either. Both halves of "install it, come back,
+play it" were broken by the same word.
+
+**Why 1,469 tests missed it.** `TheMenuScript` runs the real menu.js under cscript,
+where `GetObject` exists and works. The real code, in a host that is not the real
+host. Three tests now close that: one reads the script and fails if `GetObject` is
+called at all, and two run it with `GetObject` taken away before it loads, which is
+the engine a disc really gets. Both were watched failing against the bug put back,
+and the runtime one names the games it could not find.
+
+**Proved fixed**, by reading the menu's own DOM rather than a screenshot: the big
+button renders `Play`, all four add-ons come back `dead=false`, and the line
+"Install the game first, then this." is gone. Before the fix, on the same machine
+with the same game installed, it was Install and four dead buttons.
+
+**Not yet seen on real media.** The DVD-R carries the broken menu and DVD-R is
+write once. The fix is proved from a local copy of the same menu, which is the
+same code the disc carries, so what is left is confirmation rather than doubt.
+
 
 One difference from this case as written, which changed nothing but will confuse
 somebody: the tune on the disc is `music.wav` rather than the `tune.mp3` named above.
