@@ -253,8 +253,10 @@ and all three pass. Case 8 was judged the same day and again that evening, and
 Case 4 needed a DVD-R as well. Cases 5 and 6 were done off one disc carrying
 everything, and the menu did turn out to be drivable after all, by coordinate
 and screenshot rather than by UI Automation. Case 7 took five discs and found
-five faults. What is left is the one step of case 6 that needs a game that can
-really be installed. **Case 6 is now complete too**, and step 3 failed: it found a bug that made every add-on dead for ever.
+five faults. **Case 6 is finished too, on a disc rather than on a copy of one**,
+2026-11-05: its last step failed when it was first judged and found a bug that
+made every add-on dead for ever, and the fix has now been watched working off
+real media.
 
 | | |
 |---|---|
@@ -263,7 +265,7 @@ really be installed. **Case 6 is now complete too**, and step 3 failed: it found
 | **3** erasing a real rewritable | **pass.** *Erase a disc* lit on its own, the question named both discs by letter and by drive model, Cancel left both alone, and after saying yes the disc came back blank and the button went grey. |
 | **4** swapping a disc while the window is open | **pass**, 2026-11-04. Empty trays said DVD5 4.7 GB and *Whichever one is ready*. A blank CD-RW into D: moved the size to CD-R 700 MB on its own, 78 seconds after the tray shut, and the drive appeared as *D: ASUS DRW-24D5MT, holding CD-RW*. A blank DVD-R in its place moved it to DVD5 4.7 GB and the drive read *holding DVD-R*, which IMAPI agreed with. With BD-R 25 GB then chosen by hand the size stayed put across another swap, and the amber line named both sides: *The disc in D: is a CD-RW, and this is being built for BD-R 25 GB.* |
 | **5** the menu on a real disc | **pass**, 2026-11-04, all eight checks. Label *EVERYTHING* with the disc's own icon, the chosen background, the tune playing and looping and silenced by the control at the top left, **Install** for a GOG game, *README.txt* opening in Notepad from **Manual**, *D:\Extras* opening from **Extras**, and **Exit** closing it with the music. |
-| **6** an add-on is dead until its game is installed | **steps 1 and 2 pass**, 2026-11-04. Both add-ons render dead with *Install the game first, then this.* underneath, and pressing each of them started no process and no window. **Step 3 FAILED on 2026-11-04 and found a real bug**: the menu could never see a game as installed, on any disc. Fixed, and passing once fixed. |
+| **6** an add-on is dead until its game is installed | **steps 1 and 2 pass**, 2026-11-04. Both add-ons render dead with *Install the game first, then this.* underneath, and pressing each of them started no process and no window. **Step 3 FAILED on 2026-11-04 and found a real bug**: the menu could never see a game as installed, on any disc. Fixed, and passing once fixed. **Step 3 passes on real media as well**, 2026-11-05, on a second DVD-R carrying the fixed menu: *Play*, four live add-ons, and both presses really starting what they name. |
 | **7** a folder of files, with one thing to run and with two | **all three pass**, 2026-11-05, and between them they found **five** faults, two of which made the case unpassable until they were fixed. Part 1 copies a game off the root of its own disc and runs it. Part 2 runs the one launcher that was picked and leaves the other alone. Part 3 runs nothing and opens the folder. See below, because what this case found matters more than that it passed. |
 | **D12** *Use that one* with nothing picked | **confirmed**, and already known: it closes as if you had cancelled. |
 
@@ -381,9 +383,37 @@ button renders `Play`, all four add-ons come back `dead=false`, and the line
 "Install the game first, then this." is gone. Before the fix, on the same machine
 with the same game installed, it was Install and four dead buttons.
 
-**Not yet seen on real media.** The DVD-R carries the broken menu and DVD-R is
-write once. The fix is proved from a local copy of the same menu, which is the
-same code the disc carries, so what is left is confirmation rather than doubt.
+**Seen on real media, 2026-11-05, and the doubt above is closed.** The first
+DVD-R carried the broken menu and DVD-R is write once, so this took a second
+disc: the same fixture through the app's own pipeline, 1.93 GB written to D: in
+270 seconds with 418 progress reports, the drive shutting its own tray. The
+menu on the disc is byte for byte the menu in the build folder, both hashed off
+the disc rather than assumed, which is the only way to know which menu is being
+judged.
+
+Opened the way a person opens it, by `Start Here.hta` at the root rather than by
+reaching into `AUTORUN`, on this machine, with Hollow Knight installed at
+`C:\dwspan\Hollow Knight`:
+
+| | |
+|---|---|
+| the big button | **Play**, not Install |
+| the four add-ons | all live, and *Install the game first, then this.* is gone from under them |
+| pressing *Update 1.5.12620 (89718)* | started `D:\Add-ons\patch_hollow_knight_1.5.12618_(89712)_to_1.5.12620_(89718).exe`, off the disc |
+| pressing *Play* | started `C:\dwspan\Hollow Knight\Hollow Knight.exe`, the installed copy |
+| *Exit* | closed the menu and left no `mshta` behind |
+
+**The two presses are worth more than the two renderings.** The case only asks
+that the button say Play and the add-ons look live, and a menu can draw both
+while running nothing. Pressing *Play* is the only thing that shows the path
+`whereTheGameIs` came back with is a path to the game that is really there,
+which is exactly what the bug above got wrong. Both processes were killed the
+instant they appeared, because the game they patch is Lazar's own, and nothing
+in that folder carries today's date.
+
+One thing this disc confirms that belongs to case 7 rather than here: its own
+icon, `HOLLOWKNIGHT.ico`, sits at the root beside the installer, and the menu
+lists one game and no icon. That is the naming fix from #133 on real media.
 
 
 One difference from this case as written, which changed nothing but will confuse
