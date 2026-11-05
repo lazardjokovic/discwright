@@ -3163,7 +3163,7 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
       if(have){ todo[todo.length]=j; }
     }
     if(!todo.length){ if(after) after(0); return 0; }
-    var st={dir:dir,todo:todo,at:0,done:0,failed:[],after:after};
+    var st={dir:dir,todo:todo,at:0,done:0,failed:[],left:[],after:after};
     setJoinStep(st);
     return todo.length;
   }
@@ -3174,6 +3174,11 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
         setSay(st.failed.length+" file(s) could not be put back together:\n\n"+
                st.failed.join("\n")+
                "\n\nThe pieces are still there, so nothing is lost. There may not be room.",false);
+      }
+      if(st.left.length){
+        setSay(st.left.length+" piece(s) were joined and then would not delete, so they are still taking up room:\n\n"+
+               st.left.join("\n")+
+               "\n\nThe files they came from are whole and checked, so the game is fine. Delete them by hand once nothing has them open.",false);
       }
       if(st.after) st.after(st.done);
       return;
@@ -3186,9 +3191,13 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     try{ show(); }catch(ex){}
     var cmd="copy /b "+names.join("+")+" "+setQuote(setPath(st.dir,j.f));
     setWaitJob(setStartJob(cmd),function(){
+      // A piece that will not delete is not a join that failed: the finished
+      // file is whole and was checked before anything was removed. It is room
+      // nobody asked for, and on a set that is gigabytes by definition, so it
+      // is counted and said rather than swallowed.
       if(setJoinDone(st.dir,j)){
         for(var m=0;m<j.parts.length;m++){
-          try{ fso.DeleteFile(setPath(st.dir,j.parts[m])); }catch(ex2){}
+          try{ fso.DeleteFile(setPath(st.dir,j.parts[m])); }catch(ex2){ st.left[st.left.length]=j.parts[m]; }
         }
         st.done++;
       }
