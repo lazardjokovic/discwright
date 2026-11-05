@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace DiscWright.Burning;
 
@@ -9,6 +9,26 @@ namespace DiscWright.Burning;
 internal static class TheNumbers
 {
     internal const int ReportsArriveUnder = 0x200;
+
+    /// <summary>
+    /// What a drive with nothing in it answers with: IMAPI_E_MEDIUM_NOTPRESENT.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Read off a real empty drive on 2026-11-05, not remembered.</strong>
+    /// The obvious guess is ERROR_NO_MEDIA_IN_DRIVE as an HRESULT, 0x80070458,
+    /// and that is not what IMAPI says. A wrong one here fails silently in the
+    /// worst way: the empty tray goes back to being indistinguishable from a
+    /// disc still being read, and everything waits fifteen seconds for it
+    /// again, which is exactly the fault this is here to end.
+    /// </para>
+    /// <para>
+    /// The matching message is "There is no media in the device", which is not
+    /// what is matched on, because that sentence is in whatever language
+    /// Windows was installed in.
+    /// </para>
+    /// </remarks>
+    internal const int NothingInTheDrive = unchecked((int)0xC0AA0202);
 }
 
 /// <summary>

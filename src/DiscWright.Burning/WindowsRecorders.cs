@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 using DiscWright.Core;
 
@@ -126,7 +126,15 @@ public sealed class WindowsRecorders : IFindRecorders
                 // An empty tray, or a disc Windows has not finished reading.
                 // Not a fault, and the drive is still worth listing: somebody
                 // is about to put a disc in it.
-                return new Recorder(id, letter, name, 0, false, 0, [], FirstLineOf(nothingIn.Message));
+                //
+                // WHICH OF THE TWO IT IS MATTERS, and this is the only place
+                // that can tell. An empty tray has answered and a disc being
+                // read has not, and everything above waits on the second. Said
+                // by the code rather than by the sentence, which is localised.
+                return new Recorder(
+                    id, letter, name, 0, false, 0, [],
+                    FirstLineOf(nothingIn.Message),
+                    nothingIn.HResult == TheNumbers.NothingInTheDrive);
             }
         }
         catch (COMException wrong)

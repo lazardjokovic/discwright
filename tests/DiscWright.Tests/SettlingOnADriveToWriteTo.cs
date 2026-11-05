@@ -1,4 +1,4 @@
-using DiscWright.Core;
+﻿using DiscWright.Core;
 using DiscWright.ViewModels;
 
 namespace DiscWright.Tests;
@@ -393,6 +393,64 @@ public class SettlingOnADriveToWriteTo
     }
 
     [Fact]
+    public async Task Does_not_wait_on_a_drive_with_nothing_in_it()
+    {
+        // FIFTEEN SECONDS OF SILENCE ON EVERY ERASE, on any machine with a
+        // spare drive in it, which is most of them. An empty tray comes back
+        // the same shape as a disc that is still being read, a WhyNot and
+        // nothing else, and the waiting was spent on both. Nothing is ever
+        // going to change about a drive with nothing in it.
+        //
+        // Found by Lazar pressing Erase with an empty second drive and
+        // watching nothing happen for long enough to think it was broken.
+        AClockThatMovesItself clock = new();
+        List<string> said = [];
+
+        Settled settled = await Settling(
+            new OneReadyAndOneEmpty(), say: (doing, far) => said.Add(doing), patience: clock.Patience)
+            .OnWhicheverIsReady(ASmallImage, NeverAsksWhichDrive, NeverAsksAboutErasing);
+
+        Assert.Equal(0, clock.Waits);
+
+        // And it must not say it is waiting for a drive it did not wait for.
+        Assert.Empty(said);
+        Assert.Equal("D:", Assert.IsType<Settled.ThisOne>(settled).Drive.Drive);
+    }
+
+    [Fact]
+    public async Task Still_waits_on_a_drive_that_has_a_disc_it_cannot_read_yet()
+    {
+        // The other half, and the reason the two are told apart rather than
+        // the waiting being dropped. A disc that has just gone in is still
+        // being read, and treating that as an answer is how somebody who put
+        // a used disc in gets told there is nothing to erase.
+        AClockThatMovesItself clock = new();
+
+        await Settling(new OneReadyAndOneStillThinking(), patience: clock.Patience)
+            .OnWhicheverIsReady(ASmallImage, NeverAsksWhichDrive, NeverAsksAboutErasing);
+
+        Assert.True(clock.Waits > 0, "a disc still being read is worth waiting for");
+    }
+
+    [Fact]
+    public async Task Offers_the_erase_at_once_when_the_other_drive_is_empty()
+    {
+        // The whole path Lazar pressed: a used rewritable in one drive and
+        // nothing in the other. The question has to arrive straight away.
+        AClockThatMovesItself clock = new();
+
+        Outcome<IReadOnlyList<Recorder>> couldBe = await Settling(
+            new OneUsedRewritableAndOneEmpty(), patience: clock.Patience).WhichCouldBeErased();
+
+        Assert.Equal(0, clock.Waits);
+
+        IReadOnlyList<Recorder> could = Assert.IsType<Outcome<IReadOnlyList<Recorder>>.Ok>(couldBe).Value;
+
+        // And only the one holding something, because an empty drive has
+        // nothing to erase.
+        Assert.Equal("D:", Assert.Single(could).Drive);
+    }
+    [Fact]
     public void A_real_drive_gets_fifteen_seconds_and_is_asked_every_second()
     {
         // Measured on the ASUS writer here: a drive asked the moment a tray
@@ -501,6 +559,33 @@ public class SettlingOnADriveToWriteTo
                 ? [new("id-D", "D:", "A Drive", 0, false, 0, [], "the device is not ready")]
                 : [new("id-D", "D:", "A Drive", 2, true, 360_000, [750])];
         }
+    }
+
+    /// <summary>A drive with a blank in it, and one with nothing in it at all.</summary>
+    /// <remarks>
+    /// The empty one carries the same WhyNot a drive still reading a disc
+    /// does, because that is what IMAPI gives for both. NothingInIt is what
+    /// tells them apart, read off the code the drive returns.
+    /// </remarks>
+    private sealed class OneReadyAndOneEmpty : IFindRecorders
+    {
+        public IReadOnlyList<Recorder> All() =>
+        [
+            new("id-D", "D:", "A Drive", 2, true, 360_000, [750]),
+            new("id-E", "E:", "Another Drive", 0, false, 0, [],
+                "There is no media in the device.", NothingInIt: true)
+        ];
+    }
+
+    /// <summary>What Lazar had in the machine: a used CD-RW and an empty drive.</summary>
+    private sealed class OneUsedRewritableAndOneEmpty : IFindRecorders
+    {
+        public IReadOnlyList<Recorder> All() =>
+        [
+            new("id-D", "D:", "A Drive", 3, false, 0, [750]),
+            new("id-E", "E:", "Another Drive", 0, false, 0, [],
+                "There is no media in the device.", NothingInIt: true)
+        ];
     }
 
     private sealed class OneReadyAndOneStillThinking : IFindRecorders

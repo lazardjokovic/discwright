@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Xml.Linq;
 using DiscWright.ViewModels;
 
@@ -443,6 +443,60 @@ public class TheWindowsMarkup
             (string?)said.Attribute("Visibility"));
     }
 
+    [Fact]
+    public void Nothing_is_chosen_for_somebody_in_the_list_they_choose_from()
+    {
+        // THE ANSWER TO THIS QUESTION CAN DESTROY A DISC. The list used to
+        // start on its first row, and "Use that one" is the default button, so
+        // Enter erased whichever drive happened to come first. After the
+        // fifteen second wait this dialog used to sit behind, somebody
+        // impatient pressed Enter the moment it appeared.
+        //
+        // It had already half happened: pressing Erase a second time went to
+        // E: without Lazar feeling he had picked it. The answer then was to
+        // ask with a list rather than a yes or no, and the list answered for
+        // him anyway.
+        //
+        // Which one starts chosen is decided in the code now, per question,
+        // so the markup must not decide it for every question at once.
+        XElement list = Assert.Single(
+            Markup("PickOne.xaml").Descendants(),
+            each => each.Name.LocalName == "ListBox");
+
+        Assert.Null(list.Attribute("SelectedIndex"));
+        Assert.Equal("SomethingWasChosen", (string?)list.Attribute("SelectionChanged"));
+
+        // AND THIS ONE, WHICH IS THE HALF THAT WAS MISSED. Dropping
+        // SelectedIndex is not enough: a Selector leaves this null, WPF reads
+        // null as true once the items come from a binding, and a fresh view's
+        // current item is its first one. So the list quietly selected row
+        // nought anyway.
+        //
+        // The two assertions above passed while the running dialog still
+        // chose a disc for somebody. It was caught by pressing Erase in the
+        // real window and asking the list what was selected, which is the
+        // argument for doing that rather than trusting markup read as XML.
+        Assert.Equal("False", (string?)list.Attribute("IsSynchronizedWithCurrentItem"));
+    }
+
+    [Fact]
+    public void The_erase_question_starts_with_no_disc_chosen()
+    {
+        // And the window asks it that way. The markup leaving it open is only
+        // half the guard: something still has to say so for the one question
+        // whose answer cannot be taken back.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+        int asking = code.IndexOf("Which disc should be erased?", StringComparison.Ordinal);
+
+        Assert.True(asking > 0, "the erase question has moved");
+
+        // Inside that call rather than anywhere in the file, so the picker for
+        // an image is not what satisfies this.
+        string theCall = code[asking..];
+        int ends = theCall.IndexOf("));", StringComparison.Ordinal);
+
+        Assert.Contains("pickTheFirst: false", theCall[..ends], StringComparison.Ordinal);
+    }
     [Theory]
     [InlineData("MainWindow.xaml")]
     [InlineData("PickOne.xaml")]

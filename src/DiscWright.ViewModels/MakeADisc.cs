@@ -1166,6 +1166,22 @@ public sealed class MakeADisc : INotifyPropertyChanged
             // have a backing class factory" arrived before a single thing had
             // been erased, from the sentence below rather than from the erase
             // the catch-all was written for.
+            // BEFORE THE ASKING, NOT AFTER THE CHOOSING, and that is two
+            // faults rather than tidiness.
+            //
+            // Say drops anything said while this is false, so the
+            // "waiting for the drive" that the settling says on the line below was
+            // thrown away every time: the one sentence written for this moment,
+            // never once shown. And CanErase is !IsWorking, so the button stayed
+            // live through the whole wait and a second press started a second
+            // run of all of it.
+            IsWorking = true;
+            Tell(nameof(IsWorking));
+            Tell(nameof(NothingIsRunning));
+            Tell(nameof(CanStartAgain));
+            Tell(nameof(CanTakeSomethingOff));
+            Tell(nameof(CanErase));
+
             Outcome<IReadOnlyList<Recorder>> couldBe = await _settling.WhichCouldBeErased(ct);
 
             if (couldBe is Outcome<IReadOnlyList<Recorder>>.No nothingToErase)
@@ -1184,12 +1200,6 @@ public sealed class MakeADisc : INotifyPropertyChanged
             {
                 return;
             }
-
-            IsWorking = true;
-            Tell(nameof(IsWorking));
-            Tell(nameof(NothingIsRunning));
-            Tell(nameof(CanStartAgain));
-            Tell(nameof(CanTakeSomethingOff));
 
             // The same erase a burn offers, with the same words in front of
             // it, because it is the same act.
@@ -1220,6 +1230,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(NothingIsRunning));
             Tell(nameof(CanStartAgain));
             Tell(nameof(CanTakeSomethingOff));
+            Tell(nameof(CanErase));
             await LookAtTheDrives();
         }
     }

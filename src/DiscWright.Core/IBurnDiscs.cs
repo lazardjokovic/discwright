@@ -1,4 +1,4 @@
-namespace DiscWright.Core;
+﻿namespace DiscWright.Core;
 
 /// <summary>
 /// Whatever can tell you about the drives on this machine.
@@ -98,8 +98,29 @@ public sealed record Recorder(
     bool Blank,
     long FreeSectors,
     IReadOnlyList<int> Speeds,
-    string? WhyNot = null)
+    string? WhyNot = null,
+    bool NothingInIt = false)
 {
+    /// <summary>
+    /// Whether the tray is empty, as opposed to holding something this drive
+    /// could not read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>An empty tray is a final answer and an unreadable disc is not.</strong>
+    /// Both arrive as a <see cref="WhyNot"/>, and until this existed nothing could
+    /// tell them apart, so the waiting that exists for a disc still being read
+    /// was spent on trays that were going to stay empty: fifteen seconds of
+    /// silence on every erase and every burn, on any machine with a spare
+    /// drive in it. Found by Lazar pressing Erase with an empty second drive.
+    /// </para>
+    /// <para>
+    /// Read from the code the drive returns rather than from the sentence,
+    /// because the sentence is in whatever language Windows is installed in
+    /// and the code is not.
+    /// </para>
+    /// </remarks>
+
     /// <summary>What is in it, in words.</summary>
     public string Holding => WhyNot is not null ? "nothing readable" : OpticalMedia.NameOf(MediaType);
 

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -795,7 +795,12 @@ public partial class MainWindow : Window
                 : "Everything on the one you choose goes, and it cannot be got back. A quick erase takes "
                     + "under a minute, and then the disc can be written to again.",
             could,
-            disc => $"{disc.Drive}  the {disc.Holding} in the {disc.Name}"));
+            disc => $"{disc.Drive}  the {disc.Holding} in the {disc.Name}",
+
+            // Nothing chosen to begin with. Everything on whichever disc
+            // this names goes and cannot be got back, so it is answered by
+            // somebody rather than defaulted to whichever drive came first.
+            pickTheFirst: false));
     }
 
     /// <summary>

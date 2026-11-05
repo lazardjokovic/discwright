@@ -1,4 +1,4 @@
-using System.Collections.Specialized;
+﻿using System.Collections.Specialized;
 using System.Text;
 
 using System.Runtime.InteropServices;
@@ -5101,6 +5101,57 @@ public class TheMainWindowWithoutAWindow
         Assert.False(window.IsWorking);
     }
 
+    [Fact]
+    public async Task Is_working_from_the_press_rather_than_from_the_answer()
+    {
+        // TWO FAULTS IN ONE LINE OF ORDERING, and both of them reached Lazar.
+        //
+        // Say drops anything said while IsWorking is false, and IsWorking went
+        // true only after a drive had been chosen. So the settling's own
+        // "waiting for the drive" was thrown away for the whole of the wait: the
+        // one sentence written for that moment, never once shown. He pressed
+        // Erase, got fifteen seconds of nothing, and thought it had broken.
+        //
+        // And CanErase is !IsWorking, so the button stayed live through all of
+        // it and a second press started the whole thing again underneath.
+        AnEraserThatWorks eraser = new();
+        MakeADisc window = New(drives: new ADriveHolding(3, false, 0), eraser: eraser);
+        await window.LookAtTheDrives();
+
+        Assert.True(window.CanErase, "there is a used rewritable in the drive");
+
+        bool workingWhenAsked = false;
+        bool couldPressAgain = true;
+
+        await window.EraseADisc(could =>
+        {
+            workingWhenAsked = window.IsWorking;
+            couldPressAgain = window.CanErase;
+
+            return Task.FromResult<Recorder?>(could[0]);
+        });
+
+        Assert.True(workingWhenAsked, "the window has to be working before it asks, or it says nothing");
+        Assert.False(couldPressAgain, "the button must be dead while the drives are being asked");
+
+        // And it comes back afterwards, or the button is dead for good.
+        Assert.False(window.IsWorking);
+    }
+
+    [Fact]
+    public async Task Comes_back_to_itself_when_nobody_picked_a_disc()
+    {
+        // The press turns everything on before the question is asked, so
+        // closing the question has to turn it all off again. Without this the
+        // window sits working for ever over an erase nobody asked for.
+        MakeADisc window = New(drives: new ADriveHolding(3, false, 0), eraser: new AnEraserThatWorks());
+        await window.LookAtTheDrives();
+
+        await window.EraseADisc(_ => Task.FromResult<Recorder?>(null));
+
+        Assert.False(window.IsWorking);
+        Assert.True(window.CanErase, "the disc is still there and still worth erasing");
+    }
     [Fact]
     public async Task Erases_nothing_when_the_question_is_answered_no()
     {

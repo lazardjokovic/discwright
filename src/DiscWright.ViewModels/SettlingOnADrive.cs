@@ -1,4 +1,4 @@
-using DiscWright.Core;
+﻿using DiscWright.Core;
 
 namespace DiscWright.ViewModels;
 
@@ -131,8 +131,15 @@ public sealed class SettlingOnADrive(
     {
         IReadOnlyList<Recorder> all = drives.All();
 
+        // AN EMPTY TRAY HAS ANSWERED. It arrives as a WhyNot like a disc that
+        // is still being read, and it is not one: nothing is going to change
+        // about a drive with nothing in it. Waiting on it cost fifteen seconds
+        // of silence on every erase and every burn on any machine with a spare
+        // drive, which is most of them. Found by Lazar pressing Erase with an
+        // empty second drive and watching nothing happen.
         bool StillThinking(IReadOnlyList<Recorder> found) => found.Any(each =>
             each.WhyNot is not null
+            && !each.NothingInIt
             && (onlyThisOne is null
                 || string.Equals(each.Drive, onlyThisOne, StringComparison.OrdinalIgnoreCase)));
 

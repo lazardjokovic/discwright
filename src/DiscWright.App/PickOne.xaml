@@ -1,4 +1,4 @@
-<!--
+﻿<!--
     One out of several, where picking for somebody would be guessing.
 
     Two things in this program refuse to guess rather than choose: which drive,
@@ -34,9 +34,23 @@
                 BorderBrush="{StaticResource Edge}"
                 BorderThickness="1"
                 CornerRadius="4">
+            <!-- NOTHING CHOOSES ITSELF HERE. SelectedIndex is absent on purpose,
+                 and on its own that is not enough: a Selector leaves
+                 IsSynchronizedWithCurrentItem null, WPF reads null as true once
+                 the items come from a binding, and a fresh view's current item is
+                 its first one, so the list selects row nought by itself and the
+                 only sign is the button going live.
+
+                 Caught in the running window rather than here: the markup had
+                 already lost SelectedIndex and the guard that checked for that
+                 passed while the dialog went on choosing a disc for somebody.
+
+                 Which row starts chosen is the code's business, per question,
+                 because for erasing the answer cannot be taken back. -->
             <ListBox x:Name="TheList"
                      ItemsSource="{Binding Choices}"
-                     SelectedIndex="0"
+                     SelectionChanged="SomethingWasChosen"
+                     IsSynchronizedWithCurrentItem="False"
                      BorderThickness="0"
                      Background="Transparent"
                      MaxHeight="220"
@@ -81,6 +95,7 @@
                     Style="{StaticResource TheButton}"
                     Click="TakeThatOne"
                     IsDefault="True"
+                    x:Name="TheButton"
                     AutomationProperties.AutomationId="TakeThatOne" />
         </Grid>
     </StackPanel>
