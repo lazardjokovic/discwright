@@ -1,4 +1,4 @@
-<html>
+﻿<html>
 <head>
 <!-- An HTA is IE5 in quirks mode by default, and IE5 has no rgba: every
      see-through colour in here would be dropped and come out solid. This
@@ -289,12 +289,14 @@ function doTheThing() {
     window.close();
 }
 
-// Copying a game off the disc, one file at a time.
+// Copying a game off the disc onto the machine.
 //
-// One file per tick rather than one call to CopyFolder, for two reasons: a
-// window that is not given the thread back cannot repaint, so the bar would
-// not move and Windows would call the menu unresponsive; and a copy that
-// stops half way has to be able to say which file it stopped on.
+// WHAT IS LEFT HERE IS THE PAGE. Asking where it should go, drawing the
+// bar, and deciding what to do once it has arrived. The copying is
+// copyAGameOff in menu.js, which is run by the suite under cscript, because
+// 21 of the 35 functions that used to live in this file were named by no
+// test at all and the whole of this flow was among them. Both bugs case 7
+// found by hand were in code the suite could have caught.
 var copying = null;
 
 function copyItAndPlayIt(game, fromFolder) {
@@ -330,19 +332,30 @@ function copyItAndPlayIt(game, fromFolder) {
         return;
     }
 
-    copying = {
+    copying = { done: 0, all: howMuchInAll(items), copying: "", startedAt: 0, rate: 0, ticking: false };
+
+    copyAGameOff({
         files: files,
         items: items,
-        at: 0,
-        done: 0,
-        all: howMuchInAll(items),
-        rate: startingRate(),
+        from: fromFolder,
         destination: destination,
-        game: game
-    };
+        say: function (progress) {
+            copying.copying = progress.copying;
+            copying.done = progress.done;
+            copying.all = progress.all;
+            copying.startedAt = progress.startedAt || 0;
+            copying.rate = progress.rate || 0;
 
-    sayHowFarAlong();
-    window.setTimeout(copyTheNextOne, 10);
+            if (copying.copying && !copying.ticking) {
+                keepTheGameBarMoving();
+            } else {
+                sayHowFarAlong();
+            }
+        },
+        after: function (bad, stuck) {
+            finishTheCopy(files, items, destination, game, bad, stuck);
+        }
+    });
 }
 
 // Where to put it. Offered, not decided: somebody with a small system disc and
@@ -376,90 +389,64 @@ function askWhereToPutIt(game) {
     }
 }
 
-function copyTheNextOne() {
-    var one, landing, folder;
+// Redraws the bar twice a second while a file copies, because nothing else
+// happens between the start of a file and its end, and a bar that only moves
+// when a file finishes is a bar that never moves on a disc with one file on
+// it. The set restore has had this since the first real set; the copy off a
+// single disc went without it until a 126 MB file made Windows call the menu
+// not responding.
+function keepTheGameBarMoving() {
+    if (!copying || !copying.copying) {
+        if (copying) {
+            copying.ticking = false;
+        }
+
+        return;
+    }
+
+    copying.ticking = true;
+    sayHowFarAlong();
+    window.setTimeout(keepTheGameBarMoving, 500);
+}
+
+function sayHowFarAlong() {
+    var line = document.getElementById("stillWanted");
 
     if (!copying) {
         return;
     }
 
-    if (copying.at >= copying.items.length) {
-        finishTheCopy();
-        return;
-    }
-
-    one = copying.items[copying.at];
-    landing = onTheDisc(copying.destination, one.to.split(BACKSLASH).join("/"));
-
-    try {
-        folder = copying.files.GetParentFolderName(landing);
-
-        if (folder && !copying.files.FolderExists(folder)) {
-            makeTheWholePath(copying.files, folder);
-        }
-
-        copying.files.CopyFile(one.from, landing, true);
-    } catch (wrong) {
-        stopTheCopy("That stopped at " + one.to + ": " + wrong.message);
-        return;
-    }
-
-    copying.done += one.bytes;
-    copying.at++;
-
-    sayHowFarAlong();
-    window.setTimeout(copyTheNextOne, 10);
-}
-
-function sayHowFarAlong() {
-    var line = document.getElementById("stillWanted");
-    var percent = percentDone(copying.done, 0, copying.rate, copying.all);
-
-    line.innerText = percent + "% copied";
+    line.innerText = restoreBarPercent(copying, (new Date()).getTime()) + "% copied";
     line.style.display = "block";
 }
 
-function stopTheCopy(why) {
-    copying = null;
-    document.getElementById("stillWanted").style.display = "none";
-    alert(why);
-}
-
-function finishTheCopy() {
-    var missing = everythingArrived(copying.files, copying.items, copying.destination);
-    var where = copying.destination;
-    var plays = whatToRunAfterCopying(copying.game, where);
-    var wrong;
+function finishTheCopy(files, items, where, game, bad, stuck) {
+    var next = whatToDoAfterACopy(game, where, bad, stuck, everythingArrived(files, items, where));
 
     copying = null;
     document.getElementById("stillWanted").style.display = "none";
 
-    // Checked by size rather than by hash. A menu has no business reading
-    // several gigabytes twice, and what this catches is the copy that stopped
-    // half way, which is what happens when somebody takes the disc out.
-    if (missing) {
-        alert("Some of it did not arrive, starting with " + missing + ". It is in " + where + ".");
+    if (next.act === "stop") {
+        alert(next.say);
         return;
     }
 
-    if (plays) {
-        wrong = startIt(plays, where);
+    if (next.say) {
+        alert(next.say);
+    }
 
-        if (!wrong) {
-            window.close();
-            return;
-        }
+    // Playing hands over to the game, and the menu has no further part in it.
+    if (next.act === "run" && !startIt(next.what, where)) {
+        window.close();
+        return;
     }
 
     // Nothing to run, or it would not run. Either way they have the game and
     // should be shown where it is rather than left guessing.
-    wrong = openTheFolder(where);
-
-    if (wrong) {
+    if (openTheFolder(where)) {
         alert("It is copied, and it is in " + where + ".");
     }
 }
-
 // The manual, opened with whatever reads a PDF on this machine.
 function openTheManual() {
     var wrong = startIt(onTheDisc(theDisc(), DISC.manual), "");

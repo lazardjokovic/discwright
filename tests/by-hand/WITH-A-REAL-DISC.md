@@ -249,11 +249,12 @@ folder is made.
 
 **2026-10-24, on this machine**, with two CD-RWs. Cases 1, 2 and 3 were judged
 and all three pass. Case 8 was judged the same day and again that evening, and
-**cases 4, 5 and most of 6 were judged on 2026-11-04**. Case 4 needed a DVD-R as
-well. Cases 5 and 6 were done off one disc carrying everything, and the menu did
-turn out to be drivable after all, by coordinate and screenshot rather than by UI
-Automation. What is left is case 7, and the one step of case 6 that needs a game
-that can really be installed. **Case 6 is now complete too**, and step 3 failed: it found a bug that made every add-on dead for ever.
+**cases 4, 5 and most of 6 were judged on 2026-11-04, and case 7 on 2026-11-05**.
+Case 4 needed a DVD-R as well. Cases 5 and 6 were done off one disc carrying
+everything, and the menu did turn out to be drivable after all, by coordinate
+and screenshot rather than by UI Automation. Case 7 took five discs and found
+five faults. What is left is the one step of case 6 that needs a game that can
+really be installed. **Case 6 is now complete too**, and step 3 failed: it found a bug that made every add-on dead for ever.
 
 | | |
 |---|---|
@@ -263,6 +264,7 @@ that can really be installed. **Case 6 is now complete too**, and step 3 failed:
 | **4** swapping a disc while the window is open | **pass**, 2026-11-04. Empty trays said DVD5 4.7 GB and *Whichever one is ready*. A blank CD-RW into D: moved the size to CD-R 700 MB on its own, 78 seconds after the tray shut, and the drive appeared as *D: ASUS DRW-24D5MT, holding CD-RW*. A blank DVD-R in its place moved it to DVD5 4.7 GB and the drive read *holding DVD-R*, which IMAPI agreed with. With BD-R 25 GB then chosen by hand the size stayed put across another swap, and the amber line named both sides: *The disc in D: is a CD-RW, and this is being built for BD-R 25 GB.* |
 | **5** the menu on a real disc | **pass**, 2026-11-04, all eight checks. Label *EVERYTHING* with the disc's own icon, the chosen background, the tune playing and looping and silenced by the control at the top left, **Install** for a GOG game, *README.txt* opening in Notepad from **Manual**, *D:\Extras* opening from **Extras**, and **Exit** closing it with the music. |
 | **6** an add-on is dead until its game is installed | **steps 1 and 2 pass**, 2026-11-04. Both add-ons render dead with *Install the game first, then this.* underneath, and pressing each of them started no process and no window. **Step 3 FAILED on 2026-11-04 and found a real bug**: the menu could never see a game as installed, on any disc. Fixed, and passing once fixed. |
+| **7** a folder of files, with one thing to run and with two | **all three pass**, 2026-11-05, and between them they found **five** faults, two of which made the case unpassable until they were fixed. Part 1 copies a game off the root of its own disc and runs it. Part 2 runs the one launcher that was picked and leaves the other alone. Part 3 runs nothing and opens the folder. See below, because what this case found matters more than that it passed. |
 | **D12** *Use that one* with nothing picked | **confirmed**, and already known: it closes as if you had cancelled. |
 
 Two things worth knowing for the next pass, both about how to watch rather than
@@ -387,6 +389,106 @@ same code the disc carries, so what is left is confirmation rather than doubt.
 One difference from this case as written, which changed nothing but will confuse
 somebody: the tune on the disc is `music.wav` rather than the `tune.mp3` named above.
 Both are real ffmpeg sines. The wav is 8 seconds, so the looping shows itself faster.
+
+## Case 7, judged 2026-11-05, and it is the most productive case here
+
+Three presses on three discs. Everything passed in the end and **nothing**
+passed first time, which is the argument for this whole folder existing.
+
+**Two faults stopped the case dead and had to be fixed to finish it.**
+
+**A game alone on a disc could never be copied off it.** One game on one disc
+sits at the root, so its folder is empty, and `onTheDisc` answered an empty
+relative path with an empty string. The copy walked nothing, found no files,
+and the menu said *There is nothing in that folder to copy.* about a disc with
+the game sitting in plain sight. That is the ordinary way anybody would burn a
+single game, so the whole copy and play path was dead for it. Every test
+before this gave the game a folder of its own, which is why nothing caught it.
+
+**The disc's icon went into the player's game folder.** The menu is told what
+at the root belongs to the disc rather than to the game, and that list is a
+list of constants, so it could never name the icon: an icon is named after the
+disc it sits on. It still carried `disc.ico`, which no build has written since
+the icon started being named per disc. The one file the list was wrong about
+was a file the list exists for. Part 1's copy has `ONETORUN.ico` in it and part
+2's has no `TWOPICKED.ico`, same fixture, same press, fix in between.
+
+**Three more came out of watching rather than reading.**
+
+**The menu went grey and said not responding.** The bar sat at 25% and stopped,
+then Windows painted the hung-program ghost over it, then it came back. The
+copy was fine the whole time: progress was added up only as each file
+finished, and the last file was 126 MB copied by a single blocking call, so
+the page could not repaint for the whole of it. The set restore had fixed this
+years earlier and the fix was never brought across. Its own comment says it:
+*a bar that only moves when a file finishes is a bar that never moves on a
+disc with one file on it.*
+
+**Everything copied off a disc arrived read-only**, which is the entire reason
+that button exists. The comment above `whatToDoWith` says a game run off a disc
+cannot save because the disc is read-only, so the menu copies it onto the
+machine. Every file on a CD is read-only and every way of copying one carries
+the attribute over, so the copy could not save either. All three files of
+part 2's copy: read-only.
+
+**The button promised a game it was not going to run.** Part 3's disc has
+nothing picked to start it, so the menu copies the folder and opens it, and
+the window that builds such a disc says exactly that. The disc said **Copy and
+play**. The two halves of the program disagreed about the same disc.
+
+**Why none of this was caught by the suite, which is the real finding.** The
+copy and play flow lived in `menu.hta.template`, and the suite loads `menu.js`
+under cscript and cannot load the template. 21 of the 35 functions in it were
+named by no test at all. The file opens by saying so: *an HTA is invisible to
+UI Automation, so nothing can press a button in this page: whatever lives here
+can never be tested.* True, and the conclusion drawn from it was to put logic
+there anyway. The flow is in `menu.js` now and the page is glue.
+
+**One part of part 3 could not be judged by hand at all, and that is the
+lesson rather than a caveat.** The copy was whole, nothing had started, and
+the icon had stayed on the disc, which is three of the four things to check.
+Whether Explorer opened on the copied folder could not be established
+afterwards, because a window somebody has closed leaves nothing behind and
+the folder picker at the start of the press is a different dialog. The whole
+decision lived in the page then, where nothing could ask it anything. It is
+whatToDoAfterACopy in menu.js now and the suite asks it directly, so the
+answer no longer rests on what anybody remembers seeing.
+
+**Four things this case says that the case above does not.**
+
+The question of which file starts the game is asked by **the window, when the
+disc is built**, not by the disc. Steps 2 and 3 read as though the disc asks.
+It does not, and it should not: the answer is burned into it.
+
+The fixture holds `TheGame.exe` and `Config.exe`, not the `TheGame1.exe` named
+above.
+
+**The menu asks where to copy it**, with a folder picker, which the case does
+not mention and which is the first thing that happens after the press.
+
+**Find the window by class, not by MainWindowHandle.** mshta owns a dozen
+windows and the one .NET calls the main one is an `Internet Explorer_Hidden`
+of no size. Everything measured off it comes back zero, which reads exactly
+like a menu that failed to open. The menu is the `HTML Application Host Window`
+`Class` with a real size.
+
+**Make the runnable fixtures real before starting, and make them open a**
+**window.** A sparse file of zeros is not a program and will not run, so the
+case cannot be judged with one. These three were judged with a padded
+`cmd.exe`, which runs from anywhere and stays up, and which is a bad stand-in
+for two reasons: a terminal is not what anybody's game looks like, and a
+padded one cannot find its own banner text, so it opens with *The system
+cannot find message text for message number 0x2350* across the top. Every pass
+then reads as a failure to whoever is watching it.
+
+The fixture script takes `wscript.exe` now, which opens a plain dialog and waits.
+Swept the obvious ones to find it: copied out of System32, charmap, notepad,
+msinfo32, resmon, perfmon, cleanmgr, dfrgui and sndvol all quit the instant
+they start, and only dxdiag, osk and wscript survive. dxdiag can open a modal
+question about driver signing, and anything modal stops a by-hand pass dead.
+**Padding is the part to check**, not copying: a program has to still run after
+being padded to size, and a single-file .NET publish does not, because its
+bundle is read from the end of the file.
 
 ## Case 8, the swap, judged 2026-10-24
 

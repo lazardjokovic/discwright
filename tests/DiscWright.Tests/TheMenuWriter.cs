@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 using DiscWright.Menu;
 
@@ -125,6 +125,30 @@ public class TheMenuWriter
         Assert.Contains("offerToRemoveTheCopy(installed);", page, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Copies_a_game_off_a_single_disc_through_the_engine_too()
+    {
+        string page = MenuWriter.MenuPage(Facts());
+
+        // THE PAGE IS GLUE AND NOTHING ELSE. Copying a game off one disc used
+        // to be written out here in full, which is why it was never once run
+        // by a test: the suite loads menu.js under cscript and cannot load
+        // this. Both bugs case 7 found by hand lived on this path.
+        //
+        // So the same shape as the set: ask, draw, hand over to menu.js, and
+        // react to what comes back. These assertions are here so the page and
+        // the engine cannot quietly drift apart, which is the other thing that
+        // went wrong on this disc.
+        Assert.Contains("copyAGameOff({", page, StringComparison.Ordinal);
+        Assert.Contains("keepTheGameBarMoving();", page, StringComparison.Ordinal);
+        Assert.Contains("window.setTimeout(keepTheGameBarMoving, 500);", page, StringComparison.Ordinal);
+        Assert.Contains("restoreBarPercent(copying, (new Date()).getTime())", page, StringComparison.Ordinal);
+        Assert.Contains("whatToDoAfterACopy(game, where, bad, stuck,", page, StringComparison.Ordinal);
+
+        // And the page no longer carries a copy loop of its own.
+        Assert.DoesNotContain("files.CopyFile(", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("copyTheNextOne", page, StringComparison.Ordinal);
+    }
     [Fact]
     public void Keeps_one_disc_menu_at_a_time_and_lets_previews_pile_up()
     {

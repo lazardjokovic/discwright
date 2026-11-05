@@ -1,4 +1,4 @@
-using DiscWright.Core;
+﻿using DiscWright.Core;
 using DiscWright.Core.Staging;
 using DiscWright.Platform;
 using DiscWright.Staging;
@@ -621,6 +621,46 @@ public sealed class BuildingADisc : IDisposable
         Assert.True(File.Exists(On(disc, @"AUTORUN\background.png")));
     }
 
+    [Fact]
+    public async Task Names_everything_of_its_own_at_the_root_in_the_list_the_menu_copies_by()
+    {
+        // THE DRIFT GUARD. The menu is told what at the root belongs to the disc
+        // rather than to the game, so that copying a game off its own disc does
+        // not carry the menu, the autorun and the icon into somebody's game
+        // folder. That list and the build that writes those files are two
+        // separate pieces of code, and they drifted: the icon started being named
+        // after the disc and the list went on saying "disc.ico".
+        //
+        // So rather than checking the list against a second list, this builds a
+        // disc and checks it against what really landed. Anything the build puts
+        // at the root from now on fails here until the list knows about it.
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+
+        BuiltDisc disc = Assert.Single((await Build(Project(game) with
+        {
+            Artwork = new DiscArtwork(IconPath: APicture("icon", 256, 256))
+        })).Discs);
+
+        string line = Assert.Single(
+            await File.ReadAllLinesAsync(On(disc, @"AUTORUN\\menu.hta")),
+            each => each.Contains("oursNotTheGame: ", StringComparison.Ordinal));
+
+        // The game is the installer, and an installer is the thing being copied
+        // rather than something of ours. Everything else at the root is ours.
+        string[] ours = [.. Directory
+            .GetFileSystemEntries(disc.Folder)
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .Where(each => !each.StartsWith("setup_", StringComparison.OrdinalIgnoreCase))];
+
+        // A disc with nothing of its own on it would pass this vacuously.
+        Assert.True(ours.Length >= 5, "expected the disc's own files at the root, found " + ours.Length);
+
+        foreach (string each in ours)
+        {
+            Assert.Contains('"' + each + '"', line, StringComparison.Ordinal);
+        }
+    }
     [Fact]
     public async Task Puts_the_artwork_on_when_there_is_any()
     {

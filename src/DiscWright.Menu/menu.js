@@ -1,4 +1,4 @@
-// The disc menu's own logic.
+﻿// The disc menu's own logic.
 //
 // This file is carried onto every disc as AUTORUN\menu.js and included by
 // menu.hta. It is IDENTICAL on every disc: nothing is substituted into it, no
@@ -145,6 +145,17 @@ function whatToDoWith(game, installed) {
 
     if (game.runs && game.runs.length > 0) {
         return "Install";
+    }
+
+    // NOTHING WAS PICKED TO START IT, so nothing is going to be started.
+    // The menu copies the folder and opens it, and the window that built
+    // the disc says exactly that when the question of which file starts the
+    // game is cancelled. The button said "Copy and play" regardless, so the
+    // disc promised a game it was never going to run and the two halves of
+    // the program disagreed about the same disc. Seen on a real disc,
+    // 2026-11-05, case 7 part 3.
+    if (!game.plays || String(game.plays).length === 0) {
+        return "Copy and open";
     }
 
     return "Copy and play";
@@ -447,6 +458,22 @@ function onTheDisc(discFolder, relative) {
 
 // What pressing the one big button should actually do.
 //
+// A game's own folder on the disc.
+//
+// THE EMPTY ONE IS THE ORDINARY ONE. A game that is the only thing on a disc
+// sits at the root, beside the menu and the autorun, and its folder is the
+// empty string. onTheDisc answers an empty relative with an empty path, which
+// is right for a file that is not there and wrong for the root itself: the
+// copy was handed nothing, walked nothing, found nothing, and said "There is
+// nothing in that folder to copy" about a disc with the game sitting on it.
+//
+// So no folder means the disc. Found on a real disc on 2026-11-05, by case 7.
+function theGamesFolder(discFolder, folder) {
+    return folder && String(folder).length > 0
+        ? onTheDisc(discFolder, folder)
+        : String(discFolder || "");
+}
+
 // Three different acts wearing one button, and which it is was already decided
 // by whatToDoWith: this says where the thing to do it to actually lives. Kept
 // apart from the doing so that it can be checked without running anything.
@@ -465,7 +492,7 @@ function whatPressingItDoes(game, where, discFolder) {
         return {
             act: "install",
             run: onTheDisc(discFolder, game.runs),
-            from: onTheDisc(discFolder, game.folder)
+            from: theGamesFolder(discFolder, game.folder)
         };
     }
 
@@ -473,7 +500,7 @@ function whatPressingItDoes(game, where, discFolder) {
     // where it landed. A game run from the disc cannot save: the disc is read
     // only, and the first time it tries to write a save it either fails or
     // silently writes nowhere.
-    return { act: "copy", run: onTheDisc(discFolder, game.folder), from: "" };
+    return { act: "copy", run: theGamesFolder(discFolder, game.folder), from: "" };
 }
 
 // What an add-on's button runs, or nothing when it must not be pressed yet.
@@ -647,6 +674,52 @@ function whatToRunAfterCopying(game, destination) {
     return onTheDisc(destination, game.plays);
 }
 
+// What to do once a game has finished copying.
+//
+// THE DECISION IS HERE AND THE PAGE ONLY ACTS ON IT. All of this used to be
+// written out in the page, where no test could reach it, and the cost showed
+// the first time it was judged: part 3 of case 7 says the menu copies the
+// folder and opens it, and after the press there was nothing left to look at.
+// The copy was there and nothing had started, which is two thirds of an
+// answer, and whether Explorer ever opened could not be established at all.
+// A decision that can be asked the question directly can be judged.
+//
+// Returns {act, what, say}. act is "stop" when the copy is not whole, "run"
+// when the disc knows what starts the game, and "open" when it does not, which
+// is the ordinary answer for a folder nobody picked a launcher out of. say is
+// a warning to show first, or nothing.
+function whatToDoAfterACopy(game, where, bad, stuck, missing) {
+    var plays;
+
+    // Not whole, so nothing is started on top of it. A half copied game that
+    // runs is worse than one that does not: it fails somewhere later and
+    // nobody connects it to the disc.
+    if (bad > 0 || missing) {
+        return {
+            act: "stop",
+            what: where,
+            say: (missing
+                ? "Some of it did not arrive, starting with " + missing + "."
+                : bad + " of the files would not copy.")
+                + "\n\nIt is in " + where + "."
+        };
+    }
+
+    plays = whatToRunAfterCopying(game, where);
+
+    return {
+        act: plays ? "run" : "open",
+        what: plays || where,
+
+        // Said rather than swallowed. A game whose files are still read-only
+        // runs and then cannot save, and that is a fault nobody would connect
+        // to a disc they copied an hour earlier.
+        say: stuck > 0
+            ? stuck + " of the copied files are still read-only, so the game may not be able to save."
+                + "\n\nRight click the folder, Properties, and clear Read-only: " + where
+            : null
+    };
+}
 // Everything that has to be copied, as a flat list with sizes.
 //
 // Gathered before anything is copied, because the bar needs to know the whole
@@ -1600,6 +1673,117 @@ function sizeOfUnder(files, dir) {
     };
 }
 
+// Takes the read-only off a file that has just been copied.
+//
+// A file on a CD is read-only, and every way of copying one carries the
+// attribute across: robocopy does, and so does FileSystemObject.CopyFile.
+//
+// WHICH DEFEATS THE WHOLE POINT OF COPYING IT. The comment above
+// whatToDoWith says why that button exists: a game run off a disc cannot
+// save, because the disc is read-only and the first thing it writes either
+// fails or goes nowhere. The copy was read-only too, so a game copied onto
+// the machine so that it could save still could not save over anything that
+// came off the disc. Three comments in this file knew that files off a CD
+// arrive read-only and none of them did anything about it.
+//
+// Not fatal when it fails: a game that cannot save is worse than a game
+// whose attribute would not change, and the copy is there either way.
+function makeItWritable(files, path) {
+    try {
+        var file = files.GetFile(path);
+
+        // Bit 1 is read-only, and it is cleared rather than the whole set
+        // being replaced, because hidden and system belong to whoever made
+        // the file and are none of this menu's business.
+        if (file.Attributes & 1) {
+            file.Attributes = file.Attributes - 1;
+        }
+
+        return null;
+    } catch (wrong) {
+        return String(path);
+    }
+}
+
+// Copies a game off a disc onto the machine, one file at a time, WITHOUT
+// holding on to the thread while each one goes.
+//
+// WHY A JOB AND NOT CopyFile. FileSystemObject.CopyFile does not return
+// until the file is there, and a script that has not returned cannot repaint
+// its own window. A game that is one large file therefore froze the bar at
+// whatever the file before it had reached, and Windows painted the menu with
+// the not-responding ghost: the hung-program treatment, on the one screen
+// whose entire job is to say that something is happening. Watched on a real
+// disc on 2026-11-05, 126 MB in one file, case 7.
+//
+// The comment this replaces said one file per tick was enough to keep the
+// window alive. It is not, and the set restore has known so for longer:
+// "a bar that only moves when a file finishes is a bar that never moves on a"
+// "disc with one file on it". This is the same machinery that fixed it there,
+// finally brought across, so the program has one way of copying rather than
+// a good one and a bad one.
+//
+// work is {files, items, from, destination, say, after}. items is what
+// whatThereIsToCopy gathered, from is the folder on the disc they came out
+// of, say is called with {copying, done, all, startedAt, rate} as it goes,
+// and after with how many files would not copy and how many would not be
+// made writable.
+function copyAGameOff(work) {
+    var sizeOf = sizeOfUnder(work.files, work.destination);
+    var state = { at: 0, bad: 0, stuck: 0, done: 0, all: howMuchInAll(work.items), startedAt: 0, samples: [] };
+
+    function next() {
+        var one, relative, landing;
+
+        if (state.at >= work.items.length) {
+            work.say({ copying: "", done: state.done, all: state.all });
+            work.after(state.bad, state.stuck);
+            return;
+        }
+
+        one = work.items[state.at];
+
+        // The list carries Windows separators because it is read back off a
+        // disk; everything that builds a path here speaks in forward slashes.
+        relative = String(one.to).split(BACKSLASH).join("/");
+        landing = onTheDisc(work.destination, relative);
+
+        state.startedAt = (new Date()).getTime();
+        work.say({
+            copying: (state.at + 1) + " of " + work.items.length,
+            done: state.done,
+            all: state.all,
+            startedAt: state.startedAt,
+            rate: rateFrom(state.samples, startingRate())
+        });
+
+        try {
+            makeTheWholePath(work.files, work.files.GetParentFolderName(landing));
+        } catch (cannotMake) {
+        }
+
+        waitForJob(startAJob(setCopyCommand(work.from, work.destination, relative)), function (code) {
+            // Both questions, as the set copy asks them: robocopy says 8 and
+            // up for a failure and the size says whether the bytes are there,
+            // and neither answer is enough on its own.
+            if (code >= 8 || sizeOf(relative) !== one.bytes) {
+                state.bad++;
+            } else {
+                state.done += one.bytes;
+                state.samples.push({ bytes: one.bytes, seconds: ((new Date()).getTime() - state.startedAt) / 1000 });
+
+                if (makeItWritable(work.files, landing)) {
+                    state.stuck++;
+                }
+            }
+
+            state.at++;
+            next();
+        });
+    }
+
+    next();
+}
 // Copies one disc's share of the set into the folder, one file at a time,
 // each started and then waited for.
 //

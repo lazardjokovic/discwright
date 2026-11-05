@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 
 namespace DiscWright.Tests;
@@ -182,8 +182,25 @@ public sealed class TheMenuScript : IDisposable
         // A game run off a disc cannot save: the disc is read only, and the
         // first time it tries to write a save it either fails or silently
         // writes nowhere.
-        Assert.Equal("Copy and play", Ask("whatToDoWith({name: 'x', runs: ''})"));
-        Assert.Equal("Copy and play", Ask("whatToDoWith({name: 'x'})"));
+        Assert.Equal("Copy and play", Ask("whatToDoWith({name: 'x', runs: '', plays: 'Game.exe'})"));
+    }
+
+    [Fact]
+    public void Does_not_promise_to_play_a_game_it_is_not_going_to_start()
+    {
+        // NOTHING WAS PICKED TO START IT. That happens when the folder holds
+        // more than one thing that could be the game and the question was
+        // cancelled, and when it holds nothing runnable at all. Either way the
+        // menu copies the folder and opens it, and the window that builds the
+        // disc says so in as many words.
+        //
+        // The button said "Copy and play" anyway, so the disc promised a game
+        // it was never going to run, and the two halves of the program
+        // disagreed about the same disc. Watched on a real disc, 2026-11-05,
+        // case 7 part 3: copied, nothing started, button had said play.
+        Assert.Equal("Copy and open", Ask("whatToDoWith({name: 'x', runs: '', plays: ''})"));
+        Assert.Equal("Copy and open", Ask("whatToDoWith({name: 'x', runs: ''})"));
+        Assert.Equal("Copy and open", Ask("whatToDoWith({name: 'x'})"));
     }
 
     [Fact]
@@ -324,7 +341,18 @@ public sealed class TheMenuScript : IDisposable
     [Fact]
     public void Still_says_copy_and_play_for_a_game_with_no_installer()
     {
-        Assert.Equal("Copy and play", Ask("whatToDoWith({ name: 'A Game', runs: '' }, false)"));
+        Assert.Equal(
+            "Copy and play",
+            Ask("whatToDoWith({ name: 'A Game', runs: '', plays: 'A Game.exe' }, false)"));
+    }
+
+    [Fact]
+    public void Says_Play_before_it_looks_at_whether_anything_would_play()
+    {
+        // Already on the machine and the button says Play, whatever this disc
+        // knows about starting it, because the copy on the machine is not this
+        // disc's business. The order of these two questions is the point.
+        Assert.Equal("Play", Ask("whatToDoWith({ name: 'A Game', runs: '', plays: '' }, true)"));
     }
 
     [Fact]
@@ -518,6 +546,34 @@ public sealed class TheMenuScript : IDisposable
         // writes nowhere. So it comes off the disc first.
         Assert.Equal("copy", Ask("whatPressingItDoes(" + game + ", null, 'D:').act"));
         Assert.Equal(@"D:\GAME 1", Ask("whatPressingItDoes(" + game + ", null, 'D:').run"));
+    }
+
+    [Fact]
+    public void Copies_a_game_that_sits_at_the_root_of_its_own_disc()
+    {
+        // THE ORDINARY CASE, AND IT COULD NOT BE DONE. One game on one disc
+        // sits at the root, so its folder is empty. onTheDisc answers an empty
+        // relative with an empty path, which is right for a file that is not
+        // there and wrong for the root, so the copy was handed nothing and told
+        // the person there was nothing on the disc to copy.
+        //
+        // Every test above gave the game a folder of its own, which is why
+        // nothing caught it. Found on a real disc on 2026-11-05.
+        const string game = "{ name: 'Arcanum', runs: '', folder: '' }";
+
+        Assert.Equal("copy", Ask("whatPressingItDoes(" + game + ", null, 'D:').act"));
+        Assert.Equal("D:", Ask("whatPressingItDoes(" + game + ", null, 'D:').run"));
+    }
+
+    [Fact]
+    public void Installs_from_the_root_when_the_game_is_alone_on_the_disc()
+    {
+        // The same hole on the other branch: the folder an installer is run
+        // from. An installer run from the wrong place still installs, so this
+        // one cost nothing visible, which is exactly why it would have stayed.
+        const string game = "{ name: 'HK', runs: 'setup.exe', folder: '' }";
+
+        Assert.Equal("D:", Ask("whatPressingItDoes(" + game + ", null, 'D:').from"));
     }
 
     [Theory]
@@ -1232,6 +1288,201 @@ public sealed class TheMenuScript : IDisposable
         Assert.False(File.Exists(Path.Combine(dest, "big.bin.dwpart02")));
     }
 
+    [Fact]
+    public void Copies_a_game_off_a_disc_without_holding_on_to_the_thread()
+    {
+        // THE BAR HAS TO BE ABLE TO MOVE. FileSystemObject.CopyFile does not
+        // come back until the file is there, so on a game that is one large
+        // file the page could not repaint and Windows painted the menu with
+        // the not-responding ghost. Watched on a real disc, 2026-11-05, 126 MB
+        // in one file, case 7.
+        //
+        // So the same thing the set restore does: a detached job per file, and
+        // what it says while it runs carries the two numbers the bar needs,
+        // when this file started and the rate so far. Without those
+        // restoreBarPercent has nothing to work from and the bar sits still
+        // however often it is redrawn.
+        string disc = Path.Combine(_folder, "a disc");
+        string dest = Path.Combine(_folder, "copied off");
+        Directory.CreateDirectory(Path.Combine(disc, "data"));
+        File.WriteAllText(Path.Combine(disc, "TheGame.exe"), "12345");
+        File.WriteAllText(Path.Combine(disc, "data", "things.pak"), "ABCDEFG");
+
+        string went = Ask(WithFiles(
+            "(function () { var out = []; var items = whatThereIsToCopy(f, " + AsJScript(disc) + ", []);"
+            + " var heard = function (p) { if (p.copying) { out.push('says ' + p.copying + ' rate=' + (p.rate > 0) + ' started=' + (p.startedAt > 0)); } };"
+            + " copyAGameOff({files: f, items: items, from: " + AsJScript(disc) + ", destination: " + AsJScript(dest) + ","
+            + "   say: heard, after: function (bad, stuck) { out.push('bad=' + bad + ' stuck=' + stuck); }});"
+            + " return out.join(' | '); })()"));
+
+        Assert.Equal(
+            "says 1 of 2 rate=true started=true | says 2 of 2 rate=true started=true | bad=0 stuck=0",
+            went);
+
+        Assert.Equal("12345", File.ReadAllText(Path.Combine(dest, "TheGame.exe")));
+        Assert.Equal("ABCDEFG", File.ReadAllText(Path.Combine(dest, "data", "things.pak")));
+    }
+
+    [Fact]
+    public void Leaves_the_copy_writable_so_the_game_can_save()
+    {
+        // THE WHOLE REASON THAT BUTTON EXISTS. The comment above whatToDoWith
+        // says it: a game run off a disc cannot save, because the disc is read
+        // only and the first thing it writes either fails or goes nowhere. So
+        // the menu copies it onto the machine first.
+        //
+        // And the copy was read-only too, because every file on a CD is and
+        // every way of copying one carries the attribute across. The game
+        // still could not save over anything that came off the disc. Seen on a
+        // real disc, 2026-11-05: all three files of the copy, read-only.
+        string disc = Path.Combine(_folder, "read only disc");
+        string dest = Path.Combine(_folder, "writable copy");
+        Directory.CreateDirectory(Path.Combine(disc, "data"));
+        File.WriteAllText(Path.Combine(disc, "TheGame.exe"), "12345");
+        File.WriteAllText(Path.Combine(disc, "data", "save.dat"), "ABC");
+        File.SetAttributes(Path.Combine(disc, "TheGame.exe"), FileAttributes.ReadOnly);
+        File.SetAttributes(Path.Combine(disc, "data", "save.dat"), FileAttributes.ReadOnly);
+
+        Assert.Equal("bad=0 stuck=0", Ask(WithFiles(
+            "(function () { var said = ''; var items = whatThereIsToCopy(f, " + AsJScript(disc) + ", []);"
+            + " copyAGameOff({files: f, items: items, from: " + AsJScript(disc) + ", destination: " + AsJScript(dest) + ","
+            + "   say: function () {}, after: function (bad, stuck) { said = 'bad=' + bad + ' stuck=' + stuck; }});"
+            + " return said; })()")));
+
+        // The bytes arrived AND they can be written over, which is the half
+        // that was missing.
+        Assert.Equal("12345", File.ReadAllText(Path.Combine(dest, "TheGame.exe")));
+        Assert.False(
+            File.GetAttributes(Path.Combine(dest, "TheGame.exe")).HasFlag(FileAttributes.ReadOnly),
+            "a game copied off a disc so that it can save has to be writable");
+        Assert.False(
+            File.GetAttributes(Path.Combine(dest, "data", "save.dat")).HasFlag(FileAttributes.ReadOnly),
+            "and so does everything under it");
+
+        // And the disc is left exactly as it was found.
+        Assert.True(File.GetAttributes(Path.Combine(disc, "TheGame.exe")).HasFlag(FileAttributes.ReadOnly));
+    }
+
+    [Fact]
+    public void Counts_a_file_that_would_not_copy_rather_than_claiming_it_did()
+    {
+        // A disc that stops being readable half way through is the ordinary
+        // failure here, and the copy has to say which file it stopped on
+        // rather than hand over a game with a hole in it. Simulated by naming
+        // a file in the list that is not on the disc at all.
+        string disc = Path.Combine(_folder, "a scratched disc");
+        string dest = Path.Combine(_folder, "half a game");
+        Directory.CreateDirectory(disc);
+        File.WriteAllText(Path.Combine(disc, "TheGame.exe"), "12345");
+
+        string went = Ask(WithFiles(
+            "(function () { var said = '';"
+            + " var items = [{from: " + AsJScript(Path.Combine(disc, "TheGame.exe")) + ", to: 'TheGame.exe', bytes: 5},"
+            + "              {from: " + AsJScript(Path.Combine(disc, "gone.pak")) + ", to: 'gone.pak', bytes: 99}];"
+            + " copyAGameOff({files: f, items: items, from: " + AsJScript(disc) + ", destination: " + AsJScript(dest) + ","
+            + "   say: function () {}, after: function (bad, stuck) { said = 'bad=' + bad + ' stuck=' + stuck; }});"
+            + " return said; })()"));
+
+        Assert.Equal("bad=1 stuck=0", went);
+
+        // The one that was there still arrived. A bad file is not a reason to
+        // throw away the rest.
+        Assert.Equal("12345", File.ReadAllText(Path.Combine(dest, "TheGame.exe")));
+    }
+
+    [Fact]
+    public void Says_which_file_is_in_flight_so_the_bar_has_something_to_move_on()
+    {
+        // restoreBarPercent is what turns what the engine says into a number on
+        // the screen, and it works off startedAt and rate. The copy off a
+        // single disc used to pass a hardcoded nought where the seconds go, so
+        // the estimate was written, tested, and switched off at the one call
+        // site that needed it.
+        Assert.Equal(
+            "40",
+            Ask("restoreBarPercent({done: 200, all: 1000, startedAt: 1000, rate: 100}, 3000)"));
+
+        // Nothing in flight, so nothing is guessed on top.
+        Assert.Equal(
+            "20",
+            Ask("restoreBarPercent({done: 200, all: 1000, startedAt: 0, rate: 100}, 3000)"));
+    }
+    [Fact]
+    public void Opens_the_folder_when_nothing_was_picked_to_start_the_game()
+    {
+        // CASE 7 PART 3, AND THE REASON THIS IS A FUNCTION. The disc holds two
+        // things that could be the game and the question of which one starts it
+        // was cancelled when the disc was built, so the menu copies the folder
+        // and opens it and runs nothing.
+        //
+        // It was judged by hand on a real disc on 2026-11-05 and only two
+        // thirds of it could be judged: the copy was whole and nothing had
+        // started, and whether Explorer ever opened could not be established
+        // afterwards, because a window that has been closed leaves nothing
+        // behind. All of this lived in the page then, where no test could ask
+        // it anything. Now it can be asked directly.
+        const string game = "{ name: 'Two Of Them', runs: '', plays: '' }";
+
+        Assert.Equal("open", Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games\\\\Two', 0, 0, null).act"));
+        Assert.Equal("C:\\Games\\Two", Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games\\\\Two', 0, 0, null).what"));
+    }
+
+    [Fact]
+    public void Runs_the_one_that_was_picked_and_nothing_else()
+    {
+        // Case 7 part 2: two things that could be the game, one of them chosen
+        // when the disc was built, so that one runs and the other is copied and
+        // left alone.
+        const string game = "{ name: 'Two Of Them', runs: '', plays: 'TheGame.exe' }";
+
+        Assert.Equal("run", Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games\\\\Two', 0, 0, null).act"));
+        Assert.Equal(
+            "C:\\Games\\Two\\TheGame.exe",
+            Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games\\\\Two', 0, 0, null).what"));
+    }
+
+    [Fact]
+    public void Starts_nothing_on_top_of_a_copy_that_is_not_whole()
+    {
+        // A half copied game that runs is worse than one that does not: it
+        // fails somewhere later and nobody connects it to the disc.
+        const string game = "{ name: 'A Game', runs: '', plays: 'TheGame.exe' }";
+
+        Assert.Equal(
+            "stop",
+            Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games', 0, 0, 'data\\\\things.pak').act"));
+        Assert.Contains(
+            "starting with data",
+            Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games', 0, 0, 'data\\\\things.pak').say"),
+            StringComparison.Ordinal);
+
+        // And the same when robocopy was the one that said no.
+        Assert.Equal("stop", Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games', 2, 0, null).act"));
+        Assert.Contains(
+            "2 of the files would not copy",
+            Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games', 2, 0, null).say"),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_so_when_the_copy_is_still_read_only_rather_than_letting_saves_fail_later()
+    {
+        // The attribute is cleared per file, and a file that would not give it
+        // up is said out loud. A game that runs and then cannot save is a fault
+        // nobody would connect to a disc they copied an hour earlier.
+        const string game = "{ name: 'A Game', runs: '', plays: 'TheGame.exe' }";
+        string said = Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games', 0, 3, null).say");
+
+        Assert.Contains("3 of the copied files are still read-only", said, StringComparison.Ordinal);
+        Assert.Contains("may not be able to save", said, StringComparison.Ordinal);
+
+        // It is a warning and not a refusal: the game is there and it still runs.
+        Assert.Equal("run", Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games', 0, 3, null).act"));
+
+        // And nothing is said when every file gave it up, which is the
+        // ordinary case and must not raise a dialog.
+        Assert.Equal("null", Ask("whatToDoAfterACopy(" + game + ", 'C:\\\\Games', 0, 0, null).say"));
+    }
     [Fact]
     public void Leaves_the_pieces_alone_when_one_of_them_is_still_missing()
     {

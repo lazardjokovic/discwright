@@ -281,10 +281,17 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         string[] lines = [.. went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.TrimEnd((char)92))];
 
-        Assert.Equal("start " + Path.Combine(disc, "setup_small.exe") + " in", lines[0]);
+        // "in " and then the disc, because a game alone on a disc sits at its
+        // root and that is the folder the installer is run from. It used to be
+        // nothing at all, which left the installer running from wherever mshta
+        // happened to be: harmless for an installer, and the same hole that
+        // stopped a folder of files being copied off a disc at all.
+        Assert.Equal(
+            "start " + Path.Combine(disc, "setup_small.exe") + " in " + disc,
+            lines[0]);
         Assert.Equal(
             [
-                "start " + Path.Combine(disc, "setup_small.exe") + " in",
+                "start " + Path.Combine(disc, "setup_small.exe") + " in " + disc,
                 "while=Installing... btn next dead",
                 "after=Install btn next",
                 "line=The installer closed, and Small Game is not on this machine. Install runs it again.",

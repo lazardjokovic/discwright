@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Makes every folder the test matrix asks for, so a pass can start at once.
 
@@ -31,7 +31,28 @@ param(
     # which genuinely installs. Hollow Knight is the one to reach for: it is the
     # smallest here at 1.8 GB and the only one carrying real patches, which is
     # exactly the add-on shape case 6 asks about.
-    [string] $RealGameFrom = "${env:ProgramFiles(x86)}\GOG Galaxy\Games\Offline Installers\hollow_knight"
+    [string] $RealGameFrom = "${env:ProgramFiles(x86)}\GOG Galaxy\Games\Offline Installers\hollow_knight",
+
+    # A real program for the folders whose whole point is that the disc runs
+    # them. A sparse file of zeros is not a program and will not start, so the
+    # case cannot be judged with one.
+    #
+    # IT HAS TO OPEN A WINDOW RATHER THAN A CONSOLE. cmd.exe was used first
+    # because it starts from anywhere and stays up, and a padded one is a
+    # terrible stand-in: a terminal is not what anybody's game looks like, and a
+    # padded cmd.exe cannot even find its own banner text, so it opens saying
+    # 'The system cannot find message text for message number 0x2350'. Every
+    # pass then reads as a failure to whoever is watching.
+    #
+    # Swept the obvious ones on 2026-11-05. Copied out of System32, charmap,
+    # notepad, msinfo32, resmon, perfmon, cleanmgr, dfrgui and sndvol all quit
+    # the instant they start. dxdiag, osk and wscript survive. wscript is the
+    # one to take: it is 180 KB, it opens a plain settings dialog and waits, it
+    # does nothing at all while it is up, and it still runs after being padded
+    # to 40 MB, which is the part that actually had to be checked. dxdiag can
+    # open a modal question about driver signing on a machine that has not run
+    # it before, and anything modal stops a by-hand pass dead.
+    [string] $RealProgramFrom = "$env:WINDIR\System32\wscript.exe"
 )
 
 $ErrorActionPreference = 'Stop'
@@ -79,6 +100,33 @@ function Lump([string] $path, [long] $bytes) {
     }
 }
 
+# A program that will really start, padded out to the size of a game.
+#
+# A Lump is zeros and zeros are not a program. Case 7 ends in "the disc runs
+# it" three times over, so the two folders it burns carry a real one.
+#
+# Same order as Lump and for the same reason: empty, then the flag, then the
+# bytes, then the length. The program itself is a few hundred KB and real, the
+# tail is sparse, and the whole thing costs almost nothing while planning as 40
+# MB. Trailing bytes after a PE are ignored, so it still runs.
+function RealProgram([string] $path, [long] $bytes) {
+    $parent = Split-Path $path
+    if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+    if (-not (Test-Path $RealProgramFrom)) {
+        Write-Warning "No real program at $RealProgramFrom, so $path is zeros and will not run."
+        Lump $path $bytes
+        return
+    }
+    if (Test-Path $path) { Remove-Item $path -Force }
+    $made = [IO.File]::Create($path)
+    $made.Close()
+    & fsutil sparse setflag $path | Out-Null
+    $real = [IO.File]::ReadAllBytes($RealProgramFrom)
+    $writing = [IO.File]::Open($path, 'Open', 'Write')
+    $writing.Write($real, 0, $real.Length)
+    if ($bytes -gt $real.Length) { $writing.SetLength($bytes) }
+    $writing.Close()
+}
 function Words([string] $path, [string] $text) {
     $parent = Split-Path $path -Parent
     if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
@@ -141,7 +189,7 @@ Words "$at\readme.txt" 'A folder of files and nothing to run.'
 
 # E12  exactly one worth running, so nothing is asked
 $at = Folder 'files-one-to-run'
-Lump "$at\TheGame.exe" (40 * $MB)
+RealProgram "$at\TheGame.exe" (40 * $MB)
 Lump "$at\data\things.pak" (120 * $MB)
 
 # E13  one worth running, beside four that are never the game
@@ -155,8 +203,8 @@ Lump "$at\data\things.pak" (120 * $MB)
 
 # E14  two worth running, so it asks
 $at = Folder 'files-two-to-run'
-Lump "$at\TheGame.exe" (40 * $MB)
-Lump "$at\Config.exe" (8 * $MB)
+RealProgram "$at\TheGame.exe" (40 * $MB)
+RealProgram "$at\Config.exe" (8 * $MB)
 Lump "$at\data\things.pak" (120 * $MB)
 
 # E17  nothing at the top, two deep inside

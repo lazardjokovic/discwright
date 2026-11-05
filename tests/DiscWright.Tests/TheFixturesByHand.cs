@@ -1,3 +1,4 @@
+using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
 
 using DiscWright.Core;
@@ -280,13 +281,42 @@ public class TheFixturesByHand
         long planned = 0;
         long onDisk = 0;
 
+        int shared = 0;
+
         foreach (string file in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
         {
             planned += new FileInfo(file).Length;
+
+            // A hard link costs nothing: its bytes already existed and are
+            // shared with the file it was made from. gog-real is 1.8 GB of
+            // them, pointing at a GOG installer this machine already had, and
+            // Windows reports each one at full size because there is no way to
+            // ask which half of a share is yours. Counting them makes the
+            // fixtures look twenty times more expensive than they are.
+            if (LinksTo(file) > 1)
+            {
+                shared++;
+                continue;
+            }
+
             onDisk += ReallyTakes(file);
         }
 
         Assert.True(planned > 10L * 1024 * 1024 * 1024, $"Only {planned} bytes of fixtures, so this proves little.");
+
+        // The skip above must not be a way for a real copy to hide. If the
+        // real game is there at all it has to be linked rather than copied,
+        // which is the whole claim the script makes about it.
+        string real = Path.Combine(root, "gog-real");
+
+        if (Directory.Exists(real) && Directory.GetFiles(real).Length > 0)
+        {
+            Assert.All(
+                Directory.GetFiles(real),
+                each => Assert.True(
+                    LinksTo(each) > 1,
+                    Path.GetFileName(each) + " was copied rather than hard linked."));
+        }
 
         Assert.True(
             onDisk < planned / 20,
@@ -295,6 +325,45 @@ public class TheFixturesByHand
     }
 
     /// <summary>What a file actually occupies, holes not counted.</summary>
+    /// <summary>How many names this file's bytes answer to.</summary>
+    private static int LinksTo(string path)
+    {
+        using SafeFileHandle handle = File.OpenHandle(path);
+
+        return GetFileInformationByHandle(handle, out BY_HANDLE_FILE_INFORMATION about)
+            ? (int)about.NumberOfLinks
+            : 1;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BY_HANDLE_FILE_INFORMATION
+    {
+        // Every field a DWORD, including the three FILETIMEs as pairs. A
+        // long here looks tidier and is wrong: .NET aligns it to 8 bytes and
+        // pads after the attributes, while the native struct is packed to 4,
+        // so NumberOfLinks lands on the wrong bytes and comes back as
+        // whatever happened to be there. It read above 1 for a plain copy,
+        // which made the guard below pass against the very thing it is for.
+        public uint FileAttributes;
+        public uint CreationTimeLow;
+        public uint CreationTimeHigh;
+        public uint LastAccessTimeLow;
+        public uint LastAccessTimeHigh;
+        public uint LastWriteTimeLow;
+        public uint LastWriteTimeHigh;
+        public uint VolumeSerialNumber;
+        public uint FileSizeHigh;
+        public uint FileSizeLow;
+        public uint NumberOfLinks;
+        public uint FileIndexHigh;
+        public uint FileIndexLow;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetFileInformationByHandle(
+        SafeFileHandle file,
+        out BY_HANDLE_FILE_INFORMATION about);
     private static long ReallyTakes(string path)
     {
         uint high;

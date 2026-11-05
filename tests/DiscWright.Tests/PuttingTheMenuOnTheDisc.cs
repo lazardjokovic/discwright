@@ -1,4 +1,4 @@
-using DiscWright.Core;
+﻿using DiscWright.Core;
 using DiscWright.Core.Staging;
 using DiscWright.Menu;
 
@@ -112,6 +112,57 @@ public class PuttingTheMenuOnTheDisc
         Assert.DoesNotContain(wrote.Binaries, path => path.EndsWith("menu.ico", StringComparison.Ordinal));
     }
 
+    [Fact]
+    public async Task Counts_the_disc_s_own_icon_as_the_disc_s_rather_than_the_game_s()
+    {
+        // A GAME ALONE ON A DISC SITS AT THE ROOT, BESIDE THE ICON. The list the
+        // menu copies by names what belongs to the disc, and it is a list of
+        // constants, so it could never name an icon that is named after the disc
+        // it is on. It still carried "disc.ico", which no build has written since
+        // the icon started being named after the disc, so the one file the list
+        // was wrong about was the one file the list was written for.
+        //
+        // What that cost: copy a game off its own disc and the disc's icon went
+        // into the player's game folder with it. Seen on a real disc, 2026-11-05.
+        RecordingWriter wrote = new();
+
+        await Write(wrote, artwork: new DiscArtwork(IconPath: @"C:\\pictures\\cover.png"));
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // The same name the icon is really written under, two lines above it in
+        // the same generated block.
+        Assert.Contains(@"icon: ""HOLLOWKNIGHT.ico""", page, StringComparison.Ordinal);
+        Assert.Contains(@"""HOLLOWKNIGHT.ico""", TheDiscsOwnNamesIn(page), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Adds_nothing_when_the_icon_sits_beside_the_menu_instead()
+    {
+        // With no icon chosen the menu writes ours into its own folder, and that
+        // folder is named in the list already. Adding "AUTORUN/menu.ico" to a list
+        // of names matched at the root would be a name nothing can ever equal.
+        RecordingWriter wrote = new();
+
+        await Write(wrote);
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        Assert.DoesNotContain("menu.ico", TheDiscsOwnNamesIn(page), StringComparison.Ordinal);
+        Assert.Contains(@"""AUTORUN""", TheDiscsOwnNamesIn(page), StringComparison.Ordinal);
+    }
+
+    /// <summary>The one generated line that lists what belongs to the disc.</summary>
+    private static string TheDiscsOwnNamesIn(string page)
+    {
+        string line = Assert.Single(
+            page.Split('\n'),
+            each => each.Contains("oursNotTheGame: ", StringComparison.Ordinal));
+
+        return line;
+    }
     [Fact]
     public async Task Gives_each_disc_of_a_set_a_menu_wearing_its_own_icon()
     {

@@ -1,4 +1,4 @@
-using DiscWright.Core;
+﻿using DiscWright.Core;
 using System.Reflection;
 using System.Text;
 
@@ -88,8 +88,16 @@ public static class MenuWriter
         // carry the menu and the autorun with it. Written from the one list
         // that decides what belongs to a disc rather than from a second copy
         // of it here, which would drift.
+        //
+        // THE ICON HAS TO BE ADDED TO IT, because that list cannot name it: an
+        // icon is named after the disc it sits on, so there is no constant to
+        // put into a list of constants. Without this the icon was the one thing
+        // of the disc's own that a copy carried into somebody's game folder,
+        // while "disc.ico" sat in the list naming a file no build has written
+        // since the icon started being named after the disc. Found on a real
+        // disc on 2026-11-05, in the same case that found the root copy.
         data.Append("    oursNotTheGame: ")
-            .Append(JScript.ListOf(ReservedDiscNames.All)).Append(",\n");
+            .Append(JScript.ListOf(TheDiscsOwnNames(facts.IconOnTheDisc))).Append(",\n");
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),
@@ -125,6 +133,26 @@ public static class MenuWriter
             .Replace("%%DATA%%", data.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Everything at the root of this disc that belongs to the disc rather than
+    /// to the game on it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The constant names, plus this disc's own icon, which is not one of them
+    /// because it is named after the disc.
+    /// </para>
+    /// <para>
+    /// <strong>An icon beside the menu rather than at the root adds nothing.</strong>
+    /// That is the fallback icon, written into the menu's own folder, and the
+    /// folder is named in the list already. Only a bare name is a name at the
+    /// root, which is the only place this question is asked.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<string> TheDiscsOwnNames(string iconOnTheDisc) =>
+        iconOnTheDisc.Length > 0 && !iconOnTheDisc.Contains('/', StringComparison.Ordinal)
+            ? [.. ReservedDiscNames.All, iconOnTheDisc]
+            : ReservedDiscNames.All;
     /// <summary>
     /// For text that lands in markup rather than in script: a title, a caption,
     /// the words on a button.
