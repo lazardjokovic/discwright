@@ -1697,6 +1697,14 @@ Describe 'The question a folder with no GOG installer asks' -Tag 'UI' -Skip:(-no
             Should -Not -BeNullOrEmpty
         (Find-Ctl -Root $script:Question.Window -NameLike '*Cancel and pick that folder instead*') |
             Should -Not -BeNullOrEmpty
+        # The headline must not argue with the orange line underneath it:
+        # "it is not a GOG download" above "2 GOG download(s) sit in
+        # subfolders" read as a contradiction to the person who got both
+        # (#98). With games one level down, the first line says that.
+        (Find-Ctl -Root $script:Question.Window -NameLike '*sit one level down, in its subfolders*') |
+            Should -Not -BeNullOrEmpty
+        (Find-Ctl -Root $script:Question.Window -NameLike '*so it is not a GOG download*' -TimeoutSec 2) |
+            Should -BeNullOrEmpty
     }
 
     It 'leaves that warning off an ordinary game folder' {

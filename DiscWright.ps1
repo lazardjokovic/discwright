@@ -6642,6 +6642,21 @@ function Update-GameButtons {
 # Asks whether an entry is a game or an add-on, and of what. A window rather
 # than two more controls on the main form: step 1 is already the tallest part of
 # it, and this is answered once per installer, not adjusted while working.
+# The first line of the folder question. Its own function because it has two
+# truths to tell apart: a folder that simply is not a GOG download, and the
+# folder that HOLDS the downloads. The dialog used to open every time with
+# "so it is not a GOG download" and then, two lines further down and in
+# orange, report the GOG downloads it had found in the subfolders - a flat
+# refusal arguing with its own correction (#98). Which folder this is was
+# already known when the line was written; now the line says it.
+function Get-FolderQuestionHeadline([string]$folder, [int]$subfolderGames) {
+    $name = [IO.Path]::GetFileName($folder.TrimEnd('\'))
+    if ($subfolderGames -gt 0) {
+        return "$name holds no setup_*.exe of its own. The GOG downloads sit one level down, in its subfolders."
+    }
+    return "$name holds no setup_*.exe, so it is not a GOG download."
+}
+
 # A folder with no GOG installer in it. Rather than refuse it, ask what the
 # folder is: which executable installs the game, or none at all because the
 # folder is the game. Guessing was the alternative and it guesses wrong on any
@@ -6667,7 +6682,7 @@ function Show-FolderInstallerDialog([string]$folder) {
     $dlg.ClientSize=New-Object System.Drawing.Size(520,326)
 
     $l=New-Object System.Windows.Forms.Label
-    $l.Text = "$([IO.Path]::GetFileName($folder.TrimEnd('\'))) holds no setup_*.exe, so it is not a GOG download." +
+    $l.Text = (Get-FolderQuestionHeadline $folder $inner.Count) +
               [Environment]::NewLine + 'Everything in it goes on the disc either way. What should the menu do with it?'
     $l.Location=New-Object System.Drawing.Point(15,14); $l.Size=New-Object System.Drawing.Size(490,40)
     $dlg.Controls.Add($l)
