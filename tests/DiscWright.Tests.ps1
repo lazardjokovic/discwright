@@ -7227,6 +7227,64 @@ Describe 'Handing the ISO to another program' -Tag 'Unit' {
         $script:BurnSrc | Should -Match "replace '%1'"
         $script:BurnSrc | Should -Not -Match '/MODE|/WRITE|/START|--burn'
     }
+
+    It 'finds a program the user registered only for themselves' {
+        # Issue #98: ImgBurn, made the .iso default through "Open with ->
+        # always", never appeared in the list. Windows records such a choice
+        # per user: UserChoice names the ProgId and the command lives under
+        # HKCU\Software\Classes, which only the merged HKCR view shows. A walk
+        # that asks HKLM alone comes back empty-handed on exactly the machine
+        # that went to the trouble of choosing.
+        $script:FakeBurner = Join-Path $script:Sandbox 'ImgBurn.exe'
+        Set-Content -LiteralPath $script:FakeBurner -Value 'x' -Encoding Ascii
+        Mock Get-IsoUserChoice { 'Applications\ImgBurn.exe' }
+        Mock Get-ShellCommand {
+            if ($key -like 'Registry::HKEY_CLASSES_ROOT\Applications\ImgBurn.exe\shell\*command') {
+                return ('"' + $script:FakeBurner + '" "%1"')
+            }
+            if ($key -like '*Windows.IsoFile\shell\burn\command')  { return "$env:WINDIR\System32\isoburn.exe `"%1`"" }
+            if ($key -like '*Windows.IsoFile\shell\mount\command') { return 'x' }
+            return ''
+        }
+        $found = @(Get-IsoHandoffs)
+        @($found | Where-Object { $_.Exe -eq $script:FakeBurner }).Count | Should -Be 1
+    }
+
+    It 'still reads the machine-wide default when the user never picked one' {
+        $script:FakeBurner = Join-Path $script:Sandbox 'ImgBurn.exe'
+        Set-Content -LiteralPath $script:FakeBurner -Value 'x' -Encoding Ascii
+        Mock Get-IsoUserChoice { '' }
+        Mock Get-ShellCommand {
+            if ($key -eq 'Registry::HKEY_CLASSES_ROOT\.iso') { return 'Some.Burner.iso' }
+            if ($key -like 'Registry::HKEY_CLASSES_ROOT\Some.Burner.iso\shell\*command') {
+                return ('"' + $script:FakeBurner + '" "%1"')
+            }
+            if ($key -like '*Windows.IsoFile\shell\burn\command')  { return "$env:WINDIR\System32\isoburn.exe `"%1`"" }
+            if ($key -like '*Windows.IsoFile\shell\mount\command') { return 'x' }
+            return ''
+        }
+        $found = @(Get-IsoHandoffs)
+        @($found | Where-Object { $_.Exe -eq $script:FakeBurner }).Count | Should -Be 1
+    }
+
+    It 'mounts through the disc image API, not the verb a new default can take away' {
+        # Issue #98 again: with a burner owning .iso the file has no mount
+        # verb left, and pressing the mount entry died with "No application is
+        # associated with the specified file for this operation", worn as
+        # "Windows Explorer could not be started". Mount-DiskImage mounts
+        # whoever owns the extension, and the Explorer window on the mounted
+        # drive is the part of the verb worth keeping.
+        $script:MountIso = Join-Path $script:Sandbox 'mountme.iso'
+        Set-Content -LiteralPath $script:MountIso -Value 'x' -Encoding Ascii
+        Mock Mount-DiskImage { }
+        Mock Get-IsoMountPoint { 'E:' }
+        Mock Start-Process { }
+        Start-IsoHandoff @{ Name = 'Windows Explorer'; Exe = ''; Args = ''; Verb = 'mount' } $script:MountIso
+        Should -Invoke Mount-DiskImage -Times 1 -Exactly -ParameterFilter { $ImagePath -eq $script:MountIso }
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter {
+            $FilePath -eq 'explorer.exe' -and "$ArgumentList" -eq 'E:'
+        }
+    }
 }
 
 
