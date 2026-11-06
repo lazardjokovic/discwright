@@ -2832,6 +2832,29 @@ Describe 'A folder that is not a GOG download' -Tag 'Unit' {
         $gone.Count | Should -Be 0
     }
 
+    It 'stops calling the shelf not a download while reporting the downloads in it' {
+        # Issue #98: the folder question opened with "so it is not a GOG
+        # download" and then, two lines down in orange, reported the GOG
+        # downloads it had found in the subfolders. Both lines were true and
+        # together they read as the dialog arguing with itself. With games one
+        # level down, the first line now says that instead.
+        $head = Get-FolderQuestionHeadline 'C:\GOG Games' 2
+        $head | Should -Match 'one level down'
+        $head | Should -Not -Match 'not a GOG download'
+        $head | Should -Match '^GOG Games '
+    }
+
+    It 'still calls a plain folder what it is' {
+        $head = Get-FolderQuestionHeadline 'C:\stuff\loose-files\' 0
+        $head | Should -Be 'loose-files holds no setup_*.exe, so it is not a GOG download.'
+    }
+
+    It 'the dialog opens with that headline' {
+        # The function is only honest if the dialog actually uses it.
+        $src = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $src | Should -Match '\$l\.Text = \(Get-FolderQuestionHeadline \$folder \$inner\.Count\)'
+    }
+
     It 'refuses a folder with nothing in it' {
         $empty = Join-Path $script:Sandbox 'src\empty-folder'
         New-Item -ItemType Directory -Force -Path $empty | Out-Null
