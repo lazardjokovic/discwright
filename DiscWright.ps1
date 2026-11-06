@@ -2053,6 +2053,35 @@ function Get-DefaultArt {
     return $out
 }
 
+# "Use as-is" copies the picked file to AUTORUN\bg.png. It used to copy it
+# byte for byte whatever it was, and the picker offers JPG and BMP too. The
+# menu's engine paints only real PNG bytes under that name: anything else
+# painted nothing, the stage's #04080a showed through, and the whole menu read
+# as black with the buttons floating on it (#98, "sometimes completely black,
+# even bright wallpapers" - wallpapers are usually JPEGs, and PNGs were fine
+# all along, measured up to 8192x4608). So a PNG still travels byte for byte,
+# and anything else is re-encoded as PNG: same pixels, different wrapper.
+# Returns $true when it re-encoded.
+function Copy-BackgroundAsIs([string]$srcPath, [string]$outPng) {
+    $bytes = [IO.File]::ReadAllBytes($srcPath)
+    $isPng = ($bytes.Length -gt 8 -and $bytes[0] -eq 0x89 -and $bytes[1] -eq 0x50 -and
+              $bytes[2] -eq 0x4E -and $bytes[3] -eq 0x47)
+    if ($isPng) {
+        if (-not (Test-SamePath $srcPath $outPng)) { [IO.File]::WriteAllBytes($outPng, $bytes) }
+        return $false
+    }
+    # Loaded from memory rather than FromFile: FromFile keeps the file locked
+    # for as long as the image lives, and when a rebuild reads bg.png off the
+    # previous stage the source and the destination are the same file.
+    $ms = New-Object IO.MemoryStream(,$bytes)
+    try {
+        $img = [System.Drawing.Image]::FromStream($ms)
+        try { $img.Save($outPng, [System.Drawing.Imaging.ImageFormat]::Png) }
+        finally { $img.Dispose() }
+    } finally { $ms.Dispose() }
+    return $true
+}
+
 function New-Background([string]$imgPath,[string]$title,[string]$outPng,[string]$panelSide='Right',[bool]$divider=$false,[bool]$showTitle=$false) {
     $W=760;$H=480;$PW=290
     $left = ($panelSide -ieq 'Left')
@@ -5097,8 +5126,12 @@ function Invoke-Build([hashtable]$s, [scriptblock]$log, [scriptblock]$progress=$
     if ($s.Menu) {
         $bgOut = Join-Path $stage 'AUTORUN\bg.png'
         if ($s.BgAsIs) {
-            if (Test-SamePath $s.BgPath $bgOut) { & $log "Background kept as-is (already on disc)." }
-            else { Clear-ReadOnly $bgOut; Copy-Item $s.BgPath $bgOut -Force; Clear-ReadOnly $bgOut; & $log "Background copied as-is (no compositing)." }
+            Clear-ReadOnly $bgOut
+            if (Copy-BackgroundAsIs $s.BgPath $bgOut) {
+                & $log "Background re-encoded as PNG and copied as-is: the menu paints only real PNG bytes, and a JPEG travelling under the name bg.png rendered the whole menu black."
+            } elseif (Test-SamePath $s.BgPath $bgOut) { & $log "Background kept as-is (already on disc)." }
+            else { & $log "Background copied as-is (no compositing)." }
+            Clear-ReadOnly $bgOut
         } else {
             & $log "Composing menu background ($($s.PanelSide) panel)..."
             # An empty title box means "use the disc label" - the box is only for
@@ -6343,7 +6376,7 @@ function New-PreviewMenu {
     $bgTitle = $txtTitle.Text.Trim(); if (-not $bgTitle) { $bgTitle = $title }
 
     $bgOut = Join-Path $prev 'AUTORUN\bg.png'
-    if ($chkBgAsIs.Checked) { Copy-Item $bgSrc $bgOut -Force }
+    if ($chkBgAsIs.Checked) { [void](Copy-BackgroundAsIs $bgSrc $bgOut) }
     else { New-Background $bgSrc $bgTitle $bgOut ([string]$cmbSide.SelectedItem) ([bool]$chkDivider.Checked) ([bool]$chkTitle.Checked) }
 
     $musicName=''
