@@ -11,7 +11,7 @@ namespace DiscWright.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The ten axes in <c>tests/by-hand/a-disc.pict</c> multiply out to 276,480
+/// The ten axes in <c>tests/by-hand/a-disc.pict</c> multiply out to 138,240
 /// projects. What is worth covering is not all of them but every PAIR of
 /// values, because failures come of one value, or of two interacting, far more
 /// often than of six. PICT works out the shortest set of rows that covers
@@ -130,19 +130,190 @@ public class EveryKindOfDisc
         }
 
         // Constraints rule some pairs out on purpose, and those are the only
-        // ones allowed to be missing.
+        // ones allowed to be missing. WHICH ONES COMES OFF THE MODEL'S OWN IF
+        // LINES rather than a list kept here, because a list kept here was
+        // already wrong: it excused every missing pair holding overTwoGiB,
+        // all twenty eight of them, where the model rules out two.
+        List<ARuledOutPair> ruledOut = WhatTheModelRulesOut();
+
+        Assert.NotEmpty(ruledOut);
+
         List<string> notRuledOut =
         [
-            .. missed.Where(each =>
-                !each.Contains("overTwoGiB", StringComparison.Ordinal)
-                && !(each.Contains("Extras=music", StringComparison.Ordinal)
-                    && each.Contains("Menu=off", StringComparison.Ordinal)))
+            .. missed.Where(each => !ruledOut.Any(pair =>
+                each == $"{pair.Axis}={pair.Value} with {pair.OtherAxis}={pair.OtherValue}"
+                || each == $"{pair.OtherAxis}={pair.OtherValue} with {pair.Axis}={pair.Value}"))
         ];
 
         Assert.True(
             notRuledOut.Count == 0,
             "These pairs appear nowhere and no constraint rules them out: "
                 + string.Join("; ", notRuledOut.Take(12)));
+    }
+
+    [Fact]
+    public void No_row_asks_for_a_disc_the_model_rules_out()
+    {
+        // The other way round. A row holding a pair the model forbids is a
+        // table that was not generated from this model, and every such row
+        // tests a disc the program is right to refuse to make.
+        string[] lines = File.ReadAllLines(Repository.File("tests", "by-hand", "a-disc.txt"));
+        string[] axes = lines[0].Split('	');
+        List<ARuledOutPair> ruledOut = WhatTheModelRulesOut();
+
+        Assert.NotEmpty(ruledOut);
+
+        List<string> asked = [];
+
+        foreach (string[] row in lines.Skip(1)
+            .Where(each => each.Trim().Length > 0)
+            .Select(each => each.Split('	')))
+        {
+            foreach (ARuledOutPair pair in ruledOut)
+            {
+                int one = Array.IndexOf(axes, pair.Axis);
+                int two = Array.IndexOf(axes, pair.OtherAxis);
+
+                if (one >= 0 && two >= 0 && row[one] == pair.Value && row[two] == pair.OtherValue)
+                {
+                    asked.Add($"{pair.Axis}={pair.Value} with {pair.OtherAxis}={pair.OtherValue}");
+                }
+            }
+        }
+
+        Assert.True(
+            asked.Count == 0,
+            "The model rules these out and the rows ask for them anyway, so the table and the model "
+                + "have come apart: " + string.Join("; ", asked.Distinct()));
+    }
+
+    /// <summary>One pair of values the model says cannot happen together.</summary>
+    private sealed record ARuledOutPair(string Axis, string Value, string OtherAxis, string OtherValue);
+
+    /// <summary>
+    /// Every pair the model forbids, worked out from its own IF lines.
+    /// </summary>
+    /// <remarks>
+    /// <c>THEN [B] = "x"</c> forbids B being anything but x, so it rules out
+    /// one pair per other value B has. <c>THEN [B] &lt;&gt; "x"</c> rules out
+    /// exactly one. Reading them is the only way the exemptions stay the size
+    /// of the constraints: a constraint dropped from the model turns at once
+    /// into a pair this suite insists on covering.
+    /// </remarks>
+    private static List<ARuledOutPair> WhatTheModelRulesOut()
+    {
+        string[] lines = File.ReadAllLines(Repository.File("tests", "by-hand", "a-disc.pict"));
+        Dictionary<string, string[]> values = TheAxesOfTheModel();
+
+        List<ARuledOutPair> ruledOut = [];
+
+        foreach (string line in lines
+            .Select(each => each.Trim())
+            .Where(each => each.StartsWith("IF [", StringComparison.Ordinal)))
+        {
+            string then = line[(line.IndexOf("THEN", StringComparison.Ordinal) + 4)..];
+            string axis = Between(line, '[', ']');
+            string value = Between(line, '"', '"');
+            string otherAxis = Between(then, '[', ']');
+            string otherValue = Between(then, '"', '"');
+            bool mustBe = then[(then.IndexOf(']', StringComparison.Ordinal) + 1)..].TrimStart().StartsWith('=');
+
+            foreach (string other in mustBe
+                ? values[otherAxis].Where(each => each != otherValue)
+                : [otherValue])
+            {
+                ruledOut.Add(new ARuledOutPair(axis, value, otherAxis, other));
+            }
+        }
+
+        return ruledOut;
+    }
+
+    /// <summary>Each axis of the model and the values it offers.</summary>
+    private static Dictionary<string, string[]> TheAxesOfTheModel()
+    {
+        Dictionary<string, string[]> values = [];
+
+        foreach (string line in File.ReadAllLines(Repository.File("tests", "by-hand", "a-disc.pict")))
+        {
+            int colon = line.IndexOf(':', StringComparison.Ordinal);
+
+            if (colon <= 0 || line.StartsWith('#') || line[..colon].Any(char.IsWhiteSpace))
+            {
+                continue;
+            }
+
+            values[line[..colon]] =
+            [
+                .. line[(colon + 1)..]
+                    .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            ];
+        }
+
+        return values;
+    }
+
+    [Fact]
+    public void Says_how_big_the_model_is_and_says_it_right_everywhere()
+    {
+        // How many projects the ten axes stand for is written down in four
+        // places, and every one of them had it at twice the truth from the day
+        // it was written, because nothing read it. A number nothing reads is a
+        // number nothing keeps honest, so this reads all four.
+        Dictionary<string, string[]> axes = TheAxesOfTheModel();
+
+        Assert.Equal(10, axes.Count);
+
+        long all = 1;
+
+        foreach (string[] values in axes.Values)
+        {
+            all *= values.Length;
+        }
+
+        string written = all.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
+        // The model spells the multiplication out as well, in order.
+        Assert.Contains(
+            string.Join(" x ", axes.Values.Select(each => each.Length)),
+            File.ReadAllText(Repository.File("tests", "by-hand", "a-disc.pict")),
+            StringComparison.Ordinal);
+
+        string[][] saidIn =
+        [
+            ["tests", "by-hand", "a-disc.pict"],
+            ["tests", "by-hand", "Build-TheCombinations.ps1"],
+            ["tests", "by-hand", "README.md"],
+            ["tests", "DiscWright.Tests", "EveryKindOfDisc.cs"],
+        ];
+
+        foreach (string[] where in saidIn)
+        {
+            string[] words = File.ReadAllText(Repository.File(where))
+                .Replace("///", " ", StringComparison.Ordinal)
+                .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+
+            List<string> numbers =
+            [
+                .. Enumerable.Range(1, words.Length - 1)
+                    .Where(at => words[at].StartsWith("projects", StringComparison.Ordinal)
+                        && words[at - 1].Length > 0
+                        && char.IsDigit(words[at - 1][0]))
+                    .Select(at => words[at - 1])
+            ];
+
+            Assert.True(
+                numbers.Count > 0,
+                string.Join('/', where) + " used to say how big the model is and no longer does.");
+
+            Assert.All(numbers, each => Assert.Equal(written, each));
+        }
+    }
+
+    private static string Between(string line, char open, char close)
+    {
+        int from = line.IndexOf(open) + 1;
+        return line[from..line.IndexOf(close, from)];
     }
 
     // --------------------------------------------------------- building one

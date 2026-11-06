@@ -1,7 +1,7 @@
 # Every kind of disc this program can be asked to make.
 #
-# Ten axes. Multiplied out they are 5 x 3 x 6 x 6 x 4 x 4 x 2 x 2 x 2 x 2,
-# which is 276,480 projects, and nobody is testing that. What matters is that
+# Ten axes. Multiplied out they are 5 x 3 x 4 x 4 x 6 x 6 x 2 x 2 x 2 x 2,
+# which is 138,240 projects, and nobody is testing that. What matters is that
 # every PAIR of values appears somewhere, because failures come of one thing
 # or two things interacting far more often than of six.
 #

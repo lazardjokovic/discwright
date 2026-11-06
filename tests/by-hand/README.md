@@ -11,7 +11,7 @@
 | `Build-TheFixtures.ps1` | the folders a pass starts from |
 | `Invoke-Stryker.ps1` | the mutation run that says whether any of it is worth having |
 | `Build-TheCombinations.ps1` | turns `a-disc.pict` into the rows the suite runs, which is why PICT is not needed to run it |
-| `a-disc.pict` | the ten axes of a disc, which multiply out to 276,480 projects |
+| `a-disc.pict` | the ten axes of a disc, which multiply out to 138,240 projects |
 | `a-disc.txt` | the 40 rows PICT reduces those to, committed so the suite never needs PICT |
 
 It covers what the automated suite cannot reach: whether the window changes when it should, whether a control is live when it should be and dead when it should not, whether a sentence still reads right at none and at one as well as at many, and the whole of the menu on the disc, which is an HTA and therefore invisible to UI Automation.

@@ -3,7 +3,7 @@
     Turns a-disc.pict into the rows the suite runs.
 
 .DESCRIPTION
-    The ten axes in a-disc.pict multiply out to 276,480 projects. Nobody tests
+    The ten axes in a-disc.pict multiply out to 138,240 projects. Nobody tests
     that, and nobody needs to: failures come of one value or two values
     interacting far more often than of six, so what is worth covering is every
     PAIR of values, and PICT works out the shortest set of rows that does.
