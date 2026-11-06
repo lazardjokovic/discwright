@@ -10771,6 +10771,51 @@ WScript.Echo("joins=" + j.length + " parts=" + j[0].parts.length + " whole=" + j
         @(Get-ChildItem $dir -Filter '*.dwpart*').Count | Should -Be 0
     }
 
+    It 'says which pieces it could not clear away' -Skip:(-not $script:HaveCScript4) {
+        # The delete was wrapped in a catch that did nothing with it, so a
+        # piece that would not go left no sign at all. On a set, which is
+        # gigabytes by definition, the only symptom is the disk filling up
+        # and a restore folder holding every game twice.
+        #
+        # Read only is how FileSystemObject is made to refuse: DeleteFile
+        # takes a force flag and this code does not pass it, which is right,
+        # because a piece somebody has marked is a piece to ask about.
+        $dir = New-RestoreFolder
+        $stuck = Join-Path $dir 'game.bin.dwpart02'
+        Set-ItemProperty -LiteralPath $stuck -Name IsReadOnly -Value $true
+        try {
+            $out = Invoke-JoinJs $dir @'
+var N=-1; setJoinAll(DIR, function(d){ N=d; });
+WScript.Echo("joined=" + N);
+WScript.Echo("said=" + SAID.join(" || "));
+'@
+        } finally {
+            Set-ItemProperty -LiteralPath $stuck -Name IsReadOnly -Value $false
+        }
+
+        # The join itself worked: this is about what is left behind, not about
+        # a file that failed to come back.
+        $out | Should -Match 'joined=1'
+        (Get-Item (Join-Path $dir 'game.bin')).Length | Should -Be 300000
+        Test-Path $stuck | Should -BeTrue
+
+        $out | Should -Match 'would not delete'
+        $out | Should -Match ([regex]::Escape('game.bin.dwpart02'))
+        $out | Should -Match 'whole and checked'
+    }
+
+    It 'says nothing about leftovers when there are none' -Skip:(-not $script:HaveCScript4) {
+        # The other half, because a warning that is always up is a warning
+        # nobody reads.
+        $dir = New-RestoreFolder
+        $out = Invoke-JoinJs $dir @'
+setJoinAll(DIR, function(d){});
+WScript.Echo("said=" + SAID.join(" || "));
+'@
+        $out | Should -Not -Match 'would not delete'
+        @(Get-ChildItem $dir -Filter '*.dwpart*').Count | Should -Be 0
+    }
+
     It 'leaves every piece alone while one of them is still missing' -Skip:(-not $script:HaveCScript4) {
         # The important half of the failure. Nothing is deleted until the
         # finished file is the right size, so a set that is still arriving keeps
