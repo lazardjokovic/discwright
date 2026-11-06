@@ -280,6 +280,65 @@ Describe 'The background' -Tag 'Build' -Skip:(-not $script:CanBuild) {
         $bg = Join-Path $d.Stage 'AUTORUN\bg.png'
         (Get-Item $bg).Length | Should -Be (Get-Item $script:BgReady).Length
     }
+
+    It 'turns a <Kind> picked as-is into real PNG bytes on the disc' -ForEach @(
+        @{ Kind = 'JPEG'; Format = 'Jpeg' }
+        @{ Kind = 'BMP';  Format = 'Bmp' }
+    ) {
+        # Issue #98. "Use as is" copied the picked file to bg.png byte for
+        # byte, and the menu's engine paints only real PNG bytes under that
+        # name: a JPEG wallpaper arrived as JPEG bytes called bg.png and the
+        # whole menu rendered black, buttons floating on nothing. Measured on
+        # a real screen: every PNG up to 8192x4608 renders, every JPEG and
+        # BMP under that name goes black. So the format is judged by the
+        # signature and rewrapped, never by the file name.
+        $pic = Join-Path $script:Box ('wallpaper-' + $Kind + '.img')
+        $b = New-Object System.Drawing.Bitmap(1920, 1080)
+        $g = [System.Drawing.Graphics]::FromImage($b)
+        $g.Clear([System.Drawing.Color]::FromArgb(230, 60, 40)); $g.Dispose()
+        $b.Save($pic, [System.Drawing.Imaging.ImageFormat]::$Format); $b.Dispose()
+
+        $d = New-TestDisc @{ BgPath = $pic; BgAsIs = $true }
+        $bg = Join-Path $d.Stage 'AUTORUN\bg.png'
+        $bytes = [IO.File]::ReadAllBytes($bg)
+        # The PNG signature is what the menu's engine judges by.
+        $bytes[0] | Should -Be 0x89
+        $bytes[1] | Should -Be 0x50
+        $bytes[2] | Should -Be 0x4E
+        $bytes[3] | Should -Be 0x47
+        # Same picture, different wrapper: size and colour survive.
+        $img = [System.Drawing.Image]::FromFile($bg)
+        try {
+            $img.Width  | Should -Be 1920
+            $img.Height | Should -Be 1080
+            $px = ([System.Drawing.Bitmap]$img).GetPixel(400, 400)
+            [int]$px.G | Should -BeIn (55..65)
+        } finally { $img.Dispose() }
+    }
+
+    It 'heals a disc the old build left JPEG bytes on' {
+        # Rebuilding over a previous output reads bg.png off that stage, so
+        # the source and the destination are the same file - and a disc built
+        # before this fix holds JPEG bytes there. The rebuild must rewrap it
+        # in place rather than skip it for being already in place.
+        $d = New-TestDisc @{ BgPath = $script:BgReady; BgAsIs = $true }
+        $bg = Join-Path $d.Stage 'AUTORUN\bg.png'
+        $b = New-Object System.Drawing.Bitmap(760, 480)
+        $g = [System.Drawing.Graphics]::FromImage($b)
+        $g.Clear([System.Drawing.Color]::FromArgb(230, 60, 40)); $g.Dispose()
+        $b.Save($bg, [System.Drawing.Imaging.ImageFormat]::Jpeg); $b.Dispose()
+
+        $null = New-TestDisc @{ BgPath = $bg; BgAsIs = $true; OutDir = $d.Out }
+        ([IO.File]::ReadAllBytes($bg))[0] | Should -Be 0x89
+    }
+
+    It 'the preview walks through the same doorway as the build' {
+        # The preview has its own copy of the as-is branch. A fix that only
+        # reached the build would leave the preview showing the black menu it
+        # was pressed to rule out.
+        $app = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $app | Should -Match '\$chkBgAsIs\.Checked\) \{ \[void\]\(Copy-BackgroundAsIs \$bgSrc \$bgOut\) \}'
+    }
 }
 
 Describe 'Rebuilding over a disc that is already there' -Tag 'Build' -Skip:(-not $script:CanBuild) {
