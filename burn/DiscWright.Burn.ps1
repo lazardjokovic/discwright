@@ -1422,6 +1422,25 @@ function Get-ShellCommand([string]$key) {
     try { return (Get-ItemProperty -LiteralPath $key -EA Stop).'(default)' } catch { return '' }
 }
 
+function Get-IsoUserChoice {
+    # The default the user picked themselves, which outranks every machine-wide
+    # registration. Explorer guards this key with a hash of its own; which
+    # ProgId it names is all that matters here.
+    try {
+        $p = Get-ItemProperty -LiteralPath 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.iso\UserChoice' -EA Stop
+        return [string]$p.ProgId
+    } catch { return '' }
+}
+
+function Get-ClassCommand([string]$subkey) {
+    # The merged class view: HKCU\Software\Classes laid over HKLM's, which is
+    # the view the shell itself resolves against. Reading HKLM alone misses
+    # every program registered per user, and per user is exactly how "Open
+    # with -> always" records a choice: ImgBurn, made the .iso default that
+    # way, never appeared in this list (#98).
+    return Get-ShellCommand ('Registry::HKEY_CLASSES_ROOT\' + $subkey)
+}
+
 function Split-ShellCommand([string]$cmd) {
     # A shell command is an exe and its arguments, with %1 where the file goes.
     # Quoted path first, bare path otherwise.
@@ -1440,7 +1459,7 @@ function Get-IsoHandoffs {
     $out = @()
 
     # Windows' own, which is on every machine since 7.
-    $burn = Split-ShellCommand (Get-ShellCommand 'HKLM:\SOFTWARE\Classes\Windows.IsoFile\shell\burn\command')
+    $burn = Split-ShellCommand (Get-ClassCommand 'Windows.IsoFile\shell\burn\command')
     if ($burn -and (Test-Path -LiteralPath $burn.Exe)) {
         $out += @{ Name = (Get-ExeFriendlyName $burn.Exe)
                    What = 'writes it to a blank disc'
@@ -1448,18 +1467,13 @@ function Get-IsoHandoffs {
     }
 
     # Whatever the machine has registered for .iso, when it is something else.
-    $progid = ''
-    foreach ($k in @('HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.iso\UserChoice',
-                     'HKLM:\SOFTWARE\Classes\.iso')) {
-        try {
-            $p = Get-ItemProperty -LiteralPath $k -EA Stop
-            $v = if ($p.PSObject.Properties.Name -contains 'ProgId') { $p.ProgId } else { $p.'(default)' }
-            if ($v) { $progid = $v; break }
-        } catch { }
-    }
+    # The user's own pick is asked first, because it is the answer that
+    # defaulting .iso to a burner is supposed to change.
+    $progid = Get-IsoUserChoice
+    if (-not $progid) { $progid = [string](Get-ClassCommand '.iso') }
     if ($progid -and $progid -ne 'Windows.IsoFile') {
-        $open = Split-ShellCommand (Get-ShellCommand "HKLM:\SOFTWARE\Classes\$progid\shell\Open\command")
-        if (-not $open) { $open = Split-ShellCommand (Get-ShellCommand "HKLM:\SOFTWARE\Classes\$progid\shell\open\command") }
+        $open = Split-ShellCommand (Get-ClassCommand "$progid\shell\Open\command")
+        if (-not $open) { $open = Split-ShellCommand (Get-ClassCommand "$progid\shell\open\command") }
         if ($open -and (Test-Path -LiteralPath $open.Exe) -and
             ($out | Where-Object { $_.Exe -ieq $open.Exe }).Count -eq 0) {
             $out += @{ Name = (Get-ExeFriendlyName $open.Exe)
@@ -1470,7 +1484,7 @@ function Get-IsoHandoffs {
 
     # Not burning, and worth having anyway: look inside the disc without
     # spending one. Explorer's own, so it is listed last and labelled honestly.
-    if (Get-ShellCommand 'HKLM:\SOFTWARE\Classes\Windows.IsoFile\shell\mount\command') {
+    if (Get-ClassCommand 'Windows.IsoFile\shell\mount\command') {
         $out += @{ Name = 'Windows Explorer'
                    What = 'mounts it as a drive, without burning anything'
                    Exe = ''; Args = ''; Verb = 'mount' }
@@ -1508,12 +1522,33 @@ function Get-SetBurnChoices {
     return $out
 }
 
+function Get-IsoMountPoint([string]$isoPath) {
+    # Which drive the mounted image landed on, as "E:". Its own function so
+    # the handoff can be tested without really mounting anything: a mocked
+    # Get-Volume refuses pipeline input that is not the real volume type.
+    $vol = Get-DiskImage -ImagePath $isoPath | Get-Volume | Select-Object -First 1
+    if ($vol -and $vol.DriveLetter) { return "$($vol.DriveLetter):" }
+    return ''
+}
+
 function Start-IsoHandoff([hashtable]$handoff, [string]$isoPath) {
     <#  .SYNOPSIS
         Hand the ISO over and return. The other program takes it from there:
         this does not drive somebody else's command line, because every burner
         spells its switches differently and the failure is a wasted disc.  #>
     if (-not (Test-Path -LiteralPath $isoPath)) { throw "There is no ISO at $isoPath" }
+    if ($handoff.Verb -eq 'mount') {
+        # Not the shell verb. The verb resolves through whatever program owns
+        # .iso today, and the moment a burner is made the default the file has
+        # no mount verb left, so the press died with "No application is
+        # associated with the specified file for this operation" (#98). The
+        # disc image API mounts no matter who owns the extension, and opening
+        # the drive afterwards is the part of the verb worth keeping.
+        $null = Mount-DiskImage -ImagePath $isoPath -ErrorAction Stop
+        $at = Get-IsoMountPoint $isoPath
+        if ($at) { Start-Process explorer.exe -ArgumentList $at }
+        return
+    }
     if ($handoff.Verb) {
         Start-Process -FilePath $isoPath -Verb $handoff.Verb
         return
