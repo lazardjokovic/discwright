@@ -2845,6 +2845,73 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Reconsider();
     }
 
+    // --------------------------------------------- renaming a game in place
+    //
+    // v1 lets a double click rename any row, and discwright#98 leaned on
+    // that when the duplicate name notice was asked for: a notice is only
+    // half an answer while the way to act on it is to take the game off and
+    // add it again. Only a game's own row renames, because a file keeps the
+    // name it has on disk whatever the list says, and the registered
+    // MatchName is never touched, because what GOG wrote in the registry
+    // does not change when somebody retitles a menu button.
+
+    /// <summary>
+    /// Opens a game's row for renaming, when there is nothing running and
+    /// the row really is a game of this disc.
+    /// </summary>
+    public void BeginRenaming(AThingOnTheDisc? row)
+    {
+        if (row is null || !NothingIsRunning || _tree.IndexOf(row) < 0)
+        {
+            return;
+        }
+
+        row.BeginRenaming();
+    }
+
+    /// <summary>Shuts the row with its old name kept.</summary>
+    public void CancelRenaming(AThingOnTheDisc row)
+    {
+        if (_tree.IndexOf(row) < 0)
+        {
+            return;
+        }
+
+        row.StopRenaming();
+    }
+
+    /// <summary>
+    /// Takes what was typed as the game's name, everywhere at once: the row,
+    /// the list the disc is built from, and the list the ticks rebuild it
+    /// from, so the next tick cannot quietly put the old name back.
+    /// </summary>
+    /// <remarks>
+    /// Nothing typed, or only spaces, keeps the old name rather than making
+    /// a nameless menu button. The disc's label is left alone: it was named
+    /// once, when the first game arrived, and renaming a game afterwards is
+    /// a decision about the game.
+    /// </remarks>
+    public void FinishRenaming(AThingOnTheDisc row, string typed)
+    {
+        row.StopRenaming();
+
+        int at = _tree.IndexOf(row);
+        string name = typed?.Trim() ?? string.Empty;
+
+        if (at < 0 || name.Length == 0 || name == _asFound[at].Name)
+        {
+            return;
+        }
+
+        _asFound[at] = _asFound[at] with { Name = name };
+        _games[at] = _games[at] with { Name = name };
+        row.AnswerTo(name);
+
+        // Which is where the duplicate name notice, the plan and everything
+        // else that reads a game's name catches up.
+        Reconsider();
+    }
+
     /// <summary>
     /// Things that go on the disc without belonging to any game.
     /// </summary>

@@ -367,7 +367,7 @@ public class TheWindowChecksItself
 
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(39);
+        int which = dice.Next(40);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -491,6 +491,12 @@ public class TheWindowChecksItself
             // down like everything else.
             38 => new("open a project that is short two things",
                 desk => desk.OpenAProjectShortOfSomething()),
+
+            // Renaming a game in place, the duplicate name notice's
+            // companion. It changes the one thing every other answer reads,
+            // a game's name, so everything that follows from it has to be
+            // announced like everything else.
+            39 => new($"rename game {row} in place", desk => desk.RenameOne(row)),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -1082,6 +1088,23 @@ public class TheWindowChecksItself
                 AddOns: []);
 
             Screen.OpenThis(new Reopened(project, Media.Bd25, @"C:\out", [], []));
+        }
+
+        /// <summary>
+        /// Renames whichever game the dice landed on, through the same two
+        /// steps the window takes.
+        /// </summary>
+        internal void RenameOne(int which)
+        {
+            if (Screen.WhatGoesOnIt.Count == 0)
+            {
+                return;
+            }
+
+            AThingOnTheDisc row = Screen.WhatGoesOnIt[which % Screen.WhatGoesOnIt.Count];
+
+            Screen.BeginRenaming(row);
+            Screen.FinishRenaming(row, $"Renamed {which}");
         }
 
         /// <summary>

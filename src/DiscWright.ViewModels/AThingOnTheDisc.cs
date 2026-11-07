@@ -58,7 +58,55 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>What to show for it.</summary>
-    public string Name { get; }
+    public string Name { get; private set; }
+
+    /// <summary>
+    /// Whether this row is being renamed right now, which only a game's own
+    /// row ever is. The window swaps the name for a box while it is so.
+    /// </summary>
+    public bool IsBeingRenamed { get; private set; }
+
+    /// <summary>
+    /// Opens the row for renaming. Only a game's own row: a file keeps the
+    /// name it has on disk, because the disc will carry that name whatever
+    /// the list says.
+    /// </summary>
+    internal void BeginRenaming()
+    {
+        if (!IsAWholeGame || IsBeingRenamed)
+        {
+            return;
+        }
+
+        IsBeingRenamed = true;
+        Announce(nameof(IsBeingRenamed));
+    }
+
+    /// <summary>Shuts the row again, whatever happened in it.</summary>
+    internal void StopRenaming()
+    {
+        if (!IsBeingRenamed)
+        {
+            return;
+        }
+
+        IsBeingRenamed = false;
+        Announce(nameof(IsBeingRenamed));
+    }
+
+    /// <summary>
+    /// The new name, said so the row on the window follows. The screen is
+    /// the one that calls this, after it has renamed the game the row
+    /// stands for, so the two cannot disagree.
+    /// </summary>
+    internal void AnswerTo(string name)
+    {
+        Name = name;
+        Announce(nameof(Name));
+    }
+
+    private void Announce(string what) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(what));
 
     /// <summary>
     /// What kind of thing it is, or nothing for an ordinary file.

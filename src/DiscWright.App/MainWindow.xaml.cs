@@ -57,6 +57,66 @@ public partial class MainWindow : Window
 
     private void ChooseTheNextLook(object sender, RoutedEventArgs e) => _look.Next();
 
+    // --------------------------------------------- renaming a game in place
+    //
+    // The window's share is only the gestures: a double click opens the row
+    // the screen allows, Enter and Escape close it, and wandering off
+    // commits like Enter does. Who may rename and what a name is are the
+    // screen's decisions.
+
+    private void RenameWhatIsPicked(object sender, System.Windows.Input.MouseButtonEventArgs e) =>
+        _screen.BeginRenaming(_screen.WhatIsSelected);
+
+    /// <summary>
+    /// The box waking up: it takes the name as it stands, so a rename
+    /// abandoned last time leaves nothing stale, and the whole name is
+    /// selected because the commonest rename replaces all of it.
+    /// </summary>
+    private void AwakenTheRenameBox(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.TextBox box
+            && box.IsVisible
+            && box.DataContext is AThingOnTheDisc row)
+        {
+            // The width the name it stands in for would have had. Declared
+            // in the markup it would be summed by the row width guard beside
+            // a column that is never shown at the same time.
+            box.Width = row.HowWideTheNameIs;
+            box.Text = row.Name;
+            box.Focus();
+            box.SelectAll();
+        }
+    }
+
+    private void TheRenameKeys(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (sender is not System.Windows.Controls.TextBox box || box.DataContext is not AThingOnTheDisc row)
+        {
+            return;
+        }
+
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            _screen.FinishRenaming(row, box.Text);
+            e.Handled = true;
+        }
+        else if (e.Key == System.Windows.Input.Key.Escape)
+        {
+            _screen.CancelRenaming(row);
+            e.Handled = true;
+        }
+    }
+
+    private void TheRenameBoxLostItsFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.TextBox box
+            && box.DataContext is AThingOnTheDisc row
+            && row.IsBeingRenamed)
+        {
+            _screen.FinishRenaming(row, box.Text);
+        }
+    }
+
     /// <summary>
     /// Opens a disc that was built before, from the file it carries.
     /// </summary>

@@ -1410,6 +1410,35 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void The_rename_box_stands_exactly_where_the_name_was()
+    {
+        // In place renaming, v1's double click brought across. The box and
+        // the name swap on the same row state, so only ever one of them is
+        // on the row, and the double click that opens it is on the tree.
+        XElement box = Assert.Single(
+            Window().Descendants(Xaml + "TextBox"), each => IdOf(each) == "RenameBox");
+
+        Assert.Equal(
+            "{Binding IsBeingRenamed, Converter={StaticResource WhenSo}}",
+            (string?)box.Attribute("Visibility"));
+        Assert.Equal("AwakenTheRenameBox", (string?)box.Attribute("IsVisibleChanged"));
+        Assert.Equal("TheRenameKeys", (string?)box.Attribute("KeyDown"));
+        Assert.Equal("TheRenameBoxLostItsFocus", (string?)box.Attribute("LostFocus"));
+
+        XElement name = Assert.Single(
+            Window().Descendants(Xaml + "TextBlock"),
+            each => (string?)each.Attribute("Text") == "{Binding Name}"
+                && each.Attribute("Visibility") is not null);
+
+        Assert.Equal(
+            "{Binding IsBeingRenamed, Converter={StaticResource WhenNot}}",
+            (string?)name.Attribute("Visibility"));
+
+        XElement tree = Assert.Single(Window().Descendants(Xaml + "TreeView"));
+        Assert.Equal("RenameWhatIsPicked", (string?)tree.Attribute("MouseDoubleClick"));
+    }
+
+    [Fact]
     public void The_dark_look_answers_for_every_brush_the_light_one_names()
     {
         // The dark look is brushes and nothing else, merged over Look.xaml

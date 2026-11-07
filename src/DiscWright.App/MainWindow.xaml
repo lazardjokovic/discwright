@@ -411,6 +411,7 @@
                              will be written. -->
                         <TreeView x:Name="Games"
                                   SelectedItemChanged="WhatIsPickedChanged"
+                                  MouseDoubleClick="RenameWhatIsPicked"
                                   ItemsSource="{Binding WhatGoesOnIt}"
                                   BorderThickness="0"
                                   Background="Transparent"
@@ -488,8 +489,30 @@
                                                    Text="{Binding Name}"
                                                    TextWrapping="NoWrap"
                                                    TextTrimming="CharacterEllipsis"
+                                                   Visibility="{Binding IsBeingRenamed, Converter={StaticResource WhenNot}}"
                                                    AutomationProperties.HelpText="{Binding InFull}"
                                                    ToolTip="{Binding InFull}" />
+
+                                        <!-- The name again, open for typing,
+                                             only while the row is being
+                                             renamed. Its text is set as it
+                                             appears and read as it closes,
+                                             in the code behind, so a rename
+                                             abandoned with Escape leaves no
+                                             stale text for next time. Its
+                                             width too: it stands in for the
+                                             name and only ever instead of
+                                             it, and the row width guard sums
+                                             every width declared here, so a
+                                             second declaration would count a
+                                             column that is never shown
+                                             twice. -->
+                                        <TextBox VerticalAlignment="Center"
+                                                 Visibility="{Binding IsBeingRenamed, Converter={StaticResource WhenSo}}"
+                                                 IsVisibleChanged="AwakenTheRenameBox"
+                                                 KeyDown="TheRenameKeys"
+                                                 LostFocus="TheRenameBoxLostItsFocus"
+                                                 AutomationProperties.AutomationId="RenameBox" />
 
                                         <!-- The installer and a patch are
                                              worth naming. An ordinary file is
