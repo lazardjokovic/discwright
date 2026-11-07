@@ -18,7 +18,7 @@
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="{StaticResource Page}"
+        Background="{DynamicResource Page}"
         FontFamily="{StaticResource Face}"
         AutomationProperties.AutomationId="WorthAsking">
 

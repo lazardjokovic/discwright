@@ -17,7 +17,7 @@
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
         Icon="DiscWright.ico"
-        Background="{StaticResource Page}"
+        Background="{DynamicResource Page}"
         FontFamily="{StaticResource Face}"
         AutomationProperties.AutomationId="WhatElseGoesOnIt">
 
@@ -53,8 +53,8 @@
 
                     <Border Grid.Column="0" Width="48" Height="48"
                             HorizontalAlignment="Left"
-                            Background="{StaticResource Panel}"
-                            BorderBrush="{StaticResource Edge}"
+                            Background="{DynamicResource Panel}"
+                            BorderBrush="{DynamicResource Edge}"
                             BorderThickness="1"
                             CornerRadius="4">
                         <Image Source="{Binding DiscIcon, Converter={StaticResource APicture}}"
@@ -100,8 +100,8 @@
 
                     <Border Grid.Column="0" Width="190" Height="120"
                             HorizontalAlignment="Left"
-                            Background="{StaticResource Panel}"
-                            BorderBrush="{StaticResource Edge}"
+                            Background="{DynamicResource Panel}"
+                            BorderBrush="{DynamicResource Edge}"
                             BorderThickness="1"
                             CornerRadius="4">
                         <Image Source="{Binding Background, Converter={StaticResource APicture}}"
@@ -248,8 +248,8 @@
 
                     <Border Grid.Column="0" Width="52" Height="72"
                             HorizontalAlignment="Left"
-                            Background="{StaticResource Panel}"
-                            BorderBrush="{StaticResource Edge}"
+                            Background="{DynamicResource Panel}"
+                            BorderBrush="{DynamicResource Edge}"
                             BorderThickness="1"
                             CornerRadius="4">
                         <Image Source="{Binding Cover, Converter={StaticResource APicture}}"
@@ -290,8 +290,8 @@
 
                     <Border Grid.Column="0" Width="72" Height="72"
                             HorizontalAlignment="Left"
-                            Background="{StaticResource Panel}"
-                            BorderBrush="{StaticResource Edge}"
+                            Background="{DynamicResource Panel}"
+                            BorderBrush="{DynamicResource Edge}"
                             BorderThickness="1"
                             CornerRadius="36">
                         <Image Source="{Binding DiscFace, Converter={StaticResource APicture}}"
@@ -323,7 +323,7 @@
                     </StackPanel>
                 </Grid>
 
-                <TextBlock Foreground="{StaticResource WorryInk}"
+                <TextBlock Foreground="{DynamicResource WorryInk}"
                            FontSize="12"
                            Margin="0,14,0,0"
                            TextWrapping="Wrap"

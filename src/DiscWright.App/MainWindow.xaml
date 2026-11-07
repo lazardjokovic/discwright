@@ -25,7 +25,7 @@
         Height="740" Width="920"
         ResizeMode="CanMinimize"
         WindowStartupLocation="CenterScreen"
-        Background="{StaticResource Page}"
+        Background="{DynamicResource Page}"
         FontFamily="{StaticResource Face}"
         AutomationProperties.AutomationId="TheWindow">
 
@@ -43,7 +43,7 @@
         <Border Grid.Row="0"
                 Margin="0,0,0,12"
                 Padding="0,0,0,10"
-                BorderBrush="{StaticResource Edge}"
+                BorderBrush="{DynamicResource Edge}"
                 BorderThickness="0,0,0,1">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -199,7 +199,7 @@
                 <TextBlock DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
                            TextWrapping="Wrap"
-                           Foreground="{StaticResource WorryInk}"
+                           Foreground="{DynamicResource WorryInk}"
                            Text="{Binding WhatTheDownloadsSay}"
                            Visibility="{Binding WhatTheDownloadsSay, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhatTheDownloadsSay" />
@@ -207,7 +207,7 @@
                 <TextBlock DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
                            TextWrapping="Wrap"
-                           Foreground="{StaticResource WorryInk}"
+                           Foreground="{DynamicResource WorryInk}"
                            Text="{Binding APatchWithNothingToPatch}"
                            Visibility="{Binding APatchWithNothingToPatch, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="APatchWithNothingToPatch" />
@@ -215,7 +215,7 @@
                 <TextBlock DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
                            TextWrapping="Wrap"
-                           Foreground="{StaticResource WorryInk}"
+                           Foreground="{DynamicResource WorryInk}"
                            Text="{Binding WhyThatMatters}"
                            Visibility="{Binding WhyThatMatters, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhyThatMatters" />
@@ -271,8 +271,8 @@
                             AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
                 </StackPanel>
 
-                <Border Background="{StaticResource Panel}"
-                        BorderBrush="{StaticResource Edge}"
+                <Border Background="{DynamicResource Panel}"
+                        BorderBrush="{DynamicResource Edge}"
                         BorderThickness="1"
                         CornerRadius="4">
                     <Grid>
@@ -436,7 +436,7 @@
                              counted rows somebody had just turned off would
                              be worse than no total. -->
                         <Border Grid.Row="1"
-                                BorderBrush="{StaticResource Edge}"
+                                BorderBrush="{DynamicResource Edge}"
                                 BorderThickness="0,1,0,0"
                                 Padding="10,6"
                                 Visibility="{Binding Games.Count, Converter={StaticResource WhenSome}}">
@@ -487,7 +487,11 @@
                          730144440 }". A reader would say all of that aloud.
                          The same slip as the games list, in a second place. -->
                     <ComboBox.ItemContainerStyle>
-                        <Style TargetType="ComboBoxItem">
+                        <!-- BasedOn, because naming a container style of our
+                             own would otherwise take the themed one's place
+                             entirely, and these rows would highlight in
+                             system colours again. -->
+                        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
                             <Setter Property="AutomationProperties.Name" Value="{Binding InWords}" />
                         </Style>
                     </ComboBox.ItemContainerStyle>
@@ -508,7 +512,7 @@
                         <Style TargetType="TextBlock" BasedOn="{StaticResource Aside}">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding TheDiscIsADifferentSize}" Value="True">
-                                    <Setter Property="Foreground" Value="{StaticResource WorryInk}" />
+                                    <Setter Property="Foreground" Value="{DynamicResource WorryInk}" />
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -580,7 +584,10 @@
                          Recorder prints as "D: ASUS DRW-24D5MT, holding
                          CD-RW", which is exactly what should be read out. -->
                         <ComboBox.ItemContainerStyle>
-                            <Style TargetType="ComboBoxItem">
+                            <!-- BasedOn for the same reason as the size
+                                 picker above: a bare container style would
+                                 shadow the themed one. -->
+                            <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
                                 <Setter Property="AutomationProperties.Name" Value="{Binding}" />
                             </Style>
                         </ComboBox.ItemContainerStyle>
@@ -646,7 +653,7 @@
                            AutomationProperties.AutomationId="WhatElseIsChosen" />
 
                 <Expander Margin="0,16,0,0"
-                          Foreground="{StaticResource Quiet}"
+                          Foreground="{DynamicResource Quiet}"
                           FontSize="12"
                           Header="More options"
                           AutomationProperties.AutomationId="MoreOptions">
@@ -693,8 +700,8 @@
         <Border Grid.Row="2"
                 Margin="0,18,0,0"
                 Padding="18,14"
-                Background="{StaticResource Panel}"
-                BorderBrush="{StaticResource Edge}"
+                Background="{DynamicResource Panel}"
+                BorderBrush="{DynamicResource Edge}"
                 BorderThickness="1"
                 CornerRadius="4">
             <Grid>
@@ -768,7 +775,7 @@
                             <Style TargetType="TextBlock" BasedOn="{StaticResource Aside}">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding TheBurnWentBadly}" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource WorryInk}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource WorryInk}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -788,7 +795,7 @@
                          the whole reason the figures exist, so the figures go
                          on the window and the sentence goes where hovering
                          finds it. -->
-                    <TextBlock Foreground="{StaticResource RefusalInk}"
+                    <TextBlock Foreground="{DynamicResource RefusalInk}"
                                Margin="0,6,0,0"
                                TextWrapping="Wrap"
                                Text="{Binding WhyNot.Headline}"
@@ -834,7 +841,7 @@
                                     <TextBlock Margin="6,0,0,0"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="{StaticResource Ink}"
+                                               Foreground="{DynamicResource Ink}"
                                                Text="{Binding Value}"
                                                AutomationProperties.Name="{Binding Value}" />
                                 </StackPanel>
@@ -842,7 +849,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <TextBlock Foreground="{StaticResource WorryInk}"
+                    <TextBlock Foreground="{DynamicResource WorryInk}"
                                FontSize="12"
                                Margin="0,6,0,0"
                                TextWrapping="Wrap"
@@ -873,7 +880,7 @@
                                     <TextBlock Margin="6,0,0,0"
                                                FontSize="12"
                                                FontWeight="SemiBold"
-                                               Foreground="{StaticResource Ink}"
+                                               Foreground="{DynamicResource Ink}"
                                                Text="{Binding Value}"
                                                AutomationProperties.Name="{Binding Value}" />
                                 </StackPanel>

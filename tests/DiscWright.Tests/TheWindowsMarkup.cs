@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Xml.Linq;
 using DiscWright.ViewModels;
 
@@ -728,7 +728,7 @@ public class TheWindowsMarkup
         // Amber. An unfinished download is not a refusal, because the disc
         // builds, and it is not ordinary ink either, because the disc is
         // spent by the time anybody finds out.
-        Assert.Equal("{StaticResource WorryInk}", (string?)said.Attribute("Foreground"));
+        Assert.Equal("{DynamicResource WorryInk}", (string?)said.Attribute("Foreground"));
 
         Assert.Equal(
             "{Binding WhatTheDownloadsSay, Converter={StaticResource WhenAnything}}",
@@ -801,7 +801,7 @@ public class TheWindowsMarkup
 
         XElement ink = worry.Elements(Xaml + "Setter").Single();
         Assert.Equal("Foreground", (string?)ink.Attribute("Property"));
-        Assert.Equal("{StaticResource WorryInk}", (string?)ink.Attribute("Value"));
+        Assert.Equal("{DynamicResource WorryInk}", (string?)ink.Attribute("Value"));
     }
 
     [Fact]
@@ -842,7 +842,7 @@ public class TheWindowsMarkup
             .Single(each => (string?)each.Attribute("Grid.Row") == "0");
 
         Assert.Equal("0,0,0,1", (string?)band.Attribute("BorderThickness"));
-        Assert.Equal("{StaticResource Edge}", (string?)band.Attribute("BorderBrush"));
+        Assert.Equal("{DynamicResource Edge}", (string?)band.Attribute("BorderBrush"));
     }
 
     [Theory]
@@ -1245,7 +1245,7 @@ public class TheWindowsMarkup
         // deliberately did, and a window where everything is amber is a
         // window where amber means nothing, including on the tray line.
         Assert.Null(count.Attribute("Foreground"));
-        Assert.Equal("{StaticResource WorryInk}", (string?)matters.Attribute("Foreground"));
+        Assert.Equal("{DynamicResource WorryInk}", (string?)matters.Attribute("Foreground"));
     }
 
     [Fact]
@@ -1304,6 +1304,122 @@ public class TheWindowsMarkup
 
     private static XElement Markup(string window) =>
         XDocument.Load(Repository.File("src", "DiscWright.App", window)).Root!;
+
+    /// <summary>The palette brushes a dictionary declares, key to hex.</summary>
+    private static Dictionary<string, string> BrushesOf(string look) =>
+        XDocument.Load(Repository.File("src", "DiscWright.App", look)).Root!
+            .Elements(Xaml + "SolidColorBrush")
+            .Where(brush => brush.Attribute(Named + "Key") is not null
+                && ((string?)brush.Attribute("Color"))?.Length == 7)
+            .ToDictionary(
+                brush => (string)brush.Attribute(Named + "Key")!,
+                brush => (string)brush.Attribute("Color")!);
+
+    /// <summary>
+    /// The palette as the window would resolve it wearing this look: the
+    /// light brushes with the look's own laid over them. For Look.xaml that
+    /// is the light palette itself.
+    /// </summary>
+    private static Dictionary<string, string> PaletteWearing(string look)
+    {
+        Dictionary<string, string> palette = BrushesOf("Look.xaml");
+
+        foreach ((string key, string hex) in BrushesOf(look))
+        {
+            palette[key] = hex;
+        }
+
+        return palette;
+    }
+
+    [Fact]
+    public void The_dark_look_answers_for_every_brush_the_light_one_names()
+    {
+        // The dark look is brushes and nothing else, merged over Look.xaml
+        // when Windows says apps are dark. A key it misses stays light in a
+        // dark window, and a key of its own answers no reference at all, so
+        // either direction of disagreement is a fault.
+        string[] light = [.. BrushesOf("Look.xaml").Keys.Order(StringComparer.Ordinal)];
+        string[] dark = [.. BrushesOf("LookInTheDark.xaml").Keys.Order(StringComparer.Ordinal)];
+
+        string[] missing = [.. light.Except(dark, StringComparer.Ordinal)];
+        string[] extra = [.. dark.Except(light, StringComparer.Ordinal)];
+
+        Assert.True(missing.Length == 0,
+            "Brushes that stay light in the dark: " + string.Join(", ", missing));
+        Assert.True(extra.Length == 0,
+            "Brushes only the dark look knows about, which nothing can be asking for: "
+                + string.Join(", ", extra));
+    }
+
+    [Fact]
+    public void Each_look_is_the_brightness_it_claims()
+    {
+        // Parity alone would pass a dark look that was the light palette
+        // copied out. The names mean something: in the light, ink is darker
+        // than the page it sits on; in the dark it is the page that recedes.
+        Dictionary<string, string> light = PaletteWearing("Look.xaml");
+        Dictionary<string, string> dark = PaletteWearing("LookInTheDark.xaml");
+
+        Assert.True(Lightness(light["Ink"]) < Lightness(light["Page"]),
+            "The light look writes in ink no darker than its own page.");
+        Assert.True(Lightness(dark["Ink"]) > Lightness(dark["Page"]),
+            "The dark look writes in ink no lighter than its own page.");
+        Assert.True(Lightness(dark["Page"]) < Lightness(light["Page"]),
+            "The dark page is not darker than the light one, so the two looks are not two.");
+        Assert.True(Lightness(dark["Panel"]) < Lightness(light["Panel"]),
+            "The dark panel is not darker than the light one.");
+    }
+
+    [Fact]
+    public void A_brush_from_the_palette_is_only_ever_asked_for_dynamically()
+    {
+        // A StaticResource is resolved once, when the markup loads, and a
+        // dictionary merged afterwards changes nothing it already answered.
+        // One palette brush asked for statically is one control that stays
+        // light in a dark window, which is worse than no dark look at all:
+        // it reads as a defect rather than as an absence.
+        string[] keys = [.. BrushesOf("Look.xaml").Keys];
+
+        List<string> frozen = [];
+
+        foreach (string file in Directory.GetFiles(Repository.File("src", "DiscWright.App"), "*.xaml"))
+        {
+            foreach (System.Text.RegularExpressions.Match found in System.Text.RegularExpressions.Regex.Matches(
+                File.ReadAllText(file), @"\{StaticResource (\w+)\}"))
+            {
+                if (keys.Contains(found.Groups[1].Value, StringComparer.Ordinal))
+                {
+                    frozen.Add($"{Path.GetFileName(file)} asks for {found.Groups[1].Value} statically");
+                }
+            }
+        }
+
+        Assert.True(frozen.Count == 0,
+            "Palette brushes resolved once and for ever, so the dark look can never reach them: "
+                + string.Join("; ", frozen.Distinct(StringComparer.Ordinal)));
+    }
+
+    [Fact]
+    public void The_app_dresses_for_the_system_and_hears_it_change()
+    {
+        // The mechanism in one place, held there: the system is asked once at
+        // the start and again every time it announces a change, the dark
+        // brushes go on and come off as one dictionary, and the title bar,
+        // which no brush of ours can reach, is painted through dwmapi for
+        // every window as it loads, dialogs included.
+        string wearing = File.ReadAllText(
+            Repository.File("src", "DiscWright.App", "WearingTheTheme.cs"));
+        string app = File.ReadAllText(
+            Repository.File("src", "DiscWright.App", "App.xaml.cs"));
+
+        Assert.Contains("WhatTheSystemWears.Dark()", wearing, StringComparison.Ordinal);
+        Assert.Contains("UserPreferenceChanged", wearing, StringComparison.Ordinal);
+        Assert.Contains("LookInTheDark.xaml", wearing, StringComparison.Ordinal);
+        Assert.Contains("RegisterClassHandler", wearing, StringComparison.Ordinal);
+        Assert.Contains("PaintingTheTitleBar", wearing, StringComparison.Ordinal);
+        Assert.Contains("WearingTheTheme.FollowTheSystem", app, StringComparison.Ordinal);
+    }
 
     [Fact]
     public void No_trigger_inside_a_template_is_beaten_by_the_style_holding_it()
@@ -1480,7 +1596,8 @@ public class TheWindowsMarkup
         {
             bool wearsIt = style.Elements(Xaml + "Setter").Any(setter =>
                 (string?)setter.Attribute("Property") == "Background"
-                && (string?)setter.Attribute("Value") == "{StaticResource Accent}");
+                && (string?)setter.Attribute("Value")
+                    is "{StaticResource Accent}" or "{DynamicResource Accent}");
 
             if (!wearsIt || TakesOffItsBackground(style))
             {
@@ -1509,28 +1626,25 @@ public class TheWindowsMarkup
             .Any(setter => (string?)setter.Attribute("Property") == "Background"
                 && setter.Attribute("TargetName") is not null);
 
-    [Fact]
-    public void A_dead_button_still_has_words_on_it()
+    [Theory]
+    [InlineData("Look.xaml", true)]
+    [InlineData("LookInTheDark.xaml", false)]
+    public void A_dead_button_still_has_words_on_it(string wearing, bool wordsAreDarker)
     {
         // Not a contrast threshold. Disabled controls are low contrast on
         // purpose, and Ordinary greyed on white is about 1.8 to 1, which is
         // exactly what greyed out is supposed to look like.
         //
-        // The rule is the one this window is built on: it is a light theme,
-        // so words are darker than the paper they sit on. Once the accent
-        // button could colour its own text at all, its disabled state put
-        // White on the dead grey and the label all but vanished. Nothing had
-        // ever objected, because for years the colour never arrived and the
-        // label came out in full ink by accident.
+        // The rule is the one each look is built on. In the light, words are
+        // darker than the paper they sit on; in the dark it is the paper that
+        // recedes, so the rule flips with the look and both wearings are
+        // judged. Once the accent button could colour its own text at all,
+        // its disabled state put White on the dead grey and the label all but
+        // vanished. Nothing had ever objected, because for years the colour
+        // never arrived and the label came out in full ink by accident.
         XElement look = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!;
 
-        Dictionary<string, string> palette = look
-            .Elements(Xaml + "SolidColorBrush")
-            .Where(brush => brush.Attribute(Named + "Key") is not null
-                && ((string?)brush.Attribute("Color"))?.Length == 7)
-            .ToDictionary(
-                brush => (string)brush.Attribute(Named + "Key")!,
-                brush => (string)brush.Attribute("Color")!);
+        Dictionary<string, string> palette = PaletteWearing(wearing);
 
         List<string> vanished = [];
 
@@ -1569,14 +1683,18 @@ public class TheWindowsMarkup
                 continue;
             }
 
-            if (Lightness(ink) >= Lightness(paper))
+            bool unreadable = wordsAreDarker
+                ? Lightness(ink) >= Lightness(paper)
+                : Lightness(ink) <= Lightness(paper);
+
+            if (unreadable)
             {
                 vanished.Add($"{(string?)style.Attribute(Named + "Key")} goes dead with {ink} "
-                    + $"on {paper}, which is no darker than what it sits on");
+                    + $"on {paper}, which does not read against what it sits on");
             }
         }
 
-        Assert.True(vanished.Count == 0, "Dead buttons nobody can read: "
+        Assert.True(vanished.Count == 0, $"Dead buttons nobody can read wearing {wearing}: "
             + string.Join("; ", vanished));
     }
 
@@ -1598,8 +1716,11 @@ public class TheWindowsMarkup
             return "#FFFFFF";
         }
 
+        // Both spellings, because every palette brush is asked for
+        // dynamically now, and a helper that only knew the old one would
+        // return null everywhere and quietly blind every guard that uses it.
         System.Text.RegularExpressions.Match found =
-            System.Text.RegularExpressions.Regex.Match(value, @"^\{StaticResource (\w+)\}$");
+            System.Text.RegularExpressions.Regex.Match(value, @"^\{(?:Static|Dynamic)Resource (\w+)\}$");
 
         return found.Success && palette.TryGetValue(found.Groups[1].Value, out string? hex)
             ? hex

@@ -31,6 +31,10 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Before any window exists, so the first thing anybody sees is
+        // already wearing the right look rather than flashing the light one.
+        WearingTheTheme.FollowTheSystem(this);
+
         // A fault inside a click would otherwise close the program with no
         // word about why, which is the one thing worse than a crash.
         DispatcherUnhandledException += (_, wrong) =>

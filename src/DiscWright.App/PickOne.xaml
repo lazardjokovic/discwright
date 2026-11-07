@@ -14,7 +14,7 @@
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
-        Background="{StaticResource Page}"
+        Background="{DynamicResource Page}"
         FontFamily="{StaticResource Face}"
         AutomationProperties.AutomationId="PickOne">
 
@@ -30,8 +30,8 @@
                    AutomationProperties.AutomationId="Because" />
 
         <Border Margin="0,16,0,0"
-                Background="{StaticResource Panel}"
-                BorderBrush="{StaticResource Edge}"
+                Background="{DynamicResource Panel}"
+                BorderBrush="{DynamicResource Edge}"
                 BorderThickness="1"
                 CornerRadius="4">
             <!-- NOTHING CHOOSES ITSELF HERE. SelectedIndex is absent on purpose,
@@ -63,7 +63,10 @@
                      objects instead, a reader would start announcing the
                      whole of each one. -->
                 <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
+                    <!-- BasedOn, or this bare style would shadow the themed
+                         container and the chosen row would highlight in
+                         system colours. -->
+                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
                         <Setter Property="AutomationProperties.Name" Value="{Binding}" />
                     </Style>
                 </ListBox.ItemContainerStyle>

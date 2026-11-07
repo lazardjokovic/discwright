@@ -1,0 +1,34 @@
+<!--
+    The same brushes as Look.xaml, answered darkly.
+
+    Only brushes live here. Every size, weight, shape and style is Look.xaml's
+    and never forks: this dictionary is merged on top of it when Windows says
+    apps are dark and taken off when it stops saying so, which is the whole
+    mechanism, and it only works because every reference to a palette brush is
+    a DynamicResource. A key here that Look.xaml does not name, or one of its
+    missing, is a markup test failure.
+
+    The hues are the light palette's. The teal is lifted a step because the
+    light one disappears into a dark page, the refusal and the worry likewise,
+    and the greys invert their order: the page recedes and the ink comes
+    forward, which is what a dark theme is.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="Ink" Color="#E6E9EB" />
+    <SolidColorBrush x:Key="Quiet" Color="#9AA6AE" />
+    <SolidColorBrush x:Key="Accent" Color="#2FA7AF" />
+    <SolidColorBrush x:Key="AccentPressed" Color="#3DBAC2" />
+    <SolidColorBrush x:Key="Page" Color="#1B1F23" />
+    <SolidColorBrush x:Key="Panel" Color="#23282D" />
+    <SolidColorBrush x:Key="Edge" Color="#3A4147" />
+    <SolidColorBrush x:Key="Dead" Color="#4A545B" />
+
+    <!-- A refusal and a worry must not look the same here either. -->
+    <SolidColorBrush x:Key="RefusalInk" Color="#E4756F" />
+    <SolidColorBrush x:Key="WorryInk" Color="#D4A72C" />
+
+    <SolidColorBrush x:Key="InkOnAccent" Color="#FFFFFF" />
+
+</ResourceDictionary>

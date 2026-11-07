@@ -8,7 +8,11 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!-- The palette from the design canvas, and nothing beyond it. -->
+    <!-- The palette from the design canvas, and nothing beyond it. This is
+         the light look; LookInTheDark.xaml answers for exactly these keys
+         when Windows says apps are dark, which is why every reference to one
+         of them is a DynamicResource: resolved statically it would be
+         answered once, here, for ever. -->
     <SolidColorBrush x:Key="Ink" Color="#16191C" />
     <SolidColorBrush x:Key="Quiet" Color="#5B6871" />
     <SolidColorBrush x:Key="Accent" Color="#0E7C84" />
@@ -23,19 +27,24 @@
     <SolidColorBrush x:Key="RefusalInk" Color="#A3302C" />
     <SolidColorBrush x:Key="WorryInk" Color="#8A5A00" />
 
+    <!-- The words on the accent button. A brush rather than the word White,
+         so the dark look could change its mind about it, and so no colour in
+         this file is written where the palette cannot see it. -->
+    <SolidColorBrush x:Key="InkOnAccent" Color="#FFFFFF" />
+
     <FontFamily x:Key="Face">Segoe UI Variable Text, Segoe UI</FontFamily>
 
     <Style TargetType="ProgressBar">
         <Setter Property="Height" Value="4" />
-        <Setter Property="Foreground" Value="{StaticResource Accent}" />
-        <Setter Property="Background" Value="{StaticResource Page}" />
+        <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+        <Setter Property="Background" Value="{DynamicResource Page}" />
         <Setter Property="BorderThickness" Value="0" />
     </Style>
 
     <Style TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />
-        <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
@@ -43,32 +52,32 @@
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="21" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
     </Style>
 
     <Style x:Key="Step" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="{StaticResource Quiet}" />
+        <Setter Property="Foreground" Value="{DynamicResource Quiet}" />
         <Setter Property="Margin" Value="0,0,0,6" />
     </Style>
 
     <Style x:Key="Aside" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="Foreground" Value="{StaticResource Quiet}" />
+        <Setter Property="Foreground" Value="{DynamicResource Quiet}" />
         <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
 
     <Style TargetType="TextBox">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />
-        <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
         <Setter Property="Padding" Value="8,6" />
-        <Setter Property="BorderBrush" Value="{StaticResource Edge}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Edge}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="Background" Value="{StaticResource Panel}" />
+        <Setter Property="Background" Value="{DynamicResource Panel}" />
         <!-- Measured, not assumed, and twice. Bound to IsEnabled with no
              trigger here at all, the words stayed in #16191C, the same ink as
              a live one. A trigger setting Foreground did not help either: the
@@ -88,8 +97,60 @@
     <Style TargetType="CheckBox">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />
-        <Setter Property="Foreground" Value="{StaticResource Ink}" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
         <Setter Property="Margin" Value="0,0,0,6" />
+        <!-- Our own box, not the theme's. Windows draws its checkbox from
+             system colours that never heard of the palette, so in the dark
+             look it stayed a white box on a dark panel, the one control still
+             dressed for the wrong room. The box takes the accent when
+             ticked, and the tree's third state, some of this but not all of
+             it, is a smaller square of the same accent inside a resting box. -->
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                        <Border x:Name="Box"
+                                Width="15" Height="15"
+                                VerticalAlignment="Center"
+                                Background="{DynamicResource Panel}"
+                                BorderBrush="{DynamicResource Quiet}"
+                                BorderThickness="1"
+                                CornerRadius="3">
+                            <Grid>
+                                <Path x:Name="Tick"
+                                      Visibility="Collapsed"
+                                      Data="M 3 7.5 L 6 10.5 L 10.5 4"
+                                      Stroke="{DynamicResource InkOnAccent}"
+                                      StrokeThickness="1.8"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round" />
+                                <Rectangle x:Name="Partly"
+                                           Visibility="Collapsed"
+                                           Margin="3.5"
+                                           RadiusX="1" RadiusY="1"
+                                           Fill="{DynamicResource Accent}" />
+                            </Grid>
+                        </Border>
+                        <ContentPresenter Margin="7,0,0,0"
+                                          VerticalAlignment="Center"
+                                          RecognizesAccessKey="True" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Accent}" />
+                            <Setter TargetName="Tick" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="{x:Null}">
+                            <Setter TargetName="Partly" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
         <!-- Measured, not assumed, and twice. Bound to IsEnabled with no
              trigger here at all, the words stayed in #16191C, the same ink as
              a live one. A trigger setting Foreground did not help either: the
@@ -110,6 +171,74 @@
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Padding" Value="8,5" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+        <Setter Property="Background" Value="{DynamicResource Panel}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Edge}" />
+        <Setter Property="MinHeight" Value="30" />
+        <!-- Our own chrome, not the theme's, and not as a preference: the
+             default template paints itself from system colours whatever
+             Background says, so both dropdowns sat on the dark page as two
+             bright system-grey stripes. The shape is the Ordinary button's,
+             because a closed dropdown is a button that opens a list. -->
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton Focusable="False"
+                                      ClickMode="Press"
+                                      IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                      Background="{TemplateBinding Background}"
+                                      BorderBrush="{TemplateBinding BorderBrush}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border x:Name="Shape"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="4">
+                                        <Path HorizontalAlignment="Right"
+                                              VerticalAlignment="Center"
+                                              Margin="0,0,11,0"
+                                              Data="M 0 0 L 4 4 L 8 0"
+                                              Stroke="{DynamicResource Quiet}"
+                                              StrokeThickness="1.5" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Page}" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <ContentPresenter Margin="10,0,30,0"
+                                          HorizontalAlignment="Left"
+                                          VerticalAlignment="Center"
+                                          IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" />
+                        <Popup x:Name="PART_Popup"
+                               IsOpen="{TemplateBinding IsDropDownOpen}"
+                               Placement="Bottom"
+                               AllowsTransparency="True"
+                               PopupAnimation="Fade">
+                            <Border Background="{DynamicResource Panel}"
+                                    BorderBrush="{DynamicResource Edge}"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Margin="0,2,0,0"
+                                    MinWidth="{TemplateBinding ActualWidth}"
+                                    MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                <ScrollViewer>
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
         <!-- Measured, not assumed, and twice. Bound to IsEnabled with no
              trigger here at all, the words stayed in #16191C, the same ink as
              a live one. A trigger setting Foreground did not help either: the
@@ -160,7 +289,7 @@
     <Style x:Key="Quietly" TargetType="Button">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="Foreground" Value="{StaticResource Quiet}" />
+        <Setter Property="Foreground" Value="{DynamicResource Quiet}" />
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Cursor" Value="Hand" />
@@ -176,7 +305,7 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Words" Property="TextDecorations" Value="Underline" />
-                            <Setter TargetName="Words" Property="Foreground" Value="{StaticResource Accent}" />
+                            <Setter TargetName="Words" Property="Foreground" Value="{DynamicResource Accent}" />
                         </Trigger>
 
                         <!-- After the hover, so it wins: IsMouseOver stays
@@ -189,7 +318,7 @@
                              loses to the Style's own Foreground setter and
                              reads exactly as though it works. -->
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="Words" Property="Foreground" Value="{StaticResource Dead}" />
+                            <Setter TargetName="Words" Property="Foreground" Value="{DynamicResource Dead}" />
                             <Setter TargetName="Words" Property="TextDecorations" Value="{x:Null}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
@@ -212,8 +341,8 @@
     <Style x:Key="Ordinary" TargetType="Button">
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />
-        <Setter Property="Foreground" Value="{StaticResource Ink}" />
-        <Setter Property="Background" Value="{StaticResource Panel}" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+        <Setter Property="Background" Value="{DynamicResource Panel}" />
         <Setter Property="Padding" Value="16,8" />
         <Setter Property="MinHeight" Value="36" />
         <Setter Property="Cursor" Value="Hand" />
@@ -222,7 +351,7 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Shape"
                             Background="{TemplateBinding Background}"
-                            BorderBrush="{StaticResource Edge}"
+                            BorderBrush="{DynamicResource Edge}"
                             BorderThickness="1"
                             CornerRadius="4">
                         <!-- Bound, not fixed. Centre is still the answer for
@@ -255,7 +384,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Shape" Property="Background" Value="{StaticResource Page}" />
+                            <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Page}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -276,7 +405,7 @@
              pressed is the same lie told a second way. -->
         <Style.Triggers>
             <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Foreground" Value="{StaticResource Dead}" />
+                <Setter Property="Foreground" Value="{DynamicResource Dead}" />
                 <Setter Property="Cursor" Value="Arrow" />
             </Trigger>
         </Style.Triggers>
@@ -288,8 +417,8 @@
         <Setter Property="FontFamily" Value="{StaticResource Face}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="FontWeight" Value="SemiBold" />
-        <Setter Property="Foreground" Value="White" />
-        <Setter Property="Background" Value="{StaticResource Accent}" />
+        <Setter Property="Foreground" Value="{DynamicResource InkOnAccent}" />
+        <Setter Property="Background" Value="{DynamicResource Accent}" />
         <Setter Property="Padding" Value="16,8" />
         <Setter Property="MinHeight" Value="36" />
         <Setter Property="Cursor" Value="Hand" />
@@ -329,7 +458,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="Shape" Property="Background" Value="{StaticResource AccentPressed}" />
+                            <Setter TargetName="Shape" Property="Background" Value="{DynamicResource AccentPressed}" />
                         </Trigger>
                         <!-- Dead rather than hidden, so somebody can see what
                              they are working towards.
@@ -341,7 +470,7 @@
                              button that greys properly still offered a hand
                              to press it with. It is below now. -->
                         <Trigger Property="IsEnabled" Value="False">
-                            <Setter TargetName="Shape" Property="Background" Value="{StaticResource Dead}" />
+                            <Setter TargetName="Shape" Property="Background" Value="{DynamicResource Dead}" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -355,8 +484,187 @@
                      because the colour was never reaching the text and it
                      came out in full ink by accident. Quiet is muted enough
                      to read as dead and dark enough to still be read. -->
-                <Setter Property="Foreground" Value="{StaticResource Quiet}" />
+                <Setter Property="Foreground" Value="{DynamicResource Quiet}" />
                 <Setter Property="Cursor" Value="Arrow" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!-- A row in a dropdown. Ours because the dropdown is ours now, and the
+         default row paints its highlight from system colours. -->
+    <Style TargetType="ComboBoxItem">
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBoxItem">
+                    <Border x:Name="Row"
+                            Background="Transparent"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource Page}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- A row somebody picks one of. The chosen one wears a short band of
+         the accent at its left edge as well as the deeper paper, because on
+         the dialogs that use this the choice is the whole question and a
+         shade of grey alone is a quiet answer to a loud one. -->
+    <Style TargetType="ListBoxItem">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Row"
+                            Background="Transparent"
+                            CornerRadius="3">
+                        <Grid>
+                            <Rectangle x:Name="Chosen"
+                                       Width="3"
+                                       HorizontalAlignment="Left"
+                                       Margin="1,4"
+                                       RadiusX="1.5" RadiusY="1.5"
+                                       Fill="{DynamicResource Accent}"
+                                       Visibility="Collapsed" />
+                            <ContentPresenter Margin="6,0,0,0" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource Page}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource Page}" />
+                            <Setter TargetName="Chosen" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- The drawer under More options. Ours because the default header glyph
+         is a circle drawn in system colours, the one light coin left on a
+         dark window. The words are drawn by name, the way Quietly draws its
+         own, because the implicit TextBlock style would otherwise beat the
+         Foreground somebody set on the Expander itself. -->
+    <Style TargetType="Expander">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <StackPanel>
+                        <ToggleButton Focusable="False"
+                                      Cursor="Hand"
+                                      IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                                        <Path x:Name="Arrow"
+                                              Data="M 0 0 L 4 4 L 8 0"
+                                              Stroke="{DynamicResource Quiet}"
+                                              StrokeThickness="1.5"
+                                              VerticalAlignment="Center"
+                                              RenderTransformOrigin="0.5,0.5">
+                                            <Path.RenderTransform>
+                                                <RotateTransform Angle="-90" />
+                                            </Path.RenderTransform>
+                                        </Path>
+                                        <TextBlock Margin="7,0,0,0"
+                                                   VerticalAlignment="Center"
+                                                   Text="{Binding Header, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                                   Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                                   FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=Expander}}"
+                                                   FontFamily="{Binding FontFamily, RelativeSource={RelativeSource AncestorType=Expander}}" />
+                                    </StackPanel>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsChecked" Value="True">
+                                            <Setter TargetName="Arrow" Property="RenderTransform">
+                                                <Setter.Value>
+                                                    <RotateTransform Angle="0" />
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
+                        <ContentPresenter x:Name="Opened" Visibility="Collapsed" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="Opened" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- What hovering says, on the palette's paper rather than the system's. -->
+    <Style TargetType="ToolTip">
+        <Setter Property="FontFamily" Value="{StaticResource Face}" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource Ink}" />
+        <Setter Property="Background" Value="{DynamicResource Panel}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Edge}" />
+        <Setter Property="Padding" Value="10,7" />
+    </Style>
+
+    <!-- The scrollbars, slimmed to a thumb. The system ones are drawn from
+         system colours and arrive full width with arrow buttons, which on
+         this window means a broad light gutter down a dark panel. A track
+         that can still be clicked to page, a thumb that can be dragged, and
+         nothing else. -->
+    <ControlTemplate x:Key="APageOfNothing" TargetType="RepeatButton">
+        <Border Background="Transparent" />
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="TheThumb" TargetType="Thumb">
+        <Border Background="{DynamicResource Dead}" CornerRadius="4" Margin="2" />
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="SlimUpAndDown" TargetType="ScrollBar">
+        <Track x:Name="PART_Track" IsDirectionReversed="True">
+            <Track.DecreaseRepeatButton>
+                <RepeatButton Command="ScrollBar.PageUpCommand" Template="{StaticResource APageOfNothing}" />
+            </Track.DecreaseRepeatButton>
+            <Track.IncreaseRepeatButton>
+                <RepeatButton Command="ScrollBar.PageDownCommand" Template="{StaticResource APageOfNothing}" />
+            </Track.IncreaseRepeatButton>
+            <Track.Thumb>
+                <Thumb Template="{StaticResource TheThumb}" />
+            </Track.Thumb>
+        </Track>
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="SlimAlong" TargetType="ScrollBar">
+        <Track x:Name="PART_Track">
+            <Track.DecreaseRepeatButton>
+                <RepeatButton Command="ScrollBar.PageLeftCommand" Template="{StaticResource APageOfNothing}" />
+            </Track.DecreaseRepeatButton>
+            <Track.IncreaseRepeatButton>
+                <RepeatButton Command="ScrollBar.PageRightCommand" Template="{StaticResource APageOfNothing}" />
+            </Track.IncreaseRepeatButton>
+            <Track.Thumb>
+                <Thumb Template="{StaticResource TheThumb}" />
+            </Track.Thumb>
+        </Track>
+    </ControlTemplate>
+
+    <Style TargetType="ScrollBar">
+        <Setter Property="Width" Value="10" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template" Value="{StaticResource SlimUpAndDown}" />
+        <Style.Triggers>
+            <Trigger Property="Orientation" Value="Horizontal">
+                <Setter Property="Width" Value="Auto" />
+                <Setter Property="Height" Value="10" />
+                <Setter Property="Template" Value="{StaticResource SlimAlong}" />
             </Trigger>
         </Style.Triggers>
     </Style>
