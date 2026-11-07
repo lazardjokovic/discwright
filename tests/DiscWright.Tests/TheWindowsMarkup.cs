@@ -1393,6 +1393,23 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void What_did_not_come_back_is_a_worry_line_that_stays_on_the_window()
+    {
+        // The news about a project that named more than came back,
+        // discwright#98. It used to be a box, and a box is gone at OK while
+        // the games are still gone an hour later.
+        XElement news = Assert.Single(
+            Window().Descendants(Xaml + "TextBlock"), each => IdOf(each) == "WhatDidNotComeBack");
+
+        Assert.Equal("{Binding WhatDidNotComeBack}", (string?)news.Attribute("Text"));
+        Assert.Equal("{DynamicResource WorryInk}", (string?)news.Attribute("Foreground"));
+        Assert.Equal("Wrap", (string?)news.Attribute("TextWrapping"));
+        Assert.Equal(
+            "{Binding WhatDidNotComeBack, Converter={StaticResource WhenAnything}}",
+            (string?)news.Attribute("Visibility"));
+    }
+
+    [Fact]
     public void The_dark_look_answers_for_every_brush_the_light_one_names()
     {
         // The dark look is brushes and nothing else, merged over Look.xaml

@@ -110,21 +110,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Opened even when something is missing, and the screen says what.
+        // Refusing a whole disc over one game somebody moved would be a poor
+        // answer to the commonest thing that happens to a project a year
+        // later, and the news lands as a line under the list rather than in
+        // a box, because a box is gone at OK while the games are still gone
+        // an hour later.
         _screen.OpenThis(back);
-
-        if (!back.WholeAgain)
-        {
-            // Opened anyway, and said. Refusing a whole disc over one game
-            // somebody moved would be a poor answer to the commonest thing
-            // that happens to a project a year later.
-            MessageBox.Show(
-                this,
-                back.InWords + Environment.NewLine + Environment.NewLine
-                    + string.Join(Environment.NewLine, back.Gone.Take(10)),
-                "Opened",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-        }
     }
 
     private static long SizeOfOne(string path)

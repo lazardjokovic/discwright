@@ -1162,6 +1162,25 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void Opening_leaves_the_news_about_what_is_missing_on_the_window_rather_than_in_a_box()
+    {
+        // The screen says what the project named that did not come back and
+        // the window shows it as a line that stays, the same manners as the
+        // burn verdict above. The handler is read off disk for the same
+        // reason, and must put up no box of its own about it.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        int from = code.IndexOf("void OpenADisc(", StringComparison.Ordinal);
+        Assert.True(from >= 0, "The window no longer has an Open handler.");
+
+        string handler = code[from..];
+        handler = handler[..handler.IndexOf(Environment.NewLine + "    }", StringComparison.Ordinal)];
+
+        Assert.Contains("OpenThis(back)", handler, StringComparison.Ordinal);
+        Assert.DoesNotContain("MessageBox", handler, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Checks_the_disc_that_was_burned_not_whichever_was_built_first()
     {
         ADiskThatRemembers disk = new();

@@ -253,6 +253,19 @@
                            Visibility="{Binding WhoWearsTheSameName, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhoWearsTheSameName" />
 
+                <!-- What the opened project named that is no longer where it
+                     left it, discwright#98. The games that did not come back
+                     cannot be rows, so this line is their only trace. It used
+                     to be a box, and a box is gone at OK while the games are
+                     still gone an hour later. -->
+                <TextBlock DockPanel.Dock="Bottom"
+                           Margin="0,2,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource WorryInk}"
+                           Text="{Binding WhatDidNotComeBack}"
+                           Visibility="{Binding WhatDidNotComeBack, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhatDidNotComeBack" />
+
                 <TextBlock DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
                            TextWrapping="Wrap"

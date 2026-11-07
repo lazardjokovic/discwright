@@ -1052,6 +1052,62 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// What the last opened project named that could not be brought back, or
+    /// nothing, because everything came back or nothing was opened.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked for in discwright#98, about files "more prone to being moved
+    /// around": being told, after loading a project, that something it lists
+    /// is missing. The games that did not come back are the one part of a
+    /// project that cannot sit on the window as rows, so this line is their
+    /// only trace. The news used to arrive in a box, and a box is gone at OK
+    /// while the games are still gone an hour later.
+    /// </para>
+    /// <para>
+    /// It stays through builds, because a disc built while something is
+    /// missing is a disc built without it, which is exactly when the line is
+    /// worth reading again. A new disc, or another project opened, is a new
+    /// story, and each starts the line over.
+    /// </para>
+    /// </remarks>
+    public string? WhatDidNotComeBack { get; private set; }
+
+    /// <summary>The line about it, or nothing when it all came back.</summary>
+    private static string? TheNewsAbout(Reopened back)
+    {
+        if (back.WholeAgain)
+        {
+            return null;
+        }
+
+        List<string> said = [];
+
+        if (back.Gone.Count > 0)
+        {
+            string named = back.Gone.Count <= 5
+                ? string.Join(", ", back.Gone)
+                : string.Join(", ", back.Gone.Take(5)) + $" and {back.Gone.Count - 5} more";
+
+            said.Add(back.Gone.Count == 1
+                ? $"1 thing this project points at is not where it left it: {named}."
+                : $"{back.Gone.Count} things this project points at are not where it left them: {named}.");
+        }
+
+        if (back.Trouble.Count > 0)
+        {
+            said.Add(back.Trouble.Count == 1
+                ? $"1 folder is still there but could not be read as a game: {back.Trouble[0].Headline}."
+                : $"{back.Trouble.Count} folders are still there but could not be read as games: "
+                    + string.Join("; ", back.Trouble.Select(each => each.Headline)) + ".");
+        }
+
+        said.Add("The saved file still names all of it, so putting it back and opening the project again brings it back.");
+
+        return string.Join(" ", said);
+    }
+
+    /// <summary>
     /// Which games the disc will copy rather than start, or nothing when it
     /// will start all of them.
     /// </summary>
@@ -1991,12 +2047,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
         HowTheDiscCameOut = null;
         HowTheSetWent = null;
         HowTheSaveWent = null;
+        WhatDidNotComeBack = null;
         TheImages = [];
 
         foreach (string gone in new[]
         {
             nameof(Made), nameof(TheSetToBurn), nameof(AboutTheImage), nameof(ItWentWrong), nameof(HowTheDiscCameOut),
-            nameof(HowTheSetWent), nameof(HowTheSaveWent), nameof(TheImages), nameof(HasAnythingOnIt)
+            nameof(HowTheSetWent), nameof(HowTheSaveWent), nameof(WhatDidNotComeBack), nameof(TheImages), nameof(HasAnythingOnIt)
         })
         {
             Tell(gone);
@@ -2847,6 +2904,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // has just replaced.
         HowTheSaveWent = null;
         Tell(nameof(HowTheSaveWent));
+
+        // What the file named that could not be brought back. The games that
+        // did not come back cannot be rows, so this line is their only trace.
+        WhatDidNotComeBack = TheNewsAbout(back);
+        Tell(nameof(WhatDidNotComeBack));
 
         Reconsider();
     }

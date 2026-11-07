@@ -363,7 +363,7 @@ public class TheWindowChecksItself
 
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(38);
+        int which = dice.Next(39);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -480,6 +480,13 @@ public class TheWindowChecksItself
             // writes through the builder, and has a sentence to say, so the
             // walk holds it to announcing all of that like everything else.
             37 => new("save it for later", desk => desk.Screen.SaveItForLater()),
+
+            // A project that named more than came back, discwright#98. The
+            // games that did not come back cannot be rows, so the line about
+            // them is their only trace, and it has to be announced and taken
+            // down like everything else.
+            38 => new("open a project that is short two things",
+                desk => desk.OpenAProjectShortOfSomething()),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -1071,6 +1078,24 @@ public class TheWindowChecksItself
                 AddOns: []);
 
             Screen.OpenThis(new Reopened(project, Media.Bd25, @"C:\out", [], []));
+        }
+
+        /// <summary>
+        /// Opens a project whose file named more than came back, so the line
+        /// about what is missing has something to say.
+        /// </summary>
+        internal void OpenAProjectShortOfSomething()
+        {
+            DiscProject project = new(
+                "SHORT",
+                [AGogGame("Still Here", 1000)],
+                new DiscOptions(Menu: true, Checksums: false, LegacyFileSystems: false, CutFiles: false),
+                Artwork: null,
+                Extras: null,
+                AddOns: []);
+
+            Screen.OpenThis(new Reopened(
+                project, null, null, [@"C:\gone\one", @"C:\gone\two"], []));
         }
 
         private static Task<Recorder?> TheFirstDrive(IReadOnlyList<Recorder> ready) =>
