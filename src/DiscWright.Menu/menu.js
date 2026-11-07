@@ -1917,3 +1917,172 @@ function joinThePieces(work) {
 
     next(0);
 }
+
+// ------------------------------------------------- checking the disc itself
+//
+// A disc built with checksums carries checksums.sha256 at its root, in
+// sha256sum format, which is the same list a person could check by hand with
+// sha256sum or Get-FileHash. This checks it without either. xniwo, 4 October:
+// "Next to the mute music icon in the splash menu, an optional one click
+// windows or linux sha256 verification might be useful for some."
+//
+// The disc, not a copy of it: this answers "is this disc still good", which
+// is a different question from the set's own checking, and the one somebody
+// asks with a disc in their hand years later.
+
+// The list, read out of the text the disc carries. The declared count is
+// kept to be CHECKED, not only read: a list that has lost its tail verifies
+// the files it still mentions and reports every one of them right, which is
+// the single way a checksum list can lie to you.
+function sumsFrom(text) {
+    var out = { rows: [], declared: -1 };
+    var lines = String(text || "").split("\n");
+    var i, line, star, said;
+
+    for (i = 0; i < lines.length; i++) {
+        line = lines[i];
+
+        if (line.length > 0 && line.charAt(line.length - 1) === "\r") {
+            line = line.substring(0, line.length - 1);
+        }
+
+        if (line.length === 0) {
+            continue;
+        }
+
+        if (line.charAt(0) === "#") {
+            said = line.match(/^#\s+(\d+)\s+files\b/);
+
+            if (said) {
+                out.declared = parseInt(said[1], 10);
+            }
+
+            continue;
+        }
+
+        // A hash is 64 characters and the star is sha256sum's mark for
+        // binary mode, so anything shorter in front of " *" is not a row.
+        star = line.indexOf(" *");
+
+        if (star < 64) {
+            continue;
+        }
+
+        out.rows.push({ hash: line.substring(0, star), path: line.substring(star + 2) });
+    }
+
+    return out;
+}
+
+// What is wrong with the list itself, or nothing when it can be relied on.
+function sumsTrouble(sums) {
+    if (sums.rows.length === 0) {
+        return "This disc does not carry a checksum list, so there is nothing to check against.";
+    }
+
+    if (sums.declared >= 0 && sums.declared !== sums.rows.length) {
+        return "The checksum list on this disc says it covers " + sums.declared
+            + " files and lists " + sums.rows.length
+            + ". It is damaged, so nothing it says about this disc can be relied on.";
+    }
+
+    return "";
+}
+
+// certutil prints the hash on a line of its own, with no spaces in it.
+function hashOutOf(text) {
+    var lines = String(text || "").split("\n");
+    var i, line;
+
+    for (i = 0; i < lines.length; i++) {
+        line = lines[i];
+
+        if (line.length > 0 && line.charAt(line.length - 1) === "\r") {
+            line = line.substring(0, line.length - 1);
+        }
+
+        if (line.length >= 64 && line.indexOf(" ") < 0) {
+            return line;
+        }
+    }
+
+    return "";
+}
+
+// Which file the check is on, because minutes of a still window is how
+// somebody decides it has hung.
+function checkStep(at, of) {
+    return "Checking file " + at + " of " + of + " against what was burned.";
+}
+
+// The verdict, once every file has been looked at.
+function checkVerdict(listed, bad) {
+    if (bad.length === 0) {
+        return listed + " files checked. Every one of them is byte for byte what was burned.";
+    }
+
+    return bad.length + " of " + listed + " files on this disc are wrong or missing:\n\n"
+        + bad.join("\n")
+        + "\n\nA disc that reads badly is usually scratched or was burned badly.";
+}
+
+// The check itself: one certutil at a time, the same way the set copies one
+// file at a time, so the window stays answerable between files. Progress
+// goes through saying and the verdict through done, because nothing in this
+// file may touch a document.
+function checkTheDisc(dir, sums, saying, done) {
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+    var shell = new ActiveXObject("WScript.Shell");
+    var here = [];
+    var gone = [];
+    var i, full;
+
+    for (i = 0; i < sums.rows.length; i++) {
+        full = onTheDisc(dir, sums.rows[i].path);
+
+        if (files.FileExists(full)) {
+            here.push({ hash: sums.rows[i].hash, full: full, path: sums.rows[i].path });
+        } else {
+            gone.push(sums.rows[i].path);
+        }
+    }
+
+    var tmp = onTheDisc(
+        shell.ExpandEnvironmentStrings("%TEMP%"),
+        "dwcheck_" + (new Date()).getTime() + "_" + Math.floor(Math.random() * 1000000) + ".txt");
+
+    function walk(at, bad) {
+        if (at >= here.length) {
+            try { if (files.FileExists(tmp)) { files.DeleteFile(tmp); } } catch (left) { }
+            done(checkVerdict(sums.rows.length, bad.concat(gone)));
+            return;
+        }
+
+        saying(checkStep(at + 1, here.length));
+
+        waitForJob(
+            startAJob("certutil -hashfile " + setQuote(here[at].full) + " SHA256 > " + setQuote(tmp)),
+            function () {
+                var said = "";
+                var reading;
+
+                try {
+                    reading = files.OpenTextFile(tmp, 1);
+                    said = reading.ReadAll();
+                    reading.Close();
+                } catch (unreadable) {
+                    said = "";
+                }
+
+                var hash = hashOutOf(said);
+
+                if (hash.length === 0 || hash.toLowerCase() !== String(here[at].hash).toLowerCase()) {
+                    bad.push(here[at].path);
+                }
+
+                walk(at + 1, bad);
+            });
+    }
+
+    walk(0, []);
+}

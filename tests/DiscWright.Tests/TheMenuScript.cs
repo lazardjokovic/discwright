@@ -1,6 +1,8 @@
 ﻿using System.Diagnostics;
 using System.Text;
 
+using DiscWright.Core;
+
 namespace DiscWright.Tests;
 
 /// <summary>
@@ -1590,6 +1592,152 @@ public sealed class TheMenuScript : IDisposable
 
         return (output, running.ExitCode);
     }
+
+    // ------------------------------------------- checking the disc itself
+
+    [Fact]
+    public void Reads_the_list_the_builder_actually_writes()
+    {
+        // The C# writer and the JScript reader agreeing on the same bytes,
+        // the same proof the set file has.
+        string list = Path.Combine(_folder, "checksums.sha256");
+
+        File.WriteAllText(list, ChecksumList.For("A GAME",
+        [
+            new ChecksumEntry(@"GAME 1\setup.exe", new string('a', 64), 3),
+            new ChecksumEntry("readme.txt", new string('b', 64), 5)
+        ]));
+
+        string asked = Ask(WithFiles(
+            "(function (s) { return s.rows.length + '|' + s.declared + '|' + s.rows[0].path + '|' + s.rows[0].hash.length; })"
+            + "(sumsFrom(f.OpenTextFile(" + AsJScript(list) + ", 1).ReadAll()))"));
+
+        Assert.Equal("2|2|GAME 1/setup.exe|64", asked);
+    }
+
+    [Fact]
+    public void Trusts_no_list_that_disagrees_with_its_own_count()
+    {
+        // A list that has lost its tail verifies the files it still mentions
+        // and reports every one of them right, which is the single way a
+        // checksum list can lie to you. The count is there to be checked.
+        string said = Ask(
+            "sumsTrouble({rows: [1, 2], declared: 3})");
+
+        Assert.Contains("says it covers 3 files and lists 2", said, StringComparison.Ordinal);
+        Assert.Contains("damaged", said, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("sumsTrouble({rows: [1, 2], declared: 2})")]
+    [InlineData("sumsTrouble({rows: [1], declared: -1})")]
+    public void Relies_on_a_list_that_adds_up(string call)
+    {
+        Assert.Equal(string.Empty, Ask(call));
+    }
+
+    [Fact]
+    public void Says_there_is_nothing_to_check_against_when_the_list_is_empty()
+    {
+        Assert.Contains(
+            "nothing to check against",
+            Ask("sumsTrouble({rows: [], declared: -1})"),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Pulls_the_hash_out_of_what_certutil_prints()
+    {
+        // certutil frames the hash with a headline and a sign off, and the
+        // hash itself is the one line with no spaces in it.
+        string asked = Ask(
+            "hashOutOf('SHA256 hash of file x:\\r\\n' + new Array(65).join('a')"
+            + " + '\\r\\nCertUtil: -hashfile command completed successfully.')");
+
+        Assert.Equal(new string('a', 64), asked);
+    }
+
+    [Fact]
+    public void Takes_an_error_from_certutil_as_no_hash_at_all()
+    {
+        Assert.Equal(
+            string.Empty,
+            Ask("hashOutOf('CertUtil: -hashfile command FAILED: 0x80070002')"));
+    }
+
+    [Fact]
+    public void Says_which_file_the_check_is_on()
+    {
+        // Minutes of a still window is how somebody decides it has hung.
+        Assert.Equal(
+            "Checking file 3 of 9 against what was burned.",
+            Ask("checkStep(3, 9)"));
+    }
+
+    [Fact]
+    public void Gives_a_clean_disc_a_clean_verdict()
+    {
+        Assert.Equal(
+            "4 files checked. Every one of them is byte for byte what was burned.",
+            Ask("checkVerdict(4, [])"));
+    }
+
+    [Fact]
+    public void Names_every_file_that_let_the_disc_down()
+    {
+        string asked = Ask(
+            "checkVerdict(4, ['bad.txt', 'gone.txt']).split('\\n').join('|')");
+
+        Assert.StartsWith("2 of 4 files on this disc are wrong or missing:", asked, StringComparison.Ordinal);
+        Assert.Contains("|bad.txt|gone.txt|", asked, StringComparison.Ordinal);
+        Assert.Contains("scratched or was burned badly", asked, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Checks_real_files_with_real_hashes_and_names_what_is_wrong()
+    {
+        // The whole loop against a real folder: real files, the list the
+        // builder writes, and the hashing done by the same certutil the disc
+        // will meet. One file is good, one is in a folder, one does not match
+        // its line, and one is not there at all.
+        string disc = Path.Combine(_folder, "disc");
+        Directory.CreateDirectory(Path.Combine(disc, "DATA"));
+        File.WriteAllText(Path.Combine(disc, "good.txt"), "12345");
+        File.WriteAllText(Path.Combine(disc, "DATA", "also good.txt"), "abc");
+        File.WriteAllText(Path.Combine(disc, "bad.txt"), "not what the list says");
+
+        File.WriteAllText(Path.Combine(disc, "checksums.sha256"), ChecksumList.For("A GAME",
+        [
+            new ChecksumEntry("good.txt", Sha256Of("12345"), 5),
+            new ChecksumEntry(@"DATA\also good.txt", Sha256Of("abc"), 3),
+            new ChecksumEntry("bad.txt", Sha256Of("12345"), 22),
+            new ChecksumEntry("gone.txt", Sha256Of("x"), 1)
+        ]));
+
+        string asked = Ask(WithFiles(
+            "(function () {"
+            + " var sums = sumsFrom(f.OpenTextFile(" + AsJScript(Path.Combine(disc, "checksums.sha256")) + ", 1).ReadAll());"
+            + " var steps = []; var verdict = '';"
+            + " checkTheDisc(" + AsJScript(disc) + ", sums, function (w) { steps.push(w); }, function (v) { verdict = v; });"
+            + " return steps.length + '|' + steps[0] + '|' + verdict.split('\\n').join('~');"
+            + " }())"));
+
+        string[] parts = asked.Split('|');
+
+        // Three files are there to hash; the fourth is missing and never
+        // reaches certutil.
+        Assert.Equal("3", parts[0]);
+        Assert.Equal("Checking file 1 of 3 against what was burned.", parts[1]);
+        Assert.StartsWith("2 of 4 files on this disc are wrong or missing:", parts[2], StringComparison.Ordinal);
+        Assert.Contains("bad.txt", parts[2], StringComparison.Ordinal);
+        Assert.Contains("gone.txt", parts[2], StringComparison.Ordinal);
+        Assert.DoesNotContain("good.txt", parts[2], StringComparison.Ordinal);
+    }
+
+    private static string Sha256Of(string text) =>
+        Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(text)))
+            .ToLowerInvariant();
 
     /// <summary>
     /// Walks up to the solution and takes menu.js from the source tree, so this

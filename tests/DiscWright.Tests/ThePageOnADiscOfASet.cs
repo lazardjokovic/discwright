@@ -253,6 +253,86 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     }
 
     [Fact]
+    public void Checks_the_disc_from_the_button_beside_the_mute()
+    {
+        // The one click check from discwright#98, pressed the way the page
+        // presses it: real files, the real list, real certutil, and the
+        // verdict landing under the panel where every other line lands. One
+        // file is good, one does not match its line, one is missing.
+        string disc = Path.Combine(_folder, "checked");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "good.txt"), "12345");
+        File.WriteAllText(Path.Combine(disc, "bad.txt"), "not what the list says");
+
+        File.WriteAllText(Path.Combine(disc, "checksums.sha256"), ChecksumList.For("CHECKED",
+        [
+            new ChecksumEntry("good.txt", HashOf("12345"), 5),
+            new ChecksumEntry("bad.txt", HashOf("12345"), 22),
+            new ChecksumEntry("gone.txt", HashOf("x"), 1)
+        ]));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Checked", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Checked", "good.txt", string.Empty)])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "showTheCheck();\n"
+                + "out.push('shown=' + document.getElementById('sums').style.display + ' at=' + document.getElementById('sums').style.left);\n"
+                + "checkThisDisc();\n"
+
+                // Grey the moment it is pressed, and a second press while it
+                // works starts nothing: no new certutil, no new timers.
+                + "out.push('busy=' + document.getElementById('sums').className + ' saying=' + document.getElementById('stillWanted').innerText);\n"
+                + "var before = window.timers.length; checkThisDisc(); out.push('press again=' + (window.timers.length - before));\n"
+                + "drain();\n"
+                + "out.push('after=' + document.getElementById('sums').className);\n"
+                + "out.push('line=' + document.getElementById('stillWanted').innerText.split('\\n').join('~'));\n"
+                + "out.push('alerts=' + alerts.length + (alerts.length ? ' ' + alerts.join(' / ') : ''));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        // No music on this disc, so the check sits where the mute would.
+        Assert.Equal("shown=block at=16px", lines[0]);
+        Assert.Equal("busy=busy saying=Checking file 1 of 2 against what was burned.", lines[1]);
+        Assert.Equal("press again=0", lines[2]);
+        Assert.Equal("after=", lines[3]);
+        Assert.StartsWith("line=2 of 3 files on this disc are wrong or missing:", lines[4], StringComparison.Ordinal);
+        Assert.Contains("bad.txt", lines[4], StringComparison.Ordinal);
+        Assert.Contains("gone.txt", lines[4], StringComparison.Ordinal);
+        Assert.Equal("alerts=0", lines[^1]);
+    }
+
+    [Fact]
+    public void Keeps_the_check_off_a_preview_because_the_disc_does_not_exist_yet()
+    {
+        // The preview folder can sit beside a checksums list in the output
+        // folder, and a check button there would be checking a disc that
+        // has not been made. The preview already says nothing starts from
+        // it; this button does not even appear.
+        string disc = Path.Combine(_folder, "previewed");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "checksums.sha256"), "pretend");
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Checked", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: false,
+                Games: [new MenuGame("Checked", "good.txt", string.Empty)])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "showTheCheck();\n"
+                + "WScript.Echo('shown=' + document.getElementById('sums').style.display);\n");
+
+        Assert.DoesNotContain("block", went, StringComparison.Ordinal);
+    }
+
+    private static string HashOf(string text) =>
+        Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(text)))
+            .ToLowerInvariant();
+
+    [Fact]
     public void A_one_disc_install_keeps_the_menu_open_until_the_installer_closes()
     {
         // The same watch on a disc that is not a set: the button says

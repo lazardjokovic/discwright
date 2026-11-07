@@ -131,6 +131,7 @@ function start() {
     fitTheWindow();
     wearTheRightIcon();
     startTheMusic();
+    showTheCheck();
 
     document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);
 
@@ -960,6 +961,81 @@ function toggleMusic() {
     }
 }
 
+// The one click check against what was burned, discwright#98. Everything it
+// decides lives in menu.js where cscript can hold it to account; this is
+// only the button, the words landing under the panel, and the file read.
+
+// Whether a check is already running, so a second press cannot start a
+// second certutil walking the same disc.
+var checking = false;
+
+// Shown only when the disc carries a list to check against: a button that
+// answers "there is nothing to check" would be a button that lies about
+// what the disc can do. Only on a real disc, because the preview folder
+// holds the menu alone and the disc does not exist yet.
+function showTheCheck() {
+    if (!DISC.onADisc) {
+        return;
+    }
+
+    try {
+        var files = new ActiveXObject("Scripting.FileSystemObject");
+
+        if (!files.FileExists(onTheDisc(theDisc(), "checksums.sha256"))) {
+            return;
+        }
+
+        var button = document.getElementById("sums");
+
+        // Beside the mute when there is music, in its place when there is
+        // none, so the corner never shows a gap where a control would be.
+        button.style.left = document.getElementById("mute").style.display === "block" ? "52px" : "16px";
+        button.style.display = "block";
+    } catch (cannotLook) {
+        // A disc whose list cannot even be looked for still has a working
+        // menu, which is worth more than this button.
+    }
+}
+
+function checkThisDisc() {
+    if (checking) {
+        return;
+    }
+
+    var text = "";
+
+    try {
+        var files = new ActiveXObject("Scripting.FileSystemObject");
+        var reading = files.OpenTextFile(onTheDisc(theDisc(), "checksums.sha256"), 1);
+        text = reading.ReadAll();
+        reading.Close();
+    } catch (unreadable) {
+        sayTheCheck("The checksum list on this disc could not be read.");
+        return;
+    }
+
+    var sums = sumsFrom(text);
+    var trouble = sumsTrouble(sums);
+
+    if (trouble.length > 0) {
+        sayTheCheck(trouble);
+        return;
+    }
+
+    checking = true;
+    document.getElementById("sums").className = "busy";
+
+    checkTheDisc(theDisc(), sums, sayTheCheck, function (verdict) {
+        checking = false;
+        document.getElementById("sums").className = "";
+        sayTheCheck(verdict);
+    });
+}
+
+function sayTheCheck(words) {
+    document.getElementById("stillWanted").innerText = words;
+}
+
 function doExit() {
     // Stopped by hand, because the control outlives the window often enough
     // to leave music playing in an empty room.
@@ -1030,6 +1106,14 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
         color: #CBD6DB; border: 1px solid #27353B;
         background: #080F12; background: rgba(18, 32, 38, 0.22); }
 #mute.off { color: #5E727A; border-color: #1A2429; }
+/* The check, beside the mute, dressed the same because both are about the
+   window's own business rather than about the game. Grey while it works, so
+   a press that is already being answered looks taken rather than ignored. */
+#sums { position: absolute; left: 52px; top: 16px; width: 28px; height: 28px;
+        line-height: 28px; text-align: center; font-size: 15px; cursor: default;
+        color: #CBD6DB; border: 1px solid #27353B;
+        background: #080F12; background: rgba(18, 32, 38, 0.22); }
+#sums.busy { color: #5E727A; border-color: #1A2429; }
 </style>
 </head>
 
@@ -1061,6 +1145,9 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 
     <div id="mute" style="display: none" title="Music on or off"
          onclick="toggleMusic(); return false;">&#9835;</div>
+
+    <div id="sums" style="display: none" title="Check every file against what was burned"
+         onclick="checkThisDisc(); return false;">&#10003;</div>
 </div>
 </body>
 </html>
