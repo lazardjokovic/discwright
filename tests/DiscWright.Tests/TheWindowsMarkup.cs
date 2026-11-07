@@ -1333,6 +1333,42 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void The_list_takes_a_drop_everywhere_it_looks_like_the_list()
+    {
+        // AllowDrop is per element, so the panel alone would refuse a drop
+        // over the tree that covers it. Both say yes, with the same pair of
+        // handlers, or whether a drop lands depends on which pixel it ends
+        // over, which is indistinguishable from flaky.
+        XElement tree = Assert.Single(
+            Window().Descendants(Xaml + "TreeView"), each => IdOf(each) == "Games");
+        XElement panel = tree.Ancestors(Xaml + "Border").First();
+
+        foreach (XElement target in new[] { tree, panel })
+        {
+            Assert.Equal("True", (string?)target.Attribute("AllowDrop"));
+            Assert.Equal("SayWhetherADropWouldLand", (string?)target.Attribute("DragOver"));
+            Assert.Equal("SomethingWasDropped", (string?)target.Attribute("Drop"));
+        }
+    }
+
+    [Fact]
+    public void A_drop_walks_the_same_road_as_the_add_button()
+    {
+        // The one piece of judgement in a drop is WhatWasDropped's, where a
+        // test can hold it. The rest is the shared Add, questions and all,
+        // and a running window takes no drops at all.
+        string code = File.ReadAllText(
+            Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains(
+            "Add(WhatWasDropped.AsFolders(dropped, _disk.FolderExists))",
+            code, StringComparison.Ordinal);
+        Assert.Contains(
+            "!_screen.NothingIsRunning || e.Data.GetData(DataFormats.FileDrop)",
+            code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Saving_for_later_is_a_quiet_press_beside_the_two_big_ones()
     {
         // The recipe without the discs, discwright#98. Quiet rather than a

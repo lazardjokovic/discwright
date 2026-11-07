@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -153,6 +153,37 @@ public partial class MainWindow : Window
         }
 
         Add(asking.FolderNames);
+    }
+
+    /// <summary>
+    /// Whether a drop would land, said while the drag is still in the air.
+    /// </summary>
+    /// <remarks>
+    /// The pointer wears no-entry over the list during a run, for the same
+    /// reason every box is held then: a list that cannot be changed must not
+    /// look like it can.
+    /// </remarks>
+    private void SayWhetherADropWouldLand(object sender, DragEventArgs e)
+    {
+        e.Effects = _screen.NothingIsRunning && e.Data.GetDataPresent(DataFormats.FileDrop)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Folders dropped onto the list, discwright#98. What a drop means is
+    /// WhatWasDropped's judgement; everything after that is the same road
+    /// Add a game takes, questions and all.
+    /// </summary>
+    private void SomethingWasDropped(object sender, DragEventArgs e)
+    {
+        if (!_screen.NothingIsRunning || e.Data.GetData(DataFormats.FileDrop) is not string[] dropped)
+        {
+            return;
+        }
+
+        Add(WhatWasDropped.AsFolders(dropped, _disk.FolderExists));
     }
 
     /// <summary>

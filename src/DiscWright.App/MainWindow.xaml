@@ -299,10 +299,21 @@
                             AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
                 </StackPanel>
 
+                <!-- A drop target as well as a panel, discwright#98: the
+                     folder, or the setup exe pulled straight out of a
+                     Downloads window, lands on the same road the Add a game
+                     button takes. The tree declares the same three
+                     attributes below, because AllowDrop is per element and
+                     a tree that covers the panel without it would refuse
+                     the drop over exactly the place that looks like the
+                     list. -->
                 <Border Background="{DynamicResource Panel}"
                         BorderBrush="{DynamicResource Edge}"
                         BorderThickness="1"
-                        CornerRadius="4">
+                        CornerRadius="4"
+                        AllowDrop="True"
+                        DragOver="SayWhetherADropWouldLand"
+                        Drop="SomethingWasDropped">
                     <Grid>
                         <!-- The list, and a line under it that adds the list
                              up. Two rows rather than one, so the total sits
@@ -332,7 +343,7 @@
                                    TextWrapping="Wrap"
                                    Visibility="{Binding Games.Count, Converter={StaticResource WhenNone}}"
                                    AutomationProperties.AutomationId="NothingYet"
-                                   Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in." />
+                                   Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in. Dropping one here works too, the installer's own exe included." />
 
                         <!-- A tree, because a game is not one thing.
                              It is an installer, its parts, whatever folders
@@ -353,6 +364,9 @@
                                   Padding="4"
                                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                   IsEnabled="{Binding NothingIsRunning}"
+                                  AllowDrop="True"
+                                  DragOver="SayWhetherADropWouldLand"
+                                  Drop="SomethingWasDropped"
                                   AutomationProperties.AutomationId="Games">
                             <!-- Without this a row answers to whatever the
                                  thing in it prints as, which here is the whole
