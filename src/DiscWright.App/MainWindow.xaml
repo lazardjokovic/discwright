@@ -240,6 +240,19 @@
                            Visibility="{Binding APatchWithNothingToPatch, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="APatchWithNothingToPatch" />
 
+                <!-- Two rows reading alike here are two menu buttons reading
+                     alike on the burned disc. A notice and never a refusal:
+                     two editions of one game are an ordinary thing to burn,
+                     and what was asked for (discwright#98) was being told,
+                     not being stopped. -->
+                <TextBlock DockPanel.Dock="Bottom"
+                           Margin="0,2,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource WorryInk}"
+                           Text="{Binding WhoWearsTheSameName}"
+                           Visibility="{Binding WhoWearsTheSameName, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhoWearsTheSameName" />
+
                 <TextBlock DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
                            TextWrapping="Wrap"

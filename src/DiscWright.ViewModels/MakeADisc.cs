@@ -1015,6 +1015,43 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// The names worn by more than one game on the disc, or nothing when
+    /// every game answers to its own.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked for in discwright#98. Two rows reading alike here become two
+    /// menu buttons reading alike on the burned disc, and the person holding
+    /// it has nothing but their order to tell them apart.
+    /// </para>
+    /// <para>
+    /// A notice and never a refusal, which is what was asked for in as many
+    /// words: nothing is actually wrong, two editions of one game are an
+    /// ordinary thing to burn. Worry ink rather than ordinary, because
+    /// unlike a disc that copies instead of starting, this is almost never
+    /// what somebody meant.
+    /// </para>
+    /// </remarks>
+    public string? WhoWearsTheSameName
+    {
+        get
+        {
+            string[] worn =
+            [
+                .. _games
+                    .GroupBy(game => game.Name, StringComparer.OrdinalIgnoreCase)
+                    .Where(same => same.Count() > 1)
+                    .Select(same => $"{same.Count()} games on this disc answer to the same name, {same.Key}.")
+            ];
+
+            return worn.Length == 0
+                ? null
+                : string.Join(" ", worn)
+                    + " Their menu buttons will read alike, and nothing but their order tells them apart.";
+        }
+    }
+
+    /// <summary>
     /// Which games the disc will copy rather than start, or nothing when it
     /// will start all of them.
     /// </summary>
@@ -3106,6 +3143,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // Said about the folders on the list, so it follows the list.
         Tell(nameof(WhatTheDownloadsSay));
         Tell(nameof(WhatWillNotStartItself));
+        Tell(nameof(WhoWearsTheSameName));
 
         // And the three about what is ticked. These used to be announced
         // beside the ticks and nowhere else, so every other way of changing
