@@ -99,30 +99,58 @@
                 <!-- Side by side rather than stacked. Two of these one above the
                      other was eighty pixels of button beside sixty of title, and
                      the whole top of the window was the taller of them. -->
-                <Grid Grid.Column="2" VerticalAlignment="Center">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                    <Button Grid.Column="0"
-                            Content="Start a new disc"
-                            IsEnabled="{Binding CanStartAgain}"
-                            Style="{StaticResource Ordinary}"
-                            HorizontalAlignment="Stretch"
-                            Margin="0,0,5,0"
-                            Click="StartANewDisc"
-                            AutomationProperties.AutomationId="StartANewDisc" />
+                        <Button Grid.Column="0"
+                                Content="Start a new disc"
+                                IsEnabled="{Binding CanStartAgain}"
+                                Style="{StaticResource Ordinary}"
+                                HorizontalAlignment="Stretch"
+                                Margin="0,0,5,0"
+                                Click="StartANewDisc"
+                                AutomationProperties.AutomationId="StartANewDisc" />
 
-                    <Button Grid.Column="1"
-                            Content="Open one you built"
-                            IsEnabled="{Binding NothingIsRunning}"
-                            Style="{StaticResource Ordinary}"
-                            HorizontalAlignment="Stretch"
-                            Margin="5,0,0,0"
-                            Click="OpenADisc"
-                            AutomationProperties.AutomationId="OpenADisc" />
-                </Grid>
+                        <Button Grid.Column="1"
+                                Content="Open one you built"
+                                IsEnabled="{Binding NothingIsRunning}"
+                                Style="{StaticResource Ordinary}"
+                                HorizontalAlignment="Stretch"
+                                Margin="5,0,0,0"
+                                Click="OpenADisc"
+                                AutomationProperties.AutomationId="OpenADisc" />
+                    </Grid>
+
+                    <!-- The quiet third of the pair above. Saving writes the
+                         same discproject.json a build leaves behind, into the
+                         folder named under WHERE TO SAVE THE ISO, so Open one
+                         you built finds it the same way. Quiet rather than a
+                         third box because the row above is already as wide as
+                         its column, and because saving is the small act next
+                         to the two big ones. -->
+                    <Button Content="Save it for later, without building"
+                            Style="{StaticResource Quietly}"
+                            HorizontalAlignment="Right"
+                            Margin="0,6,0,0"
+                            IsEnabled="{Binding CanSaveItForLater}"
+                            ToolTip="Writes discproject.json into the folder under WHERE TO SAVE THE ISO. Open one you built brings it back."
+                            Click="SaveItForLater"
+                            AutomationProperties.AutomationId="SaveItForLater" />
+
+                    <!-- Where it went, left where it can be read again, the
+                         same manners as the line about the last burn. -->
+                    <TextBlock Style="{StaticResource Aside}"
+                               Margin="0,4,0,0"
+                               TextWrapping="Wrap"
+                               TextAlignment="Right"
+                               Text="{Binding HowTheSaveWent}"
+                               Visibility="{Binding HowTheSaveWent, Converter={StaticResource WhenAnything}}"
+                               AutomationProperties.AutomationId="HowTheSaveWent" />
+                </StackPanel>
             </Grid>
         </Border>
 

@@ -363,7 +363,7 @@ public class TheWindowChecksItself
 
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(37);
+        int which = dice.Next(38);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -475,6 +475,11 @@ public class TheWindowChecksItself
             // The way out of a size refusal, which the screen carries out
             // itself: aiming at the larger disc it named.
             36 => new("use the larger disc the refusal names", desk => desk.Screen.UseTheLargerDisc()),
+
+            // Saving the recipe without building. It decides whether it may,
+            // writes through the builder, and has a sentence to say, so the
+            // walk holds it to announcing all of that like everything else.
+            37 => new("save it for later", desk => desk.Screen.SaveItForLater()),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -1163,6 +1168,12 @@ public class TheWindowChecksItself
                 project.Games.Count == 0
                     ? []
                     : [new BuiltDisc(project.Label, 1, 1, System.IO.Path.Combine(outputFolder, "disc 1"), 1000)]));
+
+        // The walk presses save and only cares what the screen says about
+        // it; what lands on a disk is SavingItForLater's business.
+        public void SaveTheRecipe(DiscProject project, Medium medium, string outputFolder)
+        {
+        }
     }
 
     private sealed class ImagesThatDoNothing : IMakeImages

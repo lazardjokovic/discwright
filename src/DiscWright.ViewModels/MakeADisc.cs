@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -176,6 +176,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
             _theFolderWasSuggested = false;
             Change(ref _outputFolder, value);
             LookForImages();
+
+            // Saving lands the recipe here, so whether there is anywhere to
+            // save follows this box.
+            Tell(nameof(CanSaveItForLater));
         }
     }
 
@@ -1179,6 +1183,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(IsWorking));
             Tell(nameof(NothingIsRunning));
             Tell(nameof(CanStartAgain));
+            Tell(nameof(CanSaveItForLater));
             Tell(nameof(CanTakeSomethingOff));
             Tell(nameof(CanErase));
 
@@ -1229,6 +1234,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(IsWorking));
             Tell(nameof(NothingIsRunning));
             Tell(nameof(CanStartAgain));
+            Tell(nameof(CanSaveItForLater));
             Tell(nameof(CanTakeSomethingOff));
             Tell(nameof(CanErase));
             await LookAtTheDrives();
@@ -1325,9 +1331,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         // The line about the last burn is about discs this build is about to
         // replace, so it goes with the drive's note rather than staying under
-        // a bar that has started again.
+        // a bar that has started again. The saved line goes the same way: the
+        // build writes the same file again, so the sentence about the old
+        // save is about to stop being the story.
         HowTheDiscCameOut = null;
         HowTheSetWent = null;
+        HowTheSaveWent = null;
         HowFar = 0;
         Doing = "Starting";
         Started();
@@ -1835,6 +1844,45 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public bool CanStartAgain => NothingIsRunning && HasAnythingOnIt;
 
     /// <summary>
+    /// Whether there is a project worth keeping and somewhere to keep it.
+    /// </summary>
+    /// <remarks>
+    /// The folder is part of the question rather than a refusal after the
+    /// press: the recipe lands where the discs would, so with nowhere named
+    /// there is nowhere to save, and a dead button says so the way every
+    /// other button on this window does.
+    /// </remarks>
+    public bool CanSaveItForLater =>
+        NothingIsRunning && HasAnythingOnIt && OutputFolder.Trim().Length > 0;
+
+    /// <summary>Where the recipe went when it was saved, or null.</summary>
+    public string? HowTheSaveWent { get; private set; }
+
+    /// <summary>
+    /// Writes <c>discproject.json</c> where the discs would go, and builds
+    /// nothing.
+    /// </summary>
+    /// <remarks>
+    /// Asked for in discwright#98: saving a project to come back to used to
+    /// mean building the whole thing first, minutes of discs for a file of
+    /// recipe. The build writes the same file to the same place, so a saved
+    /// project and a built one are opened the same way and there is no
+    /// second kind of project file to teach anything about.
+    /// </remarks>
+    public void SaveItForLater()
+    {
+        if (!CanSaveItForLater)
+        {
+            return;
+        }
+
+        _machine.Builder.SaveTheRecipe(AsAProject(), Medium, OutputFolder);
+
+        HowTheSaveWent = $"Saved. Open one you built finds it in {OutputFolder}.";
+        Tell(nameof(HowTheSaveWent));
+    }
+
+    /// <summary>
     /// Clears this disc and leaves the machine alone.
     /// </summary>
     /// <remarks>
@@ -1905,12 +1953,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
         ItWentWrong = null;
         HowTheDiscCameOut = null;
         HowTheSetWent = null;
+        HowTheSaveWent = null;
         TheImages = [];
 
         foreach (string gone in new[]
         {
             nameof(Made), nameof(TheSetToBurn), nameof(AboutTheImage), nameof(ItWentWrong), nameof(HowTheDiscCameOut),
-            nameof(HowTheSetWent), nameof(TheImages), nameof(HasAnythingOnIt)
+            nameof(HowTheSetWent), nameof(HowTheSaveWent), nameof(TheImages), nameof(HasAnythingOnIt)
         })
         {
             Tell(gone);
@@ -2757,6 +2806,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(ExtrasFolder));
         Tell(nameof(Music));
 
+        // The sentence about the last save was about the project this one
+        // has just replaced.
+        HowTheSaveWent = null;
+        Tell(nameof(HowTheSaveWent));
+
         Reconsider();
     }
 
@@ -2998,6 +3052,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(IsWorking));
         Tell(nameof(NothingIsRunning));
         Tell(nameof(CanStartAgain));
+        Tell(nameof(CanSaveItForLater));
+        Tell(nameof(HowTheSaveWent));
         Tell(nameof(CanTakeSomethingOff));
         Tell(nameof(Doing));
         Tell(nameof(HowFar));
@@ -3041,9 +3097,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(WhatTheWorrysWayOutIsCalled));
 
         // A name typed, a game added, a tune chosen: all of them end here,
-        // and every one of them is something to start again FROM.
+        // and every one of them is something to start again FROM, and
+        // something worth keeping.
         Tell(nameof(HasAnythingOnIt));
         Tell(nameof(CanStartAgain));
+        Tell(nameof(CanSaveItForLater));
 
         // Said about the folders on the list, so it follows the list.
         Tell(nameof(WhatTheDownloadsSay));

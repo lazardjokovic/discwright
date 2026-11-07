@@ -704,6 +704,12 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// The recipe without the discs. The screen decides everything; this is
+    /// only the press.
+    /// </summary>
+    private void SaveItForLater(object sender, RoutedEventArgs e) => _screen.SaveItForLater();
+
+    /// <summary>
     /// Asks whether to carry on part way through a set, or start it again.
     /// </summary>
     /// <remarks>

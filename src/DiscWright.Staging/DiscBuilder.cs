@@ -129,6 +129,28 @@ public sealed class DiscBuilder(
     /// leaves no recipe for discs that were never made.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The recipe alone, with nothing built. Asked for in discwright#98 as a
+    /// Save Project button that does not first spend minutes building an ISO
+    /// nobody wanted yet.
+    /// </summary>
+    /// <remarks>
+    /// The same file, written the same way to the same place, so "Open one
+    /// you built" finds a saved project exactly as it finds a built one. The
+    /// folder is made first because a build has made it long before this
+    /// point, and a save is the one path where nothing has.
+    /// </remarks>
+    public void SaveTheRecipe(DiscProject project, Medium medium, string outputFolder)
+    {
+        if (outputFolder.Length == 0)
+        {
+            return;
+        }
+
+        writer.MakeFolder(outputFolder);
+        WriteTheProjectFile(project, medium, outputFolder);
+    }
+
     private void WriteTheProjectFile(DiscProject project, Medium medium, string outputFolder)
     {
         if (outputFolder.Length == 0)

@@ -1333,6 +1333,30 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void Saving_for_later_is_a_quiet_press_beside_the_two_big_ones()
+    {
+        // The recipe without the discs, discwright#98. Quiet rather than a
+        // third box, because the row above is already as wide as its column
+        // and saving is the small act next to the two big ones.
+        XElement save = Assert.Single(
+            Window().Descendants(Xaml + "Button"), each => IdOf(each) == "SaveItForLater");
+
+        Assert.Equal("{Binding CanSaveItForLater}", (string?)save.Attribute("IsEnabled"));
+        Assert.Equal("SaveItForLater", (string?)save.Attribute("Click"));
+
+        // Where the file lands is said before the press, because the one
+        // surprising thing about this button is that it uses the ISO folder.
+        Assert.NotNull(save.Attribute("ToolTip"));
+
+        XElement said = Assert.Single(
+            Window().Descendants(Xaml + "TextBlock"), each => IdOf(each) == "HowTheSaveWent");
+
+        Assert.Equal(
+            "{Binding HowTheSaveWent, Converter={StaticResource WhenAnything}}",
+            (string?)said.Attribute("Visibility"));
+    }
+
+    [Fact]
     public void The_dark_look_answers_for_every_brush_the_light_one_names()
     {
         // The dark look is brushes and nothing else, merged over Look.xaml

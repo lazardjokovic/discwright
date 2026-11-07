@@ -27,4 +27,18 @@ public interface IBuildDiscs
         string outputFolder,
         IProgress<BuildProgress>? progress,
         CancellationToken ct);
+
+    /// <summary>
+    /// Writes the recipe alone: <c>discproject.json</c> at the top of the
+    /// output folder, exactly where and how a finished build leaves it, with
+    /// no disc built and nothing else touched.
+    /// </summary>
+    /// <remarks>
+    /// Defaulted to refuse rather than to do nothing, deliberately. Sixteen
+    /// fakes stand in for this interface and almost none of them save, so a
+    /// quiet default keeps them short, but a quiet default that succeeded
+    /// would let a test walk through a save that saved nothing and pass.
+    /// </remarks>
+    void SaveTheRecipe(DiscProject project, Medium medium, string outputFolder) =>
+        throw new NotSupportedException("This builder does not save recipes.");
 }
