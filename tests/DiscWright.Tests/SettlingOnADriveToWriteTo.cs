@@ -271,6 +271,74 @@ public class SettlingOnADriveToWriteTo
     }
 
     [Fact]
+    public async Task Waits_for_the_drive_that_vanishes_while_it_comes_back_from_an_erase()
+    {
+        // What the first real two-disc set found, twice in one evening: the
+        // moment an erase finishes, the drive can be missing from the
+        // enumeration altogether while it re-reads the blank, and taking
+        // that first emptiness for an answer told a machine with two
+        // writers that it had none.
+        ADriveThatCatchesItsBreathAfterErasing drives = new(quietFor: 3, vanishes: true);
+        AClockThatMovesItself clock = new();
+
+        Outcome<Recorder> settled = await Settling(
+            drives, new AnEraserThatWorks(() => drives.Erased = true), patience: clock.Patience)
+            .OnThatOne("D:", ASmallImage, could => Task.FromResult<Recorder?>(could[0]));
+
+        Assert.Equal("D:", Assert.IsType<Outcome<Recorder>.Ok>(settled).Value.Drive);
+        Assert.Equal(3, clock.Waits);
+    }
+
+    [Fact]
+    public async Task Waits_for_the_drive_that_is_still_thinking_after_an_erase()
+    {
+        // The other shape of the same breath: the drive stays in the list but
+        // answers with a WhyNot, exactly like a disc that was just pushed in.
+        ADriveThatCatchesItsBreathAfterErasing drives = new(quietFor: 2, vanishes: false);
+        AClockThatMovesItself clock = new();
+
+        Settled settled = await Settling(
+            drives, new AnEraserThatWorks(() => drives.Erased = true), patience: clock.Patience)
+            .OnWhicheverIsReady(ASmallImage, NeverAsksWhichDrive, could => Task.FromResult<Recorder?>(could[0]));
+
+        Assert.Equal("D:", Assert.IsType<Settled.ThisOne>(settled).Drive.Drive);
+        Assert.Equal(2, clock.Waits);
+    }
+
+    [Fact]
+    public async Task Gives_up_on_a_drive_that_never_comes_back_from_an_erase()
+    {
+        // The same fifteen seconds a silent drive gets anywhere else, and
+        // then the silence is the answer.
+        ADriveThatCatchesItsBreathAfterErasing drives = new(quietFor: int.MaxValue, vanishes: true);
+        AClockThatMovesItself clock = new();
+
+        Outcome<Recorder> settled = await Settling(
+            drives, new AnEraserThatWorks(() => drives.Erased = true), patience: clock.Patience)
+            .OnThatOne("D:", ASmallImage, could => Task.FromResult<Recorder?>(could[0]));
+
+        Assert.Equal(15, clock.Waits);
+        Assert.IsType<Outcome<Recorder>.No>(settled);
+    }
+
+    [Fact]
+    public async Task Says_it_is_waiting_while_the_drive_comes_back_from_an_erase()
+    {
+        List<string> said = [];
+        ADriveThatCatchesItsBreathAfterErasing drives = new(quietFor: 2, vanishes: true);
+        AClockThatMovesItself clock = new();
+
+        await Settling(
+            drives, new AnEraserThatWorks(() => drives.Erased = true),
+            say: (doing, far) => said.Add(doing), patience: clock.Patience)
+            .OnThatOne("D:", ASmallImage, could => Task.FromResult<Recorder?>(could[0]));
+
+        // Half a minute of erase and then more silence reads as a program
+        // that died at the finish line.
+        Assert.Contains("waiting for the drive", said);
+    }
+
+    [Fact]
     public async Task Says_why_when_the_erase_itself_will_not_work()
     {
         Settled settled = await Settling(new OneUsedRewritable("D:"), new AnEraserThatRefuses())
@@ -541,6 +609,36 @@ public class SettlingOnADriveToWriteTo
                 ? new Recorder("id" + drive, drive, "A Drive", 3, true, 360_000, [750])
                 : new Recorder("id" + drive, drive, "A Drive", 3, false, 0, [750])
         ];
+    }
+
+    /// <summary>
+    /// A drive holding a used rewritable that, once the disc is erased, takes
+    /// a few asks to come back: either missing from the enumeration entirely
+    /// or answering with a WhyNot, which are the two shapes a real drive
+    /// wears while it re-reads the disc it just blanked.
+    /// </summary>
+    private sealed class ADriveThatCatchesItsBreathAfterErasing(int quietFor, bool vanishes) : IFindRecorders
+    {
+        internal bool Erased { get; set; }
+
+        private int _askedSinceErase;
+
+        public IReadOnlyList<Recorder> All()
+        {
+            if (!Erased)
+            {
+                return [new("id-D", "D:", "A Drive", 3, false, 0, [750])];
+            }
+
+            if (_askedSinceErase++ < quietFor)
+            {
+                return vanishes
+                    ? []
+                    : [new("id-D", "D:", "A Drive", 0, false, 0, [], "the device is not ready")];
+            }
+
+            return [new("id-D", "D:", "A Drive", 3, true, 360_000, [750])];
+        }
     }
 
     /// <summary>

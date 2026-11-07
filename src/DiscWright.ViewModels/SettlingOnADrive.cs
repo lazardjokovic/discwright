@@ -166,6 +166,65 @@ public sealed class SettlingOnADrive(
     }
 
     /// <summary>
+    /// The drives again, once the one that just blanked a disc is back among
+    /// them with an answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A drive that has just finished an erase behaves like one that has just
+    /// had a disc pushed in: it is re-reading what it holds, and for a moment
+    /// it either answers with a <see cref="Recorder.WhyNot"/> or is missing
+    /// from the enumeration altogether. <see cref="OnceTheyHaveAnswered"/>
+    /// covers the first shape and cannot cover the second, because a drive
+    /// that is not in the list looks exactly like a machine that never had
+    /// one.
+    /// </para>
+    /// <para>
+    /// Here the difference is known: this drive erased a disc a moment ago, so
+    /// it exists, and its absence is it still catching its breath. Without
+    /// this wait, both real burns that needed an erase on the way stopped
+    /// with "There is no disc writer on this machine" the instant the erase
+    /// finished, on a machine with two of them. Found by the first real
+    /// two-disc set burned on this machine's ASUS writer, twice in one
+    /// evening, 2026-11-07.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<Recorder>> OnceItIsBackFromErasing(
+        string drive, CancellationToken ct)
+    {
+        bool StillAway(IReadOnlyList<Recorder> found)
+        {
+            Recorder? it = found.FirstOrDefault(each =>
+                string.Equals(each.Drive, drive, StringComparison.OrdinalIgnoreCase));
+
+            return it is null || (it.WhyNot is not null && !it.NothingInIt);
+        }
+
+        IReadOnlyList<Recorder> all = drives.All();
+
+        if (!StillAway(all))
+        {
+            return all;
+        }
+
+        say("waiting for the drive", 0);
+
+        for (DateTimeOffset until = _patience.Now() + _patience.AtMost; _patience.Now() < until;)
+        {
+            await _patience.Waiting(_patience.Between, ct);
+
+            all = drives.All();
+
+            if (!StillAway(all))
+            {
+                return all;
+            }
+        }
+
+        return all;
+    }
+
+    /// <summary>
     /// Every disc an erase would make usable, or why there is not one.
     /// </summary>
     /// <remarks>
@@ -264,7 +323,7 @@ public sealed class SettlingOnADrive(
                     return new Settled.No(why);
                 }
 
-                all = drives.All();
+                all = await OnceItIsBackFromErasing(chosen.Drive, ct);
                 continue;
             }
 
