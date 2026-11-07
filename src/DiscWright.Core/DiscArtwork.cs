@@ -13,16 +13,25 @@ namespace DiscWright.Core;
 /// </param>
 /// <param name="CoverPath">The printed sleeve.</param>
 /// <param name="DiscFacePath">The printed label for the disc itself.</param>
+/// <param name="BackgroundColour">
+/// A colour the menu is drawn on instead of a picture, as
+/// <see cref="SolidColour"/> keeps one, or nothing. Never set beside
+/// <paramref name="BackgroundPath"/>: the screen clears one when the other
+/// is chosen, and the menu writer lets the picture win if a file somebody
+/// edited carries both.
+/// </param>
 public sealed record DiscArtwork(
     string? IconPath = null,
     string? BackgroundPath = null,
     bool BackgroundAsIs = false,
     string? CoverPath = null,
-    string? DiscFacePath = null)
+    string? DiscFacePath = null,
+    string? BackgroundColour = null)
 {
     /// <summary>Whether there is anything to put on the disc at all.</summary>
     public bool IsAnything =>
-        IconPath is not null || BackgroundPath is not null || CoverPath is not null || DiscFacePath is not null;
+        IconPath is not null || BackgroundPath is not null || CoverPath is not null || DiscFacePath is not null
+        || BackgroundColour is not null;
 
     /// <summary>Whether there is anything worth printing.</summary>
     public bool HasSomethingToPrint => CoverPath is not null || DiscFacePath is not null;

@@ -104,10 +104,23 @@
                             BorderBrush="{DynamicResource Edge}"
                             BorderThickness="1"
                             CornerRadius="4">
-                        <Image Source="{Binding Background, Converter={StaticResource APicture}}"
-                               Stretch="UniformToFill"
-                               Margin="2"
-                               AutomationProperties.AutomationId="TheBackgroundPicture" />
+                        <Grid>
+                            <!-- The colour, shown where the picture would
+                                 be, because a backdrop somebody chose is
+                                 only really confirmed by seeing it. Never
+                                 both: choosing either takes the other off. -->
+                            <!-- No AutomationId: a Border has no automation
+                                 peer, so an id here would name a thing no
+                                 test can ever reach. Checked by eye. -->
+                            <Border Margin="2"
+                                    CornerRadius="3"
+                                    Background="{Binding BackgroundColour, Converter={StaticResource AsABrush}}"
+                                    Visibility="{Binding BackgroundColour, Converter={StaticResource WhenAnything}}" />
+                            <Image Source="{Binding Background, Converter={StaticResource APicture}}"
+                                   Stretch="UniformToFill"
+                                   Margin="2"
+                                   AutomationProperties.AutomationId="TheBackgroundPicture" />
+                        </Grid>
                     </Border>
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,10,0">
@@ -140,6 +153,63 @@
                                 AutomationProperties.AutomationId="ClearTheBackground" />
                     </StackPanel>
                 </Grid>
+
+                <!-- A colour instead of a picture, discwright#98: "a solid
+                     color option by choosing a hex value". Swatches for the
+                     colours that suit the panel, a box for any other, and
+                     choosing either backdrop takes the other off. No
+                     picture and no colour is itself a look: the menu's own
+                     dark stage. -->
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <TextBlock VerticalAlignment="Center" Text="Or a colour instead" />
+
+                    <ItemsControl ItemsSource="{Binding TheColoursOffered}"
+                                  Margin="12,0,0,0"
+                                  VerticalAlignment="Center"
+                                  AutomationProperties.AutomationId="TheColoursOffered">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <!-- Its own flat template, because a stock
+                                     button's chrome would paint over the one
+                                     thing a swatch is: the colour itself. -->
+                                <Button Click="PickAColour"
+                                        Cursor="Hand"
+                                        ToolTip="{Binding}"
+                                        AutomationProperties.Name="{Binding}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Width="22" Height="22"
+                                                    Margin="0,0,6,0"
+                                                    CornerRadius="3"
+                                                    Background="{Binding Converter={StaticResource AsABrush}}"
+                                                    BorderBrush="{DynamicResource Edge}"
+                                                    BorderThickness="1" />
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBox Width="86"
+                             Margin="6,0,0,0"
+                             VerticalAlignment="Center"
+                             Text="{Binding BackgroundColourText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Six hex figures, with or without the #."
+                             AutomationProperties.AutomationId="BackgroundColourText" />
+                </StackPanel>
+
+                <TextBlock Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource WorryInk}"
+                           Text="{Binding WhatTheColourSays}"
+                           Visibility="{Binding WhatTheColourSays, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhatTheColourSays" />
 
                 <!-- ============================================ music, manual -->
                 <TextBlock Style="{StaticResource Step}" Margin="0,22,0,0" Text="AND THE REST OF IT" />

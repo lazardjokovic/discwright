@@ -53,6 +53,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private string? _extrasFolder;
     private string? _music;
 
+    /// <summary>
+    /// The colour box's raw text, kept apart from the artwork so the box
+    /// never fights the person typing in it.
+    /// </summary>
+    private string _backgroundColourText = string.Empty;
+
     private string _label = string.Empty;
     private string _outputFolder = string.Empty;
 
@@ -1728,11 +1734,83 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>The picture the menu is drawn on.</summary>
+    /// <remarks>
+    /// A picture and a colour cannot both be the backdrop, so choosing one
+    /// takes the other off, in both directions, rather than leaving two
+    /// choices on the window and letting the build pick quietly.
+    /// </remarks>
     public string? Background
     {
         get => _artwork?.BackgroundPath;
-        set => ChangeTheArtwork(Art() with { BackgroundPath = Tidy(value) });
+        set
+        {
+            string? path = Tidy(value);
+
+            if (path is not null)
+            {
+                _backgroundColourText = string.Empty;
+            }
+
+            ChangeTheArtwork(Art() with
+            {
+                BackgroundPath = path,
+                BackgroundColour = path is null ? Art().BackgroundColour : null,
+            });
+
+            Tell(nameof(BackgroundColourText));
+            Tell(nameof(WhatTheColourSays));
+        }
     }
+
+    /// <summary>
+    /// The colour the menu is drawn on instead of a picture, as typed,
+    /// discwright#98: "a solid color option by choosing a hex value".
+    /// </summary>
+    /// <remarks>
+    /// The raw text, so the box never fights the person typing in it. What
+    /// actually reaches the disc is only ever what <see cref="SolidColour"/>
+    /// makes of it: a colour, or nothing while the text is half typed or
+    /// wrong, with <see cref="WhatTheColourSays"/> saying so.
+    /// </remarks>
+    public string BackgroundColourText
+    {
+        get => _backgroundColourText;
+        set
+        {
+            _backgroundColourText = value ?? string.Empty;
+
+            string? colour = SolidColour.Tidied(_backgroundColourText);
+
+            ChangeTheArtwork(Art() with
+            {
+                BackgroundColour = colour,
+                BackgroundPath = colour is null ? Art().BackgroundPath : null,
+            });
+
+            Tell(nameof(BackgroundColourText));
+            Tell(nameof(WhatTheColourSays));
+        }
+    }
+
+    /// <summary>The colour as the disc will get it, or nothing.</summary>
+    public string? BackgroundColour => _artwork?.BackgroundColour;
+
+    /// <summary>
+    /// Why the typed text is not a colour yet, or nothing while it is one or
+    /// there is none.
+    /// </summary>
+    public string? WhatTheColourSays =>
+        _backgroundColourText.Trim().Length > 0 && !SolidColour.Fits(_backgroundColourText)
+            ? "Not a colour yet. Six hex figures name one, like 1B3A4B."
+            : null;
+
+    /// <summary>
+    /// A handful of colours that suit the menu's panel, for the swatches
+    /// beside the box. Every one of them must satisfy SolidColour, which a
+    /// test holds.
+    /// </summary>
+    public IReadOnlyList<string> TheColoursOffered { get; } =
+        ["#0e2430", "#1b3a4b", "#2e1f3a", "#143321", "#3a2a1b", "#3a1b24"];
 
     /// <summary>
     /// Whether the background is stretched to fit exactly rather than cropped.
@@ -1874,7 +1952,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// to say so, because the second place that had to say so did not.
     /// </remarks>
     private static readonly string[] ThePicturesOnIt =
-        [nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace)];
+        [nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace),
+         nameof(BackgroundColour), nameof(BackgroundColourText), nameof(WhatTheColourSays)];
 
     private void ChangeTheArtwork(DiscArtwork now)
     {
@@ -2026,6 +2105,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Manual = null;
         ExtrasFolder = null;
         Music = null;
+        _backgroundColourText = string.Empty;
         ChangeTheArtwork(new DiscArtwork());
 
         Label = string.Empty;
@@ -2839,6 +2919,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
         _loose.AddRange(was.Extras?.Loose ?? []);
         _artwork = was.Artwork;
+
+        // The box shows the colour the project carries, so a project opened
+        // and saved again keeps it without anybody retyping it.
+        _backgroundColourText = was.Artwork?.BackgroundColour ?? string.Empty;
+
         _manual = was.Extras?.ManualPath;
         _extrasFolder = was.Extras?.ExtrasFolderPath;
         _music = was.Extras?.MusicPath;

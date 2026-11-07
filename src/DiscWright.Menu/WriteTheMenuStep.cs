@@ -283,6 +283,12 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
             // Named from the step that copies it rather than spelled out
             // again here. The one thing worse than a menu that plays nothing
             // is a menu that asks the player for a file nobody wrote.
-            TheMusicOn(context));
+            TheMusicOn(context),
+
+            // Only when there is no picture, which is also how the writer
+            // settles a file that carries both.
+            BackdropColour: context.Project.Artwork?.BackgroundPath is null
+                ? context.Project.Artwork?.BackgroundColour
+                : null);
     }
 }

@@ -74,4 +74,5 @@ public sealed record ProjectArtwork(
     string? BackgroundPath,
     bool BackgroundAsItIs,
     string? CoverPath,
-    string? DiscFacePath);
+    string? DiscFacePath,
+    string? BackgroundColour = null);

@@ -139,6 +139,7 @@ public static class TheProjectAsJson
             writing.WriteBoolean("Menu", project.Options.Menu);
             WriteOrNull(writing, "BgPath", art?.BackgroundPath);
             writing.WriteBoolean("BgAsIs", art?.BackgroundAsIs ?? false);
+            WriteOrNull(writing, "BgColour", art?.BackgroundColour);
             WriteOrNull(writing, "CoverPath", art?.CoverPath);
             WriteOrNull(writing, "DiscArtPath", art?.DiscFacePath);
 

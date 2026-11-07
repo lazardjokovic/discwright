@@ -21,6 +21,7 @@
             <local:APicture x:Key="APicture" />
             <local:WhenNothing x:Key="WhenNothing" />
             <local:HeldBack x:Key="HeldBack" />
+            <local:AsABrush x:Key="AsABrush" />
         </ResourceDictionary>
     </Application.Resources>
 </Application>

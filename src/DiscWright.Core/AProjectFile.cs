@@ -107,7 +107,11 @@ public static class AProjectFile
                     BackgroundPath: Text(root, "BgPath"),
                     BackgroundAsItIs: Yes(root, "BgAsIs"),
                     CoverPath: Text(root, "CoverPath"),
-                    DiscFacePath: Text(root, "DiscArtPath")));
+                    DiscFacePath: Text(root, "DiscArtPath"),
+
+                    // Tidied on the way in, so a file somebody edited by
+                    // hand still only ever yields a colour or nothing.
+                    BackgroundColour: SolidColour.Tidied(Text(root, "BgColour"))));
         }
     }
 

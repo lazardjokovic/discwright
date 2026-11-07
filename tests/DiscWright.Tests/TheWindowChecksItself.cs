@@ -153,6 +153,7 @@ public class TheWindowChecksItself
     /// </remarks>
     [Theory]
     [InlineData("the menu background")]
+    [InlineData("the menu colour")]
     [InlineData("stretch the background to fit")]
     [InlineData("the disc icon")]
     [InlineData("the cover")]
@@ -276,7 +277,8 @@ public class TheWindowChecksItself
     /// <summary>Everything the cases above really put back.</summary>
     private static readonly HashSet<string> TheThingsThatCanBePutBack =
     [
-        nameof(MakeADisc.Background), nameof(MakeADisc.BackgroundAsIs), nameof(MakeADisc.DiscIcon),
+        nameof(MakeADisc.Background), nameof(MakeADisc.BackgroundColourText), nameof(MakeADisc.BackgroundAsIs),
+        nameof(MakeADisc.DiscIcon),
         nameof(MakeADisc.Cover), nameof(MakeADisc.DiscFace), nameof(MakeADisc.Manual),
         nameof(MakeADisc.ExtrasFolder), nameof(MakeADisc.Music), nameof(MakeADisc.Label),
         nameof(MakeADisc.OutputFolder), nameof(MakeADisc.Medium), nameof(MakeADisc.TheSizeChosen),
@@ -292,6 +294,7 @@ public class TheWindowChecksItself
         switch (what)
         {
             case "the menu background": screen.Background = @"C:\art\back.png"; break;
+            case "the menu colour": screen.BackgroundColourText = "#1B3A4B"; break;
             case "stretch the background to fit": screen.BackgroundAsIs = true; break;
             case "the disc icon": screen.DiscIcon = @"C:\art\icon.png"; break;
             case "the cover": screen.Cover = @"C:\art\cover.png"; break;
@@ -315,6 +318,7 @@ public class TheWindowChecksItself
         switch (what)
         {
             case "the menu background": screen.Background = null; break;
+            case "the menu colour": screen.BackgroundColourText = string.Empty; break;
             case "stretch the background to fit": screen.BackgroundAsIs = false; break;
             case "the disc icon": screen.DiscIcon = null; break;
             case "the cover": screen.Cover = null; break;

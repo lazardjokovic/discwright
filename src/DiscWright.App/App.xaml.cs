@@ -245,6 +245,42 @@ public sealed class APicture : IValueConverter
 }
 
 /// <summary>
+/// A colour the screen keeps as text, shown as the brush it names.
+/// </summary>
+/// <remarks>
+/// For the swatches and the backdrop preview. The screen only ever holds a
+/// colour SolidColour tidied, so anything unreadable here is a fault worth
+/// seeing, and it comes out transparent rather than thrown because a
+/// preview must not take the window down.
+/// </remarks>
+public sealed class AsABrush : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not string text || text.Length == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            System.Windows.Media.SolidColorBrush brush = new((System.Windows.Media.Color)
+                System.Windows.Media.ColorConverter.ConvertFromString(text));
+            brush.Freeze();
+
+            return brush;
+        }
+        catch (FormatException)
+        {
+            return null;
+        }
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("Nothing becomes a colour by being painted.");
+}
+
+/// <summary>
 /// Visible when there is something to show, collapsed when there is not.
 /// </summary>
 /// <remarks>

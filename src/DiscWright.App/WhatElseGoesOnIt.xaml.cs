@@ -44,6 +44,9 @@ public partial class WhatElseGoesOnIt : Window
 
     private void ClearTheBackground(object sender, RoutedEventArgs e) => _screen.Background = null;
 
+    private void PickAColour(object sender, RoutedEventArgs e) =>
+        _screen.BackgroundColourText = (string)((FrameworkElement)sender).DataContext;
+
     private void ChooseTheCover(object sender, RoutedEventArgs e) =>
         TakeAPicture("The picture for the printed cover", path => _screen.Cover = path);
 

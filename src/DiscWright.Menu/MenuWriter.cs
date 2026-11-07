@@ -115,17 +115,25 @@ public static class MenuWriter
         return Template
             .Replace("%%TITLE%%", Markup(facts.GameName), StringComparison.Ordinal)
             .Replace("%%APPNAME%%", Markup(facts.ApplicationName), StringComparison.Ordinal)
-            // The picture the menu is drawn on, or nothing at all.
+            // The picture the menu is drawn on, the colour instead, or
+            // nothing at all.
             //
             // Written as a rule rather than always present and sometimes
             // pointing at a missing file, because a background-image that
             // does not resolve leaves the panel floating on whatever the
             // browser decides, and the disc looks broken rather than plain.
+            //
+            // The colour goes through SolidColour on its way into a style
+            // rule on the page, so nothing that is not exactly a colour can
+            // ride a project file into the disc's own markup. The picture
+            // wins when a file somebody edited carries both.
             .Replace(
                 "%%BACKDROP%%",
                 facts.BackdropFile is string picture
                     ? "background-image: url(\"" + picture + "\"); background-repeat: no-repeat;"
-                    : string.Empty,
+                    : SolidColour.Tidied(facts.BackdropColour) is string colour
+                        ? "background: " + colour + ";"
+                        : string.Empty,
                 StringComparison.Ordinal)
             .Replace("%%SINGLE%%", facts.OnlyOneAtATime ? "yes" : "no", StringComparison.Ordinal)
             .Replace("%%ICON%%", Markup(facts.Icon), StringComparison.Ordinal)
@@ -260,7 +268,8 @@ public sealed record MenuFacts(
     string IconOnTheDisc = "AUTORUN/menu.ico",
     string? Manual = null,
     string? Extras = null,
-    string? Music = null)
+    string? Music = null,
+    string? BackdropColour = null)
 {
     /// <summary>The games, or one standing for the disc when none were given.</summary>
     public IReadOnlyList<MenuGame> GamesOrTheOne => Games ?? [new MenuGame(GameName, string.Empty, string.Empty)];

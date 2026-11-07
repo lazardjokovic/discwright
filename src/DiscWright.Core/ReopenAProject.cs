@@ -103,7 +103,8 @@ public static class ReopenAProject
                 opened.Artwork.BackgroundPath,
                 opened.Artwork.BackgroundAsItIs,
                 opened.Artwork.CoverPath,
-                opened.Artwork.DiscFacePath),
+                opened.Artwork.DiscFacePath,
+                opened.Artwork.BackgroundColour),
             Extras: new DiscExtras(
                 opened.ManualPath,
                 opened.ExtrasFolderPath,
