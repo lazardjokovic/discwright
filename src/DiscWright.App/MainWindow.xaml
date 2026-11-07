@@ -92,6 +92,23 @@
                             Margin="0,3,0,0"
                             Click="CheckForANewVersion"
                             AutomationProperties.AutomationId="CheckForANewVersion" />
+
+                    <!-- In this corner because it is about the program, not
+                         about the disc being made, and this corner is where
+                         the program talks about itself: its name, its build,
+                         its updates. One quiet control cycling three answers
+                         rather than a dropdown, because it is touched once.
+                         Its words come from ChoosingTheLook, whose
+                         DataContext the window sets, so the screen stays
+                         ignorant of themes. -->
+                    <Button x:Name="HowItDresses"
+                            Content="{Binding InWords}"
+                            Style="{StaticResource Quietly}"
+                            Margin="0,3,0,0"
+                            HorizontalAlignment="Left"
+                            Click="ChooseTheNextLook"
+                            ToolTip="Light, dark, or whatever Windows wears. Following Windows is the default."
+                            AutomationProperties.AutomationId="Appearance" />
                 </StackPanel>
 
                 <!-- About the whole window rather than about one more game, which
@@ -294,7 +311,17 @@
                            Visibility="{Binding WhatIsLeftOff, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhatIsLeftOff" />
 
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,10,0,0">
+                <!-- Above the list, not under it. These act on the list, so
+                     they stay inside this panel's column rather than joining
+                     the project pair top right, but under the list they were
+                     the last thing in reading order and the first thing a
+                     new window needs: on an empty window the one thing to do
+                     sat below a large blank box. A toolbar above its list is
+                     also where every file window on this system puts one.
+                     Above the panel rather than inside it, because a button
+                     inside is covered by the tree and cannot be clicked,
+                     which is recorded on the empty-list words below. -->
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,8,0,8">
                     <Button Content="Add a game"
                             IsEnabled="{Binding NothingIsRunning}"
                             Style="{StaticResource Ordinary}"

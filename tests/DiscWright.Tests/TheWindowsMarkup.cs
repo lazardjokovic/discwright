@@ -398,11 +398,11 @@ public class TheWindowsMarkup
             .Parent!;
 
         Assert.Equal(
-            ["StackPanel", "TextBlock", "Button"],
+            ["StackPanel", "TextBlock", "Button", "Button"],
             block.Elements().Select(each => each.Name.LocalName));
 
         Assert.Equal(
-            ["WhatTheVersionSays", "CheckForANewVersion"],
+            ["WhatTheVersionSays", "CheckForANewVersion", "Appearance"],
             block.Elements().Skip(1).Select(IdOf));
 
         // And it is there to be used. A link in the markup that the markup
@@ -410,7 +410,7 @@ public class TheWindowsMarkup
         // a working, tested capability with no way in. The first round of
         // faults walked straight through the assertions above by collapsing
         // it, which is as good as deleting it and leaves no trace in a diff.
-        XElement link = block.Elements().Last();
+        XElement link = block.Elements().ElementAt(2);
 
         Assert.Null(link.Attribute("Visibility"));
         Assert.Null(link.Attribute("IsEnabled"));
@@ -1495,7 +1495,53 @@ public class TheWindowsMarkup
         Assert.Contains("LookInTheDark.xaml", wearing, StringComparison.Ordinal);
         Assert.Contains("RegisterClassHandler", wearing, StringComparison.Ordinal);
         Assert.Contains("PaintingTheTitleBar", wearing, StringComparison.Ordinal);
-        Assert.Contains("WearingTheTheme.FollowTheSystem", app, StringComparison.Ordinal);
+        Assert.Contains("WearingTheTheme.Follow(this, look)", app, StringComparison.Ordinal);
+
+        // Whose decision the dark is: the choice's, every time, so a chosen
+        // dark survives a Windows that is light, and the person's change of
+        // mind lands exactly like the system's.
+        Assert.Contains("choice.WearsTheDark(WhatTheSystemWears.Dark())", wearing, StringComparison.Ordinal);
+        Assert.Contains("choice.PropertyChanged", wearing, StringComparison.Ordinal);
+
+        // And the choice is read back before any window exists, from the one
+        // note the program keeps, so the first thing on screen is already
+        // dressed the way it was left.
+        Assert.Contains("ANoteAboutTheLook.ForThisUser()", app, StringComparison.Ordinal);
+        Assert.Contains("keptLook.Recalled(), keptLook.Keep", app, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_appearance_is_a_quiet_press_in_the_programs_own_corner()
+    {
+        // About the program rather than about the disc being made, so it
+        // lives where the program talks about itself, under the version and
+        // the update link, and reads its words from ChoosingTheLook rather
+        // than from the screen.
+        XElement dresses = Assert.Single(
+            Window().Descendants(Xaml + "Button"), each => IdOf(each) == "Appearance");
+
+        Assert.Equal("{StaticResource Quietly}", (string?)dresses.Attribute("Style"));
+        Assert.Equal("{Binding InWords}", (string?)dresses.Attribute("Content"));
+        Assert.Equal("ChooseTheNextLook", (string?)dresses.Attribute("Click"));
+        Assert.NotNull(dresses.Attribute("ToolTip"));
+    }
+
+    [Fact]
+    public void The_list_buttons_sit_above_the_list_they_act_on()
+    {
+        // Under the list they were the last thing in reading order and the
+        // first thing a new window needs: on an empty window the one thing
+        // to do sat below a large blank box. Above the panel rather than
+        // inside it, because a button drawn inside is covered by the tree
+        // and cannot be clicked, which is recorded beside the empty-list
+        // words in the markup.
+        XElement adding = Assert.Single(
+            Window().Descendants(Xaml + "Button"), each => IdOf(each) == "AddAGame");
+
+        XElement row = adding.Parent!;
+
+        Assert.Equal("StackPanel", row.Name.LocalName);
+        Assert.Equal("Top", (string?)row.Attribute("DockPanel.Dock"));
     }
 
     [Fact]

@@ -2,20 +2,21 @@ using System.Windows;
 using System.Windows.Interop;
 
 using DiscWright.Platform;
+using DiscWright.ViewModels;
 
 using Microsoft.Win32;
 
 namespace DiscWright.App;
 
 /// <summary>
-/// Dresses the program the way the system is dressed, and keeps it dressed
-/// when the system changes its mind.
+/// Dresses the program the way the system is dressed, or the way somebody
+/// chose, and keeps it dressed when either changes its mind.
 /// </summary>
 /// <remarks>
 /// <para>
 /// Look.xaml is the light look and the whole design. LookInTheDark.xaml
-/// answers for the same brushes and nothing else, merged on top when Windows
-/// says apps are dark and taken off when it stops saying so. That is the
+/// answers for the same brushes and nothing else, merged on top when the
+/// program should be dark and taken off when it should not. That is the
 /// entire mechanism, and it only works because every reference to a palette
 /// brush is a DynamicResource: a StaticResource is resolved once, when the
 /// markup loads, and a dictionary merged afterwards changes nothing it
@@ -28,10 +29,13 @@ namespace DiscWright.App;
 /// every window already open when the answer changes.
 /// </para>
 /// <para>
-/// There is deliberately no setting of our own. The one honest answer to
-/// "which theme" is the one somebody already gave Windows, and a program
-/// that asks again is a program that can disagree with every other window
-/// on the screen.
+/// Which look to wear is <see cref="ChoosingTheLook"/>'s decision, where a
+/// test can hold it. Following Windows was the only behaviour at first, on
+/// the argument that a program asking "which theme" again can disagree with
+/// every other window on the screen; the owner decided on 2026-11-07 that
+/// the question may be answered for this program alone, because plenty of
+/// people keep Windows light and want one program dark. Following Windows
+/// is still the default, so nobody meets the question unasked.
 /// </para>
 /// </remarks>
 internal static class WearingTheTheme
@@ -45,9 +49,9 @@ internal static class WearingTheTheme
 
     private static bool _dark;
 
-    public static void FollowTheSystem(Application app)
+    public static void Follow(Application app, ChoosingTheLook choice)
     {
-        Wear(app, WhatTheSystemWears.Dark());
+        Wear(app, choice.WearsTheDark(WhatTheSystemWears.Dark()));
 
         // Every window's title bar, painted as the window loads, so no
         // window has to know themes exist. Loaded rather than anything
@@ -71,9 +75,14 @@ internal static class WearingTheTheme
         {
             if (changed.Category == UserPreferenceCategory.General)
             {
-                app.Dispatcher.BeginInvoke(() => Wear(app, WhatTheSystemWears.Dark()));
+                app.Dispatcher.BeginInvoke(() => Wear(app, choice.WearsTheDark(WhatTheSystemWears.Dark())));
             }
         };
+
+        // And the person changing their mind, through the quiet control on
+        // the window, which lands here the same way the system's change does.
+        choice.PropertyChanged += (_, _) =>
+            app.Dispatcher.BeginInvoke(() => Wear(app, choice.WearsTheDark(WhatTheSystemWears.Dark())));
     }
 
     private static void Wear(Application app, bool dark)

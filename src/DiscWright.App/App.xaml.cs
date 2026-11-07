@@ -33,7 +33,11 @@ public partial class App : Application
 
         // Before any window exists, so the first thing anybody sees is
         // already wearing the right look rather than flashing the light one.
-        WearingTheTheme.FollowTheSystem(this);
+        // The choice is read back from the one small note this program keeps
+        // about itself, and following Windows when there is none.
+        ANoteAboutTheLook keptLook = ANoteAboutTheLook.ForThisUser();
+        ChoosingTheLook look = new(keptLook.Recalled(), keptLook.Keep);
+        WearingTheTheme.Follow(this, look);
 
         // A fault inside a click would otherwise close the program with no
         // word about why, which is the one thing worse than a crash.
@@ -83,7 +87,7 @@ public partial class App : Application
         // for, so nothing here is checked.
         TidyingOldPreviews.In(Path.GetTempPath(), DateTime.Now);
 
-        MainWindow window = new(screen, reader, disk, burner);
+        MainWindow window = new(screen, reader, disk, burner, look);
         window.Show();
 
         // After it is on screen, because anything this asks about needs a

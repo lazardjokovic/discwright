@@ -36,17 +36,26 @@ public partial class MainWindow : Window
     private readonly GameFolderReader _reader;
     private readonly IFileSystem _disk;
     private readonly IWorkTheTray _tray;
+    private readonly ChoosingTheLook _look;
 
-    public MainWindow(MakeADisc screen, GameFolderReader reader, IFileSystem disk, IWorkTheTray tray)
+    public MainWindow(
+        MakeADisc screen, GameFolderReader reader, IFileSystem disk, IWorkTheTray tray, ChoosingTheLook look)
     {
         _screen = screen;
         _reader = reader;
         _disk = disk;
         _tray = tray;
+        _look = look;
 
         InitializeComponent();
         DataContext = screen;
+
+        // The one control not about the disc being made, so it reads its
+        // words from the choice rather than from the screen.
+        HowItDresses.DataContext = look;
     }
+
+    private void ChooseTheNextLook(object sender, RoutedEventArgs e) => _look.Next();
 
     /// <summary>
     /// Opens a disc that was built before, from the file it carries.
