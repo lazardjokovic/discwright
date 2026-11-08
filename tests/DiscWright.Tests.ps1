@@ -7308,6 +7308,126 @@ Describe 'Handing the ISO to another program' -Tag 'Unit' {
             $FilePath -eq 'explorer.exe' -and "$ArgumentList" -eq 'E:'
         }
     }
+
+    # --- the list the user builds themselves (#98, the round after ImgBurn) ---
+    # Reading the merged class view found the burner Windows had been told
+    # about. The burner Windows was never told about - a portable one, or one
+    # that opens projects rather than owning .iso - still needed a way in, and
+    # the way in is a box on the chooser and a list under DiscWright's own key.
+
+    It 'remembers a program added by hand, and only once however it is spelled' {
+        $script:OwnKey = 'HKCU:\Software\DiscWrightTests_' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+        Mock Get-OwnBurnerKey { $script:OwnKey }
+        try {
+            Add-OwnBurner 'C:\tools\burn.exe' | Should -BeTrue
+            Add-OwnBurner 'C:\TOOLS\BURN.EXE' | Should -BeFalse -Because 'NTFS reads both as the same file'
+            @(Get-OwnBurners) | Should -Be @('C:\tools\burn.exe')
+        } finally { Remove-Item -LiteralPath $script:OwnKey -Force -EA SilentlyContinue }
+    }
+
+    It 'forgets only the program it is told to, down to an empty list' {
+        $script:OwnKey = 'HKCU:\Software\DiscWrightTests_' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+        Mock Get-OwnBurnerKey { $script:OwnKey }
+        try {
+            $null = Add-OwnBurner 'C:\tools\one.exe'
+            $null = Add-OwnBurner 'C:\tools\two.exe'
+            Remove-OwnBurner 'C:\tools\one.exe'
+            @(Get-OwnBurners) | Should -Be @('C:\tools\two.exe')
+            Remove-OwnBurner 'C:\tools\two.exe'
+            @(Get-OwnBurners).Count | Should -Be 0 -Because 'an emptied list is a legal list'
+        } finally { Remove-Item -LiteralPath $script:OwnKey -Force -EA SilentlyContinue }
+    }
+
+    It 'has nothing to say on a machine where nothing was ever added' {
+        Mock Get-OwnBurnerKey { 'HKCU:\Software\DiscWrightTests_' + [Guid]::NewGuid().ToString('N') }
+        @(Get-OwnBurners).Count | Should -Be 0
+    }
+
+    It 'lists an added program among the handoffs, as the user''s own' {
+        $script:AddedExe = Join-Path $script:Sandbox 'MyBurner.exe'
+        Set-Content -LiteralPath $script:AddedExe -Value 'x' -Encoding Ascii
+        Mock Get-OwnBurners { @($script:AddedExe) }
+        $found = @(Get-IsoHandoffs)
+        $mine = @($found | Where-Object { $_.Exe -eq $script:AddedExe })
+        $mine.Count | Should -Be 1
+        $mine[0].Added | Should -BeTrue
+        $mine[0].What | Should -Match 'yourself' -Because 'the label says whose doing the row is'
+        $found[-1].Verb | Should -Be 'mount' -Because 'the mount entry stays last, as labelled'
+    }
+
+    It 'skips an added program that is gone, and does not forget it' {
+        # Uninstalled today is reinstalled tomorrow. The person who added it is
+        # the one who gets to take it off the list, so a missing exe costs the
+        # row and nothing else.
+        Mock Get-OwnBurners { @('C:\nope\gone_burner.exe') }
+        Mock Save-OwnBurners { }
+        $found = @(Get-IsoHandoffs)
+        @($found | Where-Object { $_.Exe -eq 'C:\nope\gone_burner.exe' }).Count | Should -Be 0
+        Should -Invoke Save-OwnBurners -Times 0 -Exactly
+    }
+
+    It 'does not list a program twice when the user adds one Windows already found' {
+        $script:WinFound = @(Get-IsoHandoffs | Where-Object { $_.Exe })[0].Exe
+        Mock Get-OwnBurners { @($script:WinFound) }
+        $found = @(Get-IsoHandoffs | Where-Object { $_.Exe -ieq $script:WinFound })
+        $found.Count | Should -Be 1
+        $found[0].Added | Should -Not -BeTrue -Because 'the row Windows put there wins'
+    }
+
+    It 'offers an added program for a set as well, where mount never belongs' {
+        $script:SetFake = @(
+            @{ Name = 'Windows Disc Image Burner'; What = 'writes it'; Exe = 'C:\w\isoburn.exe'; Args = ''; Verb = '' },
+            (New-OwnBurnerHandoff 'C:\tools\my.exe'),
+            @{ Name = 'Windows Explorer'; What = 'mounts it'; Exe = ''; Args = ''; Verb = 'mount' }
+        )
+        Mock Get-IsoHandoffs { $script:SetFake }
+        $c = @(Get-SetBurnChoices)
+        $c[0].Own | Should -BeTrue -Because 'DiscWright still goes first'
+        @($c | Where-Object { $_.Added }).Count | Should -Be 1
+        @($c | Where-Object { $_.Verb -eq 'mount' }).Count | Should -Be 0
+    }
+
+    It 'hands the ISO to an added program quoted, and drives it no further' {
+        $script:AddedExe2 = Join-Path $script:Sandbox 'AddedBurner.exe'
+        Set-Content -LiteralPath $script:AddedExe2 -Value 'x' -Encoding Ascii
+        $script:AddedIso = Join-Path $script:Sandbox 'with space.iso'
+        Set-Content -LiteralPath $script:AddedIso -Value 'x' -Encoding Ascii
+        Mock Start-Process { }
+        Start-IsoHandoff (New-OwnBurnerHandoff $script:AddedExe2) $script:AddedIso
+        Should -Invoke Start-Process -Times 1 -Exactly -ParameterFilter {
+            $FilePath -eq $script:AddedExe2 -and "$ArgumentList" -eq ('"' + $script:AddedIso + '"')
+        }
+    }
+
+    It 'asks through one chooser everywhere, not a private copy per button' {
+        # The Burn with... button carried its own copy of this dialog and the
+        # two drifted once already. One copy is also what keeps the add box
+        # from needing to exist twice.
+        $app = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $h = [regex]::Match($app, '(?s)\$btnHandoff\.Add_Click\(\{(.*?)\r?\n\}\)').Groups[1].Value
+        $h | Should -Not -BeNullOrEmpty
+        $h | Should -Match 'Select-IsoHandoff'
+        $h | Should -Not -Match 'New-Object System\.Windows\.Forms\.Form'
+    }
+
+    It 'carries the add box and the forget button in the chooser' {
+        $app = Get-Content -Raw (Join-Path (Split-Path $PSScriptRoot -Parent) 'DiscWright.ps1')
+        $start = $app.IndexOf('function Select-IsoHandoff')
+        $start | Should -BeGreaterThan 0
+        $i = $app.IndexOf('{', $start); $d = 0
+        for ($j = $i; $j -lt $app.Length; $j++) {
+            if ($app[$j] -eq '{') { $d++ }
+            elseif ($app[$j] -eq '}') { $d--; if ($d -eq 0) { break } }
+        }
+        $fn = $app.Substring($start, $j - $start + 1)
+        $fn | Should -Match ([regex]::Escape('Add a program...'))
+        $fn | Should -Match "'Forget'"
+        $fn | Should -Match 'Add-OwnBurner'
+        $fn | Should -Match 'Remove-OwnBurner'
+        # Forget only forgets what the user added; a row Windows put there
+        # would be back next time, and greying the button is how that is said.
+        $fn | Should -Match 'Added'
+    }
 }
 
 

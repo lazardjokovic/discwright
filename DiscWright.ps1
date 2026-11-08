@@ -7881,46 +7881,127 @@ function Select-BurnDrive($ready, $parent) {
     return $rows[$i]
 }
 
-function Select-IsoHandoff($picks, $parent) {
-    $dlg = New-Object System.Windows.Forms.Form
-    $dlg.Text = 'Burn with'; $dlg.Font = $form.Font
-    $dlg.FormBorderStyle = 'FixedDialog'; $dlg.MaximizeBox = $false; $dlg.MinimizeBox = $false
-    $dlg.StartPosition = 'CenterParent'; $dlg.ShowInTaskbar = $false
-    $dlg.ClientSize = New-Object System.Drawing.Size(460, 172)
-
-    $l = New-Object System.Windows.Forms.Label
-    $l.Text = 'Write each disc with which program?'
-    $l.Location = New-Object System.Drawing.Point(15, 14); $l.Size = New-Object System.Drawing.Size(430, 20)
-    $dlg.Controls.Add($l)
-
-    $lst = New-Object System.Windows.Forms.ListBox
-    $lst.Location = New-Object System.Drawing.Point(15, 40); $lst.Size = New-Object System.Drawing.Size(430, 62)
-    foreach ($h in $picks) { [void]$lst.Items.Add("$($h.Name)  -  $($h.What)") }
-    $lst.SelectedIndex = 0
-    $dlg.Controls.Add($lst)
-
+# The one Burn with chooser, for both callers: the walk over a set and the
+# Burn with... button, which until #98's last round carried a private copy of
+# this dialog and drifted from it once already (the note below is the scar).
+#
+# "Add a program..." and "Forget" close the dialog and let this body do the
+# work, then the loop reopens it. Not laziness: the burn module's functions
+# are dot-sourced into the CALLER's scope, which this body sees through
+# PowerShell's dynamic scoping and a .GetNewClosure() handler does not, so a
+# handler that called Add-OwnBurner itself would die at the first press. The
+# only handler here touches nothing but its own controls.
+function Select-IsoHandoff($picks, $parent,
+    [string]$asking = 'Write each disc with which program?',
+    [string]$okText = 'Use this',
     # The note was 'DiscWright only opens it', which stopped being true the day
     # DiscWright put itself on this list. It is still true of every other row,
     # and that is the thing worth knowing before picking one.
-    $note = New-Object System.Windows.Forms.Label
-    $note.Text = 'Anything but DiscWright only gets opened. What happens next is that program''s business.'
-    $note.Location = New-Object System.Drawing.Point(15, 108); $note.Size = New-Object System.Drawing.Size(430, 20)
-    $note.ForeColor = [System.Drawing.Color]::DimGray
-    $dlg.Controls.Add($note)
+    [string]$note = 'Anything but DiscWright only gets opened. What happens next is that program''s business.') {
 
-    $ok = New-Object System.Windows.Forms.Button; $ok.Text = 'Use this'
-    $ok.Location = New-Object System.Drawing.Point(275, 136); $ok.Size = New-Object System.Drawing.Size(80, 26)
-    $ok.DialogResult = 'OK'; $dlg.Controls.Add($ok)
-    $cancel = New-Object System.Windows.Forms.Button; $cancel.Text = 'Cancel'
-    $cancel.Location = New-Object System.Drawing.Point(365, 136); $cancel.Size = New-Object System.Drawing.Size(80, 26)
-    $cancel.DialogResult = 'Cancel'; $dlg.Controls.Add($cancel)
-    $dlg.AcceptButton = $ok; $dlg.CancelButton = $cancel
+    $rows = New-Object System.Collections.ArrayList
+    foreach ($h in @($picks)) { [void]$rows.Add($h) }
+    $at = 0
 
-    $r = $dlg.ShowDialog($parent)
-    $i = $lst.SelectedIndex
-    $dlg.Dispose()
-    if ($r -ne [System.Windows.Forms.DialogResult]::OK -or $i -lt 0) { return $null }
-    return $picks[$i]
+    while ($true) {
+        $dlg = New-Object System.Windows.Forms.Form
+        $dlg.Text = 'Burn with'; $dlg.Font = $form.Font
+        $dlg.FormBorderStyle = 'FixedDialog'; $dlg.MaximizeBox = $false; $dlg.MinimizeBox = $false
+        $dlg.StartPosition = 'CenterParent'; $dlg.ShowInTaskbar = $false
+        # 184, not the 172 this dialog used to be: the note underneath wraps to
+        # two lines at this width and the second line was clipped mid-letter,
+        # which a screenshot from the window suite is how anybody noticed.
+        $dlg.ClientSize = New-Object System.Drawing.Size(460, 184)
+
+        $l = New-Object System.Windows.Forms.Label
+        $l.Text = $asking
+        $l.Location = New-Object System.Drawing.Point(15, 14); $l.Size = New-Object System.Drawing.Size(430, 20)
+        $dlg.Controls.Add($l)
+
+        $lst = New-Object System.Windows.Forms.ListBox
+        $lst.Location = New-Object System.Drawing.Point(15, 40); $lst.Size = New-Object System.Drawing.Size(430, 62)
+        foreach ($h in $rows) { [void]$lst.Items.Add("$($h.Name)  -  $($h.What)") }
+        if ($rows.Count) { $lst.SelectedIndex = [Math]::Min([Math]::Max($at, 0), $rows.Count - 1) }
+        $dlg.Controls.Add($lst)
+
+        $lblNote = New-Object System.Windows.Forms.Label
+        $lblNote.Text = $note
+        $lblNote.Location = New-Object System.Drawing.Point(15, 106); $lblNote.Size = New-Object System.Drawing.Size(430, 34)
+        $lblNote.ForeColor = [System.Drawing.Color]::DimGray
+        $dlg.Controls.Add($lblNote)
+
+        # The box asked for in #98: a burner does not have to own .iso to be
+        # somebody's burner of choice, and a portable one is in no registry at
+        # all, so detection alone can never finish this list.
+        $btnAdd = New-Object System.Windows.Forms.Button; $btnAdd.Text = 'Add a program...'
+        $btnAdd.Location = New-Object System.Drawing.Point(15, 148); $btnAdd.Size = New-Object System.Drawing.Size(130, 26)
+        $btnAdd.DialogResult = 'Retry'; $dlg.Controls.Add($btnAdd)
+
+        $btnForget = New-Object System.Windows.Forms.Button; $btnForget.Text = 'Forget'
+        $btnForget.Location = New-Object System.Drawing.Point(151, 148); $btnForget.Size = New-Object System.Drawing.Size(75, 26)
+        $btnForget.DialogResult = 'Ignore'; $dlg.Controls.Add($btnForget)
+
+        $ok = New-Object System.Windows.Forms.Button; $ok.Text = $okText
+        $ok.Location = New-Object System.Drawing.Point(275, 148); $ok.Size = New-Object System.Drawing.Size(80, 26)
+        $ok.DialogResult = 'OK'; $dlg.Controls.Add($ok)
+        $cancel = New-Object System.Windows.Forms.Button; $cancel.Text = 'Cancel'
+        $cancel.Location = New-Object System.Drawing.Point(365, 148); $cancel.Size = New-Object System.Drawing.Size(80, 26)
+        $cancel.DialogResult = 'Cancel'; $dlg.Controls.Add($cancel)
+        $dlg.AcceptButton = $ok; $dlg.CancelButton = $cancel
+
+        # Forget only forgets what the user added: the rest of the list is read
+        # out of Windows, and a row Windows put there would be back next time.
+        $sync = {
+            $btnForget.Enabled = ($lst.SelectedIndex -ge 0) -and [bool]$rows[$lst.SelectedIndex].Added
+        }.GetNewClosure()
+        $lst.Add_SelectedIndexChanged($sync); & $sync
+
+        $r = $dlg.ShowDialog($parent)
+        $at = $lst.SelectedIndex
+        $dlg.Dispose()
+
+        if ($r -eq [System.Windows.Forms.DialogResult]::OK) {
+            if ($at -lt 0) { return $null }
+            return $rows[$at]
+        }
+        if ($r -eq [System.Windows.Forms.DialogResult]::Retry) {
+            $d = New-FileDialog 'Pick the program to hand the ISO to' 'Programs|*.exe|All files|*.*' ''
+            if ($d.ShowDialog() -eq 'OK') {
+                $exe = $d.FileName
+                Set-LastFileBrowse $exe
+                # Already on the list, found or added: selecting that row is
+                # the whole answer, and the store stays free of doubles.
+                $dup = -1
+                for ($i = 0; $i -lt $rows.Count; $i++) {
+                    if ([string]$rows[$i].Exe -ieq $exe) { $dup = $i; break }
+                }
+                if ($dup -ge 0) { $at = $dup }
+                else {
+                    $null = Add-OwnBurner $exe
+                    # Put where discovery will put it next time: above the
+                    # mount entry, which stays last. The dialog agreeing with
+                    # its own next opening is worth the four lines.
+                    $row = New-OwnBurnerHandoff $exe
+                    $m = -1
+                    for ($i = 0; $i -lt $rows.Count; $i++) {
+                        if ($rows[$i].Verb -eq 'mount') { $m = $i; break }
+                    }
+                    if ($m -ge 0) { $rows.Insert($m, $row); $at = $m }
+                    else { [void]$rows.Add($row); $at = $rows.Count - 1 }
+                }
+            }
+            $d.Dispose()
+            continue
+        }
+        if ($r -eq [System.Windows.Forms.DialogResult]::Ignore) {
+            if ($at -ge 0 -and [bool]$rows[$at].Added) {
+                Remove-OwnBurner ([string]$rows[$at].Exe)
+                $rows.RemoveAt($at)
+            }
+            continue
+        }
+        return $null
+    }
 }
 
 $btnHandoff.Add_Click({
@@ -7943,43 +8024,14 @@ $btnHandoff.Add_Click({
         return
     }
 
-    $dlg=New-Object System.Windows.Forms.Form
-    $dlg.Text='Burn with'; $dlg.Font=$form.Font
-    $dlg.FormBorderStyle='FixedDialog'; $dlg.MaximizeBox=$false; $dlg.MinimizeBox=$false
-    $dlg.StartPosition='CenterParent'; $dlg.ShowInTaskbar=$false
-    $dlg.ClientSize=New-Object System.Drawing.Size(460,172)
+    # The same chooser the set walk uses, asked in this button's own words.
+    # This used to be a second copy of that dialog, which drifted from the
+    # first once already and would have needed the Add a program... box
+    # twice over.
+    $chosen = Select-IsoHandoff $picks $form "Hand $($iso.Name) to which program?" 'Open' `
+        'DiscWright only opens it. What happens next is that program''s business.'
+    if (-not $chosen) { return }
 
-    $l=New-Object System.Windows.Forms.Label
-    $l.Text="Hand $($iso.Name) to which program?"
-    $l.Location=New-Object System.Drawing.Point(15,14); $l.Size=New-Object System.Drawing.Size(430,20)
-    $dlg.Controls.Add($l)
-
-    $lst=New-Object System.Windows.Forms.ListBox
-    $lst.Location=New-Object System.Drawing.Point(15,40); $lst.Size=New-Object System.Drawing.Size(430,62)
-    foreach ($h in $picks) { [void]$lst.Items.Add("$($h.Name)  -  $($h.What)") }
-    $lst.SelectedIndex = 0
-    $dlg.Controls.Add($lst)
-
-    $note=New-Object System.Windows.Forms.Label
-    $note.Text='DiscWright only opens it. What happens next is that program''s business.'
-    $note.Location=New-Object System.Drawing.Point(15,108); $note.Size=New-Object System.Drawing.Size(430,20)
-    $note.ForeColor=[System.Drawing.Color]::DimGray
-    $dlg.Controls.Add($note)
-
-    $ok=New-Object System.Windows.Forms.Button; $ok.Text='Open'
-    $ok.Location=New-Object System.Drawing.Point(275,136); $ok.Size=New-Object System.Drawing.Size(80,26)
-    $ok.DialogResult='OK'; $dlg.Controls.Add($ok)
-    $cancel=New-Object System.Windows.Forms.Button; $cancel.Text='Cancel'
-    $cancel.Location=New-Object System.Drawing.Point(365,136); $cancel.Size=New-Object System.Drawing.Size(80,26)
-    $cancel.DialogResult='Cancel'; $dlg.Controls.Add($cancel)
-    $dlg.AcceptButton=$ok; $dlg.CancelButton=$cancel
-
-    $r = $dlg.ShowDialog($form)
-    $i = $lst.SelectedIndex
-    $dlg.Dispose()
-    if ($r -ne [System.Windows.Forms.DialogResult]::OK -or $i -lt 0) { return }
-
-    $chosen = $picks[$i]
     try {
         Start-IsoHandoff $chosen $iso.FullName
         & $log "Handed $($iso.Name) to $($chosen.Name)."

@@ -1752,6 +1752,199 @@ Describe 'The question a folder with no GOG installer asks' -Tag 'UI' -Skip:(-no
     }
 }
 
+Describe 'Adding a burner of your own to Burn with' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # Asked for in #98 with a mockup: a burner does not have to own .iso to be
+    # somebody's burner of choice, and a portable one is in no registry at all,
+    # so the chooser grew an "Add a program..." box and a Forget to undo it.
+    #
+    # Hosted on its own (tests/ui/BurnWithHost.ps1) the way the folder question
+    # is: in the app the chooser only opens with an ISO built and a button
+    # mid-flight, and nothing being proved here needs an ISO. What it needs is
+    # the real dialog on the real desktop, because the add and forget work is
+    # done between one showing and the next, and no logic test executes that.
+
+    BeforeAll {
+        $script:BwHost   = Join-Path $PSScriptRoot 'BurnWithHost.ps1'
+        $script:BwAnswer = Join-Path $script:Sandbox 'burnwith-answer.txt'
+        $script:BwKey    = 'HKCU:\Software\DiscWrightUITest'
+        # A real file, because the shell's open dialog refuses a name that is
+        # not there. What it holds matters to nobody: the friendly name falls
+        # back to the file name, which is what the assertions read.
+        $script:BwExe = Join-Path $script:Sandbox 'MyOwnBurner.exe'
+        Set-Content -LiteralPath $script:BwExe -Value 'not really a burner' -Encoding Ascii
+
+        function Find-HostWin([int]$ProcId, [string]$TitleLike, [int]$TimeoutSec = 30, [long]$NotHandle = 0) {
+            # Every top-level window is looked at and only this host's taken,
+            # for the same reason the folder question does it: a dialog left
+            # standing by an earlier failure answers to the same title forever.
+            # NotHandle skips the window a click just closed, so waiting for
+            # the reopened chooser can never grab the dying one.
+            $deadline = (Get-Date).AddSeconds($TimeoutSec)
+            while ((Get-Date) -lt $deadline) {
+                $kids = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+                    [System.Windows.Automation.TreeScope]::Children,
+                    [System.Windows.Automation.Condition]::TrueCondition)
+                for ($i = 0; $i -lt $kids.Count; $i++) {
+                    try {
+                        $k = $kids.Item($i)
+                        if ($k.Current.ProcessId -ne $ProcId) { continue }
+                        if ($k.Current.Name -notlike $TitleLike) { continue }
+                        if ($NotHandle -and $k.Current.NativeWindowHandle -eq $NotHandle) { continue }
+                        return $k
+                    } catch {}
+                }
+                Start-Sleep -Milliseconds 300
+            }
+            return $null
+        }
+
+        function Start-BurnWith {
+            Remove-Item -LiteralPath $script:BwAnswer -Force -ErrorAction SilentlyContinue
+            $log = Join-Path $script:Sandbox 'burnwith-host.log'
+            $proc = Start-Process powershell.exe -WindowStyle Hidden -PassThru -RedirectStandardError $log -ArgumentList @(
+                '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', $script:BwHost,
+                '-StoreKey', $script:BwKey, '-ResultFile', $script:BwAnswer)
+            $dlg = Find-HostWin $proc.Id 'Burn with' 45
+            if (-not $dlg) {
+                $gone = $proc.HasExited
+                try { $proc.Kill() } catch {}
+                $why = ([string](@(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue) -join ' ')).Trim()
+                throw ("the Burn with chooser never appeared (host pid $($proc.Id), exited: $gone)" +
+                       $(if ($why) { " - the host said: $why" } else { '' }))
+            }
+            try {
+                Set-DrivenWindow $dlg
+                $null = Set-WindowFocus $dlg
+            } catch {
+                try { $proc.Kill() } catch {}
+                throw
+            }
+            Start-Sleep -Milliseconds 400
+            return [pscustomobject]@{ Process = $proc; Window = $dlg }
+        }
+
+        function Wait-ChooserAgain($Bw, [long]$NotHandle, [int]$TimeoutSec = 20) {
+            # Add and Forget close the chooser, work the store, and reopen it:
+            # a new window every time, so it is waited for afresh.
+            $dlg = Find-HostWin $Bw.Process.Id 'Burn with' $TimeoutSec $NotHandle
+            if (-not $dlg) { throw 'the chooser did not come back' }
+            Set-DrivenWindow $dlg
+            $null = Set-WindowFocus $dlg
+            Start-Sleep -Milliseconds 300
+            $Bw.Window = $dlg
+            return $dlg
+        }
+
+        function Get-BurnWithAnswer($Bw) {
+            try { $null = $Bw.Process.WaitForExit(15000) } catch {}
+            if (-not (Test-Path $script:BwAnswer)) { return '(nothing written)' }
+            return (Get-Content -LiteralPath $script:BwAnswer -Raw).Trim()
+        }
+
+        function Get-StoredBurners {
+            try { return @((Get-ItemProperty -LiteralPath $script:BwKey -ErrorAction Stop).OwnBurners) }
+            catch { return @() }
+        }
+
+        function Select-ChooserRow($Bw, [string[]]$Keys) {
+            # The list tells UI Automation nothing about its rows (one nameless
+            # pane, no children), so the pane is clicked to put the keyboard in
+            # it and the keys do the walking. Which row that lands on is what
+            # the Forget button's state and the answer file prove.
+            $all = $Bw.Window.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+                                      [System.Windows.Automation.Condition]::TrueCondition)
+            $list = $null
+            for ($i = 0; $i -lt $all.Count; $i++) {
+                try {
+                    $el = $all.Item($i)
+                    if ($el.Current.Name -ne '') { continue }
+                    $r = $el.Current.BoundingRectangle
+                    if ($r.Height -lt 40) { continue }
+                    if (-not $list -or $r.Height -gt $list.Current.BoundingRectangle.Height) { $list = $el }
+                } catch {}
+            }
+            if (-not $list) { throw 'the list of programs is not in the dialog' }
+            if (-not (Test-DrivingOurWindow)) {
+                throw ('The foreground window is no longer the chooser, so this click would land ' +
+                       'in whatever is in front of it. Stopped.')
+            }
+            $r = $list.Current.BoundingRectangle
+            [DwInput]::ClickAt([int]($r.X + 30), [int]($r.Y + 8))
+            Start-Sleep -Milliseconds 300
+            foreach ($k in $Keys) { Send-Keys $k 250 }
+        }
+
+        function Complete-ProgramPick($Bw, [string]$Path) {
+            $fd = Find-HostWin $Bw.Process.Id 'Pick the program to hand the ISO to' 20
+            if (-not $fd) { throw 'the program picker never appeared' }
+            # The driven window has to follow, or the guard inside every click
+            # sees a foreign foreground window and stops the run.
+            Set-DrivenWindow $fd
+            $box = Find-Ctl -Root $fd -NameLike 'File name:*' -TimeoutSec 5
+            if (-not $box) { throw 'the file name box was not found' }
+            Set-CtlText -Ctl $box -Text ('"' + $Path + '"')
+            Invoke-Ctl -Ctl (Find-Ctl -Root $fd -NameLike 'Open' -TimeoutSec 5) -SettleMs 1200
+        }
+    }
+
+    BeforeEach { Remove-Item -LiteralPath $script:BwKey -Recurse -Force -ErrorAction SilentlyContinue }
+    AfterEach {
+        if ($script:Bw) { try { $script:Bw.Process.Kill() } catch {}; $script:Bw = $null }
+        Remove-Item -LiteralPath $script:BwKey -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'offers the box, and greys Forget on a row Windows put there' {
+        $script:Bw = Start-BurnWith
+        Save-WindowShot $script:Bw.Window (Join-Path $script:ShotDir 'burn-with-chooser.png')
+        (Find-Ctl -Root $script:Bw.Window -NameLike 'Add a program...') | Should -Not -BeNullOrEmpty
+        # The first row is Windows' own burner. Forgetting it would be a lie:
+        # the registry would put it straight back.
+        Test-CtlEnabled $script:Bw.Window 'Forget' | Should -BeFalse
+        Invoke-CtlNamed $script:Bw.Window 'Cancel' -SettleMs 800 | Out-Null
+        Get-BurnWithAnswer $script:Bw | Should -Be 'CANCELLED'
+    }
+
+    It 'takes a program picked by hand and hands it back as the chosen one' {
+        $script:Bw = Start-BurnWith
+        $h0 = $script:Bw.Window.Current.NativeWindowHandle
+        Invoke-CtlNamed $script:Bw.Window 'Add a program...' -SettleMs 800 | Out-Null
+        Complete-ProgramPick $script:Bw $script:BwExe
+        $w = Wait-ChooserAgain $script:Bw $h0
+        Save-WindowShot $w (Join-Path $script:ShotDir 'burn-with-added.png')
+        # In the store the moment it was picked, not when the dialog closes.
+        Get-StoredBurners | Should -Contain $script:BwExe
+        # The reopened chooser selects the new row, and the Forget button
+        # waking up is the window's own way of saying which row that is.
+        Test-CtlEnabled $w 'Forget' | Should -BeTrue
+        Invoke-CtlNamed $w 'Use this' -SettleMs 800 | Out-Null
+        $ans = Get-BurnWithAnswer $script:Bw
+        $ans | Should -Match '^CHOSEN'
+        $ans | Should -Match ([regex]::Escape($script:BwExe))
+        $ans | Should -Match 'ADDED$' -Because 'the chosen row is the one the user added'
+    }
+
+    It 'remembers it for the next time, and Forget takes it back out' {
+        # Seeded the way the box would have left it, then shown to a fresh
+        # chooser: the row has to come out of the store, not out of a dialog
+        # that happens to still be open.
+        $null = New-Item -Path $script:BwKey -Force
+        Set-ItemProperty -LiteralPath $script:BwKey -Name 'OwnBurners' -Value ([string[]]@($script:BwExe)) -Type MultiString
+        $script:Bw = Start-BurnWith
+        Test-CtlEnabled $script:Bw.Window 'Forget' | Should -BeFalse -Because 'the first row is still Windows'' own'
+        # The added row sits just above the mount entry, which is last.
+        Select-ChooserRow $script:Bw @('{END}', '{UP}')
+        Test-CtlEnabled $script:Bw.Window 'Forget' | Should -BeTrue -Because 'the remembered row is the user''s own'
+        $h0 = $script:Bw.Window.Current.NativeWindowHandle
+        Invoke-CtlNamed $script:Bw.Window 'Forget' -SettleMs 800 | Out-Null
+        $w = Wait-ChooserAgain $script:Bw $h0
+        @(Get-StoredBurners).Count | Should -Be 0 -Because 'Forget empties the store, not just the list'
+        Test-CtlEnabled $w 'Forget' | Should -BeFalse
+        Invoke-CtlNamed $w 'Cancel' -SettleMs 800 | Out-Null
+        Get-BurnWithAnswer $script:Bw | Should -Be 'CANCELLED'
+    }
+}
+
 Describe 'The cover and disc face fields' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
 
     # These fields used to feed a printer, and this block drove the notes that
