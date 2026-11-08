@@ -1397,10 +1397,12 @@ function Test-BurnedDisc {
 # --- handing the ISO to something else ----------------------------------------
 #
 # Asked for as "being able to link your software to ImgBurn or similar software
-# for an instant burn". Not ImgBurn in particular, and nothing to configure:
+# for an instant burn". Not ImgBurn in particular, and nothing hardcoded:
 # Windows already knows what can open an ISO, and the answer differs per machine.
 # On the machine this was written on it is Nero, which is a decent argument
-# against hardcoding anybody's favourite.
+# against hardcoding anybody's favourite. The one configurable thing is the
+# list the user builds themselves, further down, for the program Windows was
+# never told about.
 #
 # Windows.IsoFile always carries burn and mount, whatever else is installed, so
 # there is always something here even on a machine with nothing added.
@@ -1439,6 +1441,58 @@ function Get-ClassCommand([string]$subkey) {
     # with -> always" records a choice: ImgBurn, made the .iso default that
     # way, never appeared in this list (#98).
     return Get-ShellCommand ('Registry::HKEY_CLASSES_ROOT\' + $subkey)
+}
+
+# --- the programs the user added to Burn with by hand (#98) ---
+#
+# Everything above reads what Windows already records, and #98 showed where
+# that ends: a burner does not have to own .iso to be somebody's burner of
+# choice, and a portable one is in no registry at all. So the list takes
+# additions, remembered under DiscWright's own key - the registry because
+# everything else here lives there, one exe path per line of a multi-string.
+
+function Get-OwnBurnerKey {
+    # Its own function so the tests can point the store at a key of their own
+    # instead of reading and writing the real one.
+    return 'HKCU:\Software\DiscWright'
+}
+
+function Get-OwnBurners {
+    # A missing key, a missing value and a blank line all mean the same
+    # thing: nothing was ever added.
+    try {
+        $v = (Get-ItemProperty -LiteralPath (Get-OwnBurnerKey) -EA Stop).OwnBurners
+    } catch { return @() }
+    return @(@($v) | ForEach-Object { [string]$_ } | Where-Object { $_.Trim() })
+}
+
+function Save-OwnBurners([string[]]$list) {
+    $key = Get-OwnBurnerKey
+    if (-not (Test-Path -LiteralPath $key)) { $null = New-Item -Path $key -Force }
+    Set-ItemProperty -LiteralPath $key -Name 'OwnBurners' -Value ([string[]]@($list)) -Type MultiString
+}
+
+function Add-OwnBurner([string]$exe) {
+    # Remembered as given, compared the way NTFS compares names. Says whether
+    # it was new, so a chooser knows to add a row or just select the old one.
+    $exe = [string]$exe
+    if (-not $exe.Trim()) { return $false }
+    $have = @(Get-OwnBurners)
+    if (@($have | Where-Object { $_ -ieq $exe }).Count) { return $false }
+    Save-OwnBurners (@($have) + $exe)
+    return $true
+}
+
+function Remove-OwnBurner([string]$exe) {
+    Save-OwnBurners @(Get-OwnBurners | Where-Object { $_ -ine $exe })
+}
+
+function New-OwnBurnerHandoff([string]$exe) {
+    # One place for the row, because the chooser builds it too when a program
+    # is added mid-dialog, and two spellings of the label would drift.
+    return @{ Name = (Get-ExeFriendlyName $exe)
+              What = 'opens it; you put this one on the list yourself'
+              Exe = $exe; Args = ''; Verb = ''; Added = $true }
 }
 
 function Split-ShellCommand([string]$cmd) {
@@ -1480,6 +1534,15 @@ function Get-IsoHandoffs {
                        What = 'opens it, and burns it its own way'
                        Exe = $open.Exe; Args = $open.Args; Verb = '' }
         }
+    }
+
+    # The programs the user pointed at by hand (#98). One that is gone is
+    # skipped, not forgotten: uninstalled today is reinstalled tomorrow, and
+    # the person who added it is the one who gets to take it off the list.
+    foreach ($exe in @(Get-OwnBurners)) {
+        if (-not (Test-Path -LiteralPath $exe)) { continue }
+        if (($out | Where-Object { $_.Exe -ieq $exe }).Count) { continue }
+        $out += New-OwnBurnerHandoff $exe
     }
 
     # Not burning, and worth having anyway: look inside the disc without
