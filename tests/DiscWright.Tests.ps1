@@ -12306,6 +12306,62 @@ Describe 'Checking a disc against its own checksum list' -Tag 'Unit' {
         $script:SumSrc | Should -Match ([regex]::Escape('<div id="sums"'))
         $script:SumSrc | Should -Match 'onclick="discCheck\(\)"'
     }
+
+    It 'does nothing when a walk is already running' -Skip:(-not $script:HaveCScript5) {
+        # A second press of the tick mid-walk would start a second walk over
+        # the same files: two certutils per file and two verdicts at the end.
+        # discSums echoes, so reaching it at all fails the test.
+        $js = @(
+            'var PREVIEW = false; var SETCHECKING = "3 of 9";'
+            'function discSums(){ WScript.Echo("SCANNED"); return []; }'
+            'function setSay(m, good){ WScript.Echo("SAID:" + m); }'
+            (Get-SumJs 'discCheck')
+            'discCheck();'
+            'WScript.Echo("done");'
+        ) -join "`r`n"
+        $f = Join-Path $script:Sandbox 'dc_busy.js'
+        Set-Content -LiteralPath $f -Value $js -Encoding Ascii
+        $out = (@(& $script:CScript5 //Nologo //E:JScript $f 2>&1) -join "`n")
+        $out.Trim() | Should -Be 'done'
+    }
+
+    It 'says which file it is on, on a disc with no set panel' -Skip:(-not $script:HaveCScript5) {
+        # The walk always said it, but only the set panel ever painted it. An
+        # ordinary disc gets the same sentence on its own status line. The
+        # fake document has no setinfo element, which is exactly what an
+        # ordinary disc's menu looks like to setTick.
+        $js = @(
+            'var SETCOPYING = ""; var SETJOINING = ""; var SETCHECKING = "2 of 5";'
+            'var SETSTARTED = 0; var SETLASTSCAN = null;'
+            'var document = { getElementById: function(id){ return null; } };'
+            'function setStatus(m){ WScript.Echo("STATUS[" + m + "]"); }'
+            (Get-SumJs 'setClock')
+            (Get-SumJs 'setTick')
+            'setTick();'
+        ) -join "`r`n"
+        $f = Join-Path $script:Sandbox 'dc_tick.js'
+        Set-Content -LiteralPath $f -Value $js -Encoding Ascii
+        $out = (@(& $script:CScript5 //Nologo //E:JScript $f 2>&1) -join "`n")
+        $out | Should -Match ([regex]::Escape('STATUS[Checking file 2 of 5 against what was burned.]'))
+    }
+
+    It 'wipes the status line when the walk runs out of files' -Skip:(-not $script:HaveCScript5) {
+        # Painted by the tick while the walk ran, and the tick stops the
+        # moment nothing is busy, so the finish branch is the only thing left
+        # that can take the sentence down.
+        $js = @(
+            'var SETCHECKING = "5 of 5";'
+            'function show(){}'
+            'function setStatus(m){ WScript.Echo("STATUS[" + m + "]"); }'
+            (Get-SumJs 'setCheckRun')
+            'setCheckRun([], 0, ["x"], function(bad){ WScript.Echo("AFTER:" + bad.length + ":" + SETCHECKING.length); });'
+        ) -join "`r`n"
+        $f = Join-Path $script:Sandbox 'dc_wipe.js'
+        Set-Content -LiteralPath $f -Value $js -Encoding Ascii
+        $out = (@(& $script:CScript5 //Nologo //E:JScript $f 2>&1) -join "`n")
+        $out | Should -Match ([regex]::Escape('STATUS[]'))
+        $out | Should -Match 'AFTER:1:0'
+    }
 }
 
 Describe 'Hashing a game without the window seizing up' -Tag 'Unit' {
@@ -12345,6 +12401,33 @@ Describe 'Hashing a game without the window seizing up' -Tag 'Unit' {
     It 'stops saying it when the list is done' {
         $m = [regex]::Match($script:VSrc, 'function setCheckRun\(list,at,bad,after\)\{[\s\S]{0,400}?SETCHECKING="";')
         $m.Success | Should -BeTrue -Because 'the first thing it does when the list runs out'
+    }
+
+    It 'paints the counter on an ordinary disc, which has no set panel' {
+        # The sentence above only ever reached the set panel. An ordinary disc
+        # ran the same walk with nothing on screen moving: minutes of a still
+        # window, then a verdict out of nowhere. Reported by xniwo against
+        # 0.11.0, on a large disc. It goes on the status line the menu already
+        # has for "Starting the installer...".
+        $script:VSrc | Should -Match ([regex]::Escape('else if(SETCHECKING.length&&typeof setStatus=="function"){'))
+        $script:VSrc | Should -Match ([regex]::Escape('setStatus("Checking file "+SETCHECKING+" against what was burned."+setClock())'))
+    }
+
+    It 'wipes that line when the walk ends' {
+        # setTick stops the moment nothing is busy and never repaints, so
+        # without this the menu would say "Checking file 7 of 7" forever.
+        $m = [regex]::Match($script:VSrc, 'function setCheckRun\(list,at,bad,after\)\{[\s\S]{0,800}?setStatus\(""\)')
+        $m.Success | Should -BeTrue -Because 'the finish branch clears the status line'
+    }
+
+    It 'refuses a second press while a walk is already running' {
+        # The tick and the Check every file button both stay clickable while a
+        # walk runs, and a second press would start a second walk over the same
+        # files: two certutils per file, and two verdicts at the end of it.
+        $fn = $script:VSrc.Substring($script:VSrc.IndexOf('function discCheck('), 600)
+        $fn | Should -Match ([regex]::Escape('if(SETCHECKING.length){ return; }'))
+        $vf = $script:VSrc.Substring($script:VSrc.IndexOf('function setVerify('), 600)
+        $vf | Should -Match ([regex]::Escape('if(SETCHECKING.length){ return; }'))
     }
 
     It 'names the waiter for what it does, not for the join that needed it first' {
@@ -13432,6 +13515,9 @@ Describe 'What the disc menu claims after checking only part of a set' {
                 'function setRows(){ return [' + $rows + ']; }'
                 'function setPath(dir, rel){ return rel; }'
                 'var SAID = ""; function setSay(m, good){ SAID = m; }'
+                # The guard at the top of setVerify reads it, the same way the
+                # other lifted-code harnesses define it (see the renderSet one).
+                'var SETCHECKING = "";'
                 'function setCheckRun(list, at, bad, after){ after([]); }'
                 (Get-JsFn4 $script:VSrc 'setVerify')
                 'setVerify();'
