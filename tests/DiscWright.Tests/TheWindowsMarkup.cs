@@ -284,17 +284,19 @@ public class TheWindowsMarkup
     }
 
     [Fact]
-    public void The_heading_over_the_list_sits_on_the_list_it_heads()
+    public void The_heading_over_the_list_has_its_row_to_itself()
     {
-        // It shares a row with the preview button, which is taller than the
-        // words are. Aligned anywhere but the bottom of that row, the button's
-        // height ends up between WHAT GOES ON IT and the tree it names, and
-        // the heading reads as belonging to the row rather than to the list.
+        // The preview button used to share this row, which made the header as
+        // tall as the button and needed a bottom alignment and a negative
+        // margin to keep the heading on the list it names. The button lives on
+        // the toolbar now; anything moved back up here brings all of that back,
+        // so the heading stays a plain row of the panel with nothing beside it.
         XElement heading = Window()
             .Descendants(Xaml + "TextBlock")
             .Single(each => (string?)each.Attribute("Text") == "WHAT GOES ON IT");
 
-        Assert.Equal("Bottom", (string?)heading.Attribute("VerticalAlignment"));
+        Assert.Equal("DockPanel", heading.Parent!.Name.LocalName);
+        Assert.Null(heading.Attribute("VerticalAlignment"));
     }
 
     [Fact]
@@ -859,17 +861,24 @@ public class TheWindowsMarkup
     }
 
     [Fact]
-    public void The_preview_sits_beside_what_it_previews()
+    public void The_preview_sits_on_the_toolbar_with_the_other_list_buttons()
     {
         XElement preview = Window()
             .Descendants(Xaml + "Button")
             .Single(each => IdOf(each) == "PreviewTheMenu");
 
-        // On the header row of the list it is about, rather than buried in
-        // More options beside a checkbox, where nobody found it.
+        // On the row that acts on the list, level with Add a game and Remove,
+        // rather than buried in More options where nobody found it or sharing
+        // the header row, where its height was the header's height and the
+        // list paid for it.
         Assert.Contains(
-            "WHAT GOES ON IT",
-            preview.Parent!.Elements(Xaml + "TextBlock").Select(each => (string?)each.Attribute("Text")));
+            "AddAGame",
+            preview.Parent!.Descendants(Xaml + "Button").Select(IdOf));
+
+        // At the far end of that row in a column of its own, so the three on
+        // the left can never sit on top of it, only push it off the edge.
+        Assert.Equal("1", (string?)preview.Attribute("Grid.Column"));
+        Assert.Equal("Right", (string?)preview.Attribute("HorizontalAlignment"));
 
         // Still dead unless there is a menu to preview, so moving it cannot
         // make it show something that is not going to be on the disc.
@@ -1567,9 +1576,15 @@ public class TheWindowsMarkup
         XElement adding = Assert.Single(
             Window().Descendants(Xaml + "Button"), each => IdOf(each) == "AddAGame");
 
-        XElement row = adding.Parent!;
+        // The three that change the list stand together in a panel, and the
+        // row carrying them is docked over the list. The row is a grid now
+        // rather than the panel itself, because the preview button sits at
+        // its far end.
+        XElement group = adding.Parent!;
+        XElement row = group.Parent!;
 
-        Assert.Equal("StackPanel", row.Name.LocalName);
+        Assert.Equal("StackPanel", group.Name.LocalName);
+        Assert.Equal("Grid", row.Name.LocalName);
         Assert.Equal("Top", (string?)row.Attribute("DockPanel.Dock"));
     }
 

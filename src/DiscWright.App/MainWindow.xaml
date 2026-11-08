@@ -181,45 +181,14 @@
 
             <!-- What goes on it -->
             <DockPanel Grid.Column="0">
-                <!-- The preview sits on the header row rather than buried
-                     beside the menu option in More options, where nobody
-                     found it. It is still dead unless there is a menu to
-                     preview, so it cannot show something that is not going
-                     to be on the disc. -->
-                <!-- No bottom margin on this row. The preview button is
-                     taller than the words beside it, and the row took its
-                     height, which left a band of nothing between the header
-                     and the list it heads. -->
-                <!-- Bottom, so the heading sits on the list it heads.
-                     It was aligned to the top instead, level with WHAT IT IS
-                     CALLED in the next column, which put the height of the
-                     preview button between the words and the thing they name.
-                     A heading belongs to what is under it, not to whatever
-                     happens to be beside it. -->
-                <Grid DockPanel.Dock="Top" Margin="0,0,0,-4">
-                    <TextBlock Style="{StaticResource Step}"
-                               VerticalAlignment="Bottom"
-                               Text="WHAT GOES ON IT" />
-                    <!-- A real button, not something that looks like a link.
-                         Pressing it opens a window, which is what a button
-                         does, and it was quiet enough to be missed even after
-                         it moved out here. -->
-                    <!-- It says it opens one window per disc, because a set
-                         opens several and the second can land exactly behind
-                         the first. Somebody looked at disc 1 of 2, took it for
-                         the whole answer, and had no way of knowing the other
-                         window was there. The titles say which disc each one
-                         is; this says to go looking for them. -->
-                    <Button Content="See what it will look like"
-                            Style="{StaticResource Ordinary}"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Top"
-                            Margin="0,0,0,8"
-                            IsEnabled="{Binding CanPreview}"
-                            Click="PreviewTheMenu"
-                            ToolTip="One window per disc, so a set opens one for each. The manual and the extras are on the last disc."
-                            AutomationProperties.AutomationId="PreviewTheMenu" />
-                </Grid>
+                <!-- Alone on its row, like WHAT IT IS CALLED across the way.
+                     The preview button used to share this row, which made the
+                     header as tall as the button and spent that height on
+                     nothing; the button now sits on the toolbar below, and
+                     the list got the difference. -->
+                <TextBlock DockPanel.Dock="Top"
+                           Style="{StaticResource Step}"
+                           Text="WHAT GOES ON IT" />
 
                 <!-- Said under the tree rather than beside a row, because
                      it is about the disc and not about one file. Leaving the
@@ -321,36 +290,68 @@
                      Above the panel rather than inside it, because a button
                      inside is covered by the tree and cannot be clicked,
                      which is recorded on the empty-list words below. -->
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,8,0,8">
-                    <Button Content="Add a game"
-                            IsEnabled="{Binding NothingIsRunning}"
+                <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <Button Content="Add a game"
+                                IsEnabled="{Binding NothingIsRunning}"
+                                Style="{StaticResource Ordinary}"
+                                Click="AddAGame"
+                                AutomationProperties.AutomationId="AddAGame" />
+                        <!-- Exactly what is picked in the list, and nothing else.
+                             It used to take everything unticked when nothing was
+                             picked, so which of the two somebody got depended on
+                             whether a row happened to be selected and nothing
+                             here said so. -->
+                        <Button Content="Remove"
+                                IsEnabled="{Binding CanTakeSomethingOff}"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="TakeItOff"
+                                AutomationProperties.AutomationId="TakeItOff" />
+                        <!-- The other half of what Remove used to be, with its own
+                             words and its own count, and here at all only when
+                             there is something for it to take. A button that says
+                             how much it will remove cannot be the surprise the one
+                             button was. -->
+                        <Button Content="{Binding WhatTakingTheLeftOffOnesSays}"
+                                Visibility="{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}"
+                                IsEnabled="{Binding NothingIsRunning}"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="TakeOffWhatIsLeftOff"
+                                AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
+                    </StackPanel>
+
+                    <!-- A real button, not something that looks like a link.
+                         Pressing it opens a window, which is what a button
+                         does. It lived on the header row above and made that
+                         row button-tall; on the toolbar it is level with the
+                         other things done to the list, and still dead unless
+                         there is a menu to preview, so it cannot show
+                         something that is not going to be on the disc. Its
+                         own column, so the left three can never sit under
+                         it, only push it off the edge. -->
+                    <!-- It says it opens one window per disc, because a set
+                         opens several and the second can land exactly behind
+                         the first. Somebody looked at disc 1 of 2, took it for
+                         the whole answer, and had no way of knowing the other
+                         window was there. The titles say which disc each one
+                         is; this says to go looking for them. -->
+                    <Button Grid.Column="1"
+                            Content="See what it will look like"
                             Style="{StaticResource Ordinary}"
-                            Click="AddAGame"
-                            AutomationProperties.AutomationId="AddAGame" />
-                    <!-- Exactly what is picked in the list, and nothing else.
-                         It used to take everything unticked when nothing was
-                         picked, so which of the two somebody got depended on
-                         whether a row happened to be selected and nothing
-                         here said so. -->
-                    <Button Content="Remove"
-                            IsEnabled="{Binding CanTakeSomethingOff}"
-                            Style="{StaticResource Ordinary}"
+                            HorizontalAlignment="Right"
                             Margin="8,0,0,0"
-                            Click="TakeItOff"
-                            AutomationProperties.AutomationId="TakeItOff" />
-                    <!-- The other half of what Remove used to be, with its own
-                         words and its own count, and here at all only when
-                         there is something for it to take. A button that says
-                         how much it will remove cannot be the surprise the one
-                         button was. -->
-                    <Button Content="{Binding WhatTakingTheLeftOffOnesSays}"
-                            Visibility="{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}"
-                            IsEnabled="{Binding NothingIsRunning}"
-                            Style="{StaticResource Ordinary}"
-                            Margin="8,0,0,0"
-                            Click="TakeOffWhatIsLeftOff"
-                            AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
-                </StackPanel>
+                            IsEnabled="{Binding CanPreview}"
+                            Click="PreviewTheMenu"
+                            ToolTip="One window per disc, so a set opens one for each. The manual and the extras are on the last disc."
+                            AutomationProperties.AutomationId="PreviewTheMenu" />
+                </Grid>
 
                 <!-- A drop target as well as a panel, discwright#98: the
                      folder, or the setup exe pulled straight out of a
