@@ -3743,6 +3743,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   }
   function discCheck(){
     if(PREVIEW){ previewStop("Check this disc"); return; }
+    // The tick stays clickable while a walk runs, and a second press would
+    // start a second walk over the same files: two certutils per file, and
+    // two verdicts at the end of it.
+    if(SETCHECKING.length){ return; }
     var list=discSums(), here=[], i;
     if(!list.length){
       setSay("This disc does not carry a checksum list, so there is nothing to check against.",false);
@@ -3800,6 +3804,9 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   }
 
   function setVerify(){
+    // Same reason as the guard on discCheck: pressed again mid-walk it would
+    // start a second walk over the same files.
+    if(SETCHECKING.length){ return; }
     var dir=setDir(), rows=setRows();
     if(!dir.length){ return; }
     var todo=[], i;
@@ -3832,6 +3839,10 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
   function setCheckRun(list,at,bad,after){
     if(at>=list.length){
       SETCHECKING="";
+      // The ordinary disc's status line, painted by setTick while the walk
+      // ran. Left alone it would say "Checking file 7 of 7" forever, because
+      // the tick stops the moment nothing is busy and never wipes it.
+      if(typeof setStatus=="function"){ try{ setStatus(""); }catch(ex0){} }
       try{ show(); }catch(ex){}
       after(bad);
       return;
@@ -3965,6 +3976,15 @@ function New-MenuHta([hashtable]$cfg,[string]$out) {
     if(!busy){ SETSTARTED=0; return; }
     var el=document.getElementById("setinfo");
     if(el&&SETLASTSCAN){ try{ el.innerHTML=setInfoHtml(SETLASTSCAN); }catch(ex){} }
+    // An ordinary disc has no set panel, and its hash check used to run with
+    // nothing on screen moving at all: minutes of a still window, then a
+    // verdict out of nowhere, which is how somebody decides it has hung and
+    // closes it. Reported by xniwo against 0.11.0, on a large disc. The same
+    // sentence the set panel shows, on the status line the menu already has
+    // for "Starting the installer...".
+    else if(SETCHECKING.length&&typeof setStatus=="function"){
+      try{ setStatus("Checking file "+SETCHECKING+" against what was burned."+setClock()); }catch(ex2){}
+    }
     if(typeof window!="undefined"&&window.setTimeout){ window.setTimeout(setTick,1000); }
   }
   // Whether the machinery is on show. Off every time the menu opens, because
