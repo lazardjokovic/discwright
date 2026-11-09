@@ -1456,22 +1456,22 @@ public class TheWindowsMarkup
     }
 
     [Fact]
-    public void The_preview_says_it_opens_a_window_for_every_disc()
+    public void The_preview_says_a_set_asks_before_opening_windows()
     {
         XElement preview = Window()
             .Descendants(Xaml + "Button")
             .Single(each => IdOf(each) == "PreviewTheMenu");
 
-        // A set opens a window per disc and the second can land exactly
-        // behind the first. Lazar looked at disc 1 of 2, took it for the whole
-        // answer, and had no way of knowing the other window was there, which
-        // is the one thing the fix for previewing a set could not tell him.
+        // The windows of a set land exactly behind one another, and the
+        // same surprise caught the owner from both directions: disc 1 of 2
+        // taken for the whole answer, then the crowd of windows read as a
+        // bug. A set asks first now, and the hover says so.
         string hover = (string?)preview.Attribute("ToolTip") ?? string.Empty;
 
-        Assert.Contains("One window per disc", hover, StringComparison.Ordinal);
+        Assert.Contains("A set asks first", hover, StringComparison.Ordinal);
 
-        // And where the manual and the extras are, because that is the reason
-        // the last disc of a set is the one worth opening.
+        // And where the manual and the extras are, because that is what one
+        // window costs and the reason the last disc is worth opening.
         Assert.Contains("last disc", hover, StringComparison.Ordinal);
     }
 

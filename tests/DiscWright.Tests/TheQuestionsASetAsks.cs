@@ -61,6 +61,51 @@ public class TheQuestionsASetAsks
         Assert.Contains("not because it can see them now", asked.Because, StringComparison.Ordinal);
     }
 
+    // --------------------------------------- and the one a preview asks
+
+    [Fact]
+    public void A_preview_of_one_disc_asks_nothing_at_all()
+    {
+        // One disc, one menu, one window: there is nothing to decide.
+        Assert.Null(WhatAPreviewAsks.ForASetOf(1));
+        Assert.Null(WhatAPreviewAsks.ForASetOf(0));
+    }
+
+    [Fact]
+    public void A_preview_of_a_set_offers_one_window_as_the_likely_answer()
+    {
+        AQuestion asked = Assert.IsType<AQuestion>(WhatAPreviewAsks.ForASetOf(3));
+
+        // The owner's design on 2026-11-09, after the crowd of windows,
+        // opened with no warning, read to him as a bug. The question names
+        // what one window costs, because the manual and the extras riding
+        // the last disc is the fact that made disc 1 alone wrong back when
+        // nothing asked.
+        Assert.Equal("This is a set of 3 discs, and every disc has a menu of its own.", asked.Headline);
+        Assert.Equal("Open one window", asked.TheLikelyOne);
+        Assert.Equal("Open all 3", asked.TheOtherWay);
+        Assert.Contains("the manual and the extras ride the last disc", asked.Because, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_preview_of_two_discs_says_both_rather_than_all_2()
+    {
+        Assert.Equal("Open both", Assert.IsType<AQuestion>(WhatAPreviewAsks.ForASetOf(2)).TheOtherWay);
+    }
+
+    [Fact]
+    public void The_window_asks_it_before_any_menu_opens_and_one_window_means_disc_1()
+    {
+        // Read off disk like the markup guards, because nothing in this
+        // project can reference the code behind. What is pinned is that
+        // the question comes from the screen, and that the likely answer
+        // narrows the windows to the first disc's rather than none.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("WhatAPreviewAsks.ForASetOf(menus.Length)", code, StringComparison.Ordinal);
+        Assert.Contains("menus = [menus[0]];", code, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void The_window_asks_them_in_the_screens_words_and_takes_the_likely_answer_as_yes()
     {

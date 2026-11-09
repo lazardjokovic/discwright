@@ -720,9 +720,17 @@ public partial class MainWindow : Window
             return;
         }
 
-        // A window per disc. The manual and the extras ride one disc of a set
-        // and the planner puts them last, so opening disc one alone showed a
-        // menu with no Manual button to somebody who had chosen a manual.
+        // A set asks before any window opens, the owner's design on
+        // 2026-11-09: the windows land exactly on top of one another, and
+        // every menu at once with no warning read to him as a bug. One
+        // window, disc 1, is the likely answer, and the question says
+        // where the manual and the extras ride, which is the fact that
+        // made opening disc 1 alone wrong back when nothing asked.
+        if (WhatAPreviewAsks.ForASetOf(menus.Length) is AQuestion crowd && Ask(crowd))
+        {
+            menus = [menus[0]];
+        }
+
         foreach (string where in menus)
         {
             try

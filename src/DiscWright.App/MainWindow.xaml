@@ -316,8 +316,9 @@
                          opens several and the second can land exactly behind
                          the first. Somebody looked at disc 1 of 2, took it for
                          the whole answer, and had no way of knowing the other
-                         window was there. The titles say which disc each one
-                         is; this says to go looking for them. -->
+                         window was there; later the same windows, opened
+                         with no warning, read as a bug. A set asks first
+                         now, and this hover says so. -->
                     <Button Grid.Column="1"
                             Content="See what it will look like"
                             Style="{StaticResource Ordinary}"
@@ -325,7 +326,7 @@
                             Margin="8,0,0,0"
                             IsEnabled="{Binding CanPreview}"
                             Click="PreviewTheMenu"
-                            ToolTip="One window per disc, so a set opens one for each. The manual and the extras are on the last disc."
+                            ToolTip="A set asks first: one window, or one per disc. The manual and the extras are on the last disc."
                             AutomationProperties.AutomationId="PreviewTheMenu" />
                 </Grid>
 
