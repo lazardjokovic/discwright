@@ -130,6 +130,29 @@ public class TheTreeOfWhatGoesOnIt
     }
 
     [Fact]
+    public void A_row_says_so_when_it_is_opened_or_shut()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        AThingOnTheDisc data = tree.Inside.Single(each => each.Name == "data");
+
+        List<string> told = [];
+        data.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        data.IsOpened = true;
+
+        // The window's rows bind to this two way, and a change nobody
+        // announces is a change the window is free to ignore. A mutation
+        // pass walked through this hole before this test existed.
+        Assert.Equal([nameof(AThingOnTheDisc.IsOpened)], told);
+
+        // And set to what it already is, it keeps quiet, the way every
+        // property here keeps quiet about a non-change.
+        told.Clear();
+        data.IsOpened = true;
+        Assert.Empty(told);
+    }
+
+    [Fact]
     public void The_rebuild_keeps_a_folder_somebody_opened_open()
     {
         AThingOnTheDisc before = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);

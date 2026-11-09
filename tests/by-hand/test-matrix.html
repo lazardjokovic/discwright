@@ -448,10 +448,12 @@
           <tr><th>Add a game</th><td>The tree gains a branch · the total under it · the name box, if it was
             empty · <b>where to save the ISO</b>, if it was empty · what it will make · the red line and the way
             out under it · <b>See what it will look like</b> · <b>Build it</b> · <b>Start a new disc</b></td></tr>
-          <tr><th>Tick or untick a row</th><td>The total · <i>Leaving off N things</i> · <i>Without its installer,
-            the disc will not install the game</i> · <i>X is not on the disc, but its add-ons are</i> · what it will
-            make (the disc count can drop) · the red line · <b>Build it</b> · <b>Remove</b></td></tr>
-          <tr><th>Remove a game</th><td>Everything above, and <b>Remove</b> itself going grey again</td></tr>
+          <tr><th>Tick or untick a row</th><td>The total · <i>Leaving off N things</i> and its link, one line on
+            the totals bar · <i>Building without the N things left off</i> by the buttons · <i>Without its
+            installer, the disc will not install the game</i> · <i>X is not on the disc, but its add-ons are</i> ·
+            what it will make (the disc count can drop) · the red line · <b>Build it</b></td></tr>
+          <tr><th>Remove a game (its cross, or Delete)</th><td>Everything above, and with the list empty the
+            totals bar goes with it</td></tr>
           <tr><th>Type or clear the name</th><td>The amber warning about the codepage · the red refusal when it
             is empty · what it will make · <b>Build it</b> · <b>See what it will look like</b></td></tr>
           <tr><th>Choose a size of disc</th><td>What it will make · the splitting line · the amber line about the
@@ -545,7 +547,7 @@
         The whole list is dim during a run, crosses with it.</span></label>
       <label class="case"><input type="checkbox" id="c8" data-controls="TakeOffWhatIsLeftOff"><span class="id">C8</span>
         <span class="what">The link after "Leaving off&hellip;"</span>
-        <span class="look">There <b>only</b> while something is unticked, at the end of the sentence that counts them: "Take it off the list" for one, "Take them off the list" for more.
+        <span class="look">There <b>only</b> while something is unticked, on the totals bar at the end of the sentence that counts them, in the accent ink with the underline on hover: "Take it off the list" for one, "Take them off the list" for more.
         It takes every unticked row, and a game with every row of it unticked goes whole.
         <span class="grey">Grey</span> during a run only.</span></label>
       <label class="case"><input type="checkbox" id="c9" data-controls="Label"><span class="id">C9</span>
@@ -853,7 +855,8 @@
       <label class="case run" data-by="Says_what_is_left_off_and_how_much_of_it"><input type="checkbox" id="e6"><span class="id">E6</span>
         <span class="what">Untick a patch after adding it</span>
         <span class="look"><i>Leaving off 1 thing, N MB.</i> in ordinary ink, not amber: it is the thing you just
-        chose to do.</span></label>
+        chose to do. And <i>Building without the 1 thing left off.</i> by the buttons, so the answer is where the
+        finger is.</span></label>
       <label class="case run" data-by="Says_a_patch_has_nothing_to_patch_when_its_game_is_turned_off"><input type="checkbox" id="e7"><span class="id">E7</span>
         <span class="what">Untick the installer and leave the patch on</span>
         <span class="look">Two different sentences, both of them: <i>Without its installer, the disc will not
@@ -1308,6 +1311,10 @@
         <span class="what">What is being left off</span>
         <span class="look">Hidden · <i>Leaving off 1 thing, 28.2 MB.</i> · <i>Leaving off 4 things,
         656.6 MB.</i></span></label>
+      <label class="case run" data-by="Says_what_is_left_off_and_how_much_of_it"><input type="checkbox" id="k2b"><span class="id">K2b</span>
+        <span class="what">What building goes without, by the buttons</span>
+        <span class="look">Hidden · <i>Building without the 1 thing left off.</i> · <i>Building without the
+        4 things left off.</i></span></label>
       <label class="case run" data-by="TheWindowChecksItself"><input type="checkbox" id="k3"><span class="id">K3</span>
         <span class="what">What it will make</span>
         <span class="look">Hidden · <i>one disc</i> · <i>a set of 3 discs</i>. Never "1 disc".</span></label>

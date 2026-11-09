@@ -243,6 +243,38 @@ public class AddingTheSameFolderAgain
     }
 
     [Fact]
+    public void Putting_back_leaves_the_ticks_and_the_open_folders_alone()
+    {
+        MakeADisc window = TheMainWindowWithoutAWindow.New();
+        window.Add(AGame(), [APatch("patch_1.1.exe"), APatch("patch_1.2.exe")]);
+        TakeOff(window, "patch_1.1.exe");
+
+        // One row unticked and the Add-ons folder opened by hand: the state
+        // the rebuild already lost once, through the cross (discwright#152).
+        // Putting pieces back rebuilds the same way and must not lose it
+        // either.
+        AThingOnTheDisc addOns = window.WhatGoesOnIt[0].Inside
+            .Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder);
+        addOns.IsOpened = true;
+        addOns.Inside
+            .Single(each => each.ItsPath.EndsWith("patch_1.2.exe", StringComparison.Ordinal))
+            .IsOn = false;
+
+        window.PutBack(Assert.IsType<TheSameFolderAgain>(
+            window.WhatIsMissingFrom(AGame(), [APatch("patch_1.1.exe"), APatch("patch_1.2.exe")])));
+
+        // What was put back arrives ticked, what was merely unticked stays
+        // unticked, and the folder somebody was looking into stays open.
+        AThingOnTheDisc after = window.WhatGoesOnIt[0].Inside
+            .Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder);
+        Assert.True(after.IsOpened);
+        Assert.True(after.Inside
+            .Single(each => each.ItsPath.EndsWith("patch_1.1.exe", StringComparison.Ordinal)).IsOn);
+        Assert.False(after.Inside
+            .Single(each => each.ItsPath.EndsWith("patch_1.2.exe", StringComparison.Ordinal)).IsOn);
+    }
+
+    [Fact]
     public void Putting_back_against_a_game_that_has_gone_does_nothing()
     {
         MakeADisc window = TheMainWindowWithoutAWindow.New();
