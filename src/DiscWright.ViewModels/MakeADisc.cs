@@ -2791,8 +2791,35 @@ public sealed class MakeADisc : INotifyPropertyChanged
             return;
         }
 
-        // One row out of a game. The game stays, carrying one thing less.
-        TakeTheRowOff(at, thing.ItsPath, thing.What == TheTreeOfWhatGoesOn.AnAddOn);
+        // A file's cross takes the file, a folder's cross takes everything
+        // under it, and a file is a folder of one here: EveryThing on a
+        // row with nothing under it yields the row itself.
+        //
+        // It used to hand the folder's own path to TakeTheRowOff, which
+        // removes a file by its exact path, and no file carries a folder's
+        // path, so the cross on Add-ons did nothing at all, silently
+        // (watching the owner, 2026-11-09).
+        //
+        // Gathered as paths before the first removal, because taking a row
+        // off rebuilds the branch and rows gathered from it die with it,
+        // which is the "Remove the 2 things left off" lesson.
+        (string Path, bool AnAddOn)[] going =
+        [
+            .. thing.EveryThing().Select(each =>
+                (each.ItsPath, each.What == TheTreeOfWhatGoesOn.AnAddOn))
+        ];
+
+        foreach ((string path, bool anAddOn) in going)
+        {
+            TakeTheRowOff(at, path, anAddOn);
+        }
+
+        // A game with nothing left in it is not on the disc, so it does
+        // not stay on the list as a name with no files and no size.
+        if (_asFound[at].Files.Count == 0 && !_addOnsAsFound.Any(addOn => addOn.BelongsTo == at))
+        {
+            Remove(_games[at]);
+        }
     }
 
     /// <summary>

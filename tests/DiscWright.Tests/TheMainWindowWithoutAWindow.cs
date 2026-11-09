@@ -4658,6 +4658,63 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void The_cross_on_the_add_ons_folder_takes_every_add_on()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900), [APatch("patch_one_1_to_2.exe"), APatch("patch_one_2_to_3.exe")]);
+
+        AThingOnTheDisc addOns = window.WhatGoesOnIt[0].Inside
+            .Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder);
+
+        window.TakeOff(addOns);
+
+        // The folder's cross used to do nothing at all: it handed the
+        // folder's own path to a removal that matches files by their
+        // exact paths, and no file carries a folder's path. The owner
+        // pressed it, watched nothing happen, and said so.
+        Assert.Empty(window.AsAProject().AddOnsOrNone);
+        Assert.DoesNotContain(
+            window.WhatGoesOnIt[0].Inside,
+            each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder);
+        Assert.Single(window.Games[0].Files);
+    }
+
+    [Fact]
+    public void The_cross_on_a_folder_of_files_takes_the_folder_and_leaves_the_rest()
+    {
+        MakeADisc window = New();
+        ListedFile installer = new("setup_deep.exe", 500);
+        window.Add(new GameFolder(
+            @"C:\games\Deep", GameKind.GogInstaller, "Deep", "Deep", installer,
+            [installer, new ListedFile(@"data\one.pak", 100), new ListedFile(@"data\two.pak", 100)],
+            [], null));
+
+        AThingOnTheDisc data = window.WhatGoesOnIt[0].Inside.Single(each => each.Name == "data");
+
+        window.TakeOff(data);
+
+        // Both files under it, not a file called "data" that never existed.
+        Assert.Equal(["setup_deep.exe"], window.Games[0].Files.Select(file => file.RelativePath));
+        Assert.DoesNotContain(window.WhatGoesOnIt[0].Inside, each => each.Name == "data");
+    }
+
+    [Fact]
+    public void A_game_emptied_by_its_crosses_comes_off_the_list_whole()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900));
+        window.Add(AGame("Two", 500));
+
+        // The only file One has, taken off by its own cross. A game with
+        // nothing left in it is not on the disc, so it does not stay on
+        // the list as a name with no files and no size.
+        window.TakeOff(window.WhatGoesOnIt[0].EveryThing().Single());
+
+        Assert.Equal(["Two"], window.Games.Select(game => game.Name));
+        Assert.Equal(["Two"], window.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
     public void Taking_a_row_off_leaves_the_other_ticks_alone()
     {
         MakeADisc window = New();
