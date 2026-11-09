@@ -854,6 +854,33 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void The_dialogs_buttons_follow_the_ticks()
+    {
+        XElement[] buttons = [.. Markup("WhatElseIsInThere.xaml").Descendants(Xaml + "Button")];
+
+        // With nothing ticked, "Put these on too" would put nothing on,
+        // which is the other button's job, so it greys instead of lying.
+        XElement takeThem = buttons.Single(each => IdOf(each) == "TakeThem");
+        Assert.Equal("{Binding AnyWanted}", (string?)takeThem.Attribute("IsEnabled"));
+
+        // And the way back from the patch defaults, for the archive disc
+        // that wants everything: one link ticks every row, grey when
+        // there is nothing left for it to tick.
+        XElement all = buttons.Single(each => IdOf(each) == "TickThemAll");
+        Assert.Equal("Tick them all", (string?)all.Attribute("Content"));
+        Assert.Equal("{Binding CanTickThemAll}", (string?)all.Attribute("IsEnabled"));
+        Assert.Equal("TickThemAll", (string?)all.Attribute("Click"));
+
+        // The window hears every tick, or both of those freeze on their
+        // first answer. Read off disk, because nothing here can press a
+        // box in a window.
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "WhatElseIsInThere.xaml.cs"));
+        Assert.Contains("nameof(AnyWanted)", code, StringComparison.Ordinal);
+        Assert.Contains("nameof(CanTickThemAll)", code, StringComparison.Ordinal);
+        Assert.Contains("each.Wanted = true;", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_header_row_carries_a_rule_under_it()
     {
         // Whatever is in it, the header is a band the full width of the

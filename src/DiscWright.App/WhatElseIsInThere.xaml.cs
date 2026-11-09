@@ -8,8 +8,11 @@ namespace DiscWright.App;
 /// <summary>
 /// What else was in the folder, and what to do with it.
 /// </summary>
-public partial class WhatElseIsInThere : Window
+public partial class WhatElseIsInThere : Window, INotifyPropertyChanged
 {
+    /// <inheritdoc/>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     /// <summary>
     /// Whether one of the two buttons was pressed, as against the window
     /// being closed with the X.
@@ -33,8 +36,51 @@ public partial class WhatElseIsInThere : Window
 
         AboutPatches = WhatWasLeftBehind.AboutThePatches(installer, left);
 
+        // The two lines that follow the ticks follow every tick: the big
+        // button greys when nothing is wanted, and the tick-them-all link
+        // greys when there is nothing left for it to tick.
+        // The two lines that follow the ticks follow every tick: the big
+        // button greys when nothing is wanted, and the tick-them-all link
+        // greys when there is nothing left for it to tick.
+        foreach (OneOfThem each in Files)
+        {
+            each.PropertyChanged += (_, what) =>
+            {
+                if (what.PropertyName == nameof(OneOfThem.Wanted))
+                {
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(AnyWanted)));
+                    PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CanTickThemAll)));
+                }
+            };
+        }
+
         InitializeComponent();
         DataContext = this;
+    }
+
+    /// <summary>
+    /// Whether anything is ticked at all. With nothing ticked, "Put these
+    /// on too" would put nothing on, which is the other button's job, so
+    /// it greys instead of lying.
+    /// </summary>
+    public bool AnyWanted => Files.Any(one => one.Wanted);
+
+    /// <summary>
+    /// Whether the tick-them-all link has anything left to do.
+    /// </summary>
+    public bool CanTickThemAll => Files.Any(one => !one.Wanted);
+
+    /// <summary>
+    /// Every row ticked at once, for the person keeping everything: the
+    /// patch defaults untick what the installer covers, and an archive
+    /// disc wants it anyway.
+    /// </summary>
+    private void TickThemAll(object sender, RoutedEventArgs e)
+    {
+        foreach (OneOfThem each in Files)
+        {
+            each.Wanted = true;
+        }
     }
 
     /// <summary>The files, each with what somebody wants done with it.</summary>

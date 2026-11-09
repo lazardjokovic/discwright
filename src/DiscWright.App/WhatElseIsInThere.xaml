@@ -44,6 +44,18 @@
                        Text="{Binding AboutPatches}"
                        Visibility="{Binding AboutPatches, Converter={StaticResource WhenAnything}}"
                        AutomationProperties.AutomationId="AboutPatches" />
+
+            <!-- For the person keeping everything: the patch defaults
+                 untick what the installer covers, and an archive disc
+                 wants it anyway. Grey when there is nothing left to
+                 tick. -->
+            <Button Content="Tick them all"
+                    Style="{StaticResource Quietly}"
+                    Margin="0,6,0,0"
+                    HorizontalAlignment="Right"
+                    IsEnabled="{Binding CanTickThemAll}"
+                    Click="TickThemAll"
+                    AutomationProperties.AutomationId="TickThemAll" />
         </StackPanel>
 
         <Border Grid.Row="1"
@@ -131,11 +143,15 @@
                     Click="NoneOfThem"
                     AutomationProperties.AutomationId="NoneOfThem" />
 
+            <!-- Grey with nothing ticked: it would put nothing on, which
+                 is the other button's job, said honestly instead of a
+                 press that does the opposite of its words. -->
             <Button Grid.Column="2"
                     Content="Put these on too"
                     Style="{StaticResource TheButton}"
                     Click="TakeThem"
                     IsDefault="True"
+                    IsEnabled="{Binding AnyWanted}"
                     AutomationProperties.AutomationId="TakeThem" />
         </Grid>
     </Grid>
