@@ -2652,10 +2652,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 each.Bytes));
         }
 
+        // Remembering what the old rows held, so putting two patches back
+        // does not re-tick a row somebody had left off or shut what they
+        // had open. What is put back is new, and arrives ticked.
         _tree[at] = TheTreeOfWhatGoesOn.For(
             _asFound[at],
             _addOnsAsFound.Where(addOn => addOn.BelongsTo == at),
-            TakeTheTicksAsTheAnswer);
+            TakeTheTicksAsTheAnswer).Remembering(_tree[at]);
 
         TakeTheTicksAsTheAnswer();
     }
@@ -2817,11 +2820,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         // Built again from what is left, which is the only way the tree and
-        // the list cannot drift apart.
+        // the list cannot drift apart, and remembering what the rows it
+        // replaces held: which were open, and which were turned off.
         _tree[at] = TheTreeOfWhatGoesOn.For(
             _asFound[at],
             _addOnsAsFound.Where(addOn => addOn.BelongsTo == at),
-            TakeTheTicksAsTheAnswer);
+            TakeTheTicksAsTheAnswer).Remembering(_tree[at]);
     }
 
     /// <summary>Takes a game back off the list, and its add-ons with it.</summary>

@@ -440,19 +440,17 @@
                                     <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
 
                                     <!-- A game is open and the folders inside
-                                         it are shut. Every row used to open,
-                                         and a folder of game files is three
-                                         hundred rows of them, so one such game
-                                         filled the panel and the game under it
-                                         was somewhere below the fold. A GOG
-                                         download has no folders, so it shows
-                                         every file as before. -->
-                                    <Setter Property="IsExpanded" Value="False" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsAWholeGame}" Value="True">
-                                            <Setter Property="IsExpanded" Value="True" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
+                                         it are shut, which is the row's own
+                                         IsOpened default. The state lives on
+                                         the row rather than here, because
+                                         taking a row off rebuilds its branch,
+                                         and open state the window kept alone
+                                         died with the old rows: the folder
+                                         the cross was pressed in snapped
+                                         shut under the mouse. Two way, so
+                                         what somebody opens by hand reaches
+                                         the row and survives the rebuild. -->
+                                    <Setter Property="IsExpanded" Value="{Binding IsOpened, Mode=TwoWay}" />
                                 </Style>
                             </TreeView.ItemContainerStyle>
 

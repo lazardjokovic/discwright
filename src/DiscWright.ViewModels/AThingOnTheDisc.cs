@@ -30,6 +30,7 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     private readonly long _own;
     private AThingOnTheDisc? _above;
     private bool _on = true;
+    private bool? _opened;
 
     /// <summary>A row with nothing under it: a file, or an add-on.</summary>
     /// <param name="name">What to show.</param>
@@ -174,6 +175,39 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
 
     /// <summary>Whether it has anything under it.</summary>
     public bool HasThingsInside => _inside.Count > 0;
+
+    /// <summary>
+    /// Whether the row is open on the window, showing what is under it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A game starts open and the folders inside it start shut. Every row
+    /// used to open, and a folder of game files is three hundred rows of
+    /// them, so one such game filled the panel and the game under it was
+    /// below the fold.
+    /// </para>
+    /// <para>
+    /// On the row rather than only on the window, because taking a row off
+    /// rebuilds the branch it was in, and open state that lived in the
+    /// window's own rows died with them: pressing the cross inside an open
+    /// folder snapped the folder shut under the mouse. The rebuild carries
+    /// this across, in <see cref="TheTreeOfWhatGoesOn.Remembering"/>.
+    /// </para>
+    /// </remarks>
+    public bool IsOpened
+    {
+        get => _opened ?? IsAWholeGame;
+        set
+        {
+            if (value == IsOpened)
+            {
+                return;
+            }
+
+            _opened = value;
+            Announce(nameof(IsOpened));
+        }
+    }
 
     /// <summary>How many rows sit above it: nought for a game.</summary>
     public int HowDeep => _above is null ? 0 : _above.HowDeep + 1;
@@ -341,7 +375,34 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// <summary>Everything under it that is ticked.</summary>
     public IEnumerable<AThingOnTheDisc> EverythingOn() => EveryThing().Where(each => each._on);
 
-    private void SetQuietly(bool on)
+    /// <summary>
+    /// Every row of the branch: itself, every folder and every file.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="EveryThing"/> walks down to the rows with nothing under
+    /// them, which is right for everything that reads ticks. The rebuild
+    /// wants the folders too, because a folder is where being open means
+    /// anything.
+    /// </remarks>
+    public IEnumerable<AThingOnTheDisc> EveryRow()
+    {
+        yield return this;
+
+        foreach (AThingOnTheDisc each in _inside)
+        {
+            foreach (AThingOnTheDisc deeper in each.EveryRow())
+            {
+                yield return deeper;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Sets the tick without telling the game, so a change to many rows is
+    /// one announcement rather than one per row. The caller reads the ticks
+    /// as the answer once, afterwards.
+    /// </summary>
+    internal void SetQuietly(bool on)
     {
         if (_inside.Count == 0)
         {

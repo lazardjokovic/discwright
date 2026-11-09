@@ -807,29 +807,24 @@ public class TheWindowsMarkup
     }
 
     [Fact]
-    public void A_game_opens_and_the_folders_inside_it_stay_shut()
+    public void A_rows_open_state_lives_on_the_row_itself()
     {
-        // Every row used to open, and a folder of game files is three
-        // hundred rows of them, so one such game filled the panel and the game
-        // under it was below the fold. A GOG download has no folders and
-        // still shows every file.
+        // A game opens and the folders inside it stay shut, which is
+        // IsOpened's own default. It used to be a setter and a trigger
+        // here, but open state the window kept alone died when a branch
+        // was rebuilt, and taking a row off rebuilds its branch: the
+        // folder the cross was pressed in snapped shut under the mouse.
+        // Two way, or what somebody opens by hand never reaches the row
+        // and there is nothing for the rebuild to carry across.
         XElement style = Window()
             .Descendants(Xaml + "TreeView")
             .Single(each => IdOf(each) == "Games")
             .Descendants(Xaml + "Style")
             .Single(each => (string?)each.Attribute("TargetType") == "TreeViewItem");
 
-        XElement shut = style.Elements(Xaml + "Setter")
+        XElement open = style.Elements(Xaml + "Setter")
             .Single(each => (string?)each.Attribute("Property") == "IsExpanded");
-        Assert.Equal("False", (string?)shut.Attribute("Value"));
-
-        XElement open = style.Descendants(Xaml + "DataTrigger").Single();
-        Assert.Equal("{Binding IsAWholeGame}", (string?)open.Attribute("Binding"));
-        Assert.Equal("True", (string?)open.Attribute("Value"));
-
-        XElement setter = open.Elements(Xaml + "Setter").Single();
-        Assert.Equal("IsExpanded", (string?)setter.Attribute("Property"));
-        Assert.Equal("True", (string?)setter.Attribute("Value"));
+        Assert.Equal("{Binding IsOpened, Mode=TwoWay}", (string?)open.Attribute("Value"));
     }
 
     [Fact]

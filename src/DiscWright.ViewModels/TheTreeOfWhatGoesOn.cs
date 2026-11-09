@@ -86,6 +86,53 @@ public static class TheTreeOfWhatGoesOn
     }
 
     /// <summary>
+    /// Carries what the rows remember across a rebuild: which of them were
+    /// open, and which were turned off.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Taking a row off, and putting a folder's missing pieces back, build
+    /// the branch again from what is left, which is the only way the tree
+    /// and the list cannot drift apart. But the rebuilt rows are new
+    /// objects, born open the way the defaults say and ticked whether or
+    /// not they were: the folder the cross was pressed in snapped shut
+    /// under the mouse, and every row somebody had turned off in that game
+    /// came silently back on.
+    /// </para>
+    /// <para>
+    /// By path, because a position and a path are what the rebuild is built
+    /// from and the only things of a row that survive it.
+    /// </para>
+    /// </remarks>
+    public static AThingOnTheDisc Remembering(this AThingOnTheDisc rebuilt, AThingOnTheDisc before)
+    {
+        Dictionary<string, AThingOnTheDisc> was = new(StringComparer.OrdinalIgnoreCase);
+        foreach (AThingOnTheDisc row in before.EveryRow())
+        {
+            was[row.ItsPath] = row;
+        }
+
+        foreach (AThingOnTheDisc row in rebuilt.EveryRow())
+        {
+            if (!was.TryGetValue(row.ItsPath, out AThingOnTheDisc? itWas))
+            {
+                continue;
+            }
+
+            if (row.HasThingsInside)
+            {
+                row.IsOpened = itWas.IsOpened;
+            }
+            else
+            {
+                row.SetQuietly(itWas.IsOn == true);
+            }
+        }
+
+        return rebuilt;
+    }
+
+    /// <summary>
     /// The game again, carrying only the files still ticked.
     /// </summary>
     /// <remarks>

@@ -4654,6 +4654,50 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public void Taking_a_row_off_leaves_the_other_ticks_alone()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900, parts: 2));
+
+        AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
+        rows[1].IsOn = false;
+
+        window.TakeOff(rows[2]);
+
+        // Taking a row off rebuilds the branch it was in, and the rebuilt
+        // rows were born ticked whether or not they were: one press of a
+        // cross turned every row somebody had left off in that game
+        // silently back on.
+        Assert.False(window.WhatGoesOnIt[0]
+            .EveryThing()
+            .Single(each => each.ItsPath == rows[1].ItsPath)
+            .IsOn);
+        Assert.Equal(2, window.WhatGoesOnIt[0].EveryThing().Count());
+    }
+
+    [Fact]
+    public void Taking_a_row_off_does_not_shut_the_folder_it_was_in()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("One", 900), [APatch("patch_one_1_to_2.exe"), APatch("patch_one_2_to_3.exe")]);
+
+        AThingOnTheDisc addOns = window.WhatGoesOnIt[0].Inside
+            .Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder);
+        Assert.False(addOns.IsOpened);
+        addOns.IsOpened = true;
+
+        window.TakeOff(addOns.Inside[0]);
+
+        // The cross only shows under the mouse, so it is pressed inside an
+        // open folder every time, and the folder snapped shut under the
+        // mouse with the other rows in it gone from view.
+        AThingOnTheDisc after = window.WhatGoesOnIt[0].Inside
+            .Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder);
+        Assert.True(after.IsOpened);
+        Assert.Single(after.Inside);
+    }
+
+    [Fact]
     public void Remove_takes_the_whole_game_when_the_game_is_what_was_chosen()
     {
         MakeADisc window = New();

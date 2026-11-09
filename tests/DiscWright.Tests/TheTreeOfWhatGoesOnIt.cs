@@ -115,6 +115,85 @@ public class TheTreeOfWhatGoesOnIt
         Assert.Equal(1300, tree.Bytes);
     }
 
+    // ------------------------------------------- what a rebuild remembers
+
+    [Fact]
+    public void A_game_starts_open_and_the_folders_inside_it_start_shut()
+    {
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        // Every row used to open, and a folder of game files is three
+        // hundred rows of them, so one such game filled the panel and the
+        // game under it was below the fold.
+        Assert.True(tree.IsOpened);
+        Assert.False(tree.Inside.Single(each => each.Name == "data").IsOpened);
+    }
+
+    [Fact]
+    public void The_rebuild_keeps_a_folder_somebody_opened_open()
+    {
+        AThingOnTheDisc before = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        before.Inside.Single(each => each.Name == "data").IsOpened = true;
+
+        // Built again from the same game, the way taking a row off does.
+        AThingOnTheDisc rebuilt = TheTreeOfWhatGoesOn.For(AGameWithFolders(), [])
+            .Remembering(before);
+
+        // The rebuilt rows are new objects, born shut the way the defaults
+        // say, so without this the folder the cross was pressed in snapped
+        // shut under the mouse.
+        Assert.True(rebuilt.Inside.Single(each => each.Name == "data").IsOpened);
+    }
+
+    [Fact]
+    public void The_rebuild_keeps_a_game_somebody_shut_shut()
+    {
+        AThingOnTheDisc before = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        before.IsOpened = false;
+
+        AThingOnTheDisc rebuilt = TheTreeOfWhatGoesOn.For(AGameWithFolders(), [])
+            .Remembering(before);
+
+        // The other way round: a game starts open, and one folded away by
+        // hand stays folded when a row comes off it.
+        Assert.False(rebuilt.IsOpened);
+    }
+
+    [Fact]
+    public void The_rebuild_keeps_the_rows_that_were_turned_off_turned_off()
+    {
+        AThingOnTheDisc before = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+        before.EveryThing().Single(each => each.Name == "readme.txt").IsOn = false;
+
+        AThingOnTheDisc rebuilt = TheTreeOfWhatGoesOn.For(AGameWithFolders(), [])
+            .Remembering(before);
+
+        // The rebuilt rows are born ticked whether or not they were, so one
+        // press of a cross turned every row somebody had left off in that
+        // game silently back on.
+        Assert.False(rebuilt.EveryThing().Single(each => each.Name == "readme.txt").IsOn);
+        Assert.True(rebuilt.EveryThing().Single(each => each.Name == "setup.exe").IsOn);
+    }
+
+    [Fact]
+    public void A_row_the_old_branch_never_had_arrives_ticked_and_shut()
+    {
+        AThingOnTheDisc before = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);
+
+        // The same game with an add-on it did not have before, the way
+        // putting a folder's missing pieces back arrives with new rows.
+        AThingOnTheDisc rebuilt = TheTreeOfWhatGoesOn.For(AGameWithFolders(), [APatch()])
+            .Remembering(before);
+
+        AThingOnTheDisc addOns = rebuilt.Inside
+            .Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder);
+
+        // Nothing remembered about them, so they take the defaults: on the
+        // disc, and folded away like any other folder.
+        Assert.True(addOns.Inside.Single().IsOn);
+        Assert.False(addOns.IsOpened);
+    }
+
     [Fact]
     public void Says_which_row_is_the_installer_and_which_is_an_add_on()
     {
