@@ -429,7 +429,13 @@
                                  say all of it aloud, and a window test would
                                  see it instead of a name. -->
                             <TreeView.ItemContainerStyle>
-                                <Style TargetType="TreeViewItem">
+                                <!-- On top of the row's own look, not instead
+                                     of it: a container style with no BasedOn
+                                     replaces the implicit style wholesale, and
+                                     the rows would go back to the system's
+                                     brushes while every other control wears
+                                     the palette. -->
+                                <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
                                     <Setter Property="AutomationProperties.Name" Value="{Binding Name}" />
 
                                     <!-- A game is open and the folders inside

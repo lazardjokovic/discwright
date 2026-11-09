@@ -1516,6 +1516,102 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void The_list_wears_a_template_of_its_own()
+    {
+        // The theme's tree answers IsEnabled=False by painting its own
+        // background from system colours, over whatever Background says.
+        // Held while a build ran, the whole list went system grey under the
+        // dark look, light ink on a light panel, watched on 2026-11-09. A
+        // template of ours has no such trigger, so there is nothing to go
+        // wrong: this asks that both the tree and its rows carry one.
+        XElement look = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!;
+
+        foreach (string dressed in (string[])["TreeView", "TreeViewItem"])
+        {
+            XElement style = Assert.Single(
+                look.Elements(Xaml + "Style"),
+                each => (string?)each.Attribute("TargetType") == dressed
+                    && each.Attribute(Named + "Key") is null);
+
+            Assert.True(
+                style.Descendants(Xaml + "ControlTemplate")
+                    .Any(template => (string?)template.Attribute("TargetType") == dressed),
+                $"{dressed} has no template of its own, so the system dresses it.");
+        }
+    }
+
+    [Fact]
+    public void The_chosen_row_is_painted_from_the_palette()
+    {
+        // Selected and unfocused, the theme's row wore the system's pale
+        // grey under our light ink, a row that could not be read in the dark
+        // look at all. The chosen row wears what the dialogs' rows wear, the
+        // deeper paper and the short accent band, asked for dynamically so
+        // the dark look reaches both.
+        XElement row = TheRowTemplate();
+
+        XElement chosen = Assert.Single(
+            row.Element(Xaml + "ControlTemplate.Triggers")!.Elements(Xaml + "Trigger"),
+            each => (string?)each.Attribute("Property") == "IsSelected"
+                && (string?)each.Attribute("Value") == "True");
+
+        Assert.Contains(chosen.Elements(Xaml + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Background"
+            && (string?)setter.Attribute("TargetName") is not null
+            && (string?)setter.Attribute("Value") == "{DynamicResource Page}");
+        Assert.Contains(chosen.Elements(Xaml + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Visibility"
+            && (string?)setter.Attribute("TargetName") == "Chosen"
+            && (string?)setter.Attribute("Value") == "Visible");
+    }
+
+    [Fact]
+    public void The_rows_indent_by_what_the_name_arithmetic_assumes()
+    {
+        // Every row gives its name back whatever the tree pushed it in by,
+        // at nineteen a level, so the sizes end in one column. That
+        // arithmetic lives in AThingOnTheDisc and is held to nineteen by
+        // TheTreeOfWhatGoesOnIt; this holds the markup to the same figure,
+        // because the two only line anything up while they agree.
+        XElement row = TheRowTemplate();
+
+        XElement inside = Assert.Single(row.Descendants(Xaml + "ItemsPresenter"));
+        Assert.Equal("19,0,0,0", (string?)inside.Attribute("Margin"));
+
+        XElement[] columns = [.. row.Descendants(Xaml + "ColumnDefinition")];
+        Assert.Equal("19", (string?)columns[0].Attribute("Width"));
+    }
+
+    [Fact]
+    public void The_container_style_builds_on_the_rows_own_look()
+    {
+        // The tree gives its rows a container style for the automation name
+        // and which rows open. A container style with no BasedOn replaces
+        // the implicit style wholesale, and the rows would go back to the
+        // system's brushes while every other control wears the palette,
+        // with nothing on the window saying why.
+        XElement container = Assert.Single(
+            Window().Descendants(Xaml + "TreeView.ItemContainerStyle").Elements(Xaml + "Style"));
+
+        Assert.Equal(
+            "{StaticResource {x:Type TreeViewItem}}",
+            (string?)container.Attribute("BasedOn"));
+    }
+
+    /// <summary>The template the list's rows wear, from Look.xaml.</summary>
+    private static XElement TheRowTemplate()
+    {
+        XElement style = Assert.Single(
+            XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!
+                .Elements(Xaml + "Style"),
+            each => (string?)each.Attribute("TargetType") == "TreeViewItem");
+
+        return Assert.Single(
+            style.Descendants(Xaml + "ControlTemplate"),
+            template => (string?)template.Attribute("TargetType") == "TreeViewItem");
+    }
+
+    [Fact]
     public void The_app_dresses_for_the_system_and_hears_it_change()
     {
         // The mechanism in one place, held there: the system is asked once at

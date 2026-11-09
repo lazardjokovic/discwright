@@ -265,13 +265,133 @@
 
         The line under it that says what the lot comes to is a sibling rather
         than a child, so it stays readable while the list is held.
+
+        The template is ours as well, and not as a preference: the theme's
+        tree answers IsEnabled=False by painting its own background from
+        system colours, over whatever Background says. Held while a build
+        ran, the whole list went system grey under the dark look, light ink
+        on a light panel, which is how this was found. A template with no
+        such trigger has nothing to paint wrongly, and the dimming above is
+        the whole of what being held looks like.
     -->
     <Style TargetType="TreeView">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TreeView">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <ScrollViewer Focusable="False"
+                                      CanContentScroll="False"
+                                      Padding="{TemplateBinding Padding}"
+                                      HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                      VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}">
+                            <ItemsPresenter />
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
         <Style.Triggers>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.45" />
             </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!-- A row of the list, drawn like a row of the dialogs: the chosen one
+         wears the deeper paper and the short accent band, because the theme's
+         row wears system brushes that never heard of the palette. Selected
+         and unfocused it was the system's pale grey under our light ink,
+         a row that could not be read in the dark look.
+
+         The children indent by nineteen exactly, because every row gives its
+         name back whatever the tree pushed it in by, at nineteen a level, and
+         the sizes only line up if the markup and that arithmetic agree. The
+         guard in TheTreeOfWhatGoesOnIt holds the rows to it and the markup
+         test holds this file to it. -->
+    <Style TargetType="TreeViewItem">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TreeViewItem">
+                    <StackPanel>
+                        <Border x:Name="Row"
+                                Background="Transparent"
+                                CornerRadius="3">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="19" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <Rectangle x:Name="Chosen"
+                                           Width="3"
+                                           HorizontalAlignment="Left"
+                                           Margin="0,4"
+                                           RadiusX="1.5" RadiusY="1.5"
+                                           Fill="{DynamicResource Accent}"
+                                           Visibility="Collapsed" />
+
+                                <!-- The opener, hidden rather than collapsed
+                                     on a row with nothing under it, so the
+                                     names start in one column either way. -->
+                                <ToggleButton x:Name="Opener"
+                                              ClickMode="Press"
+                                              Focusable="False"
+                                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border Background="Transparent">
+                                                <Path x:Name="Arrow"
+                                                      Data="M 0 0 L 4 4 L 8 0"
+                                                      Stroke="{DynamicResource Quiet}"
+                                                      StrokeThickness="1.5"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      RenderTransformOrigin="0.5,0.5">
+                                                    <Path.RenderTransform>
+                                                        <RotateTransform Angle="-90" />
+                                                    </Path.RenderTransform>
+                                                </Path>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="Arrow" Property="RenderTransform">
+                                                        <Setter.Value>
+                                                            <RotateTransform Angle="0" />
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
+
+                                <ContentPresenter Grid.Column="1"
+                                                  ContentSource="Header"
+                                                  VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <ItemsPresenter x:Name="Inside"
+                                        Margin="19,0,0,0"
+                                        Visibility="Collapsed" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="Inside" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="HasItems" Value="False">
+                            <Setter TargetName="Opener" Property="Visibility" Value="Hidden" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Row" Property="Background" Value="{DynamicResource Page}" />
+                            <Setter TargetName="Chosen" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- An ordinary button: the things somebody does on the way. -->
