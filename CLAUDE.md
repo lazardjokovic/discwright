@@ -254,6 +254,11 @@ The Linux port carries a copy of the menu template and has not had this change.
 
 ## Where things stand
 
+**0.11.1, released 2026-11-09.** The fixes from xniwo's comment on #98 after
+0.11.0: Burn with... takes a program added by hand and finds one chosen per user,
+the mount entry no longer depends on who owns `.iso`, a JPEG with Use as-is no
+longer paints the menu black, and the disc check shows how far it has got.
+
 **0.11.0, released 2026-11-03.** A game too big for one disc is written across a
 set, a file bigger than any blank is cut between discs and joined back together
 on the other side, and DiscWright burns a set itself one disc at a time. The
@@ -263,9 +268,10 @@ printer software's job.
 
 Open, and waiting on people rather than on code:
 
-- **winget is a version behind.** One version at a time is the rule, and the
-  0.10.0 submission was still unmerged when 0.11.0 was cut, so nothing for this
-  release has been submitted. That submission's number is not recorded here.
+- **winget is behind.** One version at a time is the rule. 0.11.0 was held back
+  and never submitted, and 0.11.1 is the single version intended to go next,
+  when the owner says so.
+- **The reply to xniwo's latest comment on #98** waits for the C# release.
 - **The VBScript-present branch** of the installer's shortcut choice is covered
   by tests over `packaging/DiscWright.iss` rather than end to end. Smart App
   Control has been off on this machine since 2026-10-16, so the installer runs
