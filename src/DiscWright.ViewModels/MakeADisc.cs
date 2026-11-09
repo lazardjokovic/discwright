@@ -1470,9 +1470,23 @@ public sealed class MakeADisc : INotifyPropertyChanged
             }
         });
 
+        // Read on this thread, before the pool gets involved: the window's
+        // thread is free while the build runs, so these can change mid-build,
+        // and the build must be of what was on the window at the press.
+        DiscProject project = AsAProject();
+        Medium medium = Medium;
+        string into = OutputFolder;
+
         try
         {
-            switch (await _machine.Builder.Build(AsAProject(), Medium, OutputFolder, saying, ct))
+            // On the pool, not on this thread. The staging copy is
+            // synchronous by design, and this is the thread the window is
+            // drawn on: run here, pressing Build froze the window for the
+            // whole copy, "Starting" was set and never painted, and the
+            // first thing anybody saw was the image writer's report seconds
+            // later, watched on 2026-11-09. The reports still land on this
+            // thread, because the Progress above was made on it.
+            switch (await Task.Run(() => _machine.Builder.Build(project, medium, into, saying, ct), CancellationToken.None))
             {
                 case Outcome<BuiltDiscs>.Ok(BuiltDiscs made):
                     // The folder is the disc and the image is the same disc as

@@ -148,6 +148,29 @@ public class BurningOneDiscAndWatchingIt
     }
 
     [Fact]
+    public async Task The_windows_own_thread_is_not_the_one_that_carries_the_files()
+    {
+        // The staging copy is synchronous by design, so wherever the build
+        // runs is a thread that stops answering for the whole copy. Run on
+        // the window's own thread, pressing Build froze the window: Starting
+        // was set and never painted, and the first thing anybody saw was the
+        // image writer's report seconds later, watched on 2026-11-09.
+        //
+        // Under OnTheWindowsThread.Run this thread is the window's thread,
+        // and it is busy delivering until the build is over, so the builder
+        // can only have run here by running inline, which is exactly the
+        // freeze. No deadline is needed: a builder that runs inline still
+        // finishes, it just answers with this thread's own id.
+        AWindowWatched watched = new();
+        int pressing = Environment.CurrentManagedThreadId;
+
+        await OnTheWindowsThread.Run(() => watched.Window.MakeIt());
+
+        Assert.NotNull(watched.BuildRanOn);
+        Assert.NotEqual(pressing, watched.BuildRanOn);
+    }
+
+    [Fact]
     public async Task Writes_nothing_while_something_else_is_already_running()
     {
         // A build that tries to burn while it is building, which is the only
@@ -338,6 +361,9 @@ public class BurningOneDiscAndWatchingIt
         /// <summary>Something to do in the middle of a build, or nothing.</summary>
         internal Action? WhileBuilding { get; set; }
 
+        /// <summary>Which thread the builder found itself on, once it ran.</summary>
+        internal int? BuildRanOn { get; set; }
+
         /// <summary>Builds the disc and then burns it, watching all of it.</summary>
         internal async Task Burn()
         {
@@ -452,6 +478,7 @@ public class BurningOneDiscAndWatchingIt
             DiscProject project, Medium medium, string outputFolder,
             IProgress<BuildProgress>? progress, CancellationToken ct)
         {
+            watched.BuildRanOn = Environment.CurrentManagedThreadId;
             watched.WhileBuilding?.Invoke();
 
             return Task.FromResult<Outcome<BuiltDiscs>>(new BuiltDiscs(
