@@ -1472,6 +1472,15 @@ function Save-OwnBurners([string[]]$list) {
     Set-ItemProperty -LiteralPath $key -Name 'OwnBurners' -Value ([string[]]@($list)) -Type MultiString
 }
 
+# A program, on this machine, today. The picker's filter is only a suggestion:
+# a name typed into its box goes straight past it, and the registry value can be
+# edited by hand, so this is asked of everything before it is listed or kept.
+function Test-OwnBurnerPath([string]$path) {
+    if (-not $path) { return $false }
+    if ([IO.Path]::GetExtension($path) -ine '.exe') { return $false }
+    return [bool](Test-Path -LiteralPath $path -PathType Leaf)
+}
+
 function Add-OwnBurner([string]$exe) {
     # Remembered as given, compared the way NTFS compares names. Says whether
     # it was new, so a chooser knows to add a row or just select the old one.
@@ -1540,7 +1549,7 @@ function Get-IsoHandoffs {
     # skipped, not forgotten: uninstalled today is reinstalled tomorrow, and
     # the person who added it is the one who gets to take it off the list.
     foreach ($exe in @(Get-OwnBurners)) {
-        if (-not (Test-Path -LiteralPath $exe)) { continue }
+        if (-not (Test-OwnBurnerPath $exe)) { continue }
         if (($out | Where-Object { $_.Exe -ieq $exe }).Count) { continue }
         $out += New-OwnBurnerHandoff $exe
     }

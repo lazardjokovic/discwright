@@ -7965,10 +7965,17 @@ function Select-IsoHandoff($picks, $parent,
             return $rows[$at]
         }
         if ($r -eq [System.Windows.Forms.DialogResult]::Retry) {
-            $d = New-FileDialog 'Pick the program to hand the ISO to' 'Programs|*.exe|All files|*.*' ''
+            $d = New-FileDialog 'Pick the program to hand the ISO to' 'Programs|*.exe' ''
             if ($d.ShowDialog() -eq 'OK') {
                 $exe = $d.FileName
                 Set-LastFileBrowse $exe
+                # Typing a name into the picker goes straight past its filter,
+                # and an ISO handed to a text file is not a burn.
+                if (-not (Test-OwnBurnerPath $exe)) {
+                    Show-Warn "That is not a program DiscWright can hand an ISO to:`r`n`r`n$exe"
+                    $d.Dispose()
+                    continue
+                }
                 # Already on the list, found or added: selecting that row is
                 # the whole answer, and the store stays free of doubles.
                 $dup = -1
