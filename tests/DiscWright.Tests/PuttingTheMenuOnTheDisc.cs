@@ -199,6 +199,40 @@ public class PuttingTheMenuOnTheDisc
     }
 
     [Fact]
+    public async Task A_patch_the_installer_covers_gets_no_button_on_the_menu()
+    {
+        RecordingWriter wrote = new();
+        ListedFile installer = new("setup_a_game_1.2_(500).exe", 900);
+        GameFolder found = new(@"C:\games\x", GameKind.GogInstaller, "A Game", "A Game", installer, [installer], [], null);
+        PlannedDisc[] discs = [new PlannedDisc(1, [], 0)];
+
+        BuildContext context = new(
+            new DiscProject("A GAME", [found], new DiscOptions(), AddOns:
+            [
+                new AddOn(0, @"C:\games\x\patch_a_game_1.0_to_1.1_(400).exe", "Update 1.1 (400)", 10),
+                new AddOn(0, @"C:\games\x\patch_a_game_1.2_to_1.3_(600).exe", "Update 1.3 (600)", 10),
+                new AddOn(0, @"C:\games\x\soundtrack_a_game.exe", "soundtrack a game", 10)
+            ]),
+            new DiscLayout(discs, 1_000_000, 1),
+            discs[0],
+            @"C:\stage",
+            wrote);
+
+        await new WriteTheMenuStep().Run(context, CancellationToken.None);
+
+        string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        // After installing from this disc, the covered patch can only
+        // produce its own refusal, and a button that can only refuse is
+        // worse than no button: it rides the disc's Add-ons folder with no
+        // button spent on it. What goes past the installer, and what
+        // nobody can judge, is offered.
+        Assert.DoesNotContain("Update 1.1 (400)", page, StringComparison.Ordinal);
+        Assert.Contains("Update 1.3 (600)", page, StringComparison.Ordinal);
+        Assert.Contains("soundtrack a game", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Tells_the_menu_where_the_manual_and_the_extras_are()
     {
         RecordingWriter wrote = new();

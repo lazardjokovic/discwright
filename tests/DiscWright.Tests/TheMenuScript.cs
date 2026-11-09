@@ -255,6 +255,79 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Folds_the_patches_into_one_chain_and_leaves_the_rest_their_own_buttons()
+    {
+        // A disc with four patches showed four buttons, and the person
+        // holding it had to know to press them oldest first. The chain is
+        // the patches in running order; everything else keeps the order
+        // somebody chose, and a button each.
+        string chain = Ask(
+            "(function () { var c = theUpdateChain(["
+            + "{name: 'The soundtrack'},"
+            + "{name: 'Update 1.3 (600)'},"
+            + "{name: 'Update 1.2 (500)'}]);"
+            + "var s = []; for (var i = 0; i < c.length; i++) { s.push(c[i].name); } return s.join(' | '); })()");
+
+        Assert.Equal("Update 1.2 (500) | Update 1.3 (600)", chain);
+
+        string others = Ask(
+            "(function () { var o = theOtherAddOns(["
+            + "{name: 'The soundtrack'},"
+            + "{name: 'Update 1.2'},"
+            + "{name: 'Hidden Dreams'}]);"
+            + "var s = []; for (var i = 0; i < o.length; i++) { s.push(o[i].name); } return s.join(' | '); })()");
+
+        Assert.Equal("The soundtrack | Hidden Dreams", others);
+    }
+
+    [Fact]
+    public void The_update_button_names_the_version_the_chain_ends_at()
+    {
+        // Without the build number, which is bookkeeping nobody updates
+        // "to", and nothing at all when there is no chain and no button.
+        Assert.Equal(
+            "Update to 1.3",
+            Ask("whatTheUpdateButtonSays([{name: 'Update 1.2 (500)'}, {name: 'Update 1.3 (600)'}])"));
+        Assert.Equal("Update to 1.1", Ask("whatTheUpdateButtonSays([{name: 'Update 1.1'}])"));
+        Assert.Equal("null", Ask("String(whatTheUpdateButtonSays([{name: 'The soundtrack'}]))"));
+        Assert.Equal("null", Ask("String(whatTheUpdateButtonSays([]))"));
+    }
+
+    [Fact]
+    public void Hovering_the_update_button_says_the_whole_chain_in_order()
+    {
+        Assert.Equal(
+            "Update 1.2, then Update 1.3",
+            Ask("whatTheUpdateChainIs([{name: 'Update 1.3'}, {name: 'Update 1.2'}])"));
+    }
+
+    [Fact]
+    public void The_update_command_runs_the_chain_in_order_through_cmd()
+    {
+        // cmd does the sequencing, so the menu fires one line and has no
+        // further part: each installer is waited for by cmd, and && stops
+        // the chain at the first patch whose own installer refuses.
+        string line = Ask(
+            "theUpdateCommand(["
+            + "{name: 'Update 1.3', runs: 'GAME 1/ADD-ONS/p13.exe'},"
+            + "{name: 'Update 1.2', runs: 'GAME 1/ADD-ONS/p12.exe'}], true, 'D:')");
+
+        Assert.Equal(
+            @"cmd /s /c """"D:\GAME 1\ADD-ONS\p12.exe"" && ""D:\GAME 1\ADD-ONS\p13.exe""""",
+            line);
+    }
+
+    [Fact]
+    public void The_update_command_obeys_the_same_gate_as_every_add_on()
+    {
+        // A patch run before its game half-applies to nothing and leaves
+        // no sign that it did, so the chain is as dead as the buttons.
+        Assert.Equal(
+            "null",
+            Ask("String(theUpdateCommand([{name: 'Update 1.1', runs: 'x/p.exe'}], false, 'D:'))"));
+    }
+
+    [Fact]
     public void Is_reported_with_a_line_and_a_column_when_it_will_not_parse()
     {
         // The reason for a .wsf with a real src rather than pasting the file

@@ -516,6 +516,127 @@ function whatAnAddOnRuns(addOn, gameIsInstalled, discFolder) {
     return onTheDisc(discFolder, addOn.runs);
 }
 
+// ===========================================================================
+// The patches fold into one Update button.
+//
+// A disc with four patches showed four buttons, and the person holding it
+// had to know to press them oldest first: that ordering lived in a sort
+// function and a hope. The owner settled it on 2026-11-09: one button runs
+// the chain in order by itself, and everything that is not a patch keeps a
+// button of its own. Patches the installer already covers never reach this
+// file at all, the disc was written without them on the menu.
+// ===========================================================================
+
+// The patches of a game in the order they run: the front half of
+// addOnsInOrder, which already puts them first and earliest first.
+function theUpdateChain(addOns) {
+    var ordered = addOnsInOrder(addOns || []), chain = [], i;
+
+    for (i = 0; i < ordered.length; i++) {
+        if (ordered[i].name.indexOf("Update ") === 0) {
+            chain.push(ordered[i]);
+        }
+    }
+
+    return chain;
+}
+
+// Everything that is not a patch, in the order somebody chose.
+function theOtherAddOns(addOns) {
+    var ordered = addOnsInOrder(addOns || []), others = [], i;
+
+    for (i = 0; i < ordered.length; i++) {
+        if (ordered[i].name.indexOf("Update ") !== 0) {
+            others.push(ordered[i]);
+        }
+    }
+
+    return others;
+}
+
+// What the one button says: the version the chain ends at, without the
+// build number, which is bookkeeping nobody updates "to". Nothing when
+// there is no chain and no button.
+function whatTheUpdateButtonSays(addOns) {
+    var chain = theUpdateChain(addOns), last, cut;
+
+    if (chain.length === 0) {
+        return null;
+    }
+
+    last = String(chain[chain.length - 1].name).substring("Update ".length);
+    cut = last.indexOf(" (");
+
+    if (cut > 0) {
+        last = last.substring(0, cut);
+    }
+
+    return last.length > 0 ? "Update to " + last : "Update";
+}
+
+// What hovering the button says: the whole chain, in the order it runs.
+function whatTheUpdateChainIs(addOns) {
+    var chain = theUpdateChain(addOns), names = [], i;
+
+    for (i = 0; i < chain.length; i++) {
+        names.push(chain[i].name);
+    }
+
+    return names.join(", then ");
+}
+
+// The one command line that runs the whole chain in order, or nothing
+// while the game is not installed, the same gate every add-on obeys.
+//
+// cmd does the sequencing, so the menu fires it and has no further part,
+// the way it starts everything else: each installer is waited for by cmd,
+// not by this page, and && stops the chain at the first patch whose own
+// installer refuses. /s so the outer quotes come off exactly once however
+// many quotes the paths add.
+function theUpdateCommand(addOns, gameIsInstalled, discFolder) {
+    var chain = theUpdateChain(addOns), paths = [], i;
+
+    if (chain.length === 0 || !canRunAddOnYet(gameIsInstalled)) {
+        return null;
+    }
+
+    for (i = 0; i < chain.length; i++) {
+        paths.push('"' + onTheDisc(discFolder, chain[i].runs) + '"');
+    }
+
+    return 'cmd /s /c "' + paths.join(" && ") + '"';
+}
+
+// Starts a command line exactly as it stands, for the one button that
+// runs more than one thing: startIt quotes a single path, and a composed
+// line is already quoted piece by piece. The console window is hidden,
+// because the windows worth seeing are the installers' own.
+function startTheCommand(line) {
+    var shell;
+    var preview = whyNothingRuns();
+
+    if (preview) {
+        return preview;
+    }
+
+    if (!line || String(line).length === 0) {
+        return "There is nothing on this disc for that button to start.";
+    }
+
+    try {
+        shell = new ActiveXObject("WScript.Shell");
+    } catch (noShell) {
+        return "This machine will not let the menu start anything.";
+    }
+
+    try {
+        shell.Run(String(line), 0, false);
+        return null;
+    } catch (wrong) {
+        return "That would not start: " + line + " (" + wrong.message + ")";
+    }
+}
+
 // Whether this is a disc or a preview of one.
 //
 // A preview stages the menu, the artwork and the music and nothing else: no

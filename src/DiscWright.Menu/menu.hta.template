@@ -212,12 +212,22 @@ function showGame(index) {
 // remembers the name it was registered under.
 function showAddOnsOf(game) {
     var list = document.getElementById("addOns");
-    var ordered = addOnsInOrder(game.addOns || []);
+    var chain = theUpdateChain(game.addOns || []);
+    var others = theOtherAddOns(game.addOns || []);
     var installed = isInstalled(game);
+    var dead = canRunAddOnYet(installed) ? '' : ' dead';
     var html = "", i;
 
-    for (i = 0; i < ordered.length; i++) {
-        html += '<a class="btn' + (canRunAddOnYet(installed) ? '' : ' dead') + '" href="#" onclick="runTheAddOn(' + i + '); return false;">'
+    // The patches are one button, since 2026-11-09: four patch buttons
+    // asked the person holding the disc to know the order, and the order
+    // is the menu's job. The chain runs by itself, oldest first.
+    if (chain.length > 0) {
+        html += '<a class="btn' + dead + '" href="#" onclick="runTheUpdate(); return false;">'
+             + '<span id="theUpdate"></span></a>';
+    }
+
+    for (i = 0; i < others.length; i++) {
+        html += '<a class="btn' + dead + '" href="#" onclick="runTheAddOn(' + i + '); return false;">'
              + '<span id="addOn' + i + '"></span></a>';
     }
 
@@ -225,12 +235,17 @@ function showAddOnsOf(game) {
 
     // Set as text afterwards, for the same reason the chooser does: the name
     // came from somebody else's file.
-    for (i = 0; i < ordered.length; i++) {
-        document.getElementById("addOn" + i).innerText = shortEnoughForAButton(ordered[i].name);
-        document.getElementById("addOn" + i).parentNode.title = ordered[i].name;
+    if (chain.length > 0) {
+        document.getElementById("theUpdate").innerText = shortEnoughForAButton(whatTheUpdateButtonSays(game.addOns || []));
+        document.getElementById("theUpdate").parentNode.title = whatTheUpdateChainIs(game.addOns || []);
     }
 
-    var line = ordered.length > 0 ? whatAnAddOnSays(installed) : "";
+    for (i = 0; i < others.length; i++) {
+        document.getElementById("addOn" + i).innerText = shortEnoughForAButton(others[i].name);
+        document.getElementById("addOn" + i).parentNode.title = others[i].name;
+    }
+
+    var line = (chain.length + others.length) > 0 ? whatAnAddOnSays(installed) : "";
     document.getElementById("addOnNote").innerText = line;
     document.getElementById("addOnNote").style.display = line === "" ? "none" : "block";
 }
@@ -466,11 +481,11 @@ function openTheExtras() {
     }
 }
 
-// One add-on.
+// One add-on that is not a patch. The patches have one button of their own.
 function runTheAddOn(which) {
     var game = gameAt(DISC.games, showing);
-    var ordered = addOnsInOrder(game ? (game.addOns || []) : []);
-    var what = whatAnAddOnRuns(ordered[which], isInstalled(game), theDisc());
+    var others = theOtherAddOns(game ? (game.addOns || []) : []);
+    var what = whatAnAddOnRuns(others[which], isInstalled(game), theDisc());
 
     // Dead in the page as well, but a dead button somebody clicks anyway is
     // still a click, and a patch run before its game half-applies to nothing
@@ -480,6 +495,24 @@ function runTheAddOn(which) {
     }
 
     var wrong = startIt(what, "");
+
+    if (wrong) {
+        alert(wrong);
+    }
+}
+
+// The whole chain of patches, in order, off one press. cmd sequences the
+// installers and stops at the first that refuses; the dead gate is the
+// same one every add-on obeys.
+function runTheUpdate() {
+    var game = gameAt(DISC.games, showing);
+    var line = theUpdateCommand(game ? (game.addOns || []) : [], isInstalled(game), theDisc());
+
+    if (!line) {
+        return;
+    }
+
+    var wrong = startTheCommand(line);
 
     if (wrong) {
         alert(wrong);

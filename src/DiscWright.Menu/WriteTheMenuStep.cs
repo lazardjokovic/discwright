@@ -198,11 +198,23 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
                 ? string.Empty
                 : Join(folder, game.Installer.RelativePath);
 
+            // A patch the installer provably already covers gets no button:
+            // after installing from this disc, running it can only produce
+            // its own refusal, and a button that can only refuse is worse
+            // than no button. The file still rides the disc's Add-ons
+            // folder for whoever goes looking. Only proof keeps one off,
+            // and only a GOG installer's name can prove it, so a non GOG
+            // disc offers every patch it carries.
             List<MenuAddOn> addOns =
             [
-                .. context.Project.AddOnsFor(at).Select(addOn => new MenuAddOn(
-                    addOn.Name,
-                    Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(addOn.Path))))
+                .. context.Project.AddOnsFor(at)
+                    .Where(addOn => APatchAgainstTheInstaller.For(
+                            game.Installer?.Name,
+                            System.IO.Path.GetFileName(addOn.Path))
+                        != WhatAPatchAdds.NothingTheInstallerLacks)
+                    .Select(addOn => new MenuAddOn(
+                        addOn.Name,
+                        Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(addOn.Path))))
             ];
 
             // Only when there is exactly one. Several is a question nobody
