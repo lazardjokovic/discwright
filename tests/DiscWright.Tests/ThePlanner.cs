@@ -212,24 +212,66 @@ public class ThePlanner
     }
 
     [Fact]
-    public void Puts_the_extras_on_the_last_disc_where_the_slack_is()
+    public void Puts_the_extras_on_disc_one_the_disc_everybody_puts_in_first()
     {
-        DiscLayout layout = Planned(Files(9, 4), extras: 3);
+        DiscLayout layout = Planned(Files(6, 4), extras: 3);
 
-        // Disc 1 is full at 9 of 10 and disc 2 has 6 spare. Putting them on
-        // disc 1 would push a file onto a disc that did not need to exist.
+        // They rode the last disc until 2026-11-09, and disc 1 of a set had
+        // no Manual and no Extras on its menu: the owner previewed his set
+        // and found neither. Their room comes off disc 1 before anything is
+        // laid down, so the 6 fits beside them and the 4 moves on.
+        Assert.Equal(1, layout.DiscCarryingTheExtras);
         Assert.Equal(2, layout.Discs.Count);
-        Assert.Equal(2, layout.DiscCarryingTheExtras);
+        Assert.Equal([6L], layout.Discs[0].Files.Select(file => file.Bytes));
+        Assert.Equal([4L], layout.Discs[1].Files.Select(file => file.Bytes));
     }
 
     [Fact]
-    public void Gives_the_extras_a_disc_of_their_own_when_the_last_one_is_full()
+    public void A_file_that_will_not_fit_beside_the_extras_moves_on_to_disc_two()
     {
         DiscLayout layout = Planned(Files(10), extras: 3);
 
+        // The price the owner chose knowingly: without cutting, a disc 1
+        // that would have been full now carries the extras and nothing
+        // else, and the file starts disc 2.
         Assert.Equal(2, layout.Discs.Count);
-        Assert.Equal(2, layout.DiscCarryingTheExtras);
-        Assert.Empty(layout.Discs[1].Files);
+        Assert.Equal(1, layout.DiscCarryingTheExtras);
+        Assert.Empty(layout.Discs[0].Files);
+        Assert.Equal([10L], layout.Discs[1].Files.Select(file => file.Bytes));
+    }
+
+    [Fact]
+    public void A_cut_file_shares_disc_one_with_the_extras_instead_of_costing_a_disc()
+    {
+        DiscLayout layout = Planned(Files(15), extras: 3, cut: true);
+
+        // The owner's own case: a Hollow Knight installer bigger than a CD,
+        // with a manual and the press kit. Starting the pieces on a fresh
+        // disc would leave disc 1 holding only the extras and make it a set
+        // of three. The first piece takes the 7 disc 1 has left, the second
+        // the 8 that remain, so it stays a set of two.
+        Assert.Equal(2, layout.Discs.Count);
+        Assert.Equal(1, layout.DiscCarryingTheExtras);
+
+        PlannedFile first = Assert.Single(layout.Discs[0].Files);
+        PlannedFile second = Assert.Single(layout.Discs[1].Files);
+
+        Assert.Equal(7, first.Bytes);
+        Assert.Equal(new FilePart(1, 2, 0, 15), first.Part);
+        Assert.Equal(8, second.Bytes);
+        Assert.Equal(new FilePart(2, 2, 7, 15), second.Part);
+    }
+
+    [Fact]
+    public void Extras_that_fill_disc_one_send_a_cut_file_to_disc_two()
+    {
+        DiscLayout layout = Planned(Files(15), extras: 10, cut: true);
+
+        // Nothing is left beside them, so no empty first piece is made: the
+        // pieces start on disc 2 at full size.
+        Assert.Equal(1, layout.DiscCarryingTheExtras);
+        Assert.Empty(layout.Discs[0].Files);
+        Assert.Equal([10L, 5L], layout.Discs.Skip(1).Select(disc => disc.Files.Single().Bytes));
     }
 
     [Fact]

@@ -326,7 +326,7 @@
                             Margin="8,0,0,0"
                             IsEnabled="{Binding CanPreview}"
                             Click="PreviewTheMenu"
-                            ToolTip="A set asks first: one window, or one per disc. The manual and the extras are on the last disc."
+                            ToolTip="A set asks first: one window, or one per disc. Disc 1 carries the manual and the extras."
                             AutomationProperties.AutomationId="PreviewTheMenu" />
                 </Grid>
 

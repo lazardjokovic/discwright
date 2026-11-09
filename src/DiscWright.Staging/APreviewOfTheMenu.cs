@@ -177,12 +177,10 @@ public interface IShowTheMenu
     /// they would be burned, and says where it put them, or why it could not.
     /// </summary>
     /// <remarks>
-    /// <strong>Every disc, not only the first.</strong> The manual and the
-    /// extras go on one disc of a set, which the planner puts last because
-    /// that is where the slack is. A preview of disc one alone can therefore
-    /// never show the Manual or Extras buttons on a set, however many of them
-    /// somebody has chosen, which is exactly how it looked to the person who
-    /// had chosen them.
+    /// <strong>Every disc, not only the first.</strong> Each disc of a set has
+    /// a menu of its own, and the window decides how many of them to open.
+    /// The manual and the extras ride disc 1 since 2026-11-09, so the one
+    /// window most people open shows them.
     /// </remarks>
     Outcome<IReadOnlyList<string>> Write(
         DiscProject project, Medium medium, Func<string, long> sizeOf, string into);

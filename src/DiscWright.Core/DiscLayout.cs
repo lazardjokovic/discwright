@@ -14,7 +14,8 @@ namespace DiscWright.Core;
 /// <param name="DiscCarryingTheExtras">
 /// Which disc holds the manual, the extras and any loose files, or 0 when there
 /// are none. One disc, not all of them: copying a texture pack onto five discs
-/// costs five times the room.
+/// costs five times the room. Always disc 1 when there are any, the one
+/// everybody puts in first.
 /// </param>
 public sealed record DiscLayout(
     IReadOnlyList<PlannedDisc> Discs,

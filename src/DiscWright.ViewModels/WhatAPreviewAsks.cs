@@ -29,8 +29,8 @@ public static class WhatAPreviewAsks
             ? null
             : new AQuestion(
                 $"This is a set of {discs} discs, and every disc has a menu of its own.",
-                "One window opens disc 1, the menu somebody meets first. Opening every disc shows "
-                    + "the whole set at once, and the manual and the extras ride the last disc.",
+                "One window opens disc 1, the menu somebody meets first, which carries the manual "
+                    + "and the extras. Opening every disc shows the whole set at once.",
                 "Open one window",
                 discs == 2 ? "Open both" : $"Open all {discs}");
 }

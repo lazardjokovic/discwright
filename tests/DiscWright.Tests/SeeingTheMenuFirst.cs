@@ -473,18 +473,20 @@ public class SeeingTheMenuFirst
 
         Previewing(wrote, ASetOfTwo());
 
-        // THE BUG. The extras ride one disc of a set and the planner puts
-        // them on the last one, because that is where the slack is. Previewing
-        // disc one alone could therefore never show a Manual or an Extras
-        // button, however many of them somebody had chosen, which is exactly
-        // what it looked like to the person who had chosen them.
-        Assert.DoesNotContain("manual: \"Extras/", PageOf(wrote, 1), StringComparison.Ordinal);
+        // The extras ride one disc of a set. They rode the last, and the
+        // owner previewed his set on 2026-11-09, opened the one window the
+        // question offers, which is disc 1, and found no Manual and no
+        // Extras: a burned disc 1 had neither either. They ride disc 1 now,
+        // the disc everybody meets first.
+        string first = PageOf(wrote, 1);
+        Assert.Contains("manual: \"Extras/How to play.pdf\"", first, StringComparison.Ordinal);
+        Assert.Contains("extras: \"Extras\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"Manual\"", first, StringComparison.Ordinal);
+        Assert.Contains("\"Extras\"", first, StringComparison.Ordinal);
 
-        string second = PageOf(wrote, 2);
-        Assert.Contains("manual: \"Extras/How to play.pdf\"", second, StringComparison.Ordinal);
-        Assert.Contains("extras: \"Extras\"", second, StringComparison.Ordinal);
-        Assert.Contains("\"Manual\"", second, StringComparison.Ordinal);
-        Assert.Contains("\"Extras\"", second, StringComparison.Ordinal);
+        // And only there: one disc carries them, never every disc.
+        Assert.Contains("manual: \"\"", PageOf(wrote, 2), StringComparison.Ordinal);
+        Assert.Contains("extras: \"\"", PageOf(wrote, 2), StringComparison.Ordinal);
     }
 
     [Fact]

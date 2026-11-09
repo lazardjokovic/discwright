@@ -84,7 +84,7 @@ public class TheQuestionsASetAsks
         Assert.Equal("This is a set of 3 discs, and every disc has a menu of its own.", asked.Headline);
         Assert.Equal("Open one window", asked.TheLikelyOne);
         Assert.Equal("Open all 3", asked.TheOtherWay);
-        Assert.Contains("the manual and the extras ride the last disc", asked.Because, StringComparison.Ordinal);
+        Assert.Contains("which carries the manual and the extras", asked.Because, StringComparison.Ordinal);
     }
 
     [Fact]

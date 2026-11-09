@@ -1523,9 +1523,10 @@ public class TheWindowsMarkup
 
         Assert.Contains("A set asks first", hover, StringComparison.Ordinal);
 
-        // And where the manual and the extras are, because that is what one
-        // window costs and the reason the last disc is worth opening.
-        Assert.Contains("last disc", hover, StringComparison.Ordinal);
+        // And where the manual and the extras are: on disc 1, which is the
+        // one window most people open, so choosing one window costs nothing
+        // somebody would miss.
+        Assert.Contains("Disc 1 carries the manual and the extras", hover, StringComparison.Ordinal);
     }
 
     [Theory]
