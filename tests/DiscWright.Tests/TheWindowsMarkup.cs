@@ -1321,13 +1321,14 @@ public class TheWindowsMarkup
     public void Clearing_out_the_unticked_rows_is_a_link_on_the_sentence_that_counts_them()
     {
         // It was a toolbar button that came and went, crowded the preview
-        // off the edge, and said a count the sentence under the list was
-        // already saying. It is that sentence's own remedy now, a link in
-        // the sentence's manner, discwright#123.
+        // off the edge, and said a count the sentence was already saying.
+        // It is that sentence's own remedy now, discwright#123's manner,
+        // and it wears link ink rather than Quietly's grey, because grey
+        // in a corner is what the owner called not that visible.
         XElement link = Assert.Single(
             Window().Descendants(Xaml + "Button"), each => IdOf(each) == "TakeOffWhatIsLeftOff");
 
-        Assert.Equal("{StaticResource Quietly}", (string?)link.Attribute("Style"));
+        Assert.Equal("{StaticResource AsALink}", (string?)link.Attribute("Style"));
         Assert.Equal("{Binding WhatTakingTheLeftOffOnesSays}", (string?)link.Attribute("Content"));
         Assert.Equal(
             "{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}",
@@ -1335,8 +1336,89 @@ public class TheWindowsMarkup
 
         // Beside the sentence, in one panel, so they read as one line.
         XElement beside = link.Parent!;
-        Assert.Equal("StackPanel", beside.Name.LocalName);
         Assert.Contains(beside.Elements(Xaml + "TextBlock"), each => IdOf(each) == "WhatIsLeftOff");
+    }
+
+    [Fact]
+    public void The_count_of_what_is_left_off_sits_on_the_totals_bar()
+    {
+        // Under the panel in a corner of its own the owner called it not
+        // that visible, and the eye that checks the size is already on the
+        // bar that says what the list comes to. One wrapping panel, so a
+        // long count takes a second line rather than clipping.
+        XElement[] text = [.. Window().Descendants(Xaml + "TextBlock")];
+        XElement total = text.Single(each => IdOf(each) == "WhatIsOnIt");
+        XElement count = text.Single(each => IdOf(each) == "WhatIsLeftOff");
+
+        Assert.Equal("WrapPanel", total.Parent!.Name.LocalName);
+        Assert.Same(total.Parent, count.Parent);
+    }
+
+    [Fact]
+    public void The_separator_dot_needs_something_on_both_sides_of_it()
+    {
+        // With everything unticked the total says nothing at all, and a
+        // separator with nothing on its left is a smudge leading the line.
+        // Collapsed unless both sentences are there to separate.
+        XElement dot = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => (string?)each.Attribute("Text") == "·");
+
+        XElement style = dot.Descendants(Xaml + "Style").Single();
+
+        XElement fallback = style.Elements(Xaml + "Setter").Single();
+        Assert.Equal("Visibility", (string?)fallback.Attribute("Property"));
+        Assert.Equal("Collapsed", (string?)fallback.Attribute("Value"));
+
+        XElement[] both = [.. style.Descendants(Xaml + "Condition")];
+        Assert.Equal(2, both.Length);
+        Assert.Contains(both, each =>
+            ((string?)each.Attribute("Binding") ?? string.Empty).Contains("WhatIsOnIt", StringComparison.Ordinal));
+        Assert.Contains(both, each =>
+            ((string?)each.Attribute("Binding") ?? string.Empty).Contains("WhatIsLeftOff", StringComparison.Ordinal));
+        Assert.All(both, each => Assert.Equal("Visible", (string?)each.Attribute("Value")));
+    }
+
+    [Fact]
+    public void The_build_buttons_say_what_they_will_go_without()
+    {
+        // The owner pressed Build in the second watching session not
+        // knowing whether the unticked row was going along: the sentence
+        // that knew sat under the list, and nothing at the button said it.
+        // Ordinary ink, because leaving a row off is the thing somebody
+        // just deliberately did.
+        XElement said = Window()
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "WhatBuildingGoesWithout");
+
+        Assert.Equal("{Binding WhatBuildingGoesWithout}", (string?)said.Attribute("Text"));
+        Assert.Equal(
+            "{Binding WhatBuildingGoesWithout, Converter={StaticResource WhenAnything}}",
+            (string?)said.Attribute("Visibility"));
+        Assert.Equal("{StaticResource Aside}", (string?)said.Attribute("Style"));
+        Assert.Null(said.Attribute("Foreground"));
+
+        // On the strip the buttons live on, which is the whole point.
+        XElement home = said.Ancestors(Xaml + "Grid").First();
+        Assert.Contains(home.Descendants(Xaml + "Button"), each => IdOf(each) == "MakeTheDisc");
+    }
+
+    [Fact]
+    public void The_link_ink_is_the_accent_over_the_quiet_links_shape()
+    {
+        // AsALink exists for a link that was being missed: the accent ink
+        // at rest is what says it can be pressed. Everything else, the
+        // hand, the underline on hover, the dead grey, is Quietly's, and
+        // building on it is what keeps the two from drifting apart.
+        XElement style = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!
+            .Elements(Xaml + "Style")
+            .Single(each => (string?)each.Attribute(X + "Key") == "AsALink");
+
+        Assert.Equal("{StaticResource Quietly}", (string?)style.Attribute("BasedOn"));
+
+        XElement ink = style.Elements(Xaml + "Setter").Single();
+        Assert.Equal("Foreground", (string?)ink.Attribute("Property"));
+        Assert.Equal("{DynamicResource Accent}", (string?)ink.Attribute("Value"));
     }
 
     [Fact]
@@ -1883,7 +1965,7 @@ public class TheWindowsMarkup
                 if (button.Attribute("IsEnabled") is null
                     || StyleWornBy(button) is not string wearing
                     || !styles.TryGetValue(wearing, out XElement? style)
-                    || ChangesWhenDisabled(style))
+                    || WithWhatItBuildsOn(style, styles).Any(ChangesWhenDisabled))
                 {
                     continue;
                 }
@@ -2154,6 +2236,27 @@ public class TheWindowsMarkup
     /// Whether this style changes something a person can see when the control
     /// is disabled, from a place where the change actually takes.
     /// </summary>
+    /// <summary>
+    /// The style and everything it builds on, nearest first. A style with
+    /// no disabled look of its own can still look dead through the
+    /// template it inherits, which is what AsALink does with Quietly's.
+    /// </summary>
+    private static IEnumerable<XElement> WithWhatItBuildsOn(
+        XElement style, Dictionary<string, XElement> styles)
+    {
+        for (XElement? at = style; at is not null;)
+        {
+            yield return at;
+
+            string basedOn = (string?)at.Attribute("BasedOn") ?? string.Empty;
+            at = basedOn.StartsWith("{StaticResource ", StringComparison.Ordinal)
+                && styles.TryGetValue(
+                    basedOn["{StaticResource ".Length..].TrimEnd('}', ' '), out XElement? up)
+                ? up
+                : null;
+        }
+    }
+
     private static bool ChangesWhenDisabled(XElement style) =>
         WhenDisabled(style.Elements(Xaml + "Style.Triggers"))
             .Any(trigger => Visibly(trigger).Any())

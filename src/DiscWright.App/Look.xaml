@@ -458,6 +458,19 @@
         </Style.Triggers>
     </Style>
 
+    <!-- A link that reads as a link before it is hovered: the accent ink
+         is what says it can be pressed. Quietly above is for a pressable
+         line that must not be louder than the sentence it sits under; this
+         is for one that was being missed, the owner's words on 2026-11-09
+         about Take it off the list sitting quiet in its corner. The
+         underline still waits for the hover, because an underline at rest
+         beside ordinary text reads as emphasis rather than as a control.
+         Everything else, the hand, the hover, the dead grey when it cannot
+         be pressed, is Quietly's. -->
+    <Style x:Key="AsALink" TargetType="Button" BasedOn="{StaticResource Quietly}">
+        <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+    </Style>
+
     <!-- The cross at a row's right edge that takes the row off the list.
          Hidden rather than collapsed while the mouse is elsewhere, so the
          row is the same width whether or not it is being looked at, and

@@ -272,30 +272,6 @@
                            Visibility="{Binding WhatWillNotStartItself, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhatWillNotStartItself" />
 
-                <!-- The sentence that counts what is unticked, and the way to
-                     clear it out, side by side. The clearing used to be a
-                     toolbar button that came and went and crowded the preview
-                     off the edge; it is the sentence's own remedy, so it
-                     lives on the sentence, the way every remedy here does
-                     since discwright#123. The link carries no count of its
-                     own, the count is an inch to the left. -->
-                <StackPanel DockPanel.Dock="Bottom"
-                            Orientation="Horizontal"
-                            Margin="0,8,0,0"
-                            Visibility="{Binding WhatIsLeftOff, Converter={StaticResource WhenAnything}}">
-                    <TextBlock Style="{StaticResource Aside}"
-                               Text="{Binding WhatIsLeftOff}"
-                               AutomationProperties.AutomationId="WhatIsLeftOff" />
-                    <Button Content="{Binding WhatTakingTheLeftOffOnesSays}"
-                            Style="{StaticResource Quietly}"
-                            Margin="6,0,0,0"
-                            VerticalAlignment="Center"
-                            IsEnabled="{Binding NothingIsRunning}"
-                            Visibility="{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}"
-                            Click="TakeOffWhatIsLeftOff"
-                            AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
-                </StackPanel>
-
                 <!-- Above the list, not under it. These act on the list, so
                      they stay inside this panel's column rather than joining
                      the project pair top right, but under the list they were
@@ -579,14 +555,68 @@
                              the disc is what is ticked, and a total that
                              counted rows somebody had just turned off would
                              be worse than no total. -->
+                        <!-- The sentence that counts what is unticked lives
+                             here too, with its link, since 2026-11-09: in
+                             its own corner under the panel it was quiet
+                             enough that the owner called it not that
+                             visible, and the eye that checks the size is
+                             already on this bar. Wrapped, because the three
+                             pieces together can outgrow the panel's width
+                             and a bar that clips is worse than one that
+                             takes a second line. -->
                         <Border Grid.Row="1"
                                 BorderBrush="{DynamicResource Edge}"
                                 BorderThickness="0,1,0,0"
                                 Padding="10,6"
                                 Visibility="{Binding Games.Count, Converter={StaticResource WhenSome}}">
-                            <TextBlock Style="{StaticResource Aside}"
-                                       Text="{Binding WhatIsOnIt}"
-                                       AutomationProperties.AutomationId="WhatIsOnIt" />
+                            <WrapPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource Aside}"
+                                           Text="{Binding WhatIsOnIt}"
+                                           AutomationProperties.AutomationId="WhatIsOnIt" />
+
+                                <!-- Only between the two sentences, never
+                                     leading the line: with everything
+                                     unticked the total says nothing at all,
+                                     and a separator with nothing on its
+                                     left is a smudge. -->
+                                <TextBlock Text="·" Margin="6,0">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource Aside}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding WhatIsOnIt, Converter={StaticResource WhenAnything}}" Value="Visible" />
+                                                        <Condition Binding="{Binding WhatIsLeftOff, Converter={StaticResource WhenAnything}}" Value="Visible" />
+                                                    </MultiDataTrigger.Conditions>
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </MultiDataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
+                                <TextBlock Style="{StaticResource Aside}"
+                                           Text="{Binding WhatIsLeftOff}"
+                                           Visibility="{Binding WhatIsLeftOff, Converter={StaticResource WhenAnything}}"
+                                           AutomationProperties.AutomationId="WhatIsLeftOff" />
+
+                                <!-- The sentence's own remedy, the way every
+                                     remedy here goes since discwright#123,
+                                     and in link ink rather than Quietly's
+                                     grey because grey in this corner is
+                                     what was being missed. It carries no
+                                     count of its own, the count is an inch
+                                     to the left. -->
+                                <Button Content="{Binding WhatTakingTheLeftOffOnesSays}"
+                                        Style="{StaticResource AsALink}"
+                                        Margin="6,0,0,0"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding NothingIsRunning}"
+                                        Visibility="{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}"
+                                        Click="TakeOffWhatIsLeftOff"
+                                        AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
+                            </WrapPanel>
                         </Border>
                     </Grid>
                 </Border>
@@ -887,6 +917,21 @@
                                Text="Building puts the discs on this PC. Burning writes one to a real disc."
                                Visibility="{Binding IsWorking, Converter={StaticResource WhenNot}}"
                                AutomationProperties.AutomationId="WhatTheButtonsMean" />
+
+                    <!-- The sentence under the list counts what is unticked,
+                         and in the second watching session the owner pressed
+                         Build not knowing whether the unticked row was going
+                         along: nothing at this button connected it to that
+                         sentence. This is the connection, at the exact
+                         moment the question is asked, without a dialog
+                         interrupting every build. It stays while the work
+                         runs, because it is just as true then. -->
+                    <TextBlock Style="{StaticResource Aside}"
+                               Margin="0,6,0,0"
+                               TextWrapping="Wrap"
+                               Text="{Binding WhatBuildingGoesWithout}"
+                               Visibility="{Binding WhatBuildingGoesWithout, Converter={StaticResource WhenAnything}}"
+                               AutomationProperties.AutomationId="WhatBuildingGoesWithout" />
 
                     <!-- What the image or the drive had to say that stopped
                          nothing: the older file systems left off because one

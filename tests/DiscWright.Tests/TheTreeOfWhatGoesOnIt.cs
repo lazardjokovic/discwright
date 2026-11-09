@@ -461,6 +461,9 @@ public class TheTreeOfWhatGoesOnIt
 
         Assert.Null(new[] { tree }.WhatIsTurnedOff());
         Assert.Null(new[] { tree }.WhatTakingThoseOffWouldSay());
+
+        // And the strip by the buttons has nothing to add either.
+        Assert.Null(new[] { tree }.WhatBuildingGoesWithout());
     }
 
     [Fact]
@@ -474,6 +477,12 @@ public class TheTreeOfWhatGoesOnIt
         // The link's words, not a button's: the sentence beside it carries
         // the count, so the link only has to know one from many.
         Assert.Equal("Take it off the list", new[] { tree }.WhatTakingThoseOffWouldSay());
+
+        // And the strip by the buttons says the same fact where the finger
+        // is, because the owner pressed Build not knowing the answer.
+        Assert.Equal(
+            "Building without the 1 thing left off.",
+            new[] { tree }.WhatBuildingGoesWithout());
     }
 
     [Fact]
@@ -488,6 +497,7 @@ public class TheTreeOfWhatGoesOnIt
         // link beside it goes plural with it.
         Assert.Equal("Leaving off 2 things, 1000 bytes.", new[] { tree }.WhatIsTurnedOff());
         Assert.Equal("Take them off the list", new[] { tree }.WhatTakingThoseOffWouldSay());
+        Assert.Equal("Building without the 2 things left off.", new[] { tree }.WhatBuildingGoesWithout());
     }
 
     [Fact]

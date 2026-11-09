@@ -4615,7 +4615,7 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
-    public void Tells_the_window_about_both_lines_when_a_tick_changes()
+    public void Tells_the_window_about_every_line_when_a_tick_changes()
     {
         MakeADisc window = New();
         window.Add(AGame("One", 900));
@@ -4627,12 +4627,16 @@ public class TheMainWindowWithoutAWindow
             .Single(each => each.What == TheTreeOfWhatGoesOn.TheInstaller)
             .IsOn = false;
 
-        // Two separate pieces of text on the window, so both have to be
-        // announced or one of them goes on saying what was true a tick ago.
+        // Three separate pieces of text on the window, so all of them have
+        // to be announced or one goes on saying what was true a tick ago.
         // The amber one is the one that would be missed, because it is only
         // ever there in the one case.
         Assert.Contains(nameof(MakeADisc.WhatIsLeftOff), told);
+        Assert.Contains(nameof(MakeADisc.WhatBuildingGoesWithout), told);
         Assert.Contains(nameof(MakeADisc.WhyThatMatters), told);
+
+        // And the strip's words are the tree's words, through the screen.
+        Assert.Equal("Building without the 1 thing left off.", window.WhatBuildingGoesWithout);
     }
 
     [Fact]

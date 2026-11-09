@@ -290,6 +290,30 @@ public static class TheTreeOfWhatGoesOn
     }
 
     /// <summary>
+    /// What pressing Build or Burn will go without, said beside those
+    /// buttons, or nothing when nothing is left off.
+    /// </summary>
+    /// <remarks>
+    /// The sentence that counts the unticked rows sits under the list, and
+    /// in the second watching session the owner pressed Build not knowing
+    /// whether the unticked row was going along: nothing at the button
+    /// connected it to that sentence. This is the connection, at the exact
+    /// moment the question is asked, without a dialog interrupting every
+    /// build.
+    /// </remarks>
+    public static string? WhatBuildingGoesWithout(this IEnumerable<AThingOnTheDisc> tree)
+    {
+        int left = tree.SelectMany(game => game.EveryThing()).Count(each => each.IsOn == false);
+
+        return left switch
+        {
+            0 => null,
+            1 => "Building without the 1 thing left off.",
+            _ => $"Building without the {left} things left off."
+        };
+    }
+
+    /// <summary>
     /// What the link that clears out the turned off rows says, or nothing
     /// when there are none and there is no such link.
     /// </summary>

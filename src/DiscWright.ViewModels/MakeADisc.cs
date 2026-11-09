@@ -937,6 +937,17 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string? WhatIsLeftOff => _tree.WhatIsTurnedOff();
 
     /// <summary>
+    /// What pressing Build or Burn will go without, said beside those
+    /// buttons, or nothing when nothing is left off.
+    /// </summary>
+    /// <remarks>
+    /// The sentence above counts the unticked rows under the list, and the
+    /// owner pressed Build not knowing whether the unticked row was going
+    /// along. This line is the same fact where the finger is.
+    /// </remarks>
+    public string? WhatBuildingGoesWithout => _tree.WhatBuildingGoesWithout();
+
+    /// <summary>
     /// The one thing about leaving rows off that is worth a warning colour, or
     /// nothing.
     /// </summary>
@@ -3376,6 +3387,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // over an empty one. Everything that changes the list ends here, so
         // this is where they belong.
         Tell(nameof(WhatIsLeftOff));
+        Tell(nameof(WhatBuildingGoesWithout));
         Tell(nameof(WhatTakingTheLeftOffOnesSays));
         Tell(nameof(WhyThatMatters));
         Tell(nameof(APatchWithNothingToPatch));
