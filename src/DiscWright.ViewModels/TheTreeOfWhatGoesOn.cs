@@ -78,7 +78,17 @@ public static class TheTreeOfWhatGoesOn
             AThingOnTheDisc under = FolderIn(root, AddOnsAreUnder, AddOnsAreUnder);
             foreach (AddOn addOn in its)
             {
-                under.Holding(new AThingOnTheDisc(addOn.Name, addOn.Bytes, AnAddOn, addOn.Path));
+                // The hover keeps the dialog's reason, so what a patch adds
+                // against this disc's installer is not gone at OK.
+                string? aside = APatchAgainstTheInstaller.For(
+                    game.Installer?.Name, System.IO.Path.GetFileName(addOn.Path)) switch
+                {
+                    WhatAPatchAdds.NothingTheInstallerLacks => "The installer already includes what this reaches.",
+                    WhatAPatchAdds.SomethingPastTheInstaller => "Updates the game past this disc's installer.",
+                    _ => null,
+                };
+
+                under.Holding(new AThingOnTheDisc(addOn.Name, addOn.Bytes, AnAddOn, addOn.Path, aside: aside));
             }
         }
 

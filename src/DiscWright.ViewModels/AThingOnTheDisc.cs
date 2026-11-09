@@ -28,6 +28,7 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     private readonly List<AThingOnTheDisc> _inside = [];
     private readonly Action? _tell;
     private readonly long _own;
+    private readonly string? _aside;
     private AThingOnTheDisc? _above;
     private bool _on = true;
     private bool? _opened;
@@ -45,13 +46,19 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// the full path it was found at.
     /// </param>
     /// <param name="tell">Called whenever any tick anywhere below changes.</param>
-    public AThingOnTheDisc(string name, long bytes, string? what, string itsPath, Action? tell = null)
+    /// <param name="aside">
+    /// One more line for the hover, when there is something worth saying
+    /// that the name and the path do not: for a patch, what it adds against
+    /// the disc's installer, so the dialog's reason is not gone at OK.
+    /// </param>
+    public AThingOnTheDisc(string name, long bytes, string? what, string itsPath, Action? tell = null, string? aside = null)
     {
         Name = name;
         _own = bytes;
         What = what;
         ItsPath = itsPath;
         _tell = tell;
+        _aside = aside;
         Inside = new ReadOnlyCollection<AThingOnTheDisc>(_inside);
     }
 
@@ -140,10 +147,17 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// with no window in it can ask what the row would say.
     /// </para>
     /// </remarks>
-    public string InFull =>
-        ItsPath.Length == 0 || string.Equals(ItsPath, Name, StringComparison.Ordinal)
-            ? Name
-            : Name + (char)10 + ItsPath;
+    public string InFull
+    {
+        get
+        {
+            string said = ItsPath.Length == 0 || string.Equals(ItsPath, Name, StringComparison.Ordinal)
+                ? Name
+                : Name + (char)10 + ItsPath;
+
+            return _aside is null ? said : said + (char)10 + _aside;
+        }
+    }
 
     /// <summary>Everything directly under it.</summary>
     public ReadOnlyCollection<AThingOnTheDisc> Inside { get; }

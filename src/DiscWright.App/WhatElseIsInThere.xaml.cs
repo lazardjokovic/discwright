@@ -23,13 +23,15 @@ public partial class WhatElseIsInThere : Window
     /// </remarks>
     private bool _answered;
 
-    private WhatElseIsInThere(IReadOnlyList<LeftBehind> left)
+    private WhatElseIsInThere(IReadOnlyList<LeftBehind> left, string? installer)
     {
-        Files = [.. left.Select(each => new OneOfThem(each))];
+        Files = [.. left.Select(each => new OneOfThem(each, installer))];
 
         Headline = left.Count == 1
             ? "There is one more file in that folder"
             : $"There are {left.Count} more files in that folder";
+
+        AboutPatches = WhatWasLeftBehind.AboutThePatches(installer, left);
 
         InitializeComponent();
         DataContext = this;
@@ -40,6 +42,12 @@ public partial class WhatElseIsInThere : Window
 
     /// <summary>The line at the top.</summary>
     public string Headline { get; }
+
+    /// <summary>
+    /// What a patch is and what this disc's installer already carries, said
+    /// once above the rows, or nothing when no patch is among the files.
+    /// </summary>
+    public string? AboutPatches { get; }
 
     /// <summary>
     /// Asks about the files a folder held beyond the game, and answers with
@@ -59,7 +67,7 @@ public partial class WhatElseIsInThere : Window
             return (game, []);
         }
 
-        WhatElseIsInThere asking = new(left) { Owner = owner };
+        WhatElseIsInThere asking = new(left, game.Installer?.Name) { Owner = owner };
 
         bool? said = asking.ShowDialog();
 
@@ -101,16 +109,21 @@ public partial class WhatElseIsInThere : Window
 /// <summary>One file in the list, and what is to become of it.</summary>
 public sealed class OneOfThem : INotifyPropertyChanged
 {
-    private bool _wanted = true;
+    private readonly string? _installer;
+    private bool _wanted;
     private int _treatment;
 
-    internal OneOfThem(LeftBehind what)
+    internal OneOfThem(LeftBehind what, string? installer)
     {
         What = what;
+        _installer = installer;
 
         // Ticked to begin with, because somebody pointed at the folder these
         // came from, and the surprise worth avoiding is losing a file rather
-        // than gaining one.
+        // than gaining one. The one exception is a patch the installer
+        // provably already covers, which starts off with its reason on its
+        // line, the owner's design on 2026-11-09.
+        _wanted = what.WantedAgainst(installer);
         _treatment = what.Kind == LeftBehindKind.LooksLikeAnAddOn ? 1 : 0;
     }
 
@@ -132,11 +145,11 @@ public sealed class OneOfThem : INotifyPropertyChanged
     /// </remarks>
     public string WhatToDoWithIt => Name + ": what to do with it";
 
-    /// <summary>What it would be called if it is attached as an add-on.</summary>
-    public string Explains =>
-        What.Kind == LeftBehindKind.LooksLikeAnAddOn
-            ? "Looks like something that installs onto the game, so: " + What.AsAnAddOn
-            : "Looks like something to read or look at";
+    /// <summary>
+    /// The line under the name: what the file looks like, and for a patch
+    /// the names can judge, what it adds against this disc's installer.
+    /// </summary>
+    public string Explains => What.ExplainedAgainst(_installer);
 
     public bool Wanted
     {

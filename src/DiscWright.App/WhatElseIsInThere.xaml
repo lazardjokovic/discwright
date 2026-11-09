@@ -33,6 +33,17 @@
             <TextBlock Style="{StaticResource Aside}"
                        Margin="0,4,0,0"
                        Text="The game itself is already going on. These were beside it. Anything left unticked stays off the disc." />
+
+            <!-- Said once, above the rows, only when patches are among the
+                 files: what a patch is, and what this disc's installer
+                 already carries, so the ticks' defaults have their reason
+                 in sight. The owner's ask on 2026-11-09. -->
+            <TextBlock Style="{StaticResource Aside}"
+                       Margin="0,4,0,0"
+                       TextWrapping="Wrap"
+                       Text="{Binding AboutPatches}"
+                       Visibility="{Binding AboutPatches, Converter={StaticResource WhenAnything}}"
+                       AutomationProperties.AutomationId="AboutPatches" />
         </StackPanel>
 
         <Border Grid.Row="1"
@@ -51,16 +62,35 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <CheckBox Grid.Column="0"
-                                          Margin="0"
-                                          IsChecked="{Binding Wanted}"
-                                          AutomationProperties.AutomationId="{Binding Name}">
-                                    <StackPanel>
+                                <!-- The reason line sits beside the box
+                                     rather than inside it. Inside, the
+                                     box's content is measured with no
+                                     width to speak of, wrapping never
+                                     fires, and "so it adds nothing to
+                                     this disc" was clipped to "so it
+                                     adds", which reads as the exact
+                                     opposite of what it says. Caught by
+                                     photograph, like every clipping
+                                     before it. -->
+                                <StackPanel Grid.Column="0">
+                                    <!-- The name goes through a TextBlock,
+                                         not as a bare string: handed a
+                                         string, the box reads the first
+                                         underscore as an access key and
+                                         swallows it, and every GOG file
+                                         name is full of underscores.
+                                         patch_a_game read as patcha_game
+                                         on the photograph. -->
+                                    <CheckBox Margin="0"
+                                              IsChecked="{Binding Wanted}"
+                                              AutomationProperties.AutomationId="{Binding Name}">
                                         <TextBlock Text="{Binding Name}" />
-                                        <TextBlock Style="{StaticResource Aside}"
-                                                   Text="{Binding Explains}" />
-                                    </StackPanel>
-                                </CheckBox>
+                                    </CheckBox>
+                                    <TextBlock Style="{StaticResource Aside}"
+                                               TextWrapping="Wrap"
+                                               Margin="24,2,0,0"
+                                               Text="{Binding Explains}" />
+                                </StackPanel>
 
                                 <TextBlock Grid.Column="1"
                                            Style="{StaticResource Aside}"

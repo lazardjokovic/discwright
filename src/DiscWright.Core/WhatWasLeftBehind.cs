@@ -65,6 +65,32 @@ public static class WhatWasLeftBehind
         file.RelativePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
             ? LeftBehindKind.LooksLikeAnAddOn
             : LeftBehindKind.LooksLikeSomethingToKeep;
+
+    /// <summary>
+    /// The sentence the dialog says once, above the rows, when patches are
+    /// among what was left behind, or nothing when none are and there is
+    /// nothing to explain.
+    /// </summary>
+    /// <remarks>
+    /// The owner's ask on 2026-11-09: one place where a person who has
+    /// never heard of patches gets the explanation. Worded here rather
+    /// than in the dialog so a test can read it.
+    /// </remarks>
+    public static string? AboutThePatches(string? installerFileName, IEnumerable<LeftBehind> left)
+    {
+        if (!left.Any(each => APatchAgainstTheInstaller.IsAPatch(each.File.Name)))
+        {
+            return null;
+        }
+
+        string? installs = APatchAgainstTheInstaller.WhatTheInstallerInstalls(installerFileName);
+
+        return installs is null
+            ? "A patch takes an installed game from one version to the next. DiscWright cannot "
+                + "tell which version this game's installer carries, so it suggests keeping every patch."
+            : "A patch is GOG's small installer that takes the game from one version to the next. "
+                + $"The installer going on this disc already installs {installs}.";
+    }
 }
 
 /// <summary>One file the game did not take.</summary>
@@ -80,6 +106,36 @@ public sealed record LeftBehind(ListedFile File, LeftBehindKind Kind)
     /// What it would be called as an add-on, which is not its file name.
     /// </summary>
     public string AsAnAddOn => AddOn.NameFor(File.Name);
+
+    /// <summary>
+    /// The line under the file's name in the dialog, judged against the
+    /// disc's installer when the file is a patch the names can judge.
+    /// </summary>
+    public string ExplainedAgainst(string? installerFileName)
+    {
+        if (Kind != LeftBehindKind.LooksLikeAnAddOn)
+        {
+            return "Looks like something to read or look at";
+        }
+
+        return APatchAgainstTheInstaller.For(installerFileName, File.Name) switch
+        {
+            WhatAPatchAdds.NothingTheInstallerLacks =>
+                $"Reaches {APatchAgainstTheInstaller.WhatItReaches(File.Name)}, which the installer "
+                    + "already includes, so it adds nothing to this disc.",
+            WhatAPatchAdds.SomethingPastTheInstaller =>
+                $"Updates the installed game past this disc's installer, to {APatchAgainstTheInstaller.WhatItReaches(File.Name)}.",
+            _ => "Looks like something that installs onto the game, so: " + AsAnAddOn,
+        };
+    }
+
+    /// <summary>
+    /// Whether the file's tick starts on. Only a patch the installer
+    /// provably already covers starts off, because keeping a file is the
+    /// recoverable mistake and quietly losing one is not.
+    /// </summary>
+    public bool WantedAgainst(string? installerFileName) =>
+        APatchAgainstTheInstaller.For(installerFileName, File.Name) != WhatAPatchAdds.NothingTheInstallerLacks;
 }
 
 /// <summary>What a left behind file looks like it is.</summary>

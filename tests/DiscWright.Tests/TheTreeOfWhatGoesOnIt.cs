@@ -71,6 +71,31 @@ public class TheTreeOfWhatGoesOnIt
     }
 
     [Fact]
+    public void Hovering_a_patch_keeps_the_dialogs_reason()
+    {
+        // The dialog said why a patch's tick started where it did, and a
+        // dialog's reason is gone at OK. The hover keeps it, both ways.
+        GameFolder game = AGameWithFolders() with
+        {
+            Installer = new ListedFile("setup_a_game_1.2_(500).exe", 900),
+            Files = [new ListedFile("setup_a_game_1.2_(500).exe", 900)]
+        };
+
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(game,
+        [
+            new AddOn(0, @"C:\game\patch_a_game_1.0_to_1.1_(400).exe", "Update 1.1 (400)", 10),
+            new AddOn(0, @"C:\game\patch_a_game_1.2_to_1.3_(600).exe", "Update 1.3 (600)", 10)
+        ]);
+
+        AThingOnTheDisc[] patches = [.. tree.Inside
+            .Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder)
+            .Inside];
+
+        Assert.EndsWith("The installer already includes what this reaches.", patches[0].InFull, StringComparison.Ordinal);
+        Assert.EndsWith("Updates the game past this disc's installer.", patches[1].InFull, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Hovering_a_game_says_which_folder_it_came_from()
     {
         AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithFolders(), []);

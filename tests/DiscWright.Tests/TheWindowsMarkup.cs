@@ -828,6 +828,32 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void The_more_in_that_folder_dialog_explains_patches_once_above_the_rows()
+    {
+        // The explanation of what a patch is lives where the choice is
+        // made, said once for the group rather than once per row, and only
+        // when patches are among the files: a dialog that explains patches
+        // over a lone README is noise.
+        XElement said = Markup("WhatElseIsInThere.xaml")
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => IdOf(each) == "AboutPatches");
+
+        Assert.Equal("{Binding AboutPatches}", (string?)said.Attribute("Text"));
+        Assert.Equal(
+            "{Binding AboutPatches, Converter={StaticResource WhenAnything}}",
+            (string?)said.Attribute("Visibility"));
+        Assert.Equal("Wrap", (string?)said.Attribute("TextWrapping"));
+
+        // And the line under each row wraps too: "so it adds nothing to
+        // this disc" was clipped to "so it adds", which reads as the exact
+        // opposite of what it says. Caught by photograph.
+        XElement explains = Markup("WhatElseIsInThere.xaml")
+            .Descendants(Xaml + "TextBlock")
+            .Single(each => (string?)each.Attribute("Text") == "{Binding Explains}");
+        Assert.Equal("Wrap", (string?)explains.Attribute("TextWrapping"));
+    }
+
+    [Fact]
     public void The_header_row_carries_a_rule_under_it()
     {
         // Whatever is in it, the header is a band the full width of the
