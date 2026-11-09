@@ -867,27 +867,24 @@ public class TheWindowsMarkup
             .Descendants(Xaml + "Button")
             .Single(each => IdOf(each) == "PreviewTheMenu");
 
-        // On the row that acts on the list, level with Add a game and Remove,
-        // rather than buried in More options where nobody found it or sharing
-        // the header row, where its height was the header's height and the
-        // list paid for it.
+        // On the row that acts on the list, level with Add a game, rather
+        // than buried in More options where nobody found it or sharing the
+        // header row, where its height was the header's height and the list
+        // paid for it.
         Assert.Contains(
             "AddAGame",
             preview.Parent!.Descendants(Xaml + "Button").Select(IdOf));
 
-        // At the far end of that row in a column of its own, so the three on
-        // the left can never sit on top of it. The column lives in its style
-        // now, because when the fourth button arrives the preview changes
-        // where it stands, and an attribute on the element would beat every
-        // trigger that tries.
-        XElement style = Assert.Single(
-            preview.Elements(Xaml + "Button.Style").Elements(Xaml + "Style"));
-
-        Assert.Contains(style.Elements(Xaml + "Setter"), setter =>
-            (string?)setter.Attribute("Property") == "Grid.Column"
-            && (string?)setter.Attribute("Value") == "1");
-        Assert.Null(preview.Attribute("Grid.Column"));
+        // At the far end of that row in a column of its own. The toolbar is
+        // two buttons for good now, removing is a gesture on the rows
+        // themselves, so nothing can crowd this one off the edge again the
+        // way the fourth button did on 2026-11-09.
+        Assert.Equal("1", (string?)preview.Attribute("Grid.Column"));
         Assert.Equal("Right", (string?)preview.Attribute("HorizontalAlignment"));
+
+        string[] onTheToolbar =
+            [.. preview.Parent!.Descendants(Xaml + "Button").Select(each => IdOf(each) ?? string.Empty)];
+        Assert.Equal(["AddAGame", "PreviewTheMenu"], onTheToolbar);
 
         // Still dead unless there is a menu to preview, so moving it cannot
         // make it show something that is not going to be on the disc.
@@ -1152,11 +1149,44 @@ public class TheWindowsMarkup
 
         double row = TheTickBox + Row()
             .Descendants()
-            .Sum(each => WideAs(each.Attribute("Width")) + Across(each.Attribute("Margin")));
+            .Sum(each => WideAs(each.Attribute("Width"))
+                + Across(each.Attribute("Margin"))
+                + StyledWidth(each));
 
         Assert.True(
             row <= room,
             $"A row declares {row} and the list has {room} to give it.");
+    }
+
+    /// <summary>
+    /// The width an element takes from its style, for the parts of a row
+    /// whose size lives in Look.xaml because the buttons rule says a button
+    /// may not size itself. Without this the cross on every row would be a
+    /// width this guard never counted.
+    /// </summary>
+    private static double StyledWidth(XElement element)
+    {
+        if (element.Attribute("Width") is not null)
+        {
+            return 0;
+        }
+
+        System.Text.RegularExpressions.Match wearing =
+            System.Text.RegularExpressions.Regex.Match(
+                (string?)element.Attribute("Style") ?? string.Empty,
+                @"^\{StaticResource (\w+)\}$");
+
+        if (!wearing.Success)
+        {
+            return 0;
+        }
+
+        return XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!
+            .Elements(Xaml + "Style")
+            .Where(style => (string?)style.Attribute(Named + "Key") == wearing.Groups[1].Value)
+            .SelectMany(style => style.Elements(Xaml + "Setter"))
+            .Where(setter => (string?)setter.Attribute("Property") == "Width")
+            .Sum(setter => Figure(setter.Attribute("Value")));
     }
 
     /// <summary>
@@ -1229,26 +1259,108 @@ public class TheWindowsMarkup
     }
 
     [Fact]
-    public void Remove_means_what_is_picked_and_the_rest_has_its_own_button()
+    public void Every_row_carries_its_own_way_off()
     {
-        XElement[] buttons = [.. Window().Descendants(Xaml + "Button")];
+        // Removing used to be select it, then walk up to a Remove button, a
+        // two-step the owner called strange twice in the 2026-11-09 session,
+        // with a second Remove coming and going beside it. The cross on the
+        // row is the gesture on the thing itself, and the buttons it
+        // replaces are gone from the toolbar.
+        XElement cross = Assert.Single(
+            Row().Descendants(Xaml + "Button"), each => IdOf(each) == "TakeOffThisRow");
 
-        XElement remove = buttons.Single(each => IdOf(each) == "TakeItOff");
-        XElement theRest = buttons.Single(each => IdOf(each) == "TakeOffWhatIsLeftOff");
+        Assert.Equal("{StaticResource OffTheRow}", (string?)cross.Attribute("Style"));
+        Assert.Equal("TakeOffThisRow", (string?)cross.Attribute("Click"));
+        Assert.NotNull(cross.Attribute("ToolTip"));
+        Assert.NotNull(cross.Attribute("AutomationProperties.Name"));
 
-        // One button meant two things and which one somebody got depended on
-        // whether a row happened to be picked. Remove is now the selection and
-        // nothing else, and goes grey the moment there is no selection.
-        Assert.Equal("Remove", (string?)remove.Attribute("Content"));
-        Assert.Equal("{Binding CanTakeSomethingOff}", (string?)remove.Attribute("IsEnabled"));
+        // The handler acts on the row the cross was drawn on, never on the
+        // selection, so there is no way to press one row's cross and lose a
+        // different row.
+        string handlers = File.ReadAllText(
+            Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+        Assert.Contains(
+            "pressed.DataContext is AThingOnTheDisc row", handlers, StringComparison.Ordinal);
 
-        // The other half says how many it will take, in words from the screen
-        // rather than typed here, and is on the window at all only when there
-        // is something for it to take.
-        Assert.Equal("{Binding WhatTakingTheLeftOffOnesSays}", (string?)theRest.Attribute("Content"));
+        // And nothing called Remove sits on the toolbar any more.
+        Assert.DoesNotContain(
+            Window().Descendants(Xaml + "Button"), each => IdOf(each) == "TakeItOff");
+    }
+
+    [Fact]
+    public void The_cross_hides_without_moving_the_columns()
+    {
+        XElement look = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!;
+
+        XElement style = Assert.Single(
+            look.Elements(Xaml + "Style"),
+            each => (string?)each.Attribute(Named + "Key") == "OffTheRow");
+
+        // Hidden, never collapsed: a collapsed cross gives its width back,
+        // and the size column would step left and right as the mouse moves
+        // down the list.
+        Assert.Contains(style.Elements(Xaml + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Visibility"
+            && (string?)setter.Attribute("Value") == "Hidden");
+
+        // Shown for the row under the mouse, read off the Border each row's
+        // template wraps its own header in, not off the TreeViewItem, which
+        // is over its children too and would light every ancestor's cross
+        // while a file is hovered.
+        XElement shows = Assert.Single(style.Descendants(Xaml + "DataTrigger"));
+        Assert.Equal(
+            "{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Border}}",
+            (string?)shows.Attribute("Binding"));
+        Assert.Contains(shows.Elements(Xaml + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Visibility"
+            && (string?)setter.Attribute("Value") == "Visible");
+
+        // Its size lives here so the buttons rule holds, and the row width
+        // guard reads it from here as well: a cross with no width in its
+        // style is a cross that guard cannot count.
+        Assert.Contains(style.Elements(Xaml + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Width");
+    }
+
+    [Fact]
+    public void Clearing_out_the_unticked_rows_is_a_link_on_the_sentence_that_counts_them()
+    {
+        // It was a toolbar button that came and went, crowded the preview
+        // off the edge, and said a count the sentence under the list was
+        // already saying. It is that sentence's own remedy now, a link in
+        // the sentence's manner, discwright#123.
+        XElement link = Assert.Single(
+            Window().Descendants(Xaml + "Button"), each => IdOf(each) == "TakeOffWhatIsLeftOff");
+
+        Assert.Equal("{StaticResource Quietly}", (string?)link.Attribute("Style"));
+        Assert.Equal("{Binding WhatTakingTheLeftOffOnesSays}", (string?)link.Attribute("Content"));
         Assert.Equal(
             "{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}",
-            (string?)theRest.Attribute("Visibility"));
+            (string?)link.Attribute("Visibility"));
+
+        // Beside the sentence, in one panel, so they read as one line.
+        XElement beside = link.Parent!;
+        Assert.Equal("StackPanel", beside.Name.LocalName);
+        Assert.Contains(beside.Elements(Xaml + "TextBlock"), each => IdOf(each) == "WhatIsLeftOff");
+    }
+
+    [Fact]
+    public void The_delete_key_is_the_keyboards_half_of_the_cross()
+    {
+        XElement tree = Assert.Single(Window().Descendants(Xaml + "TreeView"));
+        Assert.Equal("TheListKeys", (string?)tree.Attribute("KeyDown"));
+
+        string handlers = File.ReadAllText(
+            Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        // The rule the Remove button used to wear is the key's rule now, and
+        // the rename box keeps Delete for itself.
+        Assert.Contains("Key.Delete", handlers, StringComparison.Ordinal);
+        Assert.Contains("_screen.CanTakeSomethingOff", handlers, StringComparison.Ordinal);
+        Assert.Contains(
+            "e.OriginalSource is not System.Windows.Controls.TextBox",
+            handlers,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1264,59 +1376,6 @@ public class TheWindowsMarkup
         // window where amber means nothing, including on the tray line.
         Assert.Null(count.Attribute("Foreground"));
         Assert.Equal("{DynamicResource WorryInk}", (string?)matters.Attribute("Foreground"));
-    }
-
-    [Fact]
-    public void The_preview_steps_down_when_the_row_gains_its_fourth_button()
-    {
-        // "Only push it off the edge" is what the old comment said, and it
-        // is what happened: the fourth button arrived and the preview's
-        // words were cut to "at it will l", watched on 2026-11-09. There
-        // is a second line for it to step onto now.
-        XElement preview = Window()
-            .Descendants(Xaml + "Button")
-            .Single(each => IdOf(each) == "PreviewTheMenu");
-
-        XElement style = Assert.Single(
-            preview.Elements(Xaml + "Button.Style").Elements(Xaml + "Style"));
-
-        // Still a button that greys when dead, through its BasedOn.
-        Assert.Equal("{StaticResource Ordinary}", (string?)style.Attribute("BasedOn"));
-
-        XElement stepping = Assert.Single(style.Descendants(Xaml + "DataTrigger"));
-
-        // The same binding through the same converter as the fourth
-        // button's own Visibility, so the two cannot disagree about
-        // whether the row is crowded.
-        XElement crowding = Window()
-            .Descendants(Xaml + "Button")
-            .Single(each => IdOf(each) == "TakeOffWhatIsLeftOff");
-
-        Assert.Equal(
-            (string?)crowding.Attribute("Visibility"),
-            (string?)stepping.Attribute("Binding"));
-        Assert.Equal("Visible", (string?)stepping.Attribute("Value"));
-
-        Assert.Contains(stepping.Elements(Xaml + "Setter"), setter =>
-            (string?)setter.Attribute("Property") == "Grid.Row"
-            && (string?)setter.Attribute("Value") == "1");
-
-        // Across the whole width, not down into the leftover column: a grid
-        // column is as wide on every row, so without the span the second
-        // line held exactly the sliver the fourth button had squeezed the
-        // first one to. Photographed both ways on 2026-11-09.
-        Assert.Contains(stepping.Elements(Xaml + "Setter"), setter =>
-            (string?)setter.Attribute("Property") == "Grid.ColumnSpan"
-            && (string?)setter.Attribute("Value") == "2");
-        Assert.Contains(stepping.Elements(Xaml + "Setter"), setter =>
-            (string?)setter.Attribute("Property") == "Grid.Column"
-            && (string?)setter.Attribute("Value") == "0");
-
-        // And the toolbar really has the line it steps onto.
-        Assert.Equal(2, preview.Parent!
-            .Elements(Xaml + "Grid.RowDefinitions")
-            .Elements(Xaml + "RowDefinition")
-            .Count());
     }
 
     [Fact]

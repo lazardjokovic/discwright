@@ -302,7 +302,7 @@ public class TheTreeOfWhatGoesOnIt
             .. everyDepth.Select(row => (row.HowDeep * 19) + row.HowWideTheNameIs)
         ];
 
-        Assert.Equal([250, 250, 250, 250], whereTheNameEnds);
+        Assert.Equal([240, 240, 240, 240], whereTheNameEnds);
     }
 
     [Fact]
@@ -391,7 +391,10 @@ public class TheTreeOfWhatGoesOnIt
         tree.Inside.Single(each => each.Name == "readme.txt").IsOn = false;
 
         Assert.Equal("Leaving off 1 thing, 100 bytes.", new[] { tree }.WhatIsTurnedOff());
-        Assert.Equal("Remove the 1 thing left off", new[] { tree }.WhatTakingThoseOffWouldSay());
+
+        // The link's words, not a button's: the sentence beside it carries
+        // the count, so the link only has to know one from many.
+        Assert.Equal("Take it off the list", new[] { tree }.WhatTakingThoseOffWouldSay());
     }
 
     [Fact]
@@ -402,9 +405,10 @@ public class TheTreeOfWhatGoesOnIt
         tree.Inside.Single(each => each.Name == "setup.exe").IsOn = false;
 
         // Rows scattered down a tree, some of them inside folders that are
-        // shut, which is why the button says how many it will take.
+        // shut, which is why the sentence says how many there are, and the
+        // link beside it goes plural with it.
         Assert.Equal("Leaving off 2 things, 1000 bytes.", new[] { tree }.WhatIsTurnedOff());
-        Assert.Equal("Remove the 2 things left off", new[] { tree }.WhatTakingThoseOffWouldSay());
+        Assert.Equal("Take them off the list", new[] { tree }.WhatTakingThoseOffWouldSay());
     }
 
     [Fact]

@@ -243,20 +243,23 @@ public static class TheTreeOfWhatGoesOn
     }
 
     /// <summary>
-    /// What the button that clears out the turned off rows says, or nothing
-    /// when there are none and there is no such button.
+    /// What the link that clears out the turned off rows says, or nothing
+    /// when there are none and there is no such link.
     /// </summary>
     /// <remarks>
-    /// Its own count in its own words, because the button does something
-    /// nobody can see the extent of: the rows it takes off are scattered down
-    /// a tree and some of them are inside folders that are shut.
+    /// It used to be a toolbar button carrying its own count, "Remove the 2
+    /// things left off", because a button stands alone and has to say what it
+    /// will do. It is a link at the end of the sentence that counts them now,
+    /// "Leaving off 2 things, 25 MB.", so saying the count again an inch away
+    /// would be the same number twice on one line. The words still know one
+    /// from many, because "take them off" about one thing reads as a slip.
     /// </remarks>
     public static string? WhatTakingThoseOffWouldSay(this IEnumerable<AThingOnTheDisc> tree) =>
         tree.SelectMany(game => game.EveryThing()).Count(each => each.IsOn == false) switch
         {
             0 => null,
-            1 => "Remove the 1 thing left off",
-            int left => $"Remove the {left} things left off"
+            1 => "Take it off the list",
+            _ => "Take them off the list"
         };
 
 

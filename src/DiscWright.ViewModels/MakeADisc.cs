@@ -1531,39 +1531,31 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     public bool CanBurn => TheImages.Count > 0 && !IsWorking;
 
-    /// <summary>Whether anything would come off if Remove were pressed.</summary>
+    /// <summary>Whether pressing Delete would take anything off.</summary>
     /// <remarks>
     /// <para>
-    /// Exactly what is picked, so a button that does nothing when pressed
-    /// looks like one.
+    /// Exactly what is picked, so a key that does nothing when pressed is a
+    /// key with nothing to do rather than a surprise.
     /// </para>
     /// <para>
-    /// <strong>It used to mean two things.</strong> Remove took what was
-    /// selected, or everything unticked when nothing was, so which of the two
-    /// somebody got depended on whether a row happened to be picked, and
-    /// nothing on the window said so. Clearing out what has been turned off
-    /// is still worth having and now has a button of its own, wearing words
-    /// that say what it will do.
+    /// <strong>This used to enable a Remove button</strong>, and before that
+    /// the button meant two things, what was selected or everything unticked
+    /// when nothing was. The button is gone: every row carries its own way
+    /// off at its right edge, so removing is a gesture on the thing itself,
+    /// and this rule now belongs to the Delete key, which still works on
+    /// whatever is picked.
     /// </para>
     /// </remarks>
     public bool CanTakeSomethingOff => !IsWorking && WhatIsSelected is not null;
 
     /// <summary>
-    /// What the button that clears out the unticked rows says, or nothing when
-    /// there are none and there is no such button.
+    /// What the link that clears out the unticked rows says, or nothing when
+    /// there are none and there is no such link.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The count is in the words on purpose. The gesture takes several things
-    /// at once and none of them is selected, so the only place it can be seen
-    /// beforehand is the button, and a button called Remove with a count
-    /// somewhere else is the button this one was split out of.
-    /// </para>
-    /// <para>
-    /// Said the way <see cref="WhatIsLeftOff"/> says it, because they are
-    /// about the same rows and reading "left off" in one place and "turned
-    /// off" in the other would sound like two different things.
-    /// </para>
+    /// It sits at the end of <see cref="WhatIsLeftOff"/>, the sentence that
+    /// already counts those rows and weighs them, which is why these words
+    /// carry no count of their own: the count is an inch to the left.
     /// </remarks>
     public string? WhatTakingTheLeftOffOnesSays => _tree.WhatTakingThoseOffWouldSay();
 

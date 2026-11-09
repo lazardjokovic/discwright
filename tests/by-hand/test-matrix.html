@@ -537,13 +537,15 @@
       <label class="case"><input type="checkbox" id="c6" data-controls="AddAGame"><span class="id">C6</span>
         <span class="what">Add a game</span>
         <span class="look"><span class="grey">Grey</span> during a run only.</span></label>
-      <label class="case"><input type="checkbox" id="c7" data-controls="TakeItOff"><span class="id">C7</span>
-        <span class="what">Remove</span>
-        <span class="look"><span class="grey">Grey</span> whenever nothing is picked.
-        It takes exactly what is picked and nothing else, however many rows are unticked.</span></label>
+      <label class="case"><input type="checkbox" id="c7" data-controls="TakeOffThisRow"><span class="id">C7</span>
+        <span class="what">The cross on a row</span>
+        <span class="look">Appears while that row's header is under the mouse, hidden otherwise, and the columns do not move either way.
+        It takes exactly the row it sits on and nothing else, however many rows are unticked, with no selecting first.
+        The Delete key does the same to the picked row, and does nothing from inside a rename.
+        The whole list is dim during a run, crosses with it.</span></label>
       <label class="case"><input type="checkbox" id="c8" data-controls="TakeOffWhatIsLeftOff"><span class="id">C8</span>
-        <span class="what">Remove the N things left off</span>
-        <span class="look">There <b>only</b> while something is unticked, and it says how many in its own words: one thing reads "Remove the 1 thing left off".
+        <span class="what">The link after "Leaving off&hellip;"</span>
+        <span class="look">There <b>only</b> while something is unticked, at the end of the sentence that counts them: "Take it off the list" for one, "Take them off the list" for more.
         It takes every unticked row, and a game with every row of it unticked goes whole.
         <span class="grey">Grey</span> during a run only.</span></label>
       <label class="case"><input type="checkbox" id="c9" data-controls="Label"><span class="id">C9</span>

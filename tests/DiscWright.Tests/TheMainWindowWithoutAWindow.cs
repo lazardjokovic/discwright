@@ -821,7 +821,7 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
-    public void The_button_for_what_is_left_off_is_there_only_when_something_is()
+    public void The_link_for_what_is_left_off_is_there_only_when_something_is()
     {
         MakeADisc window = New();
         Assert.Null(window.WhatTakingTheLeftOffOnesSays);
@@ -831,14 +831,13 @@ public class TheMainWindowWithoutAWindow
 
         AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
 
-        // The count is in the words, because the gesture takes several things
-        // at once and none of them is picked, so the button is the only place
-        // it can be seen before it happens.
+        // No count in the words: the link sits at the end of the sentence
+        // that counts those rows, so the words only know one from many.
         rows[0].IsOn = false;
-        Assert.Equal("Remove the 1 thing left off", window.WhatTakingTheLeftOffOnesSays);
+        Assert.Equal("Take it off the list", window.WhatTakingTheLeftOffOnesSays);
 
         rows[1].IsOn = false;
-        Assert.Equal("Remove the 2 things left off", window.WhatTakingTheLeftOffOnesSays);
+        Assert.Equal("Take them off the list", window.WhatTakingTheLeftOffOnesSays);
 
         rows[0].IsOn = true;
         rows[1].IsOn = true;

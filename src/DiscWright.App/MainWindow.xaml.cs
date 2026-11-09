@@ -326,10 +326,30 @@ public partial class MainWindow : Window
     private void WhatIsPickedChanged(object sender, RoutedPropertyChangedEventArgs<object> e) =>
         _screen.WhatIsSelected = e.NewValue as AThingOnTheDisc;
 
-    private void TakeItOff(object sender, RoutedEventArgs e)
+    private void TakeOffThisRow(object sender, RoutedEventArgs e)
     {
-        // Whatever is picked, and nothing when nothing is.
-        _screen.TakeOff(_screen.WhatIsSelected);
+        // The row whose cross was pressed, which is the row the button was
+        // drawn on: no selection in between, so there is no way to press one
+        // row's cross and lose a different row.
+        if (sender is FrameworkElement pressed && pressed.DataContext is AThingOnTheDisc row)
+        {
+            _screen.TakeOff(row);
+        }
+    }
+
+    private void TheListKeys(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        // Delete takes the picked row off, the keyboard's half of the cross
+        // on the row. Not from inside the rename box, where Delete is an
+        // editing key: the box handles it itself, but a handled key still
+        // bubbles here when the box leaves it alone at the end of its text.
+        if (e.Key == System.Windows.Input.Key.Delete
+            && e.OriginalSource is not System.Windows.Controls.TextBox
+            && _screen.CanTakeSomethingOff)
+        {
+            _screen.TakeOff(_screen.WhatIsSelected);
+            e.Handled = true;
+        }
     }
 
     private void TakeOffWhatIsLeftOff(object sender, RoutedEventArgs e) =>

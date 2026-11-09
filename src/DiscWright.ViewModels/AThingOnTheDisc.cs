@@ -207,7 +207,14 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
         Math.Max(TheLeastANameGets, TheNameGets - (HowDeep * EachLevelIndentsBy));
 
     /// <summary>What the name gets on a row that is not indented at all.</summary>
-    private const double TheNameGets = 250;
+    /// <remarks>
+    /// It was 250 until the cross that takes a row off joined the row on
+    /// 2026-11-09. The cross's width and margin came out of the name,
+    /// because the name is the one thing on the row that can lose a little
+    /// width without losing anything, and the row width guard holds the
+    /// whole sum to the panel.
+    /// </remarks>
+    private const double TheNameGets = 240;
 
     /// <summary>
     /// How far a tree pushes a row in for each level it is down, in pixels.

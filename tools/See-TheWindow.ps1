@@ -59,7 +59,9 @@ try {
     # come back when there IS something to say is checked further down, which is
     # the half of it worth checking.
     $wanted = @(
-        'AddAGame', 'TakeItOff', 'Games', 'NothingYet',
+        # TakeItOff is gone: removing is the cross on each row now, which only
+        # exists with rows on the list and only shows under the mouse.
+        'AddAGame', 'Games', 'NothingYet',
         'Label', 'DiscSize', 'OutputFolder', 'ChooseWhereItGoes',
         'MoreOptions', 'Menu', 'Checksums', 'ArtworkOnDisc', 'LegacyFileSystems', 'CutFiles',
         'WhatItWillMake', 'WhatTheButtonsMean', 'StartANewDisc', 'OpenADisc', 'MakeTheDisc'
