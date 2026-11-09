@@ -14,6 +14,12 @@
         powershell -STA -File BurnWithHost.ps1 -StoreKey <HKCU:\...> -ResultFile <file>
 
     The result file holds one line: CANCELLED, or CHOSEN<tab>name<tab>exe<tab>ADDED|FOUND.
+
+    With -WalkIsos a|b it runs the real walk over a set instead, and the result
+    file holds what the walk logged. The module is then NOT loaded here: the
+    walk loads it itself, inside its own scope, exactly as it does in the app,
+    and that scope is the thing being proved. So the store is the real one, and
+    the test saves and restores it.
 #>
 # The parameters are read inside the Shown handler, which the analyzer does
 # not follow into, so it reports them as never read.
@@ -22,7 +28,8 @@
 param(
     [Parameter(Mandatory)][string]$StoreKey,
     [Parameter(Mandatory)][string]$ResultFile,
-    [string]$AppPath
+    [string]$AppPath,
+    [string]$WalkIsos = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,9 +54,12 @@ foreach ($f in $ast.FindAll({ param($n)
 # the real callers do after dot-sourcing it. The store is then pointed at the
 # test's own key, because a test that writes into the real one would leave its
 # burners on whoever runs it.
-. (Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'burn\DiscWright.Burn.ps1')
-$script:TestStoreKey = $StoreKey
-function Get-OwnBurnerKey { return $script:TestStoreKey }
+$script:BurnModule = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) 'burn\DiscWright.Burn.ps1'
+if (-not $WalkIsos) {
+    . $script:BurnModule
+    $script:TestStoreKey = $StoreKey
+    function Get-OwnBurnerKey { return $script:TestStoreKey }
+}
 
 # What the chooser expects to find around itself in the real app: the main
 # form for the font, and $state for the file dialog's opening folder.
@@ -62,6 +72,17 @@ $form.ClientSize = New-Object System.Drawing.Size(420, 160)
 $form.StartPosition = 'CenterScreen'
 
 $form.Add_Shown({
+    if ($WalkIsos) {
+        $script:WalkLog = New-Object System.Collections.ArrayList
+        try {
+            Invoke-SetBurnWalk ($WalkIsos -split '\|') { param($m) [void]$script:WalkLog.Add($m) } $form $null $script:BurnModule
+        } catch {
+            [void]$script:WalkLog.Add("THREW`t$($_.Exception.Message)")
+        }
+        Set-Content -LiteralPath $ResultFile -Value ($script:WalkLog -join [Environment]::NewLine) -Encoding UTF8
+        $form.Close()
+        return
+    }
     try {
         $picks = @(Get-IsoHandoffs)
         $answer = Select-IsoHandoff $picks $form

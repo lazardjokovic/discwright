@@ -1789,9 +1789,20 @@ Describe 'Adding a burner of your own to Burn with' -Tag 'UI' -Skip:(-not $scrip
                     try {
                         $k = $kids.Item($i)
                         if ($k.Current.ProcessId -ne $ProcId) { continue }
-                        if ($k.Current.Name -notlike $TitleLike) { continue }
-                        if ($NotHandle -and $k.Current.NativeWindowHandle -eq $NotHandle) { continue }
-                        return $k
+                        # A dialog owned by the app's visible main window is
+                        # reported inside it, not beside it, so one level down
+                        # is looked at too.
+                        $found = @($k)
+                        $inner = $k.FindAll([System.Windows.Automation.TreeScope]::Children,
+                            (New-Object System.Windows.Automation.PropertyCondition(
+                                [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                                [System.Windows.Automation.ControlType]::Window)))
+                        for ($j = 0; $j -lt $inner.Count; $j++) { $found += $inner.Item($j) }
+                        foreach ($w in $found) {
+                            if ($w.Current.Name -notlike $TitleLike) { continue }
+                            if ($NotHandle -and $w.Current.NativeWindowHandle -eq $NotHandle) { continue }
+                            return $w
+                        }
                     } catch {}
                 }
                 Start-Sleep -Milliseconds 300
@@ -1886,12 +1897,127 @@ Describe 'Adding a burner of your own to Burn with' -Tag 'UI' -Skip:(-not $scrip
             Set-CtlText -Ctl $box -Text ('"' + $Path + '"')
             Invoke-Ctl -Ctl (Find-Ctl -Root $fd -NameLike 'Open' -TimeoutSec 5) -SettleMs 1200
         }
+
+        # --- for the runs that leave the hosted chooser and use the real paths ---
+
+        # The burner that proves the handoff: a real program, compiled here,
+        # that writes down the arguments it was started with. Its folder has a
+        # space in it, so a path that was not quoted arrives in two pieces.
+        $script:BwOutDir = Join-Path $script:Sandbox 'burn with out'
+        New-Item -ItemType Directory -Force -Path $script:BwOutDir | Out-Null
+        $script:BwRealExe = Join-Path $script:BwOutDir 'Test Burner.exe'
+        Add-Type -OutputAssembly $script:BwRealExe -OutputType WindowsApplication -TypeDefinition @'
+public static class TestBurner {
+    public static void Main(string[] a) {
+        System.IO.File.AppendAllText(
+            System.Reflection.Assembly.GetEntryAssembly().Location + ".got",
+            string.Join("|", a) + "\r\n");
+    }
+}
+'@
+        $script:BwGot = $script:BwRealExe + '.got'
+
+        # A real disc image, because the mount entry is going to mount it.
+        $built = Get-ChildItem -LiteralPath $script:ProjOut -Filter '*.iso' -File | Select-Object -First 1
+        if (-not $built) { throw "the suite's built disc has no ISO in $($script:ProjOut)" }
+        $script:BwIso = Join-Path $script:BwOutDir 'Hand Me Over.iso'
+        Copy-Item -LiteralPath $built.FullName -Destination $script:BwIso -Force
+
+        $script:BwNotExe = Join-Path $script:Sandbox 'notaprogram.txt'
+        Set-Content -LiteralPath $script:BwNotExe -Value 'not a program' -Encoding Ascii
+
+        # The real app and the real walk load the burn module themselves, so
+        # neither can be pointed at a test key. They use the real store, which
+        # is put back exactly as it was found after every test.
+        $script:BwRealKey = 'HKCU:\Software\DiscWright'
+        $script:BwRealSaved = (Get-ItemProperty -LiteralPath $script:BwRealKey -ErrorAction SilentlyContinue).OwnBurners
+
+        function Get-RealBurners {
+            $v = (Get-ItemProperty -LiteralPath $script:BwRealKey -ErrorAction SilentlyContinue).OwnBurners
+            if ($null -eq $v) { return @() }
+            return @($v)
+        }
+
+        function Clear-RealBurners {
+            Remove-ItemProperty -LiteralPath $script:BwRealKey -Name 'OwnBurners' -ErrorAction SilentlyContinue
+        }
+
+        function Restore-RealBurners {
+            if ($null -eq $script:BwRealSaved) { Clear-RealBurners; return }
+            $null = New-Item -Path $script:BwRealKey -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -LiteralPath $script:BwRealKey -Name 'OwnBurners' -Value ([string[]]$script:BwRealSaved) -Type MultiString
+        }
+
+        function Wait-BurnerGot([int]$Lines, [int]$TimeoutSec = 15) {
+            $deadline = (Get-Date).AddSeconds($TimeoutSec)
+            while ((Get-Date) -lt $deadline) {
+                if ((Test-Path -LiteralPath $script:BwGot) -and @(Get-Content -LiteralPath $script:BwGot).Count -ge $Lines) { break }
+                Start-Sleep -Milliseconds 200
+            }
+            if (-not (Test-Path -LiteralPath $script:BwGot)) { return @() }
+            return @(Get-Content -LiteralPath $script:BwGot)
+        }
+
+        function Open-RealChooser {
+            $script:BwApp = Start-DiscWright -AppPath $script:AppPath
+            Set-CtlText -Ctl (Get-BoxAfter $script:BwApp.Window '6)  Output folder*') -Text $script:BwOutDir
+            for ($i = 0; $i -lt 25 -and (Test-CtlEnabled $script:BwApp.Window 'Burn with...') -ne $true; $i++) {
+                Start-Sleep -Milliseconds 200
+            }
+            Invoke-CtlNamed $script:BwApp.Window 'Burn with...' -SettleMs 800 | Out-Null
+            $dlg = Find-HostWin $script:BwApp.Process.Id 'Burn with' 20
+            if (-not $dlg) { throw 'the Burn with... button did not open the chooser' }
+            Set-DrivenWindow $dlg
+            $null = Set-WindowFocus $dlg
+            Start-Sleep -Milliseconds 400
+            return [pscustomobject]@{ Process = $script:BwApp.Process; Window = $dlg }
+        }
+
+        function Add-ThroughBox($Bw, [string]$Exe) {
+            $h = $Bw.Window.Current.NativeWindowHandle
+            Invoke-CtlNamed $Bw.Window 'Add a program...' -SettleMs 800 | Out-Null
+            Complete-ProgramPick $Bw $Exe
+            return (Wait-ChooserAgain $Bw $h)
+        }
+
+        function Invoke-HostBox($Proc, [string]$Title, [string]$Button, [int]$TimeoutSec = 20) {
+            # A message box with no owner: found the way the chooser is, read,
+            # and answered. Returns the wording.
+            $box = Find-HostWin $Proc.Id $Title $TimeoutSec
+            if (-not $box) { throw "the box called '$Title' never appeared" }
+            Set-DrivenWindow $box
+            $null = Set-WindowFocus $box
+            Start-Sleep -Milliseconds 300
+            $text = ''
+            $all = $box.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+                                [System.Windows.Automation.Condition]::TrueCondition)
+            for ($i = 0; $i -lt $all.Count; $i++) {
+                try {
+                    $n = $all.Item($i).Current.Name
+                    if ($n -and $n -notin @('OK', 'Cancel', 'Yes', 'No') -and $n.Length -gt $text.Length) { $text = $n }
+                } catch {}
+            }
+            Invoke-Ctl -Ctl (Find-Ctl -Root $box -NameLike $Button -TimeoutSec 5) -SettleMs 700
+            return $text
+        }
+
+        function Start-WalkHost([string[]]$Isos) {
+            Remove-Item -LiteralPath $script:BwAnswer -Force -ErrorAction SilentlyContinue
+            $log = Join-Path $script:Sandbox 'burnwith-walk.log'
+            $proc = Start-Process powershell.exe -WindowStyle Hidden -PassThru -RedirectStandardError $log -ArgumentList @(
+                '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', $script:BwHost,
+                '-StoreKey', $script:BwKey, '-ResultFile', $script:BwAnswer, '-WalkIsos', ('"' + ($Isos -join '|') + '"'))
+            return [pscustomobject]@{ Process = $proc; Window = $null }
+        }
     }
 
     BeforeEach { Remove-Item -LiteralPath $script:BwKey -Recurse -Force -ErrorAction SilentlyContinue }
     AfterEach {
         if ($script:Bw) { try { $script:Bw.Process.Kill() } catch {}; $script:Bw = $null }
+        if ($script:BwApp) { Stop-DiscWright $script:BwApp; $script:BwApp = $null }
         Remove-Item -LiteralPath $script:BwKey -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $script:BwGot -Force -ErrorAction SilentlyContinue
+        Restore-RealBurners
     }
 
     It 'offers the box, and greys Forget on a row Windows put there' {
@@ -1942,6 +2068,383 @@ Describe 'Adding a burner of your own to Burn with' -Tag 'UI' -Skip:(-not $scrip
         Test-CtlEnabled $w 'Forget' | Should -BeFalse
         Invoke-CtlNamed $w 'Cancel' -SettleMs 800 | Out-Null
         Get-BurnWithAnswer $script:Bw | Should -Be 'CANCELLED'
+    }
+
+    It 'puts the chooser back untouched when the program picker is cancelled' {
+        $script:Bw = Start-BurnWith
+        $h0 = $script:Bw.Window.Current.NativeWindowHandle
+        Invoke-CtlNamed $script:Bw.Window 'Add a program...' -SettleMs 800 | Out-Null
+        $fd = Find-HostWin $script:Bw.Process.Id 'Pick the program to hand the ISO to' 20
+        $fd | Should -Not -BeNullOrEmpty
+        Set-DrivenWindow $fd
+        Invoke-Ctl -Ctl (Find-Ctl -Root $fd -NameLike 'Cancel' -TimeoutSec 5) -SettleMs 800
+        $w = Wait-ChooserAgain $script:Bw $h0
+        @(Get-StoredBurners).Count | Should -Be 0
+        Test-CtlEnabled $w 'Forget' | Should -BeFalse -Because 'the selection is still on the row Windows put there'
+        Invoke-CtlNamed $w 'Cancel' -SettleMs 800 | Out-Null
+        Get-BurnWithAnswer $script:Bw | Should -Be 'CANCELLED'
+    }
+
+    It 'selects a program already added instead of keeping it twice' {
+        $null = New-Item -Path $script:BwKey -Force
+        Set-ItemProperty -LiteralPath $script:BwKey -Name 'OwnBurners' -Value ([string[]]@($script:BwExe)) -Type MultiString
+        $script:Bw = Start-BurnWith
+        $w = Add-ThroughBox $script:Bw $script:BwExe.ToUpperInvariant()
+        @(Get-StoredBurners).Count | Should -Be 1 -Because 'the same program spelled in capitals is still the same program'
+        Test-CtlEnabled $w 'Forget' | Should -BeTrue -Because 'the selection moved to the row already there'
+        # The store refuses doubles by itself, so it cannot tell whether the
+        # LIST grew a second row. Forget removes one row: if another copy were
+        # standing, the row above the mount entry would still be the user's.
+        $h = $w.Current.NativeWindowHandle
+        Invoke-CtlNamed $w 'Forget' -SettleMs 800 | Out-Null
+        $w = Wait-ChooserAgain $script:Bw $h
+        @(Get-StoredBurners).Count | Should -Be 0
+        Select-ChooserRow $script:Bw @('{END}', '{UP}')
+        Test-CtlEnabled $w 'Forget' | Should -BeFalse -Because 'the program was only ever on the list once'
+        Invoke-CtlNamed $w 'Cancel' -SettleMs 800 | Out-Null
+        Get-BurnWithAnswer $script:Bw | Should -Be 'CANCELLED'
+    }
+
+    It 'selects the row Windows already found when that program is picked by hand' {
+        $own = Join-Path $env:WINDIR 'System32\isoburn.exe'
+        $script:Bw = Start-BurnWith
+        $w = Add-ThroughBox $script:Bw $own
+        @(Get-StoredBurners).Count | Should -Be 0 -Because 'Windows already lists it, so there is nothing to remember'
+        Test-CtlEnabled $w 'Forget' | Should -BeFalse -Because 'it is still Windows'' own row'
+        Invoke-CtlNamed $w 'Use this' -SettleMs 800 | Out-Null
+        $ans = Get-BurnWithAnswer $script:Bw
+        $ans | Should -Match 'isoburn'
+        $ans | Should -Match 'FOUND$'
+    }
+
+    It 'refuses a file that is not a program, says so, and goes back to the list' {
+        $script:Bw = Start-BurnWith
+        $h0 = $script:Bw.Window.Current.NativeWindowHandle
+        Invoke-CtlNamed $script:Bw.Window 'Add a program...' -SettleMs 800 | Out-Null
+        Complete-ProgramPick $script:Bw $script:BwNotExe
+        $said = Invoke-HostBox $script:Bw.Process 'DiscWright' 'OK'
+        $said | Should -Match 'not a program'
+        $said | Should -Match 'notaprogram\.txt'
+        $w = Wait-ChooserAgain $script:Bw $h0
+        @(Get-StoredBurners).Count | Should -Be 0
+        Invoke-CtlNamed $w 'Cancel' -SettleMs 800 | Out-Null
+        Get-BurnWithAnswer $script:Bw | Should -Be 'CANCELLED'
+    }
+
+    It 'adds, forgets and hands over through the real Burn with... button' {
+        # The hosted chooser above loads the burn module at script level. The
+        # app loads it inside the click handler, so a chooser whose add and
+        # forget could not see those functions would pass everything above and
+        # die here, on the first press, for the person who asked for the box.
+        Clear-RealBurners
+        $c = Open-RealChooser
+        (Find-Ctl -Root $c.Window -NameLike 'Open') | Should -Not -BeNullOrEmpty -Because 'the button asks in its own words'
+        Save-WindowShot $c.Window (Join-Path $script:ShotDir 'burn-with-from-the-app.png')
+
+        $w = Add-ThroughBox $c $script:BwRealExe
+        Get-RealBurners | Should -Contain $script:BwRealExe
+        Test-CtlEnabled $w 'Forget' | Should -BeTrue
+
+        $h = $w.Current.NativeWindowHandle
+        Invoke-CtlNamed $w 'Forget' -SettleMs 800 | Out-Null
+        $w = Wait-ChooserAgain $c $h
+        @(Get-RealBurners).Count | Should -Be 0 -Because 'Forget takes it out of the store, not only off the list'
+
+        $w = Add-ThroughBox $c $script:BwRealExe
+        Invoke-CtlNamed $w 'Open' -SettleMs 800 | Out-Null
+        # What the program was actually started with: one argument, the whole
+        # path, spaces and all.
+        $got = @(Wait-BurnerGot 1)
+        $got.Count | Should -Be 1 -Because 'the program was started exactly once'
+        $got[0] | Should -BeExactly $script:BwIso
+    }
+
+    It 'still offers the program on the next press of the real button' {
+        Clear-RealBurners
+        $null = New-Item -Path $script:BwRealKey -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -LiteralPath $script:BwRealKey -Name 'OwnBurners' -Value ([string[]]@($script:BwRealExe)) -Type MultiString
+        $c = Open-RealChooser
+        Select-ChooserRow $c @('{END}', '{UP}')
+        Test-CtlEnabled $c.Window 'Forget' | Should -BeTrue -Because 'the row above the mount entry is the remembered one'
+        Invoke-CtlNamed $c.Window 'Open' -SettleMs 800 | Out-Null
+        @(Wait-BurnerGot 1)[0] | Should -BeExactly $script:BwIso
+    }
+
+    It 'mounts the real ISO from the real button, as a plain user, and opens the drive' {
+        # The other half of #98's Burn with report. This suite runs unelevated
+        # on the desktop, which is how the app runs, and the ISO is a real one.
+        Clear-RealBurners
+        $c = Open-RealChooser
+        try {
+            Select-ChooserRow $c @('{END}')
+            Invoke-CtlNamed $c.Window 'Open' -SettleMs 800 | Out-Null
+            $img = $null
+            for ($i = 0; $i -lt 40; $i++) {
+                $img = Get-DiskImage -ImagePath $script:BwIso -ErrorAction SilentlyContinue
+                if ($img -and $img.Attached) { break }
+                Start-Sleep -Milliseconds 250
+            }
+            $img.Attached | Should -BeTrue -Because 'the entry is called mount'
+            $letter = $null
+            for ($i = 0; $i -lt 40 -and -not $letter; $i++) {
+                $letter = ($img | Get-Volume -ErrorAction SilentlyContinue).DriveLetter
+                if (-not $letter) { Start-Sleep -Milliseconds 250 }
+            }
+            $letter | Should -Not -BeNullOrEmpty
+            Test-Path -LiteralPath ("$letter" + ':\AUTORUN.INF') | Should -BeTrue -Because 'the mounted drive is the disc'
+            $open = $false
+            for ($i = 0; $i -lt 40 -and -not $open; $i++) {
+                foreach ($x in @((New-Object -ComObject Shell.Application).Windows())) {
+                    try { if ($x.LocationURL -like ("file:///$letter" + ':*')) { $open = $true } } catch {}
+                }
+                if (-not $open) { Start-Sleep -Milliseconds 250 }
+            }
+            $open | Should -BeTrue -Because 'Explorer on the drive is what the shell verb used to give'
+        } finally {
+            foreach ($x in @((New-Object -ComObject Shell.Application).Windows())) {
+                try { if ($x.LocationURL -like 'file:///?:*') { $x.Quit() } } catch {}
+            }
+            Dismount-DiskImage -ImagePath $script:BwIso -ErrorAction SilentlyContinue | Out-Null
+        }
+    }
+
+    It 'walks a set through a program added mid-walk, one disc at a time' {
+        # The second caller, unstubbed: the walk loads the burn module into its
+        # own scope, the chooser adds through it, and the program really gets
+        # each disc in order, with the walk waiting between them.
+        Clear-RealBurners
+        $d1 = Join-Path $script:BwOutDir 'Big Game D1.iso'
+        $d2 = Join-Path $script:BwOutDir 'Big Game D2.iso'
+        Set-Content -LiteralPath $d1 -Value 'one' -Encoding Ascii
+        Set-Content -LiteralPath $d2 -Value 'two' -Encoding Ascii
+        try {
+            $script:Bw = Start-WalkHost @($d1, $d2)
+            $p = $script:Bw.Process
+            $null = Invoke-HostBox $p 'Burn 2 discs' 'Yes' 45
+            $dlg = Find-HostWin $p.Id 'Burn with' 20
+            if (-not $dlg) { throw 'the walk never asked which program' }
+            Set-DrivenWindow $dlg
+            $null = Set-WindowFocus $dlg
+            Start-Sleep -Milliseconds 400
+            $script:Bw.Window = $dlg
+            $w = Add-ThroughBox $script:Bw $script:BwRealExe
+            Get-RealBurners | Should -Contain $script:BwRealExe
+            Invoke-CtlNamed $w 'Use this' -SettleMs 800 | Out-Null
+
+            $null = Invoke-HostBox $p 'Disc 1 of 2' 'Yes'
+            @(Wait-BurnerGot 1).Count | Should -Be 1
+            @(Get-Content -LiteralPath $script:BwGot)[0] | Should -BeExactly $d1
+            $null = Invoke-HostBox $p 'Disc 1 of 2 done?' 'Yes'
+            $null = Invoke-HostBox $p 'Disc 2 of 2' 'Yes'
+            $got = @(Wait-BurnerGot 2)
+            $got.Count | Should -Be 2
+            $got[1] | Should -BeExactly $d2
+            $log = Get-BurnWithAnswer $script:Bw
+            $log | Should -Not -Match 'THREW'
+            $log | Should -Match 'All 2 discs have been handed over'
+        } finally {
+            Remove-Item -LiteralPath $d1, $d2 -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe 'A picture used as it is paints the menu' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # #98: with Use as-is ticked the menu was sometimes completely black, and
+    # the disc came out the same. The logic tests prove the bytes on the disc
+    # became a PNG. This proves what was actually reported: that the picture
+    # is on the screen, measured off the real menu in the real engine.
+
+    BeforeAll {
+        $script:AsIsMshtaBefore = @(Get-Process mshta -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+
+        function Get-MenuBrightness([IntPtr]$Menu) {
+            # The left of the stage, clear of the button panel on the right.
+            $r = New-Object DwMenu+RECT
+            [void][DwMenu]::GetWindowRect($Menu, [ref]$r)
+            $bmp = New-Object System.Drawing.Bitmap(320, 260)
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($r.L + 60, $r.T + 100, 0, 0, $bmp.Size)
+            $g.Dispose()
+            $sum = 0; $n = 0
+            for ($y = 0; $y -lt 260; $y += 13) {
+                for ($x = 0; $x -lt 320; $x += 16) {
+                    $c = $bmp.GetPixel($x, $y)
+                    $sum += ($c.R + $c.G + $c.B) / 3; $n++
+                }
+            }
+            $bmp.Dispose()
+            return [int]($sum / $n)
+        }
+    }
+
+    AfterEach {
+        Get-Process mshta -ErrorAction SilentlyContinue |
+            Where-Object { $script:AsIsMshtaBefore -notcontains $_.Id } |
+            ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+        if ($script:AsIsApp) { Stop-DiscWright $script:AsIsApp; $script:AsIsApp = $null }
+    }
+
+    It 'shows a bright <Kind> instead of a black stage' -ForEach @(
+        @{ Kind = 'JPEG'; Ext = '.jpg'; Fmt = 'Jpeg' }
+        @{ Kind = 'BMP';  Ext = '.bmp'; Fmt = 'Bmp' }
+    ) {
+        $dir = Join-Path $script:Sandbox ("asis-" + $Kind)
+        New-Item -ItemType Directory -Force -Path $dir | Out-Null
+        $pic = Join-Path $dir ('bright' + $Ext)
+        $bmp = New-Object System.Drawing.Bitmap(760, 480)
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.Clear([System.Drawing.Color]::FromArgb(235, 175, 60))
+        $g.Dispose()
+        $bmp.Save($pic, [System.Drawing.Imaging.ImageFormat]::$Fmt)
+        $bmp.Dispose()
+
+        Save-Project @{
+            Games = @((Get-GameInfo $script:GameA)); Label = 'As Is'
+            IconPath = $script:Art; IconIsIco = $false
+            Menu = $true; BgPath = $pic; BgAsIs = $true; PanelSide = 'Right'
+            Divider = $false; ShowTitle = $false; TitleText = ''
+            WindowBorder = $true; ButtonStyle = 'Minimal'; MusicFile = $null
+            Buttons = @('Play', 'Install', 'Exit'); ManualPath = $null; ExtrasPath = $null
+            ExtraItems = @(); MediaKey = ''; OutDir = $dir
+        } $dir
+
+        $script:AsIsApp = Start-DiscWright -AppPath $script:AppPath
+        $win = $script:AsIsApp.Window
+        Set-CtlText -Ctl (Get-BoxAfter $win '6)  Output folder*') -Text $dir
+        Invoke-CtlNamed $win 'Open existing disc*' | Out-Null
+        Complete-FolderDialog -Win $win | Out-Null
+        Start-Sleep -Seconds 2
+        Test-CtlEnabled $win 'Preview menu' | Should -BeTrue
+        Invoke-CtlNamed $win 'Preview menu' | Out-Null
+        $proc = $null
+        for ($i = 0; $i -lt 40 -and -not $proc; $i++) {
+            $proc = Get-Process mshta -ErrorAction SilentlyContinue |
+                    Where-Object { $script:AsIsMshtaBefore -notcontains $_.Id } | Select-Object -First 1
+            if (-not $proc) { Start-Sleep -Milliseconds 250 }
+        }
+        $proc | Should -Not -BeNullOrEmpty
+        $menu = Find-MenuWindow -ProcessId $proc.Id
+        $menu | Should -Not -Be ([IntPtr]::Zero)
+        $null = Wait-MenuButtonCount -Menu $menu -Expected 2
+        # Bright orange is about 156. The black stage measured 7.
+        Get-MenuBrightness $menu | Should -BeGreaterThan 100
+    }
+}
+
+Describe 'The disc check says how far it has got' -Tag 'UI' -Skip:(-not $script:HaveDesktop) {
+
+    # #98: a hash check on a large disc ran for minutes with nothing moving.
+    # The cscript tests run the walk's own functions against a stand-in page.
+    # This runs a real built disc's own menu in real mshta, with real certutil
+    # and a real timer, and writes down what the status line said as it went.
+    # One thing is added to the page, a recorder that presses the check, and
+    # the checksum list is told about it so the disc still reads as sound.
+
+    It 'shows the counter while it works, then clears it and gives the verdict' {
+        $out = Join-Path $script:Sandbox 'check-progress'
+        New-Item -ItemType Directory -Force -Path $out | Out-Null
+        $null = Invoke-Build @{
+            Games = @((Get-GameInfo $script:GameA)); Label = 'Check Me'; IconPath = $script:Art; IconIsIco = $false
+            Menu = $true; BgPath = $script:Art; BgAsIs = $false; PanelSide = 'Right'
+            Divider = $false; ShowTitle = $false; TitleText = ''
+            WindowBorder = $true; ButtonStyle = 'Minimal'; MusicFile = $null
+            Buttons = @('Play', 'Install', 'Exit'); ManualPath = $null; ExtrasPath = $null
+            ExtraItems = @(); OutDir = $out; Checksums = $true
+        } { param($m) $null = $m }
+
+        $hta = Get-ChildItem -LiteralPath $out -Recurse -Filter 'menu.hta' -File | Select-Object -First 1
+        $hta | Should -Not -BeNullOrEmpty
+        $root = Split-Path $hta.DirectoryName -Parent
+        $sums = Join-Path $root 'checksums.sha256'
+        Test-Path -LiteralPath $sums | Should -BeTrue -Because 'the check is only offered on a disc that carries the list'
+
+        $log = Join-Path $out 'status-log.txt'
+        $js = $log.Replace('\', '\\')
+        $recorder = @"
+<script language="JScript">
+(function(){
+  var f=new ActiveXObject("Scripting.FileSystemObject");
+  var t=f.OpenTextFile("$js",8,true);
+  var last=null;
+  window.setInterval(function(){
+    var l="["+(document.getElementById("status").innerText||"")+"]";
+    if(l!==last){ t.WriteLine(l); last=l; }
+  },40);
+  window.setTimeout(function(){ discCheck(); },1500);
+})();
+</script>
+</body>
+"@
+        $page = [IO.File]::ReadAllText($hta.FullName)
+        $page.Contains('</body>') | Should -BeTrue
+        [IO.File]::WriteAllText($hta.FullName, $page.Replace('</body>', $recorder))
+        $newHash = (Get-FileHash -LiteralPath $hta.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        $rewritten = foreach ($line in [IO.File]::ReadAllLines($sums)) {
+            if ($line -match 'menu\.hta') { $line -replace '^[0-9a-fA-F]{64}', $newHash } else { $line }
+        }
+        [IO.File]::WriteAllLines($sums, [string[]]$rewritten)
+
+        $before = @(Get-Process mshta -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+        try {
+            $proc = Start-Process mshta.exe -PassThru -ArgumentList ('"' + $hta.FullName + '"')
+
+            # The verdict is a modal popup, which freezes the page's timers
+            # until it is answered, so it is read off the screen and the
+            # recorder gets its last word after OK.
+            $pop = $null
+            $deadline = (Get-Date).AddSeconds(60)
+            $winType = New-Object System.Windows.Automation.PropertyCondition(
+                [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+                [System.Windows.Automation.ControlType]::Window)
+            while (-not $pop -and (Get-Date) -lt $deadline) {
+                $kids = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+                    [System.Windows.Automation.TreeScope]::Children, $winType)
+                for ($i = 0; $i -lt $kids.Count -and -not $pop; $i++) {
+                    try {
+                        $k = $kids.Item($i)
+                        if ($k.Current.ProcessId -ne $proc.Id) { continue }
+                        if ($k.Current.ClassName -eq '#32770') { $pop = $k; break }
+                        $in = $k.FindAll([System.Windows.Automation.TreeScope]::Children, $winType)
+                        for ($j = 0; $j -lt $in.Count; $j++) {
+                            if ($in.Item($j).Current.ClassName -eq '#32770') { $pop = $in.Item($j); break }
+                        }
+                    } catch {}
+                }
+                if (-not $pop) { Start-Sleep -Milliseconds 250 }
+            }
+            $pop | Should -Not -BeNullOrEmpty -Because 'the check ends by saying how it went'
+
+            $said = ''
+            $all = $pop.FindAll([System.Windows.Automation.TreeScope]::Descendants,
+                                [System.Windows.Automation.Condition]::TrueCondition)
+            for ($i = 0; $i -lt $all.Count; $i++) {
+                try {
+                    $n = $all.Item($i).Current.Name
+                    if ($n -and $n -ne 'OK' -and $n.Length -gt $said.Length) { $said = $n }
+                } catch {}
+            }
+            $said | Should -Match 'byte for byte' -Because 'the disc is sound'
+
+            Set-DrivenWindow $pop
+            $null = Set-WindowFocus $pop
+            Start-Sleep -Milliseconds 300
+            Invoke-Ctl -Ctl (Find-Ctl -Root $pop -NameLike 'OK' -TimeoutSec 5) -SettleMs 800
+            Start-Sleep -Milliseconds 600
+
+            $fs = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite,Delete')
+            $rd = New-Object IO.StreamReader($fs)
+            $seen = @($rd.ReadToEnd() -split "`r?`n" | Where-Object { $_ })
+            $rd.Dispose()
+        } finally {
+            Get-Process mshta -ErrorAction SilentlyContinue |
+                Where-Object { $before -notcontains $_.Id } |
+                ForEach-Object { Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }
+        }
+        $went = $seen -join ' // '
+        @($seen | Where-Object { $_ -match '^\[Checking file \d+ of \d+ against what was burned\.' }).Count |
+            Should -BeGreaterThan 1 -Because "the line has to move as it works, and it went: $went"
+        $seen[-1] | Should -Be '[]' -Because "the counter must not be left standing, and the line went: $went"
     }
 }
 

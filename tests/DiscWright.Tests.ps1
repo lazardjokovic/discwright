@@ -7309,6 +7309,51 @@ Describe 'Handing the ISO to another program' -Tag 'Unit' {
         }
     }
 
+    It 'finds a per-user registration in the real registry, with nothing standing in for it' {
+        # The tests above stand in for the registry read, and the bug in #98
+        # WAS the registry read: looking under HKLM for a command Windows had
+        # put under HKCU. So here the key really exists, per user, the way
+        # "Open with -> always" leaves it, and only the one protected value
+        # that a script cannot write is supplied.
+        $name = 'DwTestBurner_' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.exe'
+        $classes = 'HKCU:\Software\Classes\Applications\' + $name
+        $exe = Join-Path $script:Sandbox $name
+        Set-Content -LiteralPath $exe -Value 'x' -Encoding Ascii
+        $script:UserProg = 'Applications\' + $name
+        Mock Get-IsoUserChoice { $script:UserProg }
+        try {
+            $null = New-Item -Path ($classes + '\shell\open\command') -Force
+            Set-Item -LiteralPath ($classes + '\shell\open\command') -Value ('"' + $exe + '" "%1"')
+            @(Get-IsoHandoffs | Where-Object { $_.Exe -eq $exe }).Count | Should -Be 1
+        } finally {
+            Remove-Item -LiteralPath $classes -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'accepts a real program as one the user can add, however its name is cased' {
+        $exe = Join-Path $script:Sandbox 'Portable Burner.EXE'
+        Set-Content -LiteralPath $exe -Value 'x' -Encoding Ascii
+        Test-OwnBurnerPath $exe | Should -BeTrue
+    }
+
+    It 'refuses <Why> as a program the user can add' -ForEach @(
+        @{ Why = 'a file that is not a program'; Name = 'notes.txt'; Make = $true }
+        @{ Why = 'a program that is not there'; Name = 'gone.exe'; Make = $false }
+        @{ Why = 'nothing at all'; Name = ''; Make = $false }
+    ) {
+        $path = if ($Name) { Join-Path $script:Sandbox $Name } else { '' }
+        if ($Make) { Set-Content -LiteralPath $path -Value 'x' -Encoding Ascii }
+        Test-OwnBurnerPath $path | Should -BeFalse
+    }
+
+    It 'does not list something in the store that is not a program' {
+        # The value is the user's own registry, editable by hand.
+        $script:NotExe = Join-Path $script:Sandbox 'readme.txt'
+        Set-Content -LiteralPath $script:NotExe -Value 'x' -Encoding Ascii
+        Mock Get-OwnBurners { @($script:NotExe) }
+        @(Get-IsoHandoffs | Where-Object { $_.Exe -eq $script:NotExe }).Count | Should -Be 0
+    }
+
     # --- the list the user builds themselves (#98, the round after ImgBurn) ---
     # Reading the merged class view found the burner Windows had been told
     # about. The burner Windows was never told about - a portable one, or one
