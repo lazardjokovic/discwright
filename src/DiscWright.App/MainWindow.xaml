@@ -295,6 +295,13 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
+                    <!-- The second row costs nothing while it is empty, and
+                         the preview steps down onto it when the row gets its
+                         fourth button. -->
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
                     <StackPanel Grid.Column="0" Orientation="Horizontal">
                         <Button Content="Add a game"
@@ -342,15 +349,42 @@
                          the whole answer, and had no way of knowing the other
                          window was there. The titles say which disc each one
                          is; this says to go looking for them. -->
-                    <Button Grid.Column="1"
-                            Content="See what it will look like"
-                            Style="{StaticResource Ordinary}"
+                    <!-- Pushed off the edge is what actually happened: the
+                         fourth button arrived and this one's words were cut
+                         to "at it will l", watched on 2026-11-09. So when
+                         the row gains the fourth button it steps down a
+                         line instead, still at the far end. The trigger
+                         reads the same binding through the same converter
+                         as that button's own Visibility, so the two cannot
+                         disagree about whether the row is crowded. -->
+                    <Button Content="See what it will look like"
                             HorizontalAlignment="Right"
-                            Margin="8,0,0,0"
                             IsEnabled="{Binding CanPreview}"
                             Click="PreviewTheMenu"
                             ToolTip="One window per disc, so a set opens one for each. The manual and the extras are on the last disc."
-                            AutomationProperties.AutomationId="PreviewTheMenu" />
+                            AutomationProperties.AutomationId="PreviewTheMenu">
+                        <!-- The whole width, not the leftover column: a grid
+                             column is as wide on every row, so stepping down
+                             into the same column left exactly the sliver the
+                             fourth button had squeezed it to, photographed
+                             before this spanned. -->
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource Ordinary}">
+                                <Setter Property="Grid.Row" Value="0" />
+                                <Setter Property="Grid.Column" Value="1" />
+                                <Setter Property="Grid.ColumnSpan" Value="1" />
+                                <Setter Property="Margin" Value="8,0,0,0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}" Value="Visible">
+                                        <Setter Property="Grid.Row" Value="1" />
+                                        <Setter Property="Grid.Column" Value="0" />
+                                        <Setter Property="Grid.ColumnSpan" Value="2" />
+                                        <Setter Property="Margin" Value="0,8,0,0" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                 </Grid>
 
                 <!-- A drop target as well as a panel, discwright#98: the

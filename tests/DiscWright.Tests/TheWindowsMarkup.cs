@@ -876,8 +876,17 @@ public class TheWindowsMarkup
             preview.Parent!.Descendants(Xaml + "Button").Select(IdOf));
 
         // At the far end of that row in a column of its own, so the three on
-        // the left can never sit on top of it, only push it off the edge.
-        Assert.Equal("1", (string?)preview.Attribute("Grid.Column"));
+        // the left can never sit on top of it. The column lives in its style
+        // now, because when the fourth button arrives the preview changes
+        // where it stands, and an attribute on the element would beat every
+        // trigger that tries.
+        XElement style = Assert.Single(
+            preview.Elements(Xaml + "Button.Style").Elements(Xaml + "Style"));
+
+        Assert.Contains(style.Elements(Xaml + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Grid.Column"
+            && (string?)setter.Attribute("Value") == "1");
+        Assert.Null(preview.Attribute("Grid.Column"));
         Assert.Equal("Right", (string?)preview.Attribute("HorizontalAlignment"));
 
         // Still dead unless there is a menu to preview, so moving it cannot
@@ -1255,6 +1264,59 @@ public class TheWindowsMarkup
         // window where amber means nothing, including on the tray line.
         Assert.Null(count.Attribute("Foreground"));
         Assert.Equal("{DynamicResource WorryInk}", (string?)matters.Attribute("Foreground"));
+    }
+
+    [Fact]
+    public void The_preview_steps_down_when_the_row_gains_its_fourth_button()
+    {
+        // "Only push it off the edge" is what the old comment said, and it
+        // is what happened: the fourth button arrived and the preview's
+        // words were cut to "at it will l", watched on 2026-11-09. There
+        // is a second line for it to step onto now.
+        XElement preview = Window()
+            .Descendants(Xaml + "Button")
+            .Single(each => IdOf(each) == "PreviewTheMenu");
+
+        XElement style = Assert.Single(
+            preview.Elements(Xaml + "Button.Style").Elements(Xaml + "Style"));
+
+        // Still a button that greys when dead, through its BasedOn.
+        Assert.Equal("{StaticResource Ordinary}", (string?)style.Attribute("BasedOn"));
+
+        XElement stepping = Assert.Single(style.Descendants(Xaml + "DataTrigger"));
+
+        // The same binding through the same converter as the fourth
+        // button's own Visibility, so the two cannot disagree about
+        // whether the row is crowded.
+        XElement crowding = Window()
+            .Descendants(Xaml + "Button")
+            .Single(each => IdOf(each) == "TakeOffWhatIsLeftOff");
+
+        Assert.Equal(
+            (string?)crowding.Attribute("Visibility"),
+            (string?)stepping.Attribute("Binding"));
+        Assert.Equal("Visible", (string?)stepping.Attribute("Value"));
+
+        Assert.Contains(stepping.Elements(Xaml + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Grid.Row"
+            && (string?)setter.Attribute("Value") == "1");
+
+        // Across the whole width, not down into the leftover column: a grid
+        // column is as wide on every row, so without the span the second
+        // line held exactly the sliver the fourth button had squeezed the
+        // first one to. Photographed both ways on 2026-11-09.
+        Assert.Contains(stepping.Elements(Xaml + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Grid.ColumnSpan"
+            && (string?)setter.Attribute("Value") == "2");
+        Assert.Contains(stepping.Elements(Xaml + "Setter"), setter =>
+            (string?)setter.Attribute("Property") == "Grid.Column"
+            && (string?)setter.Attribute("Value") == "0");
+
+        // And the toolbar really has the line it steps onto.
+        Assert.Equal(2, preview.Parent!
+            .Elements(Xaml + "Grid.RowDefinitions")
+            .Elements(Xaml + "RowDefinition")
+            .Count());
     }
 
     [Fact]
@@ -2013,10 +2075,23 @@ public class TheWindowsMarkup
     /// <summary>The key of the style a control wears, when it names one.</summary>
     private static string? StyleWornBy(XElement control)
     {
+        string worn = (string?)control.Attribute("Style") ?? string.Empty;
+
+        if (worn.Length == 0)
+        {
+            // An inline style wears its parent through BasedOn, and a button
+            // dressed that way is still a button this file's guards are
+            // about: without this, moving a Style into an element quietly
+            // took the button out from under A_button_that_can_be_disabled_looks_it.
+            worn = control
+                .Elements(control.Name.Namespace + (control.Name.LocalName + ".Style"))
+                .Elements(Xaml + "Style")
+                .Select(style => (string?)style.Attribute("BasedOn") ?? string.Empty)
+                .FirstOrDefault() ?? string.Empty;
+        }
+
         System.Text.RegularExpressions.Match found =
-            System.Text.RegularExpressions.Regex.Match(
-                (string?)control.Attribute("Style") ?? string.Empty,
-                @"^\{StaticResource (\w+)\}$");
+            System.Text.RegularExpressions.Regex.Match(worn, @"^\{StaticResource (\w+)\}$");
 
         return found.Success ? found.Groups[1].Value : null;
     }
