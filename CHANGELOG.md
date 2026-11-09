@@ -7,6 +7,42 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## [0.11.1] — 2026-11-09
+
+Nearly all of this came from one comment on GitHub. Thank you to
+[xniwo](https://github.com/xniwo), who tried 0.11.0 on a real machine and wrote
+down exactly what happened in [#98](https://github.com/lazardjokovic/discwright/issues/98).
+
+### Added
+
+- **Burn with... takes a program you add yourself.** A portable burner, or one
+  registered to nothing, is in no registry, so no amount of looking could list
+  it. **Add a program...** remembers it, **Forget** takes it back out, and it
+  appears everywhere the list does, a disc set included. Only an existing `.exe`
+  is accepted.
+
+### Fixed
+
+- **A burner you made the default for `.iso` never appeared under Burn with...**
+  The list looked for the program in the machine's settings, while choosing a
+  default records it in your own. ImgBurn was the program that showed this up.
+- **The mount entry under Burn with... failed with "Windows Explorer could not
+  be started"** once another program owned `.iso`. It now mounts the image
+  directly, whoever owns the extension, and opens the drive.
+- **A JPEG or BMP with Use as-is painted the whole menu black.** The file was
+  copied under the name `bg.png` whatever it was, and the menu only paints real
+  PNG data. It is now converted, in the preview and on the disc. Rebuilding over
+  a disc made by the old version heals it too.
+- **The folder question argued with itself.** Picking the folder that holds your
+  downloads said it was not a GOG download and then, two lines down, listed the
+  GOG downloads it had found. It now says they sit one level down.
+- **The disc check looked frozen on an ordinary disc.** It now says "Checking
+  file N of M against what was burned" with the time so far, and clears the line
+  when it finishes. Pressing the check twice no longer starts a second one.
+- **A piece of a split file that would not delete went unmentioned**, and the
+  only symptom was a disk filling up. The finished file was always whole. The
+  pieces left behind are now named at the end.
+
 ## [0.11.0] — 2026-11-03
 
 A game that will not fit on one disc is now written across several, and a file
@@ -1619,7 +1655,8 @@ First public release.
 - `extras/DiscLabel.ps1`, a parked printable disc-face generator, kept out of the app to
   keep the tool to one job.
 
-[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/lazardjokovic/discwright/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/lazardjokovic/discwright/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/lazardjokovic/discwright/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/lazardjokovic/discwright/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/lazardjokovic/discwright/compare/v0.9.1...v0.9.2
