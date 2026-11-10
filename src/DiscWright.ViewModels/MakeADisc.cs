@@ -537,6 +537,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
             return;
         }
 
+        // NEVER WHILE A DRIVE IS AT WORK. Windows says a device changed every
+        // time a tray opens or a disc goes in, a burn's own included, and
+        // answering it asked every drive what it held while one of them was
+        // writing. The burning drive answered "this drive cannot write data
+        // discs" in the log of the owner's set on 2026-11-10, a second into
+        // writing disc 2, and two programs asking one busy drive is how the
+        // window froze that night. Remembered instead, and looked at once the
+        // work is done.
+        if (IsWorking)
+        {
+            _aDiscMovedMeanwhile = true;
+            return;
+        }
+
         _lookingAtTheDrives = true;
 
         IReadOnlyList<Recorder> drives;
@@ -1354,12 +1368,31 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(CanSaveItForLater));
             Tell(nameof(CanTakeSomethingOff));
             Tell(nameof(CanErase));
+            _aDiscMovedMeanwhile = false;
             await LookAtTheDrives();
         }
     }
 
     /// <summary>Whether a build is running right now.</summary>
     public bool IsWorking { get; private set; }
+
+    /// <summary>Whether a disc went in or out while something was running.</summary>
+    private bool _aDiscMovedMeanwhile;
+
+    /// <summary>
+    /// The look a run put off, once the run is over, and nothing when no disc
+    /// moved: a build that touched no drive must not spin one up afterwards.
+    /// </summary>
+    private async Task LookAgainIfADiscMovedMeanwhile()
+    {
+        if (!_aDiscMovedMeanwhile)
+        {
+            return;
+        }
+
+        _aDiscMovedMeanwhile = false;
+        await LookAtTheDrives();
+    }
 
     /// <summary>
     /// What the build is doing, in the words the build itself used.
@@ -1535,6 +1568,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             }
 
             Started();
+            await LookAgainIfADiscMovedMeanwhile();
         }
     }
 
@@ -1740,6 +1774,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             }
 
             Started();
+            await LookAgainIfADiscMovedMeanwhile();
         }
     }
 
@@ -2370,6 +2405,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
             TellHowTheBurnWent();
             Started();
+            await LookAgainIfADiscMovedMeanwhile();
         }
     }
 

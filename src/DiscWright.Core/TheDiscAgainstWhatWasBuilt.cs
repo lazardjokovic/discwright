@@ -61,12 +61,21 @@ public static class TheDiscAgainstWhatWasBuilt
         int done = 0;
         int matched = 0;
 
+        // Counted in bytes, because one file can be most of a disc: the owner
+        // watched "checking the disc, 5 of 41" sit still for two and a half
+        // minutes on a 600 MB piece on 2026-11-10 and took it for stuck.
+        long bytesInAll = shouldBe.Files.Sum(file => file.Bytes);
+        long bytesBefore = 0;
+
         foreach (ListedFile wanted in shouldBe.Files)
         {
             ct.ThrowIfCancellationRequested();
 
             string where = Tidied(wanted.RelativePath);
-            progress?.Report(new CheckProgress(++done, shouldBe.Files.Count, wanted.RelativePath));
+            int number = ++done;
+            long before = bytesBefore;
+            bytesBefore += wanted.Bytes;
+            progress?.Report(new CheckProgress(number, shouldBe.Files.Count, wanted.RelativePath, before, bytesInAll));
 
             if (!onTheDisc.TryGetValue(where, out ListedFile? found))
             {
@@ -84,7 +93,15 @@ public static class TheDiscAgainstWhatWasBuilt
 
             try
             {
-                string onDisc = hasher.Sha256(System.IO.Path.Combine(discRoot, found.RelativePath), ct);
+                // The disc's copy is the slow read, so it is the one that says
+                // how far it has got.
+                string onDisc = hasher.Sha256(
+                    System.IO.Path.Combine(discRoot, found.RelativePath),
+                    progress is null
+                        ? null
+                        : new AsItReads(read => progress.Report(new CheckProgress(
+                            number, shouldBe.Files.Count, wanted.RelativePath, before + read, bytesInAll))),
+                    ct);
                 string built = hasher.Sha256(System.IO.Path.Combine(staged, wanted.RelativePath), ct);
 
                 if (string.Equals(onDisc, built, StringComparison.OrdinalIgnoreCase))
@@ -218,9 +235,31 @@ public sealed record DiscCheck(
 }
 
 /// <summary>How far through reading the disc back.</summary>
-public sealed record CheckProgress(int Done, int OfFiles, string File)
+/// <param name="BytesDone">Read so far, the file being read included, or 0 when not counted.</param>
+/// <param name="BytesInAll">What the whole check reads, or 0 when not counted.</param>
+public sealed record CheckProgress(int Done, int OfFiles, string File, long BytesDone = 0, long BytesInAll = 0)
 {
-    public double HowFar => OfFiles == 0 ? 0 : (double)Done / OfFiles;
+    /// <summary>By the bytes when they are counted, by the files when not.</summary>
+    public double HowFar => BytesInAll > 0
+        ? Math.Min(1.0, (double)BytesDone / BytesInAll)
+        : OfFiles == 0 ? 0 : (double)Done / OfFiles;
 
-    public override string ToString() => $"checking the disc, {Done} of {OfFiles}: {File}";
+    /// <summary>The bytes as a whole percentage, never 100 until it is finished.</summary>
+    public int Percent => (int)Math.Min(99, Math.Floor(HowFar * 100));
+
+    public override string ToString() => BytesInAll > 0
+        ? $"checking the disc, {Percent}%, file {Done} of {OfFiles}: {File}"
+        : $"checking the disc, {Done} of {OfFiles}: {File}";
+}
+
+/// <summary>
+/// Bytes read, said straight away on the thread that read them.
+/// </summary>
+/// <remarks>
+/// Not a <c>Progress&lt;T&gt;</c>, which would post each report to another
+/// thread and could land it after the check had moved to the next file.
+/// </remarks>
+internal sealed class AsItReads(Action<long> said) : IProgress<long>
+{
+    public void Report(long value) => said(value);
 }

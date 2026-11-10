@@ -320,6 +320,19 @@ public sealed class KeepingALog : IDisposable
     }
 
     [Fact]
+    public void A_choice_out_of_several_is_written_with_what_was_offered_and_taken()
+    {
+        // Which disc to erase, with two drives, came through the chooser and
+        // not the yes or no, so the log of 2026-11-10 had the erase but not
+        // the question.
+        string picking = File.ReadAllText(Repository.File("src", "DiscWright.App", "PickOne.xaml.cs"));
+
+        Assert.Contains("WorthAsking.Log.Write($\"Asked: {headline} ({string.Join(\"; \", asking.Choices)})\")", picking, StringComparison.Ordinal);
+        Assert.Contains("\"Answered: none of them\"", picking, StringComparison.Ordinal);
+        Assert.Contains("$\"Answered: {asking.Choices[asking.Chosen]}\"", picking, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Windows_refusing_to_list_the_drives_is_written_with_its_code()
     {
         string recorders = File.ReadAllText(Repository.File("src", "DiscWright.Burning", "WindowsRecorders.cs"));

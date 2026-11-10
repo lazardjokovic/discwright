@@ -51,8 +51,8 @@ public class BurningOneDiscAndWatchingIt
         // line. Not in a fixed order: Progress<T> hands each report to the
         // thread pool, so two files hashed in no time can be heard either way
         // round. What matters is that every one of them was said.
-        Assert.Contains("checking the disc, 1 of 2: setup_a_game.exe", watched.Said);
-        Assert.Contains("checking the disc, 2 of 2: A DISC.iso", watched.Said);
+        Assert.Contains("checking the disc, 0%, file 1 of 2: setup_a_game.exe", watched.Said);
+        Assert.Contains("checking the disc, 50%, file 2 of 2: A DISC.iso", watched.Said);
     }
 
     [Fact]

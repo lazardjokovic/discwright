@@ -22,7 +22,12 @@ public sealed class Sha256Hasher : IHasher
     /// </summary>
     private const int Bite = 1024 * 1024;
 
-    public string Sha256(string path, CancellationToken ct)
+    public string Sha256(string path, CancellationToken ct) => Sha256(path, null, ct);
+
+    /// <summary>How often the bytes read are said: every 8 MB, a few times a second off a disc.</summary>
+    private const long SayEvery = 8L * 1024 * 1024;
+
+    public string Sha256(string path, IProgress<long>? read, CancellationToken ct)
     {
         using SHA256 sha = System.Security.Cryptography.SHA256.Create();
 
@@ -31,13 +36,24 @@ public sealed class Sha256Hasher : IHasher
         using FileStream file = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, Bite, FileOptions.SequentialScan);
 
         byte[] buffer = new byte[Bite];
-        int read;
+        int got;
+        long sofar = 0;
+        long said = 0;
 
-        while ((read = file.Read(buffer, 0, buffer.Length)) > 0)
+        while ((got = file.Read(buffer, 0, buffer.Length)) > 0)
         {
             ct.ThrowIfCancellationRequested();
-            sha.TransformBlock(buffer, 0, read, null, 0);
+            sha.TransformBlock(buffer, 0, got, null, 0);
+            sofar += got;
+
+            if (read is not null && sofar - said >= SayEvery)
+            {
+                read.Report(sofar);
+                said = sofar;
+            }
         }
+
+        read?.Report(sofar);
 
         sha.TransformFinalBlock([], 0, 0);
 

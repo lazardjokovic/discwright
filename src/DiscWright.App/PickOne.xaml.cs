@@ -69,9 +69,18 @@ public partial class PickOne : Window
     {
         PickOne asking = new(headline, because, choices.Select(describe), pickTheFirst) { Owner = owner };
 
-        return asking.ShowDialog() == true && asking.Chosen >= 0 && asking.Chosen < choices.Count
+        // Written down like every yes or no, through the same log. Which disc
+        // to erase came through here on 2026-11-10 and the log had the erase
+        // but not the question, because only WorthAsking wrote anything.
+        WorthAsking.Log.Write($"Asked: {headline} ({string.Join("; ", asking.Choices)})");
+
+        T? chosen = asking.ShowDialog() == true && asking.Chosen >= 0 && asking.Chosen < choices.Count
             ? choices[asking.Chosen]
             : null;
+
+        WorthAsking.Log.Write(chosen is null ? "Answered: none of them" : $"Answered: {asking.Choices[asking.Chosen]}");
+
+        return chosen;
     }
 
     private void TakeThatOne(object sender, RoutedEventArgs e)

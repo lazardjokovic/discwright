@@ -1070,6 +1070,38 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task Asks_no_drive_while_one_is_burning_and_looks_once_it_is_done()
+    {
+        // Windows says a device changed whenever a tray moves, a burn's own
+        // included, and the window answered by asking every drive while one
+        // was writing: "this drive cannot write data discs", a second into
+        // disc 2 of the owner's set on 2026-11-10.
+        CountedDrives drives = new(ABlankIn("E:"));
+        ABurnerThatHearsADiscMove burner = new();
+        MakeADisc window = await Built(drives: drives, burner: burner);
+        burner.Window = window;
+        burner.Drives = drives;
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        Assert.Equal(burner.AskedBeforeTheLook, burner.AskedAfterTheLook);
+        Assert.True(drives.Asked > burner.AskedAfterTheLook, "the look put off during the burn never happened");
+    }
+
+    [Fact]
+    public async Task Looks_at_no_drive_after_a_burn_when_no_disc_moved()
+    {
+        CountedDrives drives = new(ABlankIn("E:"));
+        ABurnerThatHearsADiscMove burner = new() { HearsOne = false };
+        MakeADisc window = await Built(drives: drives, burner: burner);
+        burner.Drives = drives;
+
+        await window.BurnIt(@"C:\out\A GAME.iso", NeverAsked, NeverAskedAboutErasing, Closes);
+
+        Assert.Equal(burner.AskedAfterTheLook, drives.Asked);
+    }
+
+    [Fact]
     public async Task Reads_the_disc_back_and_says_it_is_the_disc()
     {
         MakeADisc window = await Built(drives: new TheseDrives(ABlankIn("E:")));
@@ -4080,6 +4112,52 @@ public class TheMainWindowWithoutAWindow
 
         public IReadOnlyList<Recorder> All() =>
             _asked++ > 0 && AfterErasing is not null ? [AfterErasing] : drives;
+    }
+
+    /// <summary>Drives that count how often they are asked.</summary>
+    private sealed class CountedDrives(params Recorder[] drives) : IFindRecorders
+    {
+        private int _asked;
+
+        internal int Asked => Volatile.Read(ref _asked);
+
+        public IReadOnlyList<Recorder> All()
+        {
+            Interlocked.Increment(ref _asked);
+            return drives;
+        }
+    }
+
+    /// <summary>
+    /// A burner during whose writing Windows says a device changed, the way a
+    /// tray moving does, and the window is asked to look at the drives.
+    /// </summary>
+    private sealed class ABurnerThatHearsADiscMove : IBurnDiscs
+    {
+        internal MakeADisc? Window { get; set; }
+
+        internal CountedDrives? Drives { get; set; }
+
+        internal bool HearsOne { get; init; } = true;
+
+        internal int AskedBeforeTheLook { get; private set; }
+
+        internal int AskedAfterTheLook { get; private set; }
+
+        public async Task<Outcome<BurnedDisc>> Burn(
+            string imagePath, Recorder onto, IProgress<BurnProgress>? progress, CancellationToken ct)
+        {
+            AskedBeforeTheLook = Drives!.Asked;
+
+            if (HearsOne)
+            {
+                await Window!.LookAtTheDrives();
+            }
+
+            AskedAfterTheLook = Drives.Asked;
+
+            return new BurnedDisc(onto.Drive, 47, 16, true);
+        }
     }
 
     private sealed class ABurnerThatWorks : IBurnDiscs

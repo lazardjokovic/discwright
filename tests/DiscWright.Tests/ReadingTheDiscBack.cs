@@ -166,9 +166,48 @@ public class ReadingTheDiscBack : IDisposable
         await Check(disc, built, said);
 
         // Hashing a full disc takes minutes, and a still window is how somebody
-        // decides it has hung.
-        Assert.Equal(3, said.Heard.Count);
+        // decides it has hung. Each file is named as it starts, and again as
+        // its bytes come off the disc.
+        Assert.Equal([1, 1, 2, 2, 3, 3], said.Heard.Select(each => each.Done));
         Assert.Equal(1, said.Heard[^1].HowFar);
+    }
+
+    [Fact]
+    public async Task Moves_inside_one_big_file_by_the_bytes_it_has_read()
+    {
+        // The owner watched "checking the disc, 5 of 41" sit still for two
+        // and a half minutes on a 600 MB piece on 2026-11-10. A 40 MB file
+        // here is read in 8 MB steps, and every step moves the number.
+        byte[] big = new byte[40 * 1024 * 1024];
+        string built = Path.Combine(_root, "built");
+        string disc = Path.Combine(_root, "disc");
+        Directory.CreateDirectory(built);
+        Directory.CreateDirectory(disc);
+        File.WriteAllBytes(Path.Combine(built, "piece.bin"), big);
+        File.WriteAllBytes(Path.Combine(disc, "piece.bin"), big);
+
+        EverythingItSaid<CheckProgress> said = new();
+        await Check(disc, built, said);
+
+        int[] percents = [.. said.Heard.Select(each => each.Percent)];
+
+        Assert.True(percents.Distinct().Count() >= 5, "it moved only to " + string.Join(", ", percents));
+        Assert.Equal(percents.Order(), percents);
+        Assert.All(said.Heard, each => Assert.Equal(1, each.Done));
+    }
+
+    [Fact]
+    public void Says_the_percentage_first_and_never_says_100_before_it_ends()
+    {
+        Assert.Equal(
+            "checking the disc, 39%, file 5 of 41: setup.exe.dwpart01",
+            new CheckProgress(5, 41, "setup.exe.dwpart01", 390, 1000).ToString());
+        Assert.Equal(99, new CheckProgress(41, 41, "last", 1000, 1000).Percent);
+        Assert.Equal(1.0, new CheckProgress(41, 41, "last", 1000, 1000).HowFar);
+
+        // Without bytes, as before: by the files.
+        Assert.Equal("checking the disc, 2 of 4: x", new CheckProgress(2, 4, "x").ToString());
+        Assert.Equal(0.5, new CheckProgress(2, 4, "x").HowFar);
     }
 
     // ------------------------------------------------------------------ helpers
