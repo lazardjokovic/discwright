@@ -168,6 +168,7 @@ public class TheWindowChecksItself
     [InlineData("a menu on the disc")]
     [InlineData("a list of what every file should be")]
     [InlineData("readable by Windows 98")]
+    [InlineData("a Start Here file")]
     public void Choosing_it_and_putting_it_back_leaves_the_window_exactly_as_it_was(string what)
     {
         ADeskWithAScreenOnIt desk = new();
@@ -269,7 +270,7 @@ public class TheWindowChecksItself
         // warnings that follow it are different, not absent.
         nameof(MakeADisc.TheDrive),
 
-        // The four options as one record. Nothing binds to it; the window
+        // The five options as one record. Nothing binds to it; the window
         // binds to each tick, and each tick is a case above.
         nameof(MakeADisc.Options),
     ];
@@ -284,6 +285,7 @@ public class TheWindowChecksItself
         nameof(MakeADisc.OutputFolder), nameof(MakeADisc.Medium), nameof(MakeADisc.TheSizeChosen),
         nameof(MakeADisc.CutFiles),
         nameof(MakeADisc.Menu), nameof(MakeADisc.Checksums), nameof(MakeADisc.LegacyFileSystems),
+        nameof(MakeADisc.StartHere),
     ];
 
     /// <summary>The row of the dropdown that stands for this size.</summary>
@@ -309,6 +311,7 @@ public class TheWindowChecksItself
             case "a menu on the disc": screen.Menu = false; break;
             case "a list of what every file should be": screen.Checksums = false; break;
             case "readable by Windows 98": screen.LegacyFileSystems = true; break;
+            case "a Start Here file": screen.StartHere = false; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to choose.");
         }
     }
@@ -333,6 +336,7 @@ public class TheWindowChecksItself
             case "a menu on the disc": screen.Menu = true; break;
             case "a list of what every file should be": screen.Checksums = true; break;
             case "readable by Windows 98": screen.LegacyFileSystems = false; break;
+            case "a Start Here file": screen.StartHere = true; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to put back.");
         }
     }
@@ -1077,7 +1081,7 @@ public class TheWindowChecksItself
             DiscProject project = new(
                 "OPENED",
                 [.. Enumerable.Range(1, (games % 3) + 1).Select(at => AGogGame($"Opened {at}", 1000))],
-                new DiscOptions(Menu: false, Checksums: false, LegacyFileSystems: true, CutFiles: true),
+                new DiscOptions(Menu: false, Checksums: false, LegacyFileSystems: true, CutFiles: true, StartHere: false),
                 Artwork: new DiscArtwork(
                     @"C:\art\icon.png",
                     @"C:\art\back.png",

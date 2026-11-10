@@ -19,6 +19,20 @@ public class PuttingTheMenuOnTheDisc
     }
 
     [Fact]
+    public async Task Leaves_Start_Here_off_when_asked_and_keeps_the_menu()
+    {
+        RecordingWriter wrote = new();
+
+        await Write(wrote, startHere: false);
+
+        // Asked for by somebody testing v1 (discwright#181). The menu stays,
+        // and opens by itself where AutoRun is on or from AUTORUN where not.
+        Assert.Equal(
+            [@"C:\stage\AUTORUN\menu.js", @"C:\stage\AUTORUN\menu.hta"],
+            wrote.Texts.Select(text => text.Path));
+    }
+
+    [Fact]
     public async Task Lets_what_is_behind_the_buttons_through()
     {
         RecordingWriter wrote = new();
@@ -504,8 +518,9 @@ public class PuttingTheMenuOnTheDisc
         GameKind kind = GameKind.GogInstaller,
         bool menu = true,
         DiscArtwork? artwork = null,
-        DiscExtras? extras = null) =>
-        new WriteTheMenuStep().Run(Context(writer, game, kind, menu, artwork, extras), CancellationToken.None);
+        DiscExtras? extras = null,
+        bool startHere = true) =>
+        new WriteTheMenuStep().Run(Context(writer, game, kind, menu, artwork, extras, startHere), CancellationToken.None);
 
     private static BuildContext Context(
         IStageWriter writer,
@@ -513,13 +528,14 @@ public class PuttingTheMenuOnTheDisc
         GameKind kind = GameKind.GogInstaller,
         bool menu = true,
         DiscArtwork? artwork = null,
-        DiscExtras? extras = null)
+        DiscExtras? extras = null,
+        bool startHere = true)
     {
         GameFolder found = new(@"C:\games\x", kind, game, game, null, [], [], null);
         PlannedDisc disc = new(1, [], 0);
 
         return new BuildContext(
-            new DiscProject("HOLLOW KNIGHT", [found], new DiscOptions(Menu: menu))
+            new DiscProject("HOLLOW KNIGHT", [found], new DiscOptions(Menu: menu, StartHere: startHere))
             {
                 Artwork = artwork,
                 Extras = extras

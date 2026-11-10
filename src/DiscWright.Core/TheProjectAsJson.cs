@@ -166,6 +166,7 @@ public static class TheProjectAsJson
             writing.WriteBoolean("ArtworkOnDisc", true);
             writing.WriteBoolean("DiscSet", false);
             writing.WriteBoolean("CutFiles", project.Options.CutFiles);
+            writing.WriteBoolean("StartHere", project.Options.StartHere);
             writing.WriteString("OutDir", outputFolder);
 
             writing.WriteEndObject();

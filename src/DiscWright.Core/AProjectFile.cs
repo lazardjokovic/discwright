@@ -91,7 +91,11 @@ public static class AProjectFile
                     // writes has to open there, but nothing here branches on
                     // it any more: the artwork goes on the disc either way.
                     LegacyFileSystems: Yes(root, "LegacyFs"),
-                    CutFiles: Yes(root, "CutFiles")),
+                    CutFiles: Yes(root, "CutFiles"),
+
+                    // Absent in every file written before the option, and on
+                    // in all of them, so absent means on.
+                    StartHere: Yes(root, "StartHere", whenMissing: true)),
 
                 // Version 5. Absent is the automatic setting, which is what
                 // those projects always described.

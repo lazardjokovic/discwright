@@ -77,7 +77,14 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
         // switched on, and Windows has been turning that off for years:
         // without this the disc appears to do nothing at all, and the menu
         // sits in AUTORUN where nobody has any reason to look.
-        context.Writer.WriteText(context.On(TheWayIn), MenuWriter.TheWayInWithoutAutorun());
+        //
+        // Unless somebody turned it off, which a tester of v1 asked to be
+        // able to do (discwright#181): the menu still opens by itself where
+        // AutoRun is on, and from the AUTORUN folder where it is not.
+        if (context.Project.Options.StartHere)
+        {
+            context.Writer.WriteText(context.On(TheWayIn), MenuWriter.TheWayInWithoutAutorun());
+        }
 
         // Only when the disc has no icon of its own. A menu wearing the blank
         // default looks like nobody finished it, and this is 33 KB.

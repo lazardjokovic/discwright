@@ -1216,6 +1216,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
         set => Switch(Options with { CutFiles = value });
     }
 
+    /// <summary>Whether a disc with a menu carries Start Here.hta at its top.</summary>
+    public bool StartHere
+    {
+        get => Options.StartHere;
+        set => Switch(Options with { StartHere = value });
+    }
+
     /// <summary>
     /// Everything worth knowing about the drives, for the picker to hover
     /// with: what it does when nobody chooses, and any tray that needs a push.
@@ -3081,6 +3088,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(Checksums));
         Tell(nameof(LegacyFileSystems));
         Tell(nameof(CutFiles));
+        Tell(nameof(StartHere));
 
         // The artwork, the manual, the tune and the folder of extras, which a
         // project file carries and which nothing here announced.

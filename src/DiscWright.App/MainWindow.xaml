@@ -871,6 +871,33 @@
                             </CheckBox.ToolTip>
                         </CheckBox>
 
+                        <!-- Under the menu and stepped in, because it belongs to
+                             it: a Start Here file opens the menu, so with no
+                             menu there is nothing for it to open and it is dead.
+                             Asked for by somebody testing v1 (discwright#181). -->
+                        <CheckBox Content="A Start Here file at the top of the disc"
+                                  Margin="22,0,0,6"
+                                  IsChecked="{Binding StartHere}"
+                                  AutomationProperties.AutomationId="StartHere">
+                            <CheckBox.Style>
+                                <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                    <Setter Property="IsEnabled" Value="{Binding NothingIsRunning}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Menu}" Value="False">
+                                            <Setter Property="IsEnabled" Value="False" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </CheckBox.Style>
+                            <CheckBox.ToolTip>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="360">
+                                    Start Here.hta opens the menu by hand on a computer where AutoRun is off,
+                                    which is most of them now. Without it the menu is still on the disc, in
+                                    the AUTORUN folder.
+                                </TextBlock>
+                            </CheckBox.ToolTip>
+                        </CheckBox>
+
                         <CheckBox Content="A list of what every file should be"
                                   IsChecked="{Binding Checksums}"
                                   IsEnabled="{Binding NothingIsRunning}"

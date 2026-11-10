@@ -44,6 +44,21 @@ public class OpeningAProjectFile
         Assert.True(opened.Options.LegacyFileSystems);
         Assert.False(opened.Options.CutFiles);
         Assert.Equal(Media.Dvd5, opened.Medium);
+
+        // Written before the option existed, and every disc of that time had
+        // Start Here.hta, so a file that does not say comes back with it on.
+        Assert.True(opened.Options.StartHere);
+    }
+
+    [Fact]
+    public void Reads_a_disc_made_without_Start_Here()
+    {
+        OpenedProject opened = Open("""
+            { "Games": [{ "Folder": "D:\\a" }], "Menu": true, "StartHere": false }
+            """);
+
+        Assert.True(opened.Options.Menu);
+        Assert.False(opened.Options.StartHere);
     }
 
     [Fact]

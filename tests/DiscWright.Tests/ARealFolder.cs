@@ -48,6 +48,29 @@ public sealed class ARealFolder : IDisposable
     }
 
     [Fact]
+    public void Reads_a_folder_with_square_brackets_in_its_name()
+    {
+        // Reported against v1 on 2026-11-09 (discwright#181): a folder with
+        // square brackets in its name was "not found". PowerShell reads [ and
+        // ] in a path as a wildcard. Nothing here should, but it was never
+        // asked until somebody's real folder had them.
+        GameFolder installer = Read(Make("The Witcher [GOG] [v1.5]",
+            ("setup_the_witcher_1.5_(12345).exe", 2048)));
+
+        Assert.Equal(GameKind.GogInstaller, installer.Kind);
+
+        // And brackets inside it, in a folder and a file name, every one found.
+        GameFolder files = Read(Make("Gothic [GOTY]",
+            ("Gothic [GOTY].exe", 3000),
+            (@"Data [x]\anims [1].vdf", 1500)));
+
+        Assert.Equal(
+            [@"Data [x]\anims [1].vdf", "Gothic [GOTY].exe"],
+            files.Files.Select(file => file.RelativePath).Order(StringComparer.Ordinal));
+        Assert.Equal(4500, files.Bytes);
+    }
+
+    [Fact]
     public void Reports_sizes_and_paths_the_way_the_planner_needs_them()
     {
         string folder = Make("B - game files",

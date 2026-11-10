@@ -38,7 +38,8 @@ public class TheProjectFileComesBack
                 Menu: true,
                 Checksums: false,
                 LegacyFileSystems: true,
-                CutFiles: true)
+                CutFiles: true,
+                StartHere: false)
         };
 
         DiscOptions back = Written(was).Options;
@@ -51,6 +52,7 @@ public class TheProjectFileComesBack
         Assert.False(back.Checksums);
         Assert.True(back.LegacyFileSystems);
         Assert.True(back.CutFiles);
+        Assert.False(back.StartHere);
     }
 
     [Fact]

@@ -111,8 +111,15 @@ public sealed record DiscProject(
 /// <param name="CutFiles">
 /// Whether a single file bigger than a whole disc may be cut across several.
 /// </param>
+/// <param name="StartHere">
+/// Whether a disc with a menu also carries Start Here.hta at its top, the way
+/// in where AutoRun is off. On by default, because Windows has turned AutoRun
+/// off for years and without it the menu sits in a folder nobody opens. Asked
+/// for as an option on 2026-11-10 by somebody testing v1 (discwright#181).
+/// </param>
 public sealed record DiscOptions(
     bool Menu = true,
     bool Checksums = true,
     bool LegacyFileSystems = false,
-    bool CutFiles = false);
+    bool CutFiles = false,
+    bool StartHere = true);

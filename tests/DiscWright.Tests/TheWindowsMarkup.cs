@@ -434,6 +434,38 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void Start_Here_sits_under_the_menu_and_is_dead_without_one()
+    {
+        // A Start Here file opens the menu, so with no menu it has nothing to
+        // open. Dead rather than hidden, so somebody can see it is there and
+        // why it cannot be ticked. And dead during a run, like every option.
+        XElement box = Window().Descendants(Xaml + "CheckBox").Single(each => IdOf(each) == "StartHere");
+
+        Assert.Equal("{Binding StartHere}", (string?)box.Attribute("IsChecked"));
+        Assert.Null(box.Attribute("Visibility"));
+
+        XElement style = box.Descendants(Xaml + "Style").Single();
+        Assert.Contains(
+            style.Elements(Xaml + "Setter"),
+            each => (string?)each.Attribute("Property") == "IsEnabled"
+                && (string?)each.Attribute("Value") == "{Binding NothingIsRunning}");
+
+        XElement off = style.Descendants(Xaml + "DataTrigger").Single();
+        Assert.Equal("{Binding Menu}", (string?)off.Attribute("Binding"));
+        Assert.Equal("False", (string?)off.Attribute("Value"));
+        Assert.Equal("False", (string?)off.Elements(Xaml + "Setter").Single().Attribute("Value"));
+
+        // Stepped in, and with the same 6 below it as every other box here:
+        // the first version set its margin whole and lost the 6, so it sat
+        // touching the box under it, seen on the VM's screen.
+        Assert.Equal("22,0,0,6", (string?)box.Attribute("Margin"));
+
+        // Straight after the menu's own box, so it reads as belonging to it.
+        XElement[] boxes = [.. box.Parent!.Elements(Xaml + "CheckBox")];
+        Assert.Equal("Menu", IdOf(boxes[Array.IndexOf(boxes, box) - 1]));
+    }
+
+    [Fact]
     public void The_log_is_one_link_away_and_never_hidden()
     {
         // The night it was asked for, the question was "was it you?", and it
