@@ -61,7 +61,7 @@ dotnet test --filter FullyQualifiedName~ThePlanner
 tools\Invoke-TestsOnTheVM.ps1
 ```
 
-**1753 tests, and about half a minute.** Every pull request runs that same suite on a hosted Windows runner, in Release, and publishes the one self-contained file the app ships as. `.github/workflows/checks.yml` says what it runs, what leaves itself out, and why.
+**1762 tests, and about half a minute.** Every pull request runs that same suite on a hosted Windows runner, in Release, and publishes the one self-contained file the app ships as. `.github/workflows/checks.yml` says what it runs, what leaves itself out, and why.
 
 **The test project does not reference `DiscWright.App`, on purpose**, so no test can press a button or open a window, and `dotnet test` does not compile the XAML. The window is covered three other ways instead: tests that read `MainWindow.xaml.cs` as text and fail when a case goes unhandled, tests that read the XAML as XML and hold the ids and the bindings in place, and `TheWindowChecksItself`, a stateful walk over the view models that presses Make, Burn, Erase and Open and asks the same two questions after every step, whether the window still adds up and whether it said what changed. Nearly every bug this rewrite has found came from that walk, from a planted fault, or from reaching code nothing reached. Not one came from an example based test.
 
@@ -121,6 +121,8 @@ packaging\Build-TheMsix.ps1
 ```
 
 The app ships as **one self-contained file**, and that is not a preference. Smart App Control refuses a freshly built unsigned DLL by name, so an app published as an exe beside eight loose DLLs starts and then dies with `0xE0434352`; inside a bundle the assemblies load from memory and there is nothing for Code Integrity to check. `Build-TheInstaller.ps1` publishes that file and wraps it with Inno Setup, carrying a guard against wrapping an exe plus loose DLLs because that has gone wrong once already, and the hosted runner does the publish and the same guard on every pull request, so a packaging break is found before a tag is pushed rather than after. `Build-TheMsix.ps1` lays the same payload out as a package for the Store route, which has to be launched by its identity to be worth testing at all. Both read the version from `Directory.Build.props`, so an installer cannot name a different version from the app inside it.
+
+**A release is made by pushing a tag**, `v2.0.0` for 2.0.0, and nowhere else. `.github/workflows/release.yml` runs `packaging\Build-TheRelease.ps1`, which refuses a tag that is not `vX.Y.Z`, a tag that disagrees with `Directory.Build.props`, and a release with no notes in `packaging/release-notes`. It then runs the suite on the tagged commit, builds the installer, the same app as a portable exe and a `SHA256SUMS.txt`, and makes a **draft** release called "DiscWright 2.0.0" carrying all three. A draft is seen by nobody else and is never "latest", so publishing it stays a person's decision. Run by hand from the Actions tab, the workflow builds everything and releases nothing.
 
 ## Where it ends up
 

@@ -1,0 +1,102 @@
+name: release
+
+# A release is made here and nowhere else, so what people download was built
+# from a tagged commit on a clean machine rather than on somebody's desktop.
+#
+# Pushing a tag v2.0.0 makes a DRAFT release called "DiscWright 2.0.0" with the
+# installer, the portable exe and their checksums on it. A draft is seen by
+# nobody but the owner and is never "latest", so it is read on the releases
+# page and published by hand. Publishing is the moment it reaches people, and
+# that stays a person's decision.
+#
+# Run by hand from the Actions tab, it is a dry run: everything is built and
+# kept as an artifact of the run, and no release is made.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# Writing a release needs contents: write, and nothing else here writes.
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The tag being released, or for a dry run the version the app already
+      # says, so the same checks run either way.
+      - name: Which version
+        id: which
+        shell: pwsh
+        run: |
+          if ('${{ github.ref_type }}' -eq 'tag') {
+              $tag = '${{ github.ref_name }}'
+          } else {
+              $props = Select-String -Path Directory.Build.props -Pattern '<Version>([^<]+)</Version>' | Select-Object -First 1
+              $tag = 'v' + $props.Matches[0].Groups[1].Value
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$($tag.Substring(1))" >> $env:GITHUB_OUTPUT
+
+      # Refused before anything is built: a tag that is not vX.Y.Z, a tag that
+      # disagrees with the app, a release with no notes.
+      - name: The tag and the app agree
+        shell: pwsh
+        run: >
+          ./packaging/Build-TheRelease.ps1 -Tag ${{ steps.which.outputs.tag }} -CheckOnly
+          ${{ github.ref_type != 'tag' && '-WithoutNotes' || '' }}
+
+      # The whole suite again, on exactly the commit the tag names, because a
+      # green pull request says nothing about a tag pushed somewhere else.
+      - name: Build
+        run: dotnet build DiscWright.slnx -c Release --nologo
+
+      - name: The suite
+        run: dotnet test tests/DiscWright.Tests/DiscWright.Tests.csproj -c Release --no-build --nologo
+
+      - name: Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build the release
+        shell: pwsh
+        run: >
+          ./packaging/Build-TheRelease.ps1 -Tag ${{ steps.which.outputs.tag }}
+          ${{ github.ref_type != 'tag' && '-WithoutNotes' || '' }}
+
+      - name: Keep what was built
+        uses: actions/upload-artifact@v4
+        with:
+          name: DiscWright-${{ steps.which.outputs.version }}
+          path: |
+            build/DiscWright-${{ steps.which.outputs.version }}-setup.exe
+            build/DiscWright-${{ steps.which.outputs.version }}-portable.exe
+            build/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Draft the release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create ${{ steps.which.outputs.tag }}
+          build/DiscWright-${{ steps.which.outputs.version }}-setup.exe
+          build/DiscWright-${{ steps.which.outputs.version }}-portable.exe
+          build/SHA256SUMS.txt
+          --draft --verify-tag
+          --title "DiscWright ${{ steps.which.outputs.version }}"
+          --notes-file packaging/release-notes/${{ steps.which.outputs.version }}.md
