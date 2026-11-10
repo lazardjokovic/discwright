@@ -97,7 +97,7 @@ public static class MenuWriter
         // since the icon started being named after the disc. Found on a real
         // disc on 2026-11-05, in the same case that found the root copy.
         data.Append("    oursNotTheGame: ")
-            .Append(JScript.ListOf(TheDiscsOwnNames(facts.IconOnTheDisc))).Append(",\n");
+            .Append(JScript.ListOf(TheDiscsOwnNames(facts))).Append(",\n");
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),
@@ -157,10 +157,22 @@ public static class MenuWriter
     /// root, which is the only place this question is asked.
     /// </para>
     /// </remarks>
-    private static IEnumerable<string> TheDiscsOwnNames(string iconOnTheDisc) =>
-        iconOnTheDisc.Length > 0 && !iconOnTheDisc.Contains('/', StringComparison.Ordinal)
-            ? [.. ReservedDiscNames.All, iconOnTheDisc]
-            : ReservedDiscNames.All;
+    /// <para>
+    /// <strong>And every other disc's icon of the set.</strong> A set's file
+    /// lists every disc's files and is read once, from the first disc that
+    /// goes in, so disc 2's icon was the one row of a disc's own that this
+    /// disc could not recognise, and it was copied in beside the game. Found
+    /// by the owner on 2026-11-10, HOLLOWKNIGHT2.ico in the folder his set was
+    /// put back together in.
+    /// </para>
+    private static IEnumerable<string> TheDiscsOwnNames(MenuFacts facts) =>
+    [
+        .. ReservedDiscNames.All,
+        .. new[] { facts.IconOnTheDisc }
+            .Concat(facts.IconsOfTheSet ?? [])
+            .Where(icon => icon.Length > 0 && !icon.Contains('/', StringComparison.Ordinal))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+    ];
     /// <summary>
     /// For text that lands in markup rather than in script: a title, a caption,
     /// the words on a button.
@@ -252,6 +264,10 @@ public static class MenuWriter
 /// relative one, so the attribute alone leaves the window wearing Windows'
 /// default.
 /// </param>
+/// <param name="IconsOfTheSet">
+/// Every disc of the set's own icon name, when the set has one, so a copy off
+/// any disc leaves all of them behind.
+/// </param>
 /// <param name="Manual">Where the manual is on the disc, or nothing.</param>
 /// <param name="Extras">Where the extras folder is, or nothing.</param>
 public sealed record MenuFacts(
@@ -269,7 +285,8 @@ public sealed record MenuFacts(
     string? Manual = null,
     string? Extras = null,
     string? Music = null,
-    string? BackdropColour = null)
+    string? BackdropColour = null,
+    IReadOnlyList<string>? IconsOfTheSet = null)
 {
     /// <summary>The games, or one standing for the disc when none were given.</summary>
     public IReadOnlyList<MenuGame> GamesOrTheOne => Games ?? [new MenuGame(GameName, string.Empty, string.Empty)];

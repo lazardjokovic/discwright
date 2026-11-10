@@ -1408,17 +1408,29 @@ function removeTheCopyButtonSays(bytes) {
 }
 
 // Whether a folder is one this menu made and may remove: a drive root is
-// not, the person's profile is not, and nothing is unless it sits directly
-// under a folder called Games, which is the only place restoreFolderFor
-// ever puts a game. The guard between a button and somebody's files.
+// not, the person's profile is not, and nothing is unless it is named the
+// way the menu names one, "<game> installer" anywhere below a drive, or a
+// folder directly under Games, where menus before 2026-11-10 put them. The
+// guard between a button and somebody's files.
 function mayRemoveTheCopy(dir) {
     var parts = String(dir || "").split("/").join(BACKSLASH).split(BACKSLASH);
+    var last;
 
     while (parts.length && parts[parts.length - 1] === "") {
         parts.pop();
     }
 
-    return parts.length >= 3 && parts[parts.length - 2].toLowerCase() === "games" && parts[parts.length - 1].length > 0;
+    if (parts.length < 2) {
+        return false;
+    }
+
+    last = parts[parts.length - 1];
+
+    if (/ installer$/i.test(last) && last.length > " installer".length) {
+        return true;
+    }
+
+    return parts.length >= 3 && parts[parts.length - 2].toLowerCase() === "games" && last.length > 0;
 }
 
 // How much is in a folder, or 0 when it is not there.
@@ -1468,8 +1480,16 @@ function restoreSentence(scan, discIn, busy, folder) {
     // Where it is going, named while it goes. The owner on 2026-11-10: "I
     // had no idea where it will be copied", and on somebody else's machine
     // it would be stranger still.
+    // And how far, when the page knows: "file 2 of 2" sat still under a bar
+    // the owner wanted a number beside on 2026-11-10.
     if (busy.copying) {
-        return "Copying file " + busy.copying + " off this disc" + (folder ? " into " + folder : "") + ".";
+        return "Copying file " + busy.copying + " off this disc" + (folder ? " into " + folder : "")
+            + (typeof busy.percent === "number" ? ", " + busy.percent + "%" : "") + ".";
+    }
+
+    // A disc just finished, said for a moment before the tray opens.
+    if (busy.copied) {
+        return busy.copied;
     }
 
     if (busy.wanting) {
@@ -1546,60 +1566,89 @@ function restoreBarPercent(progress, now) {
     return percentDone(progress.done, seconds, progress.rate || startingRate(), progress.all);
 }
 
-// The question Install asks before a set copies anything: where it goes.
+// What the install page says before a set copies anything: where the
+// installer is put back together, how much room that needs, and that the
+// game's own installer asks about the game afterwards.
 //
-// ASKED, ONCE PER WINDOW, since 2026-11-10. Until then the folder was
-// offered rather than asked, because asking is a dialog on every disc, and
-// the owner pressed Install, had no idea where anything went, and found it
-// done at once: a whole copy from an earlier try was already in the folder
-// and the menu went straight to the installer without a word. On another
-// machine that would be stranger still. So the first press says where, and
-// what is already there, and OK takes it. The discs after it go to the same
-// place without asking again.
+// A PAGE OF ITS OWN, since 2026-11-10, the owner's design after installing
+// his Hollow Knight set: "since we have no idea to which PC the disc will be
+// inserted, it should always ask where to install, like it was back in the
+// day". The first answer was an OK / Cancel box, where Cancel had to mean
+// "somewhere else", and the box said "copied" about something everybody
+// thinks of as installing. There are two "where" questions for a set and
+// this is the first of them: where the installer is joined. The game's own
+// installer asks the second, so the page says so, or the same question would
+// seem to come twice.
 //
-// scan is setScan's answer for that folder. Returns the sentence for an
-// OK / Cancel question, where Cancel always means somewhere else.
-function whereTheSetGoes(name, folder, needBytes, scan) {
+// scan is setScan's answer for that folder, free is the bytes free on its
+// drive or -1 when that cannot be told, and discs is how many the set has.
+// Returns {headline, says, go, note, short}: short is true when the drive
+// cannot hold what is needed.
+function installPageSays(name, folder, needBytes, free, scan, discs) {
     var game = String(name || "This game");
+    var short = free >= 0 && free < needBytes;
+    var room = "It needs " + bytesInWords(needBytes) + (free >= 0 ? ", and that drive has " + bytesInWords(free) + " free." : ".");
+    var says, go;
 
     if (scan && scan.complete) {
-        return "A complete copy of " + game + " is already in:\n\n" + folder
-            + "\n\nOK installs from it. Cancel picks a different folder to copy it to.";
+        says = "A complete copy of the installer is already in " + folder + ". Install runs it from there.";
+        go = "Install";
+        short = false;
+    } else if (scan && scan.ok > 0) {
+        says = "Part of the installer is already copied to " + folder + ". Copying carries on there. " + room;
+        go = "Copy and install";
+    } else {
+        says = game + " comes on " + discs + " discs. Its installer is copied off them and put back together in "
+            + folder + ". " + room;
+        go = "Copy and install";
     }
 
-    if (scan && scan.ok > 0) {
-        return "Part of " + game + " is already copied to:\n\n" + folder
-            + "\n\nOK carries on there. Cancel picks a different folder.";
+    if (short) {
+        says += " That is not enough. Change the folder to a drive with more room.";
     }
 
-    return game + " will be copied to:\n\n" + folder
-        + "\n\nIt needs about " + bytesInWords(needBytes) + " free there while it works, and the installer runs"
-        + " from that folder. OK copies it there. Cancel picks a different folder.";
+    return {
+        headline: "Where the installer goes",
+        says: says,
+        go: go,
+        note: "Afterwards, " + game + "'s own installer asks where to install the game.",
+        short: short
+    };
 }
 
-// Where to put the game back together.
+// What the folder the installer is joined in is called: the game's name and
+// the word installer, so nobody mistakes it for the game itself, and so the
+// menu can tell a folder it made from somebody else's when it offers to
+// remove the copy.
+function installerFolderName(name) {
+    return folderNameFor(name) + " installer";
+}
+
+// The line under the buttons once a disc of the set is copied, shown for a
+// moment before the tray opens. A disc that copies in seconds, because the
+// check had just read it and Windows still had it in memory, went straight
+// to an open tray and read to the owner as nothing having happened.
+function discCopiedSays(number, bytes, nextDisc) {
+    return "Disc " + number + " is copied, " + bytesInWords(bytes) + "."
+        + (nextDisc ? " Opening the tray for disc " + nextDisc + "." : "");
+}
+
+// Where to suggest putting the installer back together.
 //
-// Under the person's own profile when that drive has the room, the same
-// place a game with nothing to install is copied to, because a folder
-// somebody cannot write to half copies and stops. When it does not, the
-// drive with the most room, because a set is by definition bigger than one
-// disc. The name comes from the game and nothing else, so every disc of the
-// set proposes the same folder without anything being remembered between
-// them. This is the suggestion; whereTheSetGoes is the question that offers
-// it, once, and Cancel there picks anywhere else.
+// The fixed drive with the most room, in a folder named after the game and
+// the word installer. Not the person's profile and not Program Files: the
+// disc goes into machines nobody here has seen, a set is by definition bigger
+// than one disc, and Program Files wants an administrator. The name comes
+// from the game and nothing else, so every disc of the set proposes the same
+// folder without anything being remembered between them. It is only a
+// suggestion: the install page shows it and Change folder picks anywhere.
 //
 // drives is a list of {letter: "D:", free: bytes}, and home is the profile
-// folder, so this can be worked out without a disk in a test.
+// folder, the answer when no drive can be read, so this can be worked out
+// without a disk in a test.
 function restoreFolderFor(home, name, drives, needBytes) {
-    var folder = folderNameFor(name);
-    var homeDrive = String(home || "").substring(0, 2).toUpperCase();
+    var folder = installerFolderName(name);
     var i, best = null;
-
-    for (i = 0; i < drives.length; i++) {
-        if (drives[i].letter.toUpperCase() === homeDrive && drives[i].free > needBytes) {
-            return onTheDisc(onTheDisc(String(home), "Games"), folder);
-        }
-    }
 
     for (i = 0; i < drives.length; i++) {
         if (best === null || drives[i].free > best.free) {
@@ -1608,10 +1657,10 @@ function restoreFolderFor(home, name, drives, needBytes) {
     }
 
     if (best === null) {
-        return onTheDisc(onTheDisc(String(home || ""), "Games"), folder);
+        return onTheDisc(String(home || ""), folder);
     }
 
-    return onTheDisc(onTheDisc(best.letter + BACKSLASH, "Games"), folder);
+    return onTheDisc(best.letter + BACKSLASH, folder);
 }
 
 // The hard drives on this machine with how much room each has, for

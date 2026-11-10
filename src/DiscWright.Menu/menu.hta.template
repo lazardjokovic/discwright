@@ -614,12 +614,22 @@ function sayTheSet(scan) {
     var bar = document.getElementById("restoreBar");
     var filled = document.getElementById("restoreBarIn");
 
+    // The same number the bar is drawn from, said in words beside it.
+    restoring.percent = restoring.copying && restoring.all > 0
+        ? restoreBarPercent(restoring, (new Date()).getTime())
+        : undefined;
+
     line.innerText = restoreSentence(scan || scanTheSet(), SET.discIn, restoring, SET.dir);
     line.style.display = "block";
 
     if (restoring.copying && restoring.all > 0) {
         bar.style.display = "block";
-        filled.style.width = restoreBarPercent(restoring, (new Date()).getTime()) + "%";
+        filled.style.width = restoring.percent + "%";
+    } else if (restoring.copied) {
+        // Full, for the moment the finished disc is said, so a disc that
+        // copied in seconds is still seen to have finished.
+        bar.style.display = "block";
+        filled.style.width = "100%";
     } else {
         bar.style.display = "none";
     }
@@ -670,18 +680,12 @@ function restoreGo() {
 
     var files = new ActiveXObject("Scripting.FileSystemObject");
 
-    // Where it goes, asked on the first press in this window and not on the
-    // discs after it. The wording and the rule are whereTheSetGoes in
-    // menu.js; this only shows it and takes the answer.
+    // Where it goes, asked on its own page on the first press in this window
+    // and not on the discs after it. The wording is installPageSays in
+    // menu.js; the page shows it, and Copy and install comes back here.
     if (!SET.asked) {
-        var chosen = askWhereTheSetGoes();
-
-        if (!chosen) {
-            return;
-        }
-
-        SET.dir = chosen;
-        SET.asked = true;
+        showWhere();
+        return;
     }
 
     var dir = theRestoreFolder();
@@ -733,25 +737,71 @@ function restoreGo() {
     copyThisDisc();
 }
 
-// The question before a set copies anything, and the folder picker behind
-// its Cancel. Nothing, when somebody closes the picker: nothing is copied.
-function askWhereTheSetGoes() {
-    var suggested = theRestoreFolder();
-    var picked;
+// The install page: where the installer is put back together, asked before
+// a set copies anything, the way an installer always asked. Its words are
+// installPageSays in menu.js; this draws them and takes the answer.
+function showWhere() {
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+    var dir = theRestoreFolder();
+    var free = -1;
+    var page;
 
-    if (confirm(whereTheSetGoes(DISC.game, suggested, setBytesNeeded(SET.rows, SET.joins), scanTheSet()))) {
-        return suggested;
+    try {
+        free = files.GetDrive(files.GetDriveName(dir)).FreeSpace;
+    } catch (cannotTell) {
+        free = -1;
     }
 
-    picked = pickAFolder("Where should " + DISC.game + " be copied to?");
+    page = installPageSays(DISC.game, dir, setBytesNeeded(SET.rows, SET.joins), free, scanTheSet(), SET.of);
+
+    document.getElementById("whereName").innerText = DISC.game;
+    document.getElementById("whereHeadline").innerText = page.headline;
+    document.getElementById("whereSays").innerText = page.says;
+    document.getElementById("whereGo").innerText = page.go;
+    document.getElementById("whereNote").innerText = page.note;
+    document.getElementById("whereGo").className = "btn next" + (page.short ? " dead" : "");
+
+    document.getElementById("gameScreen").style.display = "none";
+    document.getElementById("stillWanted").style.display = "none";
+    document.getElementById("whereScreen").style.display = "block";
+}
+
+// Back to the game, without having copied anything.
+function hideWhere() {
+    document.getElementById("whereScreen").style.display = "none";
+    document.getElementById("gameScreen").style.display = "block";
+    showTheSet(gameAt(DISC.games, showing));
+}
+
+// Copy and install, or Install when a whole copy is already there: the
+// folder shown is the answer, and the press carries on where it stopped.
+function whereGo() {
+    if (document.getElementById("whereGo").className.indexOf("dead") >= 0) {
+        return;
+    }
+
+    SET.asked = true;
+    hideWhere();
+    restoreGo();
+}
+
+// Change folder: Windows' own picker, and the installer gets a folder of
+// its own inside whatever was picked, so it never spills into somebody's
+// Downloads. Closing the picker changes nothing.
+function whereChange() {
+    var picked = pickAFolder("Where should the " + DISC.game + " installer go?");
 
     if (!picked) {
-        return null;
+        return;
     }
 
-    // A folder of its own inside the one picked, named the way the
-    // suggestion is, so a game never spills into somebody's Downloads.
-    return onTheDisc(picked, folderNameFor(DISC.game));
+    SET.dir = onTheDisc(picked, installerFolderName(DISC.game));
+    showWhere();
+}
+
+// Cancel: nothing is copied, and the next press asks again.
+function whereCancel() {
+    hideWhere();
 }
 
 // Windows' own folder picker, and the path picked or nothing. On its own so
@@ -822,10 +872,22 @@ function copyThisDisc() {
                     if (scan.complete) {
                         installFromTheFolder();
                     } else {
-                        // This disc is done with, so out it comes, and "put
-                        // disc 2 in" arrives with the tray already open.
-                        ejectTheDisc(theDisc());
-                        waitForTheNextDisc(scan);
+                        // Said for two seconds before the tray opens, with the
+                        // bar full: a disc that copied in moments went straight
+                        // to an open tray and read to the owner, on
+                        // 2026-11-10, as nothing having happened. Not a timer
+                        // that pretends to work, a pause that says it did.
+                        restoring.copied = discCopiedSays(SET.discIn, restoring.all, scan.need[0]);
+                        sayTheSet(scan);
+
+                        window.setTimeout(function () {
+                            restoring.copied = null;
+
+                            // This disc is done with, so out it comes, and
+                            // "put disc 2 in" arrives with the tray open.
+                            ejectTheDisc(theDisc());
+                            waitForTheNextDisc(scan);
+                        }, 2000);
                     }
                 }
             });
@@ -1220,6 +1282,10 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
         color: #CBD6DB; border: 1px solid #27353B;
         background: #080F12; background: rgba(18, 32, 38, 0.22); }
 #sums.busy, #sums.dead { color: #5E727A; border-color: #1A2429; }
+/* The install page's words: the folder wraps, because a path is long and the
+   panel is narrow. */
+#whereSays { margin: 0 0 12px 0; font-size: 11px; line-height: 15px; color: #CBD6DB; word-wrap: break-word; }
+#whereNote { margin: 4px 0 0 0; font-size: 10px; line-height: 14px; color: #8FA3AA; }
 </style>
 </head>
 
@@ -1245,6 +1311,19 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
             <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
         </div>
 
+        <!-- The install page, for a set: where the installer is joined, asked
+             before anything is copied. Drawn in the panel rather than in a
+             dialog, so it reads as a step of installing, the way an installer's
+             own pages did. -->
+        <div id="whereScreen" style="display: none">
+            <h1 id="whereName"></h1>
+            <p class="hint" id="whereHeadline"></p>
+            <div id="whereSays"></div>
+            <a class="btn next" id="whereGo" href="#" onclick="whereGo(); return false;"></a>
+            <a class="btn" id="whereChange" href="#" onclick="whereChange(); return false;">Change folder</a>
+            <a class="btn" id="whereCancel" href="#" onclick="whereCancel(); return false;">Cancel</a>
+            <div id="whereNote"></div>
+        </div>
         <div id="restoreBar" style="display: none"><div id="restoreBarIn"></div></div>
         <div id="stillWanted"></div>
     </div>

@@ -1148,20 +1148,25 @@ public sealed class TheMenuScript : IDisposable
             Ask(@"restoreSentence(null, 1, {copying: '3 of 9'}, 'D:\\Games\\Big')"));
     }
 
-    // ------------------------------------------ where a set goes, asked
+    // ---------------------------------------------- the install page
 
     [Fact]
-    public void Asks_where_a_new_copy_goes_and_says_how_much_room_it_needs()
+    public void Says_where_the_installer_goes_how_much_room_it_needs_and_what_comes_after()
     {
+        // The owner's design on 2026-11-10: a page that asks where, like an
+        // installer always did, and says the game's own installer asks about
+        // the game afterwards, so the question does not seem to come twice.
         string asked = Ask(
-            @"whereTheSetGoes('Hollow Knight', 'C:\\Users\\somebody\\Games\\Hollow Knight', 1288490189, {ok: 0, total: 9})")
-            .Replace("\r", string.Empty, StringComparison.Ordinal);
+            @"(function () { var p = installPageSays('Hollow Knight', 'D:\\Hollow Knight installer', 1288490189, 365072220160, {ok: 0, total: 9}, 2);"
+            + " return [p.headline, p.says, p.go, p.note, String(p.short)].join('|'); }())");
 
         Assert.Equal(
-            "Hollow Knight will be copied to:\n\n"
-                + @"C:\Users\somebody\Games\Hollow Knight"
-                + "\n\nIt needs about 1.2 GB free there while it works, and the installer runs from that folder."
-                + " OK copies it there. Cancel picks a different folder.",
+            "Where the installer goes|"
+                + @"Hollow Knight comes on 2 discs. Its installer is copied off them and put back together in D:\Hollow Knight installer."
+                + " It needs 1.2 GB, and that drive has 340 GB free.|"
+                + "Copy and install|"
+                + "Afterwards, Hollow Knight's own installer asks where to install the game.|"
+                + "false",
             asked);
     }
 
@@ -1170,20 +1175,65 @@ public sealed class TheMenuScript : IDisposable
     {
         // What the owner met: a whole copy from an earlier try, and Install
         // went straight to the installer, done at once, nothing said.
-        string asked = Ask(@"whereTheSetGoes('Hollow Knight', 'C:\\Games\\Hollow Knight', 1, {complete: true, ok: 9, total: 9})");
+        string asked = Ask(
+            @"(function () { var p = installPageSays('Hollow Knight', 'C:\\Games\\Hollow Knight', 1, 0, {complete: true, ok: 9, total: 9}, 2);"
+            + " return p.says + '|' + p.go + '|' + p.short; }())");
 
-        Assert.StartsWith("A complete copy of Hollow Knight is already in:", asked, StringComparison.Ordinal);
-        Assert.Contains(@"C:\Games\Hollow Knight", asked, StringComparison.Ordinal);
-        Assert.EndsWith("OK installs from it. Cancel picks a different folder to copy it to.", asked, StringComparison.Ordinal);
+        Assert.Equal(
+            @"A complete copy of the installer is already in C:\Games\Hollow Knight. Install runs it from there.|Install|false",
+            asked);
     }
 
     [Fact]
-    public void Says_part_of_it_is_already_copied_and_offers_to_carry_on()
+    public void Says_part_of_it_is_already_copied_and_carries_on_there()
     {
-        string asked = Ask(@"whereTheSetGoes('Hollow Knight', 'C:\\Games\\Hollow Knight', 1, {ok: 4, total: 9})");
+        string asked = Ask(
+            @"(function () { var p = installPageSays('Hollow Knight', 'D:\\Hollow Knight installer', 1048576, -1, {ok: 4, total: 9}, 2);"
+            + " return p.says + '|' + p.go; }())");
 
-        Assert.StartsWith("Part of Hollow Knight is already copied to:", asked, StringComparison.Ordinal);
-        Assert.EndsWith("OK carries on there. Cancel picks a different folder.", asked, StringComparison.Ordinal);
+        Assert.Equal(
+            @"Part of the installer is already copied to D:\Hollow Knight installer. Copying carries on there. It needs 1 MB.|Copy and install",
+            asked);
+    }
+
+    [Fact]
+    public void Says_when_the_drive_is_too_small_and_will_not_go_ahead()
+    {
+        string asked = Ask(
+            @"(function () { var p = installPageSays('Big', 'E:\\Big installer', 2097152, 1048576, {ok: 0, total: 3}, 2);"
+            + " return p.says + '|' + p.short; }())");
+
+        Assert.EndsWith("That is not enough. Change the folder to a drive with more room.|true", asked, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Names_the_installer_s_folder_so_nobody_takes_it_for_the_game()
+    {
+        Assert.Equal("Hollow Knight installer", Ask("installerFolderName('Hollow Knight')"));
+        Assert.Equal("Half-Life  Opposing Force installer", Ask("installerFolderName('Half-Life: Opposing Force')"));
+    }
+
+    [Fact]
+    public void Says_each_disc_is_copied_before_the_tray_opens()
+    {
+        // A disc that copied in seconds went straight to an open tray and
+        // read to the owner as nothing having happened.
+        Assert.Equal(
+            "Disc 1 is copied, 617 MB. Opening the tray for disc 2.",
+            Ask("discCopiedSays(1, 646971392, 2)"));
+        Assert.Equal("Disc 2 is copied, 600 MB.", Ask("discCopiedSays(2, 629145600, null)"));
+        Assert.Equal("Disc 1 is copied, 617 MB. Opening the tray for disc 2.",
+            Ask("restoreSentence(null, 1, {copied: 'Disc 1 is copied, 617 MB. Opening the tray for disc 2.'}, '')"));
+    }
+
+    [Fact]
+    public void Says_how_far_the_copy_is_beside_the_file_it_is_on()
+    {
+        // "Maybe we can also add a percentage here, not just this", the
+        // owner watching "Copying file 2 of 2" on 2026-11-10.
+        Assert.Equal(
+            @"Copying file 2 of 2 off this disc into D:\Big installer, 43%.",
+            Ask(@"restoreSentence(null, 1, {copying: '2 of 2', percent: 43}, 'D:\\Big installer')"));
     }
 
     [Fact]
@@ -1292,6 +1342,14 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal("false", Ask(@"String(mayRemoveTheCopy('C:\\Users\\x\\Games'))"));
         Assert.Equal("false", Ask(@"String(mayRemoveTheCopy('C:\\Users\\x\\Documents\\Hollow Knight'))"));
         Assert.Equal("false", Ask("String(mayRemoveTheCopy(''))"));
+
+        // Named the way the install page names one, since 2026-11-10, and
+        // never a bare drive or a folder only called installer.
+        Assert.Equal("true", Ask(@"String(mayRemoveTheCopy('D:\\Hollow Knight installer'))"));
+        Assert.Equal("true", Ask(@"String(mayRemoveTheCopy('F:\\My Games\\Hollow Knight installer\\'))"));
+        Assert.Equal("false", Ask(@"String(mayRemoveTheCopy('D:\\installer'))"));
+        Assert.Equal("false", Ask(@"String(mayRemoveTheCopy('D:\\ installer'))"));
+        Assert.Equal("false", Ask(@"String(mayRemoveTheCopy('Hollow Knight installer'))"));
     }
 
     [Fact]
@@ -1328,20 +1386,24 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
-    public void Puts_the_game_back_under_the_profile_when_that_drive_has_the_room()
+    public void Suggests_the_drive_with_the_most_room_in_a_folder_named_for_the_installer()
     {
+        // Not the profile and not Program Files: the disc goes into machines
+        // nobody here has seen, and a set is bigger than one disc.
         Assert.Equal(
-            @"C:\Users\somebody\Games\Big Game",
+            @"D:\Big Game installer",
             Ask(@"restoreFolderFor('C:\\Users\\somebody', 'Big Game', [{letter: 'C:', free: 1000}, {letter: 'D:', free: 5000}], 900)"));
+        Assert.Equal(
+            @"C:\Half-Life  Opposing Force installer",
+            Ask(@"restoreFolderFor('C:\\Users\\somebody', 'Half-Life: Opposing Force', [{letter: 'C:', free: 9000}, {letter: 'D:', free: 5000}], 900)"));
     }
 
     [Fact]
-    public void Puts_the_game_back_on_the_drive_with_the_most_room_when_the_profile_s_has_not_got_it()
+    public void Falls_back_to_the_profile_when_no_drive_can_be_read()
     {
-        // A set is by definition bigger than one disc.
         Assert.Equal(
-            @"D:\Games\Half-Life  Opposing Force",
-            Ask(@"restoreFolderFor('C:\\Users\\somebody', 'Half-Life: Opposing Force', [{letter: 'C:', free: 100}, {letter: 'D:', free: 5000}], 900)"));
+            @"C:\Users\somebody\Big Game installer",
+            Ask(@"restoreFolderFor('C:\\Users\\somebody', 'Big Game', [], 900)"));
     }
 
     [Fact]

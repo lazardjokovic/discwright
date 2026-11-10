@@ -191,6 +191,22 @@ public class PuttingTheMenuOnTheDisc
         Assert.Contains(@"icon=""../HOLLOWKNIGHT2.ico""", two, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Every_menu_of_a_set_knows_every_disc_s_icon_is_the_disc_s_own()
+    {
+        // The set's file lists every disc's files and is read from the first
+        // disc that goes in, so disc 2's icon was copied in beside the game:
+        // HOLLOWKNIGHT2.ico in the owner's folder on 2026-11-10.
+        foreach (int disc in new[] { 1, 2, 3 })
+        {
+            string ours = TheDiscsOwnNamesIn(PageFor(disc, ofDiscs: 3));
+
+            Assert.Contains(@"""HOLLOWKNIGHT1.ico""", ours, StringComparison.Ordinal);
+            Assert.Contains(@"""HOLLOWKNIGHT2.ico""", ours, StringComparison.Ordinal);
+            Assert.Contains(@"""HOLLOWKNIGHT3.ico""", ours, StringComparison.Ordinal);
+        }
+    }
+
     private static string PageFor(int disc, int ofDiscs)
     {
         RecordingWriter wrote = new();

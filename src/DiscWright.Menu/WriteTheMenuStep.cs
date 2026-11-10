@@ -308,6 +308,13 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
             // settles a file that carries both.
             BackdropColour: context.Project.Artwork?.BackgroundPath is null
                 ? context.Project.Artwork?.BackgroundColour
+                : null,
+
+            // Every disc's icon of the set, not only this one's, so a copy off
+            // this disc leaves the others' behind as well.
+            IconsOfTheSet: context.Project.Artwork?.IconPath is not null
+                ? [.. Enumerable.Range(1, context.Layout.Discs.Count).Select(number =>
+                    DiscIconName.For(context.Project.Label, number, context.Layout.Discs.Count))]
                 : null);
     }
 }

@@ -127,11 +127,20 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 // can see that it moved while a file copied.
                 + "var drawTheSet = sayTheSet; var lastWidth = null;\n"
                 + "sayTheSet = function (s) { drawTheSet(s); var w = document.getElementById('restoreBarIn').style.width;"
-                + " if (w !== undefined && w !== lastWidth) { widths.push(w); lastWidth = w; } };\n"
+                + " if (w !== undefined && w !== lastWidth) { widths.push(w); lastWidth = w; }"
+                + " var l = document.getElementById('stillWanted').innerText; if (l.indexOf(' is copied') >= 0) { copiedSaid = l + ' bar=' + w; } };\n"
+                + "var copiedSaid = 'never';\n"
 
-                // The big button, pressed the way the page presses it.
+                // The big button, pressed the way the page presses it. The
+                // first press opens the install page and copies nothing; the
+                // page's own button goes on.
                 + "doTheThing();\n"
+                + "out.push('page=' + document.getElementById('whereScreen').style.display + ' game=' + document.getElementById('gameScreen').style.display + ' timers=' + window.timers.length);\n"
+                + "out.push('says=' + document.getElementById('whereSays').innerText);\n"
+                + "out.push('go=' + document.getElementById('whereGo').innerText + ' note=' + document.getElementById('whereNote').innerText);\n"
+                + "whereGo();\n"
                 + "pump(function () { return restoring.wanting > 0; });\n"
+                + "out.push('copied=' + copiedSaid);\n"
                 + "said();\n"
 
                 // The bar was drawn while the file copied, which on files this
@@ -145,17 +154,24 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "drain();\n"
                 + "out.push('title=' + document.title);\n"
                 + "said();\n"
-                + "out.push('asked=' + confirms.length + ' ' + (confirms.length ? confirms[0].split('\\n').join('~') : ''));\n"
                 + "out.push('alerts=' + alerts.length + (alerts.length ? ' ' + alerts.join(' / ') : ''));\n"
                 + "WScript.Echo(out.join('\\n'));\n");
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-        // Asked where it goes once, on the first press, naming the folder,
-        // and not again when disc 2 went in.
-        string asked = Assert.Single(lines, each => each.StartsWith("asked=", StringComparison.Ordinal));
-        Assert.StartsWith("asked=1 Big Game will be copied to:~~" + dest + "~~", asked, StringComparison.Ordinal);
-        lines = [.. lines.Where(each => each != asked)];
+        // The first press shows the install page, naming the folder and the
+        // room, and copies nothing until its own button is pressed. It is
+        // not asked again when disc 2 goes in: there is one page line.
+        string says = Assert.Single(lines, each => each.StartsWith("says=", StringComparison.Ordinal));
+        Assert.StartsWith("says=Big Game comes on 2 discs. Its installer is copied off them and put back together in " + dest + ". It needs ", says, StringComparison.Ordinal);
+        Assert.Equal("page=block game=none timers=0", Assert.Single(lines, each => each.StartsWith("page=", StringComparison.Ordinal)));
+        Assert.Equal("go=Copy and install note=Afterwards, Big Game's own installer asks where to install the game.", Assert.Single(lines, each => each.StartsWith("go=", StringComparison.Ordinal)));
+
+        // Disc 1 said it was copied, with the bar full, before the tray
+        // opened: a disc that copies in moments must still be seen to finish.
+        Assert.Equal("copied=Disc 1 is copied, 8 bytes. Opening the tray for disc 2. bar=100%", Assert.Single(lines, each => each.StartsWith("copied=", StringComparison.Ordinal)));
+
+        lines = [.. lines.Where(each => !each.StartsWith("says=", StringComparison.Ordinal) && !each.StartsWith("page=", StringComparison.Ordinal) && !each.StartsWith("go=", StringComparison.Ordinal) && !each.StartsWith("copied=", StringComparison.Ordinal))];
 
         Assert.Equal(
             [
@@ -234,6 +250,10 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "startIt = function (what, from) { out.push('start ' + what); return null; };\n"
                 + "var installedNow = false; isInstalled = function () { return installedNow; };\n"
                 + "doTheThing();\n"
+
+                // The install page first, which names the whole copy already
+                // there; its Install goes on.
+                + "whereGo();\n"
                 + "installedNow = true;\n"
                 + "drain();\n"
                 + "out.push('button=' + document.getElementById('doIt').innerText);\n"
@@ -458,47 +478,117 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     // ------------------------------------------- where it goes, and when not
 
     [Fact]
-    public void Cancel_and_closing_the_picker_copies_nothing_and_asks_again_next_time()
+    public void Cancel_on_the_install_page_copies_nothing_and_the_next_press_asks_again()
     {
         string disc1 = AFirstDiscOfTwo();
         string dest = Path.Combine(_folder, "suggested");
 
         string went = RunOnDisc1(disc1, dest,
-            "answers = [false];\n"
-            + "pickAFolder = function (title) { out.push('picker=' + title); return null; };\n"
+            "doTheThing();\n"
+            + "whereCancel();\n"
+            + "out.push('page=' + document.getElementById('whereScreen').style.display + ' game=' + document.getElementById('gameScreen').style.display"
+            + " + ' timers=' + window.timers.length + ' busy=' + restoring.busy + ' asked=' + (SET.asked ? 'yes' : 'no'));\n"
             + "doTheThing();\n"
-            + "out.push('timers=' + window.timers.length + ' busy=' + restoring.busy + ' asked=' + (SET.asked ? 'yes' : 'no'));\n"
+            + "out.push('again=' + document.getElementById('whereScreen').style.display);\n"
             + "WScript.Echo(out.join('\\n'));\n");
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal(["picker=Where should Big Game be copied to?", "timers=0 busy=false asked=no"], lines);
+        Assert.Equal(["page=none game=block timers=0 busy=false asked=no", "again=block"], lines);
         Assert.False(Directory.Exists(dest), "nothing is made when nobody said where");
     }
 
     [Fact]
-    public void Cancel_and_picking_a_folder_copies_into_a_folder_of_its_own_there()
+    public void A_drive_without_the_room_leaves_the_page_s_button_dead()
+    {
+        // The words are installPageSays's; what is pinned here is that the
+        // page acts on its verdict: drawn dead, and a press copies nothing.
+        string disc1 = AFirstDiscOfTwo();
+        string dest = Path.Combine(_folder, "suggested");
+
+        string went = RunOnDisc1(disc1, dest,
+            "installPageSays = function () { return { headline: 'h', says: 's', go: 'Copy and install', note: 'n', short: true }; };\n"
+            + "doTheThing();\n"
+            + "out.push('go=' + document.getElementById('whereGo').className);\n"
+            + "whereGo();\n"
+            + "out.push('timers=' + window.timers.length + ' asked=' + (SET.asked ? 'yes' : 'no') + ' page=' + document.getElementById('whereScreen').style.display);\n"
+            + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(["go=btn next dead", "timers=0 asked=no page=block"], lines);
+        Assert.False(Directory.Exists(dest));
+    }
+
+    [Fact]
+    public void Change_folder_with_the_picker_closed_changes_nothing()
+    {
+        string disc1 = AFirstDiscOfTwo();
+        string dest = Path.Combine(_folder, "suggested");
+
+        string went = RunOnDisc1(disc1, dest,
+            "pickAFolder = function (title) { out.push('picker=' + title); return null; };\n"
+            + "doTheThing();\n"
+            + "whereChange();\n"
+            + "out.push('dir=' + SET.dir + ' page=' + document.getElementById('whereScreen').style.display + ' timers=' + window.timers.length);\n"
+            + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(["picker=Where should the Big Game installer go?", "dir=" + dest + " page=block timers=0"], lines);
+    }
+
+    [Fact]
+    public void Change_folder_puts_the_installer_in_a_folder_of_its_own_there_and_the_page_says_so()
     {
         string disc1 = AFirstDiscOfTwo();
         string elsewhere = Path.Combine(_folder, "my games");
         Directory.CreateDirectory(elsewhere);
 
         string went = RunOnDisc1(disc1, Path.Combine(_folder, "suggested"),
-            "answers = [false];\n"
-            + "pickAFolder = function () { return " + AsJScript(elsewhere) + "; };\n"
+            "pickAFolder = function () { return " + AsJScript(elsewhere) + "; };\n"
             + "doTheThing();\n"
+            + "whereChange();\n"
+            + "out.push('says=' + document.getElementById('whereSays').innerText);\n"
+            + "whereGo();\n"
             + "pump(function () { return restoring.wanting > 0; });\n"
             + "out.push('dir=' + SET.dir);\n"
-            + "out.push('line=' + document.getElementById('stillWanted').innerText);\n"
+            + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        string mine = Path.Combine(elsewhere, "Big Game installer");
+
+        Assert.Contains("put back together in " + mine + ".", lines[0], StringComparison.Ordinal);
+        Assert.Equal("dir=" + mine, lines[1]);
+        Assert.Equal("12345", File.ReadAllText(Path.Combine(mine, "readme.txt")));
+        Assert.False(File.Exists(Path.Combine(elsewhere, "readme.txt")), "never spilled into the folder picked");
+    }
+
+    [Fact]
+    public void A_complete_copy_already_there_is_named_and_installs_from_it()
+    {
+        // What the owner met on 2026-11-10: a whole copy from an earlier try,
+        // and Install went straight to the installer without a word.
+        string disc1 = AFirstDiscOfTwo();
+        string dest = Path.Combine(_folder, "already");
+        Directory.CreateDirectory(dest);
+        File.WriteAllText(Path.Combine(dest, "setup_big.exe"), "ABCDEFG");
+        File.WriteAllText(Path.Combine(dest, "readme.txt"), "12345");
+
+        string went = RunOnDisc1(disc1, dest,
+            "startIt = function (what, from) { out.push('start ' + what); return null; };\n"
+            + "doTheThing();\n"
+            + "out.push('says=' + document.getElementById('whereSays').innerText);\n"
+            + "out.push('go=' + document.getElementById('whereGo').innerText);\n"
+            + "whereGo();\n"
             + "WScript.Echo(out.join('\\n'));\n");
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal("dir=" + Path.Combine(elsewhere, "Big Game"), lines[0]);
-        Assert.Equal("12345", File.ReadAllText(Path.Combine(elsewhere, "Big Game", "readme.txt")));
-        Assert.False(File.Exists(Path.Combine(elsewhere, "readme.txt")), "never spilled into the folder picked");
+        Assert.Equal("says=A complete copy of the installer is already in " + dest + ". Install runs it from there.", lines[0]);
+        Assert.Equal("go=Install", lines[1]);
+        Assert.Equal("start " + Path.Combine(dest, "setup_big.exe"), lines[2]);
     }
-
     [Fact]
     public void The_check_is_dead_while_the_set_copies_and_a_press_on_it_starts_nothing()
     {
