@@ -108,15 +108,15 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
     /// A Manual button on a disc with no manual is worse than no button: it is
     /// a promise the disc cannot keep, discovered by somebody who has already
     /// burned it. So the buttons are worked out from what is actually going on
-    /// the disc, and the one disc of a set that carries the extras is the only
-    /// one that offers them.
+    /// the disc. Every disc of a set carries the extras, so every disc offers
+    /// them.
     /// </remarks>
     private static List<string> ButtonsFor(BuildContext context, GameFolder? game)
     {
         List<string> buttons = [game?.Kind == GameKind.FilesOnly ? "Open folder" : "Install"];
 
         DiscExtras? extras = context.Project.Extras;
-        bool thisDiscCarriesThem = context.Disc.Number == context.Layout.DiscCarryingTheExtras;
+        bool thisDiscCarriesThem = context.Layout.CarriesTheExtras(context.Disc.Number);
 
         if (extras?.ManualPath is not null && thisDiscCarriesThem)
         {
@@ -137,15 +137,15 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
     /// Where the manual is on this disc, or nothing.
     /// </summary>
     /// <remarks>
-    /// Only on the one disc of a set that carries the extras. A Manual button
-    /// on a disc with no manual is a promise the disc cannot keep, found by
-    /// somebody who has already burned it.
+    /// On every disc that carries the extras, which is every disc when there
+    /// are any. A Manual button on a disc with no manual is a promise the disc
+    /// cannot keep, found by somebody who has already burned it.
     /// </remarks>
     private static string? TheManualOn(BuildContext context)
     {
         DiscExtras? extras = context.Project.Extras;
 
-        return extras?.ManualPath is not null && context.Disc.Number == context.Layout.DiscCarryingTheExtras
+        return extras?.ManualPath is not null && context.Layout.CarriesTheExtras(context.Disc.Number)
             ? ExtrasFolder + "/" + System.IO.Path.GetFileName(extras.ManualPath)
             : null;
     }
@@ -154,7 +154,7 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
     /// What this disc plays behind its menu, or nothing.
     /// </summary>
     /// <remarks>
-    /// Every disc of a set, unlike the manual and the extras. Music belongs to
+    /// Every disc of a set, like the manual and the extras. Music belongs to
     /// the menu rather than to the content, every disc has a menu of its own,
     /// and that is why the planner counts it as overhead on all of them.
     /// </remarks>
@@ -170,7 +170,7 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
 
         bool anything = extras?.ExtrasFolderPath is not null || extras?.Loose.Count > 0;
 
-        return anything && context.Disc.Number == context.Layout.DiscCarryingTheExtras
+        return anything && context.Layout.CarriesTheExtras(context.Disc.Number)
             ? ExtrasFolder
             : null;
     }

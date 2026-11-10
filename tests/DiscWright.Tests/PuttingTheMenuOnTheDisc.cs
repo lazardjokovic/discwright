@@ -188,7 +188,7 @@ public class PuttingTheMenuOnTheDisc
             {
                 Artwork = new DiscArtwork(IconPath: @"C:\pictures\cover.png")
             },
-            new DiscLayout(discs, 1_000_000, 1),
+            new DiscLayout(discs, 1_000_000, true),
             discs[disc - 1],
             @"C:\stage",
             wrote);
@@ -213,7 +213,7 @@ public class PuttingTheMenuOnTheDisc
                 new AddOn(0, @"C:\games\x\patch_a_game_1.2_to_1.3_(600).exe", "Update 1.3 (600)", 10),
                 new AddOn(0, @"C:\games\x\soundtrack_a_game.exe", "soundtrack a game", 10)
             ]),
-            new DiscLayout(discs, 1_000_000, 1),
+            new DiscLayout(discs, 1_000_000, true),
             discs[0],
             @"C:\stage",
             wrote);
@@ -527,7 +527,7 @@ public class PuttingTheMenuOnTheDisc
 
             // This disc carries the extras, which is the case worth testing:
             // the other discs of a set must NOT offer a manual they do not have.
-            new DiscLayout([disc], 1_000_000, 1),
+            new DiscLayout([disc], 1_000_000, true),
             disc,
             @"C:\stage",
             writer);

@@ -77,36 +77,36 @@ public static class DiscPlanner
 
         // Before anything is placed, because no disc in the set can carry
         // them and there is no arrangement of discs that fixes it.
-        if (request.BytesForTheExtras > room)
+        // At or over, because every disc carries them now: extras that fill a
+        // disc to the last byte leave no room for the game on any of them,
+        // and planning on would make empty discs for ever.
+        if (request.BytesForTheExtras > 0 && request.BytesForTheExtras >= room)
         {
             return Refusals.TheExtrasAloneWillNotFitOnADisc(request.BytesForTheExtras, request.Medium, room);
         }
 
-        // The manual, the extras and the loose files ride disc 1, so their
-        // room is taken out of disc 1 before the game is laid down.
+        // The manual, the extras and the loose files ride EVERY disc, so
+        // their room comes off each one before the game is laid down.
         //
-        // They rode the last disc until 2026-11-09, because that is where
-        // first fit leaves the slack. But the disc everybody puts in first
-        // is disc 1, and on a set its menu had no Manual and no Extras: the
-        // owner previewed his set, saw one window, and found neither. He
-        // chose disc 1 knowing the cost, which is that without cutting a
-        // set can rarely need one more disc; with cutting the bytes run on
-        // and the count is the same.
+        // They rode the last disc until 2026-11-09, then disc 1 (#161), and
+        // both times another disc of the set offered Manual and Extras
+        // buttons with nothing behind them. On 2026-11-10 the owner pressed
+        // Manual on disc 2 of his Hollow Knight set and got "That would not
+        // start", and once the game was installed the same buttons opened his
+        // Documents. He chose every disc, knowing it costs their room on each.
         long reserved = Math.Max(0, request.BytesForTheExtras);
 
         List<PlannedDisc> discs = [];
         List<PlannedFile> onThisDisc = [];
         long bytesOnThisDisc = 0;
 
-        // How much the disc being filled can take: disc 1 gives up the
-        // extras' room, every other disc has all of it.
-        long RoomHere() => discs.Count == 0 ? room - reserved : room;
+        // How much any disc can take once the extras are on it.
+        long RoomHere() => room - reserved;
 
-        // Whether the disc being filled holds anything yet. Disc 1 always
-        // does when it carries the extras, even with no file on it, so a
-        // file too big for what is left of it moves on to disc 2 and does
-        // not get squeezed in on top of them.
-        bool ThisDiscHoldsSomething() => onThisDisc.Count > 0 || (discs.Count == 0 && reserved > 0);
+        // Whether the disc being filled holds anything yet. Every disc does
+        // when there are extras, even with no file on it, so a file too big
+        // for what is left moves on rather than being squeezed in on top.
+        bool ThisDiscHoldsSomething() => onThisDisc.Count > 0 || reserved > 0;
 
         void FinishThisDisc()
         {
@@ -117,35 +117,32 @@ public static class DiscPlanner
 
         foreach (PlanFile file in request.Files)
         {
-            // Every disc carries the same overhead, so a file that will not fit
-            // one of them will not fit any of them.
-            if (file.Bytes > room)
+            // Every disc carries the same overhead and the same extras, so a
+            // file that will not fit one of them will not fit any of them.
+            if (file.Bytes > RoomHere())
             {
                 if (!request.MayCutFiles)
                 {
-                    return Refusals.ThatOneFileIsBiggerThanADisc(file, request.Medium, room);
+                    return Refusals.ThatOneFileIsBiggerThanADisc(file, request.Medium, RoomHere());
                 }
 
                 // The pieces start on a disc with no other file on it, so they
                 // run in order and somebody holding disc 3 can see which piece
-                // is on it without doing arithmetic. Disc 1 with only the
-                // extras on it counts as fresh: the first piece takes what is
-                // left of it rather than leaving disc 1 nearly empty, which
-                // would cost a whole disc for the sake of a manual. A disc 1
-                // the extras fill to the last byte is finished first.
-                if (onThisDisc.Count > 0 || RoomHere() <= 0)
+                // is on it without doing arithmetic. A disc with only the
+                // extras on it counts as fresh.
+                if (onThisDisc.Count > 0)
                 {
                     FinishThisDisc();
                 }
 
                 // The sizes of the pieces, worked out before any is named,
-                // because the count is part of every piece's name. Only the
-                // first can be smaller than a disc, when it shares disc 1
-                // with the extras; the join reads each piece's own offset
-                // and length, so unequal pieces go back together the same.
+                // because the count is part of every piece's name. Each takes
+                // what a disc has left beside the extras; the join reads each
+                // piece's own offset and length, so the last, smaller piece
+                // goes back together the same.
                 List<long> sizes = [];
 
-                for (long left = file.Bytes, here = RoomHere(); left > 0; here = room)
+                for (long left = file.Bytes, here = RoomHere(); left > 0; here = RoomHere())
                 {
                     long take = Math.Min(here, left);
                     sizes.Add(take);
@@ -204,9 +201,6 @@ public static class DiscPlanner
             FinishThisDisc();
         }
 
-        // On disc 1, or on no disc when there are none. Disc 1 always exists
-        // by now: there was at least one file, and either it went on disc 1
-        // or disc 1 was finished, holding only the extras, to make way.
-        return new DiscLayout(discs, room, reserved > 0 ? 1 : 0);
+        return new DiscLayout(discs, room, reserved > 0);
     }
 }

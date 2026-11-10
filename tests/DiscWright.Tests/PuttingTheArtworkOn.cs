@@ -151,7 +151,7 @@ public class PuttingTheArtworkOn
                 [],
                 new DiscOptions(Menu: menu),
                 artwork),
-            new DiscLayout([disc], 1_000_000, 0),
+            new DiscLayout([disc], 1_000_000, false),
             disc,
             @"C:\stage",
             writer);

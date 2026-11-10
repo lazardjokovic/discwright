@@ -1,16 +1,14 @@
 namespace DiscWright.Core.Staging;
 
 /// <summary>
-/// Puts the manual, the extras folder and the loose files on the one disc that
-/// carries them.
+/// Puts the manual, the extras folder and the loose files on every disc.
 /// </summary>
 /// <remarks>
-/// <strong>One disc of a set, not all of them.</strong> Copying a three
-/// gigabyte texture pack onto five discs costs five times the room, and the
-/// planner has already worked out which disc has the slack for it. For a three
-/// megabyte manual that is arguably the wrong answer, and is still the right
-/// default: the person who wants it on every disc can say so, and nobody wants
-/// to discover they burned the same extras five times.
+/// <strong>Every disc of a set, since 2026-11-10.</strong> On one disc, every
+/// other disc's menu offered Manual and Extras buttons with nothing behind them,
+/// which the owner met on disc 2 of his Hollow Knight set. The cost is their
+/// room on each disc, and the planner takes it off every one; a three gigabyte
+/// texture pack is better off as an add-on than as an extra.
 /// </remarks>
 public sealed class CopyTheExtrasStep(IFileSystem files) : IBuildStep
 {
@@ -21,7 +19,7 @@ public sealed class CopyTheExtrasStep(IFileSystem files) : IBuildStep
 
     public bool AppliesTo(BuildContext context) =>
         context.Project.Extras?.IsAnythingOnOneDisc == true
-        && context.Disc.Number == context.Layout.DiscCarryingTheExtras;
+        && context.Layout.CarriesTheExtras(context.Disc.Number);
 
     public Task Run(BuildContext context, CancellationToken ct)
     {

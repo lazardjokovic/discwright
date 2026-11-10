@@ -109,7 +109,7 @@ public sealed class CheckingEveryFile : IDisposable
 
         return new BuildContext(
             new DiscProject("HOLLOW KNIGHT", [], new DiscOptions(Checksums: checksums)),
-            new DiscLayout([disc], 1_000_000, 0),
+            new DiscLayout([disc], 1_000_000, false),
             disc,
             wrote.AStageAt(_stage),
             wrote);

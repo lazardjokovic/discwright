@@ -682,6 +682,14 @@ function startIt(what, from) {
         return "There is nothing on this disc for that button to start.";
     }
 
+    // Looked for before anything runs. Handed a path that is not there,
+    // Windows answered with "That would not start: ... (0)", a number that
+    // means nothing to anybody, which is what the owner met pressing Manual
+    // on disc 2 of his set on 2026-11-10.
+    if (thereIsNo(what, false)) {
+        return "That file is not where the menu expected it: " + what;
+    }
+
     try {
         shell = new ActiveXObject("WScript.Shell");
     } catch (noShell) {
@@ -707,6 +715,19 @@ function startIt(what, from) {
     }
 }
 
+// Whether a file, or a folder when folder is true, is certainly missing.
+// False when it cannot be told, because a machine that will not let the menu
+// look should still be allowed to try.
+function thereIsNo(path, folder) {
+    try {
+        var files = new ActiveXObject("Scripting.FileSystemObject");
+
+        return folder ? !files.FolderExists(String(path)) : !files.FileExists(String(path));
+    } catch (cannotLook) {
+        return false;
+    }
+}
+
 // Opens a folder in Explorer. Same shape, same reason.
 function openTheFolder(where) {
     var preview = whyNothingRuns();
@@ -717,6 +738,14 @@ function openTheFolder(where) {
 
     if (!where || String(where).length === 0) {
         return "There is no folder on this disc for that button to open.";
+    }
+
+    // Explorer handed a folder that does not exist opens the person's
+    // Documents instead, without a word. The owner pressed Extras on disc 2
+    // on 2026-11-10 and got his own Documents, "opening something random,
+    // which makes no sense". Looked for first, and said plainly.
+    if (thereIsNo(where, true)) {
+        return "That folder is not where the menu expected it: " + where;
     }
 
     try {

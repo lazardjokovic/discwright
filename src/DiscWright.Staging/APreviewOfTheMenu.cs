@@ -179,7 +179,7 @@ public interface IShowTheMenu
     /// <remarks>
     /// <strong>Every disc, not only the first.</strong> Each disc of a set has
     /// a menu of its own, and the window decides how many of them to open.
-    /// The manual and the extras ride disc 1 since 2026-11-09, so the one
+    /// The manual and the extras ride every disc since 2026-11-10, so the one
     /// window most people open shows them.
     /// </remarks>
     Outcome<IReadOnlyList<string>> Write(

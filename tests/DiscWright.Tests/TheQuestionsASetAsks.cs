@@ -77,14 +77,13 @@ public class TheQuestionsASetAsks
         AQuestion asked = Assert.IsType<AQuestion>(WhatAPreviewAsks.ForASetOf(3));
 
         // The owner's design on 2026-11-09, after the crowd of windows,
-        // opened with no warning, read to him as a bug. The question names
-        // what one window costs, because the manual and the extras riding
-        // the last disc is the fact that made disc 1 alone wrong back when
-        // nothing asked.
+        // opened with no warning, read to him as a bug. The question says
+        // one window misses nothing, because every disc carries the manual
+        // and the extras since 2026-11-10.
         Assert.Equal("This is a set of 3 discs, and every disc has a menu of its own.", asked.Headline);
         Assert.Equal("Open one window", asked.TheLikelyOne);
         Assert.Equal("Open all 3", asked.TheOtherWay);
-        Assert.Contains("which carries the manual and the extras", asked.Because, StringComparison.Ordinal);
+        Assert.Contains("Every disc carries the manual and the extras", asked.Because, StringComparison.Ordinal);
     }
 
     [Fact]

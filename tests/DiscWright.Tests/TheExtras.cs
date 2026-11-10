@@ -109,7 +109,7 @@ public sealed class TheExtras : IDisposable
     }
 
     [Fact]
-    public async Task Puts_the_extras_on_one_disc_of_a_set_and_not_on_all_of_them()
+    public async Task Puts_the_extras_on_every_disc_of_a_set()
     {
         string manual = AFile("manual.pdf", 400);
 
@@ -119,15 +119,14 @@ public sealed class TheExtras : IDisposable
 
         Assert.True(built.Discs.Count > 1);
 
-        // Copying a three gigabyte texture pack onto five discs costs five
-        // times the room, so it rides the one disc with the slack for it.
-        int carrying = built.Discs.Count(disc => Directory.Exists(Path.Combine(disc.Folder, "Extras")));
-
-        Assert.Equal(1, carrying);
+        // The owner's choice on 2026-11-10, after Manual on disc 2 of his set
+        // would not start: every disc carries them and pays their room.
+        Assert.All(built.Discs, disc =>
+            Assert.True(File.Exists(Path.Combine(disc.Folder, "Extras", "manual.pdf")), $"disc {disc.Number} has no manual"));
     }
 
     [Fact]
-    public async Task Offers_a_Manual_button_only_on_the_disc_that_has_the_manual()
+    public async Task Offers_a_Manual_button_on_every_disc_and_every_one_has_the_manual()
     {
         string manual = AFile("manual.pdf", 400);
 
@@ -135,13 +134,17 @@ public sealed class TheExtras : IDisposable
             With(new DiscExtras(ManualPath: manual), AGame("Big", 4000, parts: 3)),
             capacity: Overhead + 6000);
 
-        int offering = built.Discs.Count(disc =>
-            File.ReadAllText(Path.Combine(disc.Folder, "AUTORUN", "menu.hta")).Contains("\"Manual\"", StringComparison.Ordinal));
-
         // A Manual button on a disc with no manual is worse than no button: it
         // is a promise the disc cannot keep, found by somebody who has already
-        // burned it.
-        Assert.Equal(1, offering);
+        // burned it. So every button has its manual beside it.
+        Assert.All(built.Discs, disc =>
+        {
+            Assert.Contains(
+                "\"Manual\"",
+                File.ReadAllText(Path.Combine(disc.Folder, "AUTORUN", "menu.hta")),
+                StringComparison.Ordinal);
+            Assert.True(File.Exists(Path.Combine(disc.Folder, "Extras", "manual.pdf")));
+        });
     }
 
     [Fact]
@@ -177,17 +180,18 @@ public sealed class TheExtras : IDisposable
     }
 
     [Fact]
-    public async Task Counts_the_extras_against_the_disc_they_land_on()
+    public async Task Counts_the_extras_against_every_disc()
     {
-        // The manual is bigger than the room left after the game, so the two
-        // cannot share a disc and the planner has to make another.
+        // The manual comes off every disc's room, so a game that would have
+        // fitted a disc on its own no longer fits beside it, and without
+        // cutting the build is refused rather than squeezed.
         string manual = AFile("an enormous manual.pdf", 4000);
 
-        BuiltDiscs built = await Build(
+        Outcome<BuiltDiscs> built = await Builder().Build(
             With(new DiscExtras(ManualPath: manual), AGame("Game", 4000)),
-            capacity: Overhead + 5000);
+            new Medium("TEST", "a test disc", Overhead + 5000), _out, null, CancellationToken.None);
 
-        Assert.True(built.Discs.Count > 1, "The extras have to be weighed, or they go on a disc with no room for them.");
+        Assert.IsType<Outcome<BuiltDiscs>.No>(built);
     }
 
     [Fact]

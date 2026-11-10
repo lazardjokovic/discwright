@@ -273,9 +273,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// burned, or nothing at all.
     /// </summary>
     /// <remarks>
-    /// All of them, not the first. The manual and the extras ride one disc of
-    /// a set and the planner puts them on the last one, so a preview of disc
-    /// one can never show the buttons for them however many somebody chose.
+    /// All of them, not the first, so the window can open one or every one,
+    /// as the person answers. Every disc carries the manual and the extras
+    /// since 2026-11-10, so disc 1 alone shows their buttons too.
     /// </remarks>
     public IReadOnlyList<string> ThePreviews { get; private set; } = [];
 

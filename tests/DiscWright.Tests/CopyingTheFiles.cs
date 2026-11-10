@@ -96,7 +96,7 @@ public class CopyingTheFiles
 
     private static BuildContext Context(IStageWriter writer, PlannedDisc disc) =>
         new(new DiscProject("TEST", [], new DiscOptions()),
-            new DiscLayout([disc], 1_000_000, 0),
+            new DiscLayout([disc], 1_000_000, false),
             disc,
             @"C:\stage",
             writer);

@@ -473,20 +473,19 @@ public class SeeingTheMenuFirst
 
         Previewing(wrote, ASetOfTwo());
 
-        // The extras ride one disc of a set. They rode the last, and the
-        // owner previewed his set on 2026-11-09, opened the one window the
-        // question offers, which is disc 1, and found no Manual and no
-        // Extras: a burned disc 1 had neither either. They ride disc 1 now,
-        // the disc everybody meets first.
-        string first = PageOf(wrote, 1);
-        Assert.Contains("manual: \"Extras/How to play.pdf\"", first, StringComparison.Ordinal);
-        Assert.Contains("extras: \"Extras\"", first, StringComparison.Ordinal);
-        Assert.Contains("\"Manual\"", first, StringComparison.Ordinal);
-        Assert.Contains("\"Extras\"", first, StringComparison.Ordinal);
-
-        // And only there: one disc carries them, never every disc.
-        Assert.Contains("manual: \"\"", PageOf(wrote, 2), StringComparison.Ordinal);
-        Assert.Contains("extras: \"\"", PageOf(wrote, 2), StringComparison.Ordinal);
+        // Every disc of a set carries them. They rode the last disc, then
+        // disc 1, and each time another disc's menu was missing them or, on
+        // a burned disc, offered buttons with nothing behind them: the owner
+        // pressed Manual on disc 2 on 2026-11-10 and got "That would not
+        // start". So whichever window somebody opens shows them.
+        foreach (int disc in new[] { 1, 2 })
+        {
+            string page = PageOf(wrote, disc);
+            Assert.Contains("manual: \"Extras/How to play.pdf\"", page, StringComparison.Ordinal);
+            Assert.Contains("extras: \"Extras\"", page, StringComparison.Ordinal);
+            Assert.Contains("\"Manual\"", page, StringComparison.Ordinal);
+            Assert.Contains("\"Extras\"", page, StringComparison.Ordinal);
+        }
     }
 
     [Fact]
@@ -694,7 +693,7 @@ public class SeeingTheMenuFirst
         DiscProject project = AProject();
         PlannedDisc disc = new(1, [], 0);
 
-        return new BuildContext(project, new DiscLayout([disc], Media.Dvd5.Capacity, 1), disc, Look, writer);
+        return new BuildContext(project, new DiscLayout([disc], Media.Dvd5.Capacity, true), disc, Look, writer);
     }
 
     private static MakeADisc TheScreen(IShowTheMenu? preview = null) =>

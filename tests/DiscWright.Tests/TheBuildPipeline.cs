@@ -113,7 +113,7 @@ public class TheBuildPipeline
 
     private static BuildContext Context() =>
         new(new DiscProject("TEST", [], new DiscOptions()),
-            new DiscLayout([new PlannedDisc(1, [], 0)], 1000, 0),
+            new DiscLayout([new PlannedDisc(1, [], 0)], 1000, false),
             new PlannedDisc(1, [], 0),
             @"C:\stage",
             new RecordingWriter());

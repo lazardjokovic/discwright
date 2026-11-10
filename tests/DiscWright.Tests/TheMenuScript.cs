@@ -930,8 +930,31 @@ public sealed class TheMenuScript : IDisposable
 
         string said = Ask("String(startIt(" + AsJScript(missing) + ", ''))");
 
-        Assert.Contains("would not start", said, StringComparison.Ordinal);
-        Assert.Contains("there is no such thing.exe", said, StringComparison.Ordinal);
+        // Looked for first, and said in words, rather than handed to Windows,
+        // which answered the owner's Manual on disc 2 on 2026-11-10 with
+        // "That would not start: ... (0)".
+        Assert.Equal("That file is not where the menu expected it: " + missing, said);
+    }
+
+    [Fact]
+    public void Says_a_folder_is_missing_rather_than_opening_somebodys_documents()
+    {
+        // Explorer handed a folder that does not exist opens Documents with
+        // no word, which the owner met pressing Extras on disc 2.
+        string missing = Path.Combine(_folder, "Extras");
+
+        Assert.Equal(
+            "That folder is not where the menu expected it: " + missing,
+            Ask("String(openTheFolder(" + AsJScript(missing) + "))"));
+    }
+
+    [Fact]
+    public void Tells_a_missing_file_from_a_missing_folder()
+    {
+        // A folder is not a file to start, and a file is not a folder to
+        // open: each is looked for as what it is.
+        Assert.Equal("true", Ask("String(thereIsNo(" + AsJScript(_folder) + ", false))"));
+        Assert.Equal("false", Ask("String(thereIsNo(" + AsJScript(_folder) + ", true))"));
     }
 
     [Fact]
