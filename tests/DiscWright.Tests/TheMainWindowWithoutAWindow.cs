@@ -787,6 +787,24 @@ public class TheMainWindowWithoutAWindow
         Assert.True(window.CanBurn);
     }
 
+    [Fact]
+    public void Typing_the_folder_reads_only_the_folder_and_never_what_is_under_it()
+    {
+        ADiskThatMustNotBeWalked disk = new();
+        MakeADisc window = New(disk: disk);
+
+        // A letter at a time, the way it is typed. Each one used to walk
+        // everything under what was typed so far on the window's thread, so
+        // C:\ walked the whole drive and the window froze for minutes.
+        foreach (string typed in new[] { "C", "C:", @"C:\", @"C:\Discs" })
+        {
+            window.OutputFolder = typed;
+        }
+
+        Assert.Equal(4, disk.LookedHere);
+        Assert.Equal([Path.Combine(@"C:\Discs", "AN OLD DISC.iso")], window.TheImages);
+    }
+
     // -------------------------------------------- a button that cannot act
 
     [Fact]
@@ -4245,6 +4263,26 @@ public class TheMainWindowWithoutAWindow
 
         public FolderListing List(string path) =>
             new(path, [new ListedFile("AN OLD DISC.iso", 4_000_000)]);
+    }
+
+    /// <summary>
+    /// An output folder whose images are in it, and which refuses to be
+    /// walked, the way a whole drive cannot be in the time a key takes.
+    /// </summary>
+    private sealed class ADiskThatMustNotBeWalked : IFileSystem
+    {
+        internal int LookedHere { get; private set; }
+
+        public bool FolderExists(string path) => true;
+
+        public FolderListing List(string path) =>
+            throw new InvalidOperationException($"Walked everything under {path} to find the images in it.");
+
+        public FolderListing ListHere(string path)
+        {
+            LookedHere++;
+            return new(path, [new ListedFile("AN OLD DISC.iso", 4_000_000)]);
+        }
     }
 
     /// <summary>A disk that remembers which folders were looked in.</summary>

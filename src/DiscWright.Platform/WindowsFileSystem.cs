@@ -24,7 +24,12 @@ public sealed class WindowsFileSystem : IFileSystem
         }
     }
 
-    public FolderListing List(string path)
+    public FolderListing List(string path) => Walk(path, goingDown: true);
+
+    /// <inheritdoc />
+    public FolderListing ListHere(string path) => Walk(path, goingDown: false);
+
+    private static FolderListing Walk(string path, bool goingDown)
     {
         // NOT trimmed of its trailing separator. A drive root trimmed to "E:"
         // is not the root of E: at all, it is "wherever the process last was on
@@ -36,7 +41,7 @@ public sealed class WindowsFileSystem : IFileSystem
 
         EnumerationOptions howToWalk = new()
         {
-            RecurseSubdirectories = true,
+            RecurseSubdirectories = goingDown,
 
             // Two decisions in one setting, because this is the only knob there
             // is. The default skips hidden and system files; those are INCLUDED

@@ -3364,15 +3364,17 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// What images are sitting in the output folder.
     /// </summary>
     /// <remarks>
-    /// Looked at when the folder changes and when a build finishes, rather than
-    /// on every keystroke.
+    /// Looked at whenever the folder box changes, which is every keystroke,
+    /// so only the folder itself is read and never what is under it: the
+    /// images are written straight into it. Reading everything under it made
+    /// typing <c>C:\</c> walk the whole drive on the window's thread.
     /// </remarks>
     private void LookForImages()
     {
         TheImages = OutputFolder.Length > 0 && _machine.Disk.FolderExists(OutputFolder)
             ?
             [
-                .. _machine.Disk.List(OutputFolder).Files
+                .. _machine.Disk.ListHere(OutputFolder).Files
                     .Where(file => file.RelativePath.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
                     .Select(file => System.IO.Path.Combine(OutputFolder, file.RelativePath))
                     .Order(StringComparer.OrdinalIgnoreCase)

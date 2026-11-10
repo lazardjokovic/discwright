@@ -23,6 +23,34 @@ public interface IFileSystem
     FolderListing List(string path);
 
     /// <summary>
+    /// The files directly in the folder, and nothing from the folders under it.
+    /// </summary>
+    /// <remarks>
+    /// For a question about the folder itself, which is all the window asks
+    /// when it looks for images: they are written straight into the folder
+    /// chosen. Asking <see cref="List"/> instead walked everything below it,
+    /// on the window's thread, every time the box changed, so typing
+    /// <c>C:\</c> into it walked the whole drive and thirteen characters took
+    /// nearly two minutes.
+    ///
+    /// Defaulted from the full listing so the fakes in the tests need nothing
+    /// new; the real disk answers it without going down a level.
+    /// </remarks>
+    FolderListing ListHere(string path)
+    {
+        FolderListing all = List(path);
+
+        return all with
+        {
+            Files =
+            [
+                .. all.Files.Where(file =>
+                    file.RelativePath.IndexOfAny(['/', (char)92]) < 0)
+            ]
+        };
+    }
+
+    /// <summary>
     /// A text file's contents, or nothing when there is no such file.
     /// </summary>
     /// <remarks>
