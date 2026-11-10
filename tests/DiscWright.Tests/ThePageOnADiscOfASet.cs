@@ -176,12 +176,12 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.Equal(
             [
                 // Before anything is pressed: the button, and the line under it.
-                "button=Install, disc 1 of 2",
+                "button=Install disc 1 of 2",
                 "line=Nothing is copied yet. Install copies this disc, then asks for disc 2.",
 
                 // Disc 1 copied, and the page asking for the next one without
                 // anybody pressing anything else.
-                "button=Install, disc 1 of 2",
+                "button=Install disc 1 of 2",
                 "line=Put disc 2 in. This carries on by itself once it is there.",
                 "bar=drawn button=btn next dead",
                 "press again=0",
@@ -499,6 +499,32 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     }
 
     [Fact]
+    public void Manual_and_extras_are_dead_while_the_set_copies_and_live_while_it_installs()
+    {
+        // Pressing Extras under the copy froze the menu for a minute on
+        // 2026-11-10: the page waited on the drive the copy was reading.
+        string disc1 = AFirstDiscOfTwo();
+
+        string went = RunOnDisc1(disc1, Path.Combine(_folder, "suggested"),
+            "var opened = 0; startIt = function () { opened++; return null; }; openTheFolder = function () { opened++; return null; };\n"
+            + "restoring.busy = true;\n"
+            + "showTheSet(gameAt(DISC.games, 0));\n"
+            + "out.push('copying=' + document.getElementById('manual').className + ' / ' + document.getElementById('extras').className);\n"
+            + "openTheManual(); openTheExtras();\n"
+            + "out.push('opened=' + opened);\n"
+            + "restoring.installing = true;\n"
+            + "showTheSet(gameAt(DISC.games, 0));\n"
+            + "out.push('installing=' + document.getElementById('manual').className + ' / ' + document.getElementById('extras').className);\n"
+            + "openTheManual(); openTheExtras();\n"
+            + "out.push('opened=' + opened);\n"
+            + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(["copying=btn dead / btn dead", "opened=0", "installing=btn / btn", "opened=2"], lines);
+    }
+
+    [Fact]
     public void A_drive_without_the_room_leaves_the_page_s_button_dead()
     {
         // The words are installPageSays's; what is pinned here is that the
@@ -581,13 +607,27 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             + "out.push('says=' + document.getElementById('whereSays').innerText);\n"
             + "out.push('go=' + document.getElementById('whereGo').innerText);\n"
             + "whereGo();\n"
+
+            // Said and drawn before the start, which waits for the page to
+            // redraw; then the start itself.
+            + "out.push('starting=' + document.getElementById('doIt').innerText + ' ' + document.getElementById('doIt').parentNode.className"
+            + " + ' | ' + document.getElementById('stillWanted').innerText);\n"
+            + "drain();\n"
             + "WScript.Echo(out.join('\\n'));\n");
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
         Assert.Equal("says=A complete copy of the installer is already in " + dest + ". Install runs it from there.", lines[0]);
         Assert.Equal("go=Install", lines[1]);
-        Assert.Equal("start " + Path.Combine(dest, "setup_big.exe"), lines[2]);
+        // The ellipsis after "Starting" does not survive cscript's console,
+        // so the words either side of it are what is held.
+        Assert.StartsWith("starting=Starting", lines[2], StringComparison.Ordinal);
+        Assert.EndsWith(
+            " btn next dead | Starting the installer from " + dest
+                + ". Windows checks a file this size before it runs it, which can take a minute.",
+            lines[2],
+            StringComparison.Ordinal);
+        Assert.Equal("start " + Path.Combine(dest, "setup_big.exe"), lines[3]);
     }
     [Fact]
     public void The_check_is_dead_while_the_set_copies_and_a_press_on_it_starts_nothing()

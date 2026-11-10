@@ -469,8 +469,18 @@ function finishTheCopy(files, items, where, game, bad, stuck) {
         alert("It is copied, and it is in " + where + ".");
     }
 }
+// Whether a set's copy, its join or its wait for the next disc is under
+// way, rather than the installer: the time the disc must be left alone.
+function aCopyIsReadingTheDisc() {
+    return !!(SET && restoring.busy && !restoring.installing);
+}
+
 // The manual, opened with whatever reads a PDF on this machine.
 function openTheManual() {
+    if (aCopyIsReadingTheDisc()) {
+        return;
+    }
+
     var wrong = startIt(onTheDisc(theDisc(), DISC.manual), "");
 
     if (wrong) {
@@ -480,6 +490,10 @@ function openTheManual() {
 
 // The extras, which are a folder rather than a thing to run.
 function openTheExtras() {
+    if (aCopyIsReadingTheDisc()) {
+        return;
+    }
+
     var wrong = openTheFolder(onTheDisc(theDisc(), DISC.extras));
 
     if (wrong) {
@@ -662,6 +676,13 @@ function showTheSet(game) {
     // The check is dead while the set is being worked on, the owner's catch
     // on 2026-11-10: it stayed live under a copy reading the same disc.
     document.getElementById("sums").className = restoring.busy ? "dead" : (checking ? "busy" : "");
+
+    // And Manual and Extras, while the disc is being copied: pressing Extras
+    // under the copy froze the menu for a minute the same afternoon, the
+    // page waiting on a drive the copy was reading as hard as it could. Live
+    // again while the installer runs, when nothing is reading the disc.
+    document.getElementById("manual").className = "btn" + (aCopyIsReadingTheDisc() ? " dead" : "");
+    document.getElementById("extras").className = "btn" + (aCopyIsReadingTheDisc() ? " dead" : "");
 
     if (!restoring.installing) {
         sayTheSet(scan);
@@ -966,14 +987,26 @@ function installFromTheFolder() {
         return;
     }
 
-    wrong = startIt(run, dir);
+    // Said first, and drawn, before the start that can hold the window: see
+    // startingTheInstallerSays in menu.js.
+    restoring.busy = true;
+    document.getElementById("doIt").innerText = "Starting…";
+    document.getElementById("doIt").parentNode.className = "btn next dead";
+    document.getElementById("restoreBar").style.display = "none";
+    document.getElementById("stillWanted").innerText = startingTheInstallerSays(dir);
 
-    if (wrong) {
-        alert(wrong);
-        return;
-    }
+    window.setTimeout(function () {
+        wrong = startIt(run, dir);
 
-    watchTheInstaller(game, run);
+        if (wrong) {
+            restoring.busy = false;
+            showTheSet(game);
+            alert(wrong);
+            return;
+        }
+
+        watchTheInstaller(game, run);
+    }, 50);
 }
 
 // The menu stays while the installer runs, with the button grey and saying

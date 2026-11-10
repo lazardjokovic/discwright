@@ -696,8 +696,17 @@ function startIt(what, from) {
         return "This machine will not let the menu start anything.";
     }
 
+    // The folder it starts in, and then straight back out of it. Left there,
+    // the menu itself was standing in the copy of the installer, and Windows
+    // will not remove a folder a running program is standing in: Remove the
+    // copy took every file and then said "Permission denied" about the
+    // folder, the owner's set on 2026-11-10. What was started keeps the
+    // folder it was started in either way.
+    var was = "";
+
     if (from && String(from).length > 0) {
         try {
+            was = shell.CurrentDirectory;
             shell.CurrentDirectory = from;
         } catch (cannotGoThere) {
             // An installer run from the wrong folder still installs. Not being
@@ -712,6 +721,13 @@ function startIt(what, from) {
         return null;
     } catch (wrong) {
         return "That would not start: " + what + " (" + wrong.message + ")";
+    } finally {
+        if (was.length > 0) {
+            try {
+                shell.CurrentDirectory = was;
+            } catch (cannotGoBack) {
+            }
+        }
     }
 }
 
@@ -1306,7 +1322,9 @@ function restoreButtonSays(scan, discIn, discsInSet, installed, verb) {
         return verb || "Install";
     }
 
-    return (verb || "Install") + ", disc " + (discIn > 0 ? discIn : 1) + " of " + discsInSet;
+    // No comma: "Install disc 1 of 2", one thing to do, the way the owner
+    // read it on 2026-11-10 and asked for it.
+    return (verb || "Install") + " disc " + (discIn > 0 ? discIn : 1) + " of " + discsInSet;
 }
 
 // Opens the tray the disc is in, so that "put disc 2 in" arrives with the
@@ -1433,6 +1451,34 @@ function mayRemoveTheCopy(dir) {
     return parts.length >= 3 && parts[parts.length - 2].toLowerCase() === "games" && last.length > 0;
 }
 
+// Moves this program's own working folder out of dir when it is in it, to
+// the folder above. Windows will not remove a folder a running program is
+// standing in, and "Permission denied" about a folder already emptied is
+// what the owner met on 2026-11-10. startIt no longer leaves the menu
+// standing there; this is the second lock on the same door.
+function stepOutOf(dir) {
+    var shell, here, there, cut;
+
+    try {
+        shell = new ActiveXObject("WScript.Shell");
+        here = String(shell.CurrentDirectory).toLowerCase();
+        there = String(dir).toLowerCase();
+
+        while (there.length > 3 && there.charAt(there.length - 1) === BACKSLASH) {
+            there = there.substring(0, there.length - 1);
+        }
+
+        if (here === there || here.indexOf(there + BACKSLASH) === 0) {
+            cut = String(dir).replace(/[\\\/]+$/, "").lastIndexOf(BACKSLASH);
+            shell.CurrentDirectory = cut > 2 ? String(dir).substring(0, cut) : String(dir).substring(0, 3);
+            return true;
+        }
+    } catch (cannotTell) {
+    }
+
+    return false;
+}
+
 // How much is in a folder, or 0 when it is not there.
 function bytesIn(files, dir) {
     try {
@@ -1448,6 +1494,8 @@ function removeTheCopy(files, dir) {
     if (!mayRemoveTheCopy(dir)) {
         return "That is not a folder this menu made, so it is left alone: " + dir;
     }
+
+    stepOutOf(dir);
 
     try {
         if (files.FolderExists(dir)) {
@@ -1614,6 +1662,18 @@ function installPageSays(name, folder, needBytes, free, scan, discs) {
         note: "Afterwards, " + game + "'s own installer asks where to install the game.",
         short: short
     };
+}
+
+// The line while the installer is being started, said before it is.
+//
+// Starting a 1.2 GB installer is not instant: Windows checks a file that
+// size before it lets it run, and the page cannot redraw while it waits. On
+// 2026-11-10 the owner looked at "Every file is here. Install runs the
+// installer from there." under a grey button for twenty seconds, which reads
+// like a button to press, and said a person would think it was stuck.
+function startingTheInstallerSays(folder) {
+    return "Starting the installer" + (folder ? " from " + folder : "")
+        + ". Windows checks a file this size before it runs it, which can take a minute.";
 }
 
 // What the folder the installer is joined in is called: the game's name and

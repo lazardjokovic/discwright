@@ -921,6 +921,48 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Leaves_the_menu_standing_where_it_was_after_starting_something_in_a_folder()
+    {
+        // Left in the folder it started an installer in, the menu could not
+        // remove that folder afterwards: "Permission denied", the owner's
+        // set on 2026-11-10, every file gone and the folder still there.
+        string script = Path.Combine(_folder, "quiet.cmd");
+        string copy = Path.Combine(_folder, "A Game installer");
+        Directory.CreateDirectory(copy);
+        File.WriteAllText(script, "@echo off");
+
+        string said = Ask(
+            "(function () { var sh = new ActiveXObject('WScript.Shell'); var before = sh.CurrentDirectory;"
+            + " var r = startIt(" + AsJScript(script) + ", " + AsJScript(copy) + ");"
+            + " return String(r) + '|' + (sh.CurrentDirectory === before ? 'where it was' : sh.CurrentDirectory); }())");
+
+        Assert.Equal("null|where it was", said);
+    }
+
+    [Fact]
+    public void Steps_out_of_a_copy_it_is_standing_in_and_removes_the_folder_too()
+    {
+        string copy = Path.Combine(_folder, "A Game installer");
+        Directory.CreateDirectory(copy);
+        File.WriteAllText(Path.Combine(copy, "setup.exe"), "12345");
+
+        string said = Ask(WithFiles(
+            "(function () { new ActiveXObject('WScript.Shell').CurrentDirectory = " + AsJScript(copy) + ";"
+            + " return String(removeTheCopy(f, " + AsJScript(copy) + ")); }())"));
+
+        Assert.Equal("null", said);
+        Assert.False(Directory.Exists(copy), "the folder itself should be gone, not only its files");
+    }
+
+    [Fact]
+    public void Says_the_installer_is_starting_before_it_does()
+    {
+        Assert.Equal(
+            @"Starting the installer from F:\Hollow Knight installer. Windows checks a file this size before it runs it, which can take a minute.",
+            Ask(@"startingTheInstallerSays('F:\\Hollow Knight installer')"));
+    }
+
+    [Fact]
     public void Says_what_went_wrong_rather_than_failing_in_silence()
     {
         // A menu button that does nothing when pressed is the worst outcome
@@ -1258,8 +1300,8 @@ public sealed class TheMenuScript : IDisposable
     {
         // From the person's side that is what it does. The copying is how
         // the install works rather than what they came to do.
-        Assert.Equal("Install, disc 2 of 3", Ask("restoreButtonSays({complete: false}, 2, 3, false)"));
-        Assert.Equal("Install, disc 1 of 3", Ask("restoreButtonSays({complete: false}, 0, 3, false)"));
+        Assert.Equal("Install disc 2 of 3", Ask("restoreButtonSays({complete: false}, 2, 3, false)"));
+        Assert.Equal("Install disc 1 of 3", Ask("restoreButtonSays({complete: false}, 0, 3, false)"));
         Assert.Equal("Install", Ask("restoreButtonSays({complete: true}, 3, 3, false)"));
         Assert.Equal("Play", Ask("restoreButtonSays({complete: false}, 1, 3, true)"));
     }
@@ -1270,9 +1312,9 @@ public sealed class TheMenuScript : IDisposable
         // The owner asked what a non GOG game does. The same copy and join,
         // then the game's exe runs from the folder, so the button says what
         // it would say on one disc, with the disc number after it.
-        Assert.Equal("Copy and play, disc 1 of 2", Ask("restoreButtonSays({complete: false}, 1, 2, false, 'Copy and play')"));
+        Assert.Equal("Copy and play disc 1 of 2", Ask("restoreButtonSays({complete: false}, 1, 2, false, 'Copy and play')"));
         Assert.Equal("Copy and play", Ask("restoreButtonSays({complete: true}, 2, 2, false, 'Copy and play')"));
-        Assert.Equal("Install, disc 1 of 2", Ask("restoreButtonSays({complete: false}, 1, 2, false, undefined)"));
+        Assert.Equal("Install disc 1 of 2", Ask("restoreButtonSays({complete: false}, 1, 2, false, undefined)"));
     }
 
     [Fact]

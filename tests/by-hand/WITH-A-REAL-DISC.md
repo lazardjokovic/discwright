@@ -204,7 +204,7 @@ robocopy and the real `copy /b`. Only a real drive proves the swap is noticed.
    splitting on, which makes exactly two, and burn both discs.
 2. Put **disc 1** in a machine and open the menu.
 
-**Expect:** the big button says **Install, disc 1 of 2**, and the line under
+**Expect:** the big button says **Install disc 1 of 2**, and the line under
 the buttons says *Nothing is copied yet. Install copies this disc, then asks
 for disc 2.*
 
@@ -230,7 +230,7 @@ game and nothing of the disc's own: no `AUTORUN`, no `Disc set.txt`.
 
 6. Start again with **disc 2 first**.
 
-**Expect:** the button says **Install, disc 2 of 2**; after copying it asks
+**Expect:** the button says **Install disc 2 of 2**; after copying it asks
 for disc 1 and finishes the same way.
 
 7. Press **Exit** halfway through disc 1, then open the disc again and press
