@@ -400,11 +400,11 @@ public class TheWindowsMarkup
             .Parent!;
 
         Assert.Equal(
-            ["StackPanel", "TextBlock", "Button", "Button"],
+            ["StackPanel", "TextBlock", "Button", "Button", "Button"],
             block.Elements().Select(each => each.Name.LocalName));
 
         Assert.Equal(
-            ["WhatTheVersionSays", "CheckForANewVersion", "Appearance"],
+            ["WhatTheVersionSays", "CheckForANewVersion", "Appearance", "OpenTheLog"],
             block.Elements().Skip(1).Select(IdOf));
 
         // And it is there to be used. A link in the markup that the markup
@@ -414,6 +414,22 @@ public class TheWindowsMarkup
         // it, which is as good as deleting it and leaves no trace in a diff.
         XElement link = block.Elements().ElementAt(2);
 
+        Assert.Null(link.Attribute("Visibility"));
+        Assert.Null(link.Attribute("IsEnabled"));
+    }
+
+    [Fact]
+    public void The_log_is_one_link_away_and_never_hidden()
+    {
+        // The night it was asked for, the question was "was it you?", and it
+        // had to be answered from Windows' own log. A link that hides itself
+        // until something goes wrong is not there the night it is needed.
+        XElement link = Window()
+            .Descendants(Xaml + "Button")
+            .Single(each => IdOf(each) == "OpenTheLog");
+
+        Assert.Equal("OpenTheLog", (string?)link.Attribute("Click"));
+        Assert.Equal("Open the log", (string?)link.Attribute("Content"));
         Assert.Null(link.Attribute("Visibility"));
         Assert.Null(link.Attribute("IsEnabled"));
     }

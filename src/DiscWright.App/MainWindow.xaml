@@ -109,6 +109,19 @@
                             Click="ChooseTheNextLook"
                             ToolTip="Light, dark, or whatever Windows wears. Following Windows is the default."
                             AutomationProperties.AutomationId="Appearance" />
+
+                    <!-- The program talking about itself again, so this corner.
+                         Asked for by the owner on 2026-11-10 after a night of
+                         rebuilding a failed set from screenshots. Opens today's
+                         file in whatever opens text, or the folder when today
+                         has nothing in it yet. -->
+                    <Button Content="Open the log"
+                            Style="{StaticResource Quietly}"
+                            Margin="0,3,0,0"
+                            HorizontalAlignment="Left"
+                            Click="OpenTheLog"
+                            ToolTip="What DiscWright did and what the drives said, one file a day. It stays on this PC."
+                            AutomationProperties.AutomationId="OpenTheLog" />
                 </StackPanel>
 
                 <!-- About the whole window rather than about one more game, which

@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 
 using DiscWright.Core;
 using DiscWright.Core.Staging;
+using DiscWright.Platform;
 using DiscWright.Staging;
 using DiscWright.ViewModels;
 
@@ -790,6 +791,38 @@ public partial class MainWindow : Window
             MessageBox.Show(
                 this,
                 "No browser would open. The page is:" + Environment.NewLine + Environment.NewLine + page,
+                "DiscWright",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+    }
+
+    /// <summary>The log the app keeps, for the link that opens it.</summary>
+    internal TheLogOnDisk? TheLog { get; init; }
+
+    /// <summary>
+    /// Opens today's log, or the folder when today has nothing in it yet.
+    /// </summary>
+    private void OpenTheLog(object sender, RoutedEventArgs e)
+    {
+        if (TheLog is not TheLogOnDisk log)
+        {
+            return;
+        }
+
+        string target = File.Exists(log.Today) ? log.Today : log.Folder;
+
+        try
+        {
+            Directory.CreateDirectory(log.Folder);
+            Process.Start(new ProcessStartInfo(target) { UseShellExecute = true });
+        }
+        catch (Exception wrong) when (wrong is System.ComponentModel.Win32Exception or InvalidOperationException
+            or IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show(
+                this,
+                "Nothing would open the log. It is in:" + Environment.NewLine + Environment.NewLine + log.Folder,
                 "DiscWright",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);

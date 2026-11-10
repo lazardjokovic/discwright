@@ -39,10 +39,20 @@ public partial class App : Application
         ChoosingTheLook look = new(keptLook.Recalled(), keptLook.Keep);
         WearingTheTheme.Follow(this, look);
 
+        // First, so that everything after it has somewhere to write. One file
+        // a day under the user's local application data, never sent anywhere.
+        TheLogOnDisk log = new(TheLogOnDisk.ForThisUser());
+        log.Write($"DiscWright {WhatThisBuildIs()} started.");
+        WorthAsking.Log = log;
+
         // A fault inside a click would otherwise close the program with no
         // word about why, which is the one thing worse than a crash.
         DispatcherUnhandledException += (_, wrong) =>
         {
+            // Whole, in the log, because the box below is gone at OK and the
+            // stack is the one thing that says where it happened.
+            log.Write($"Stopped by something nobody expected: {wrong.Exception}");
+
             MessageBox.Show(
                 MainWindow,
                 wrong.Exception.ToString(),
@@ -67,7 +77,7 @@ public partial class App : Application
             new WindowsAutorunEncoding(),
             builder,
             new WindowsImageMaker(disk),
-            new WindowsRecorders(),
+            new TheDrivesWrittenDown(new WindowsRecorders(log), log),
             burner,
             burner,
             disk,
@@ -81,13 +91,16 @@ public partial class App : Application
             HowBigIs(disk),
             WhereADiscWouldGo()));
 
+        // Everything the window says, as it says it.
+        WhatTheLogHears.Listen(screen, log);
+
         // Previews nobody has looked at in a week. One folder per project
         // keeps them from multiplying; this is what stops them collecting
         // for ever. It cannot throw and its answer is not worth waiting
         // for, so nothing here is checked.
         TidyingOldPreviews.In(Path.GetTempPath(), DateTime.Now);
 
-        MainWindow window = new(screen, reader, disk, burner, look);
+        MainWindow window = new(screen, reader, disk, burner, look) { TheLog = log };
         window.Show();
 
         // After it is on screen, because anything this asks about needs a

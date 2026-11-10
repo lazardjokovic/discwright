@@ -18,9 +18,11 @@ namespace DiscWright.Burning;
 /// one. It appears in Windows' own event log, so it says what it is.
 /// </para>
 /// </remarks>
-public sealed class WindowsRecorders : IFindRecorders
+public sealed class WindowsRecorders(IKeepALog? log = null) : IFindRecorders
 {
     internal const string WhoIsAsking = "DiscWright";
+
+    private readonly IKeepALog _log = log ?? new NothingIsLogged();
 
     public IReadOnlyList<Recorder> All()
     {
@@ -35,6 +37,7 @@ public sealed class WindowsRecorders : IFindRecorders
 
             if (!drives.IsSupportedEnvironment)
             {
+                _log.Write("Windows says this machine cannot burn discs at all.");
                 return [];
             }
 
@@ -47,15 +50,19 @@ public sealed class WindowsRecorders : IFindRecorders
 
             return found;
         }
-        catch (COMException)
+        catch (COMException wrong)
         {
+            WhyNone(wrong);
+
             // No burning service on this machine at all, which is an answer and
             // not a failure: the image is still made and another machine can
             // burn it.
             return [];
         }
-        catch (InvalidComObjectException)
+        catch (InvalidComObjectException wrong)
         {
+            WhyNone(wrong);
+
             // NOT a COMException, which is the whole reason this line exists.
             // "Attempt has been made to use a COM object that does not have a
             // backing class factory" walked past the catch above, out of here,
@@ -67,8 +74,9 @@ public sealed class WindowsRecorders : IFindRecorders
             // happens. Nothing had gone wrong with his disc.
             return [];
         }
-        catch (TypeLoadException)
+        catch (TypeLoadException wrong)
         {
+            WhyNone(wrong);
             return [];
         }
         finally
@@ -76,6 +84,18 @@ public sealed class WindowsRecorders : IFindRecorders
             Release(master);
         }
     }
+
+    /// <summary>
+    /// Writes down why Windows listed no drives, which nothing else ever sees.
+    /// </summary>
+    /// <remarks>
+    /// Every way out of the catch above answers with an empty list, and an
+    /// empty list reads as a machine with no writer. On 2026-11-10 that was
+    /// said twice on a machine with two, and the reason was thrown away both
+    /// times. The code is what tells a busy service from a missing one.
+    /// </remarks>
+    private void WhyNone(Exception wrong) =>
+        _log.Write($"Windows would not list the drives: {FirstLineOf(wrong.Message)} (0x{wrong.HResult:X8}).");
 
     /// <summary>
     /// One drive, asked about itself and about whatever is in it.
