@@ -94,14 +94,17 @@ public static class TheDiscAgainstWhatWasBuilt
             try
             {
                 // The disc's copy is the slow read, so it is the one that says
-                // how far it has got.
-                string onDisc = hasher.Sha256(
+                // how far it has got. Read twice before it counts as
+                // unreadable: a worn rewritable can fail one pass and give
+                // the bytes on the next, the drive's own retries having had
+                // another go at the same sectors.
+                string onDisc = HashedTwiceIfNeeded(() => hasher.Sha256(
                     System.IO.Path.Combine(discRoot, found.RelativePath),
                     progress is null
                         ? null
                         : new AsItReads(read => progress.Report(new CheckProgress(
                             number, shouldBe.Files.Count, wanted.RelativePath, before + read, bytesInAll))),
-                    ct);
+                    ct));
                 string built = hasher.Sha256(System.IO.Path.Combine(staged, wanted.RelativePath), ct);
 
                 if (string.Equals(onDisc, built, StringComparison.OrdinalIgnoreCase))
@@ -130,7 +133,33 @@ public static class TheDiscAgainstWhatWasBuilt
                 .Except(shouldBe.Files.Select(file => Tidied(file.RelativePath)), StringComparer.OrdinalIgnoreCase)
         ];
 
-        return new DiscCheck(matched, unreadable, missing, unexpected, wrongSize.Concat(wrongContents).ToList(), null);
+        return new DiscCheck(matched, unreadable, missing, unexpected, wrongSize.Concat(wrongContents).ToList(), null)
+        {
+            ReadIn = TheDriveOf(discRoot)
+        };
+    }
+
+    /// <summary>A read of the disc, and one more when the first will not come back.</summary>
+    private static string HashedTwiceIfNeeded(Func<string> reading)
+    {
+        try
+        {
+            return reading();
+        }
+        catch (Exception wrong) when (wrong is System.IO.IOException or UnauthorizedAccessException)
+        {
+            return reading();
+        }
+    }
+
+    /// <summary>"D:" out of "D:\", or the folder as it is when it is not a drive.</summary>
+    public static string TheDriveOf(string discRoot)
+    {
+        string root = System.IO.Path.GetPathRoot(discRoot) ?? string.Empty;
+
+        return root.Length > 0 && string.Equals(root.TrimEnd((char)92), discRoot.TrimEnd((char)92), StringComparison.OrdinalIgnoreCase)
+            ? root.TrimEnd((char)92)
+            : discRoot;
     }
 
     /// <summary>
@@ -157,6 +186,12 @@ public sealed record DiscCheck(
     string? WhyNot)
 {
     /// <summary>
+    /// The drive the disc was read in, when it is known, so a disc one drive
+    /// cannot read is said to be that, and not simply bad.
+    /// </summary>
+    public string? ReadIn { get; init; }
+
+    /// <summary>
     /// Whether the disc is the disc.
     /// </summary>
     /// <remarks>
@@ -181,6 +216,18 @@ public sealed record DiscCheck(
                 return Unexpected.Count == 0
                     ? $"All {Matched} files on the disc are exactly what was built."
                     : $"All {Matched} files are exactly what was built. {Unexpected.Count} more were already on the disc.";
+            }
+
+            // ONLY UNREADABLE, the case the owner met on 2026-11-10: D: could
+            // not read one file of a worn CD-RW, Windows logged seven bad
+            // blocks on it, and VSO Inspector then read the same disc as good
+            // in E:. Both were right, about different drives. "Not the disc it
+            // was meant to be" was wrong about a disc another drive reads.
+            if (Unreadable.Count > 0 && Missing.Count == 0 && Wrong.Count == 0)
+            {
+                return $"{ReadIn ?? "The drive"} could not read {Files(Unreadable.Count)} back, "
+                    + $"even on a second try:{Naming()} A worn rewritable can read in one drive and not another, "
+                    + "so this disc may work elsewhere, but do not rely on it. Burn it again, ideally on a fresh disc.";
             }
 
             List<string> wrong = [];

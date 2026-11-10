@@ -39,18 +39,91 @@ public class ReadingTheDiscBack : IDisposable
         // The reading was right. Two files on that CD-RW really had gone
         // bad, and he could not tell from this which two, or 2 of what: the
         // figure reads as a disc number sitting where a disc number would be.
+        //
+        // And on 2026-11-10, the other half: D: could not read one file of a
+        // worn CD-RW, Windows logged seven bad blocks on D: while it tried,
+        // and VSO Inspector read the same disc as good in E:. So a disc whose
+        // only trouble is reading says which drive could not read it, and
+        // that another drive may.
         DiscCheck check = new(
             7,
             [@"setup_hollow_knight.exe.dwpart01", @"AUTORUN\background.png"],
             [],
             [],
             [],
-            null);
+            null) { ReadIn = "D:" };
 
         Assert.Equal(
-            "This disc is not the disc it was meant to be: 2 files could not be read off it. "
-                + @"setup_hollow_knight.exe.dwpart01, AUTORUN\background.png.",
+            "D: could not read 2 files back, even on a second try: "
+                + @"setup_hollow_knight.exe.dwpart01, AUTORUN\background.png."
+                + " A worn rewritable can read in one drive and not another, so this disc may work elsewhere,"
+                + " but do not rely on it. Burn it again, ideally on a fresh disc.",
             check.InWords);
+    }
+
+    [Fact]
+    public void A_disc_with_more_wrong_than_reading_is_still_called_wrong()
+    {
+        // A file that came back different is not a drive's trouble reading:
+        // the disc holds the wrong bytes.
+        DiscCheck check = new(5, ["a.bin"], [], [], ["b.bin"], null) { ReadIn = "D:" };
+
+        Assert.StartsWith("This disc is not the disc it was meant to be:", check.InWords, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Reads_a_file_a_second_time_before_calling_it_unreadable()
+    {
+        string built = Folder("built", ("piece.bin", "abc"));
+        string disc = Folder("disc", ("piece.bin", "abc"));
+
+        DiscCheck check = await TheDiscAgainstWhatWasBuilt.Check(
+            disc, built, new WindowsFileSystem(), new FailsTheDiscOnce(disc), null, default);
+
+        Assert.True(check.Good, check.InWords);
+    }
+
+    [Fact]
+    public async Task Calls_a_file_unreadable_when_the_second_try_fails_too_and_names_the_drive()
+    {
+        string built = Folder("built", ("piece.bin", "abc"));
+        string disc = Folder("disc", ("piece.bin", "abc"));
+
+        DiscCheck check = await TheDiscAgainstWhatWasBuilt.Check(
+            disc, built, new WindowsFileSystem(), new FailsTheDiscOnce(disc, times: 2), null, default);
+
+        Assert.Equal(["piece.bin"], check.Unreadable);
+
+        // Not a drive root here, so the folder it was read in stands for it.
+        Assert.Equal(disc, check.ReadIn);
+        Assert.StartsWith(disc + " could not read 1 file back, even on a second try: piece.bin.", check.InWords, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Names_a_drive_by_its_letter_and_anything_else_by_its_folder()
+    {
+        Assert.Equal("D:", TheDiscAgainstWhatWasBuilt.TheDriveOf(@"D:\"));
+        Assert.Equal("E:", TheDiscAgainstWhatWasBuilt.TheDriveOf("E:"));
+        Assert.Equal(@"C:\stage\disc", TheDiscAgainstWhatWasBuilt.TheDriveOf(@"C:\stage\disc"));
+    }
+
+    /// <summary>The real hasher, except that reading under the disc fails the first few times.</summary>
+    private sealed class FailsTheDiscOnce(string disc, int times = 1) : IHasher
+    {
+        private int _failed;
+
+        public string Sha256(string path, CancellationToken ct) => Sha256(path, null, ct);
+
+        public string Sha256(string path, IProgress<long>? read, CancellationToken ct)
+        {
+            if (path.StartsWith(disc, StringComparison.OrdinalIgnoreCase) && _failed < times)
+            {
+                _failed++;
+                throw new IOException("The request could not be performed because of an I/O device error.");
+            }
+
+            return new Sha256Hasher().Sha256(path, read, ct);
+        }
     }
 
     [Fact]

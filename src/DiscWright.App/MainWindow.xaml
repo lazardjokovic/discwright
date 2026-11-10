@@ -871,12 +871,14 @@
                             </CheckBox.ToolTip>
                         </CheckBox>
 
-                        <!-- Under the menu and stepped in, because it belongs to
+                        <!-- Straight after the menu's box, because it belongs to
                              it: a Start Here file opens the menu, so with no
                              menu there is nothing for it to open and it is dead.
-                             Asked for by somebody testing v1 (discwright#181). -->
+                             Lined up with the others rather than stepped in: the
+                             owner, 2026-11-10, "it should not be under this,
+                             just aligned". Asked for by somebody testing v1
+                             (discwright#181). -->
                         <CheckBox Content="A Start Here file at the top of the disc"
-                                  Margin="22,0,0,6"
                                   IsChecked="{Binding StartHere}"
                                   AutomationProperties.AutomationId="StartHere">
                             <CheckBox.Style>

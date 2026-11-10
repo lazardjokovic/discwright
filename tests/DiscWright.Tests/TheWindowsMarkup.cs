@@ -455,10 +455,10 @@ public class TheWindowsMarkup
         Assert.Equal("False", (string?)off.Attribute("Value"));
         Assert.Equal("False", (string?)off.Elements(Xaml + "Setter").Single().Attribute("Value"));
 
-        // Stepped in, and with the same 6 below it as every other box here:
-        // the first version set its margin whole and lost the 6, so it sat
-        // touching the box under it, seen on the VM's screen.
-        Assert.Equal("22,0,0,6", (string?)box.Attribute("Margin"));
+        // Lined up with every other box and spaced the way they are, by the
+        // style they share and nothing of its own. It was stepped in at first,
+        // and the owner called that a visual bug on 2026-11-10.
+        Assert.Null(box.Attribute("Margin"));
 
         // Straight after the menu's own box, so it reads as belonging to it.
         XElement[] boxes = [.. box.Parent!.Elements(Xaml + "CheckBox")];
