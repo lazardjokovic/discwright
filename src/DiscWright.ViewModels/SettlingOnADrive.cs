@@ -137,11 +137,25 @@ public sealed class SettlingOnADrive(
         // of silence on every erase and every burn on any machine with a spare
         // drive, which is most of them. Found by Lazar pressing Erase with an
         // empty second drive and watching nothing happen.
-        bool StillThinking(IReadOnlyList<Recorder> found) => found.Any(each =>
-            each.WhyNot is not null
-            && !each.NothingInIt
-            && (onlyThisOne is null
-                || string.Equals(each.Drive, onlyThisOne, StringComparison.OrdinalIgnoreCase)));
+        //
+        // A NAMED DRIVE THAT IS MISSING HAS NOT ANSWERED EITHER. Asked the
+        // moment somebody says the next blank is in, Windows can list no
+        // drives at all while the tray settles, and a drive nobody can see
+        // looks exactly like a machine that never had one. The drive was
+        // named because it was there a moment ago: it wrote the disc before.
+        // Taking that first emptiness for an answer stopped a set at disc 2
+        // with "There is no disc writer on this machine", on the same ASUS
+        // writer that had just written and checked disc 1. Found by Lazar
+        // burning his Hollow Knight set on 2026-11-10. The same breath the
+        // drive takes after an erase, met at the swap.
+        bool StillThinking(IReadOnlyList<Recorder> found) =>
+            (onlyThisOne is not null
+                && !found.Any(each => string.Equals(each.Drive, onlyThisOne, StringComparison.OrdinalIgnoreCase)))
+            || found.Any(each =>
+                each.WhyNot is not null
+                && !each.NothingInIt
+                && (onlyThisOne is null
+                    || string.Equals(each.Drive, onlyThisOne, StringComparison.OrdinalIgnoreCase)));
 
         if (!StillThinking(all))
         {

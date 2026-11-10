@@ -94,6 +94,69 @@ public class SettlingOnADriveToWriteTo
     }
 
     [Fact]
+    public async Task Waits_for_the_named_drive_while_windows_lists_no_drives_at_all()
+    {
+        // What stopped the owner's Hollow Knight set at disc 2 on 2026-11-10:
+        // disc 1 written and checked in D:, a blank put in, "The blank is in"
+        // pressed, and the first ask found no drives at all while the tray
+        // settled. Taken for an answer, that read "There is no disc writer
+        // on this machine" about the drive that had just written disc 1.
+        AWriterThatVanishesForAMoment drives = new(missingFor: 3, listsNothing: true);
+        AClockThatMovesItself clock = new();
+
+        Outcome<Recorder> settled = await Settling(drives, patience: clock.Patience)
+            .OnThatOne("D:", ASmallImage, NeverAsksAboutErasing);
+
+        Assert.Equal("D:", Assert.IsType<Outcome<Recorder>.Ok>(settled).Value.Drive);
+        Assert.Equal(3, clock.Waits);
+    }
+
+    [Fact]
+    public async Task Waits_for_the_named_drive_while_only_the_other_one_is_listed()
+    {
+        // The other shape: the machine's second drive is listed and the named
+        // one is not, yet. Its absence is a breath, not "that drive is not
+        // here".
+        AWriterThatVanishesForAMoment drives = new(missingFor: 2, listsNothing: false);
+        AClockThatMovesItself clock = new();
+
+        Outcome<Recorder> settled = await Settling(drives, patience: clock.Patience)
+            .OnThatOne("D:", ASmallImage, NeverAsksAboutErasing);
+
+        Assert.Equal("D:", Assert.IsType<Outcome<Recorder>.Ok>(settled).Value.Drive);
+        Assert.Equal(2, clock.Waits);
+    }
+
+    [Fact]
+    public async Task Gives_up_on_a_named_drive_that_never_comes_back_and_says_so()
+    {
+        // Fifteen seconds, like every other silence, and then the refusal
+        // names the drive rather than claiming the machine has none.
+        AWriterThatVanishesForAMoment drives = new(missingFor: int.MaxValue, listsNothing: false);
+        AClockThatMovesItself clock = new();
+
+        Outcome<Recorder> settled = await Settling(drives, patience: clock.Patience)
+            .OnThatOne("D:", ASmallImage, NeverAsksAboutErasing);
+
+        Assert.Equal(15, clock.Waits);
+        Assert.Contains("D:", Assert.IsType<Outcome<Recorder>.No>(settled).Refusal.Headline, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Does_not_wait_when_nobody_named_a_drive_and_there_is_none()
+    {
+        // The wait is for a drive known to exist. A machine with no writer
+        // at all, asked without one named, is told so at once.
+        AClockThatMovesItself clock = new();
+
+        Settled settled = await Settling(new NoDrivesAtAll(), patience: clock.Patience)
+            .OnWhicheverIsReady(ASmallImage, NeverAsksWhichDrive, NeverAsksAboutErasing);
+
+        Assert.Equal(0, clock.Waits);
+        Assert.IsType<Settled.No>(settled);
+    }
+
+    [Fact]
     public async Task Says_there_is_no_writer_when_the_machine_has_none()
     {
         Settled settled = await Settling(new NoDrivesAtAll())
@@ -638,6 +701,29 @@ public class SettlingOnADriveToWriteTo
             }
 
             return [new("id-D", "D:", "A Drive", 3, true, 360_000, [750])];
+        }
+    }
+
+    /// <summary>
+    /// D: with a blank in it that is missing from the first few asks, the way
+    /// the ASUS writer was the moment a blank went in for disc 2: either
+    /// nothing listed at all, or only the machine's other drive.
+    /// </summary>
+    private sealed class AWriterThatVanishesForAMoment(int missingFor, bool listsNothing) : IFindRecorders
+    {
+        private int _asked;
+
+        public IReadOnlyList<Recorder> All()
+        {
+            if (_asked++ < missingFor)
+            {
+                return listsNothing
+                    ? []
+                    : [new("id-E", "E:", "Another Drive", 0, false, 0, [],
+                        "There is no media in the device.", NothingInIt: true)];
+            }
+
+            return [new("id-D", "D:", "A Drive", 2, true, 360_000, [750])];
         }
     }
 
