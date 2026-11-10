@@ -69,59 +69,66 @@
                                    AutomationProperties.AutomationId="ThisBuild" />
                     </StackPanel>
 
-                    <!-- The quiet line every other block in this window has. The
-                         answer lands here rather than in a message box, which was
-                         the only box in the program not reporting a problem.
+                    <!-- THE PROGRAM'S OWN LINKS, ON ONE LINE. Stacked one under
+                         another they made this corner four rows tall beside a
+                         column of buttons two rows tall, and the owner, on
+                         2026-11-10, saw the empty space it left between the name
+                         and Start a new disc, and every row below pushed down by
+                         the one Open the log added. Side by side with a dot
+                         between, the way the totals bar under the list reads.
+                         A WrapPanel, so a long answer from the update link
+                         wraps rather than running under the buttons. -->
+                    <WrapPanel Margin="0,4,0,0">
+                        <!-- Never hidden and never disabled. It is the only way
+                             to ask, and one that vanished after its first press
+                             would be a capability that works once. What it says
+                             is the screen's decision, so the window cannot word
+                             it differently. -->
+                        <Button Content="{Binding WhatTheVersionLinkSays}"
+                                Style="{StaticResource Quietly}"
+                                Click="CheckForANewVersion"
+                                AutomationProperties.AutomationId="CheckForANewVersion" />
 
-                         Stacked rather than side by side because the longest of
-                         these sentences is wider than the gap before the buttons,
-                         and a line that wraps under a link it is meant to sit
-                         beside looks worse than two lines that were always two. -->
+                        <TextBlock Text="·" Style="{StaticResource Aside}" Margin="7,0" VerticalAlignment="Center" />
+
+                        <!-- About the program, not about the disc being made.
+                             One quiet control cycling three answers rather than
+                             a dropdown, because it is touched once. Its words
+                             come from ChoosingTheLook, whose DataContext the
+                             window sets, so the screen stays ignorant of
+                             themes. -->
+                        <Button x:Name="HowItDresses"
+                                Content="{Binding InWords}"
+                                Style="{StaticResource Quietly}"
+                                Click="ChooseTheNextLook"
+                                ToolTip="Light, dark, or whatever Windows wears. Following Windows is the default."
+                                AutomationProperties.AutomationId="Appearance" />
+
+                        <TextBlock Text="·" Style="{StaticResource Aside}" Margin="7,0" VerticalAlignment="Center" />
+
+                        <!-- Asked for by the owner on 2026-11-10 after a night
+                             of rebuilding a failed set from screenshots. Opens
+                             today's file in whatever opens text, or the folder
+                             when today has nothing in it yet. -->
+                        <Button Content="Open the log"
+                                Style="{StaticResource Quietly}"
+                                Click="OpenTheLog"
+                                ToolTip="What DiscWright did and what the drives said, one file a day. It stays on this PC."
+                                AutomationProperties.AutomationId="OpenTheLog" />
+                    </WrapPanel>
+
+                    <!-- The answer to the update link, under the links rather
+                         than among them, and only when there is one: the longest
+                         of these sentences is wider than the gap before the
+                         buttons. The answer lands here rather than in a message
+                         box, which was the only box in the program not reporting
+                         a problem. -->
                     <TextBlock Style="{StaticResource Aside}"
                                Margin="0,4,0,0"
+                               TextWrapping="Wrap"
                                Text="{Binding WhatTheVersionSays}"
                                Visibility="{Binding WhatTheVersionSays, Converter={StaticResource WhenAnything}}"
                                AutomationProperties.AutomationId="WhatTheVersionSays" />
-
-                    <!-- Never hidden and never disabled. It is the only way to
-                         ask, and one that vanished after its first press would be
-                         a capability that works once. What it says is the screen's
-                         decision, so the window cannot word it differently. -->
-                    <Button Content="{Binding WhatTheVersionLinkSays}"
-                            Style="{StaticResource Quietly}"
-                            Margin="0,3,0,0"
-                            Click="CheckForANewVersion"
-                            AutomationProperties.AutomationId="CheckForANewVersion" />
-
-                    <!-- In this corner because it is about the program, not
-                         about the disc being made, and this corner is where
-                         the program talks about itself: its name, its build,
-                         its updates. One quiet control cycling three answers
-                         rather than a dropdown, because it is touched once.
-                         Its words come from ChoosingTheLook, whose
-                         DataContext the window sets, so the screen stays
-                         ignorant of themes. -->
-                    <Button x:Name="HowItDresses"
-                            Content="{Binding InWords}"
-                            Style="{StaticResource Quietly}"
-                            Margin="0,3,0,0"
-                            HorizontalAlignment="Left"
-                            Click="ChooseTheNextLook"
-                            ToolTip="Light, dark, or whatever Windows wears. Following Windows is the default."
-                            AutomationProperties.AutomationId="Appearance" />
-
-                    <!-- The program talking about itself again, so this corner.
-                         Asked for by the owner on 2026-11-10 after a night of
-                         rebuilding a failed set from screenshots. Opens today's
-                         file in whatever opens text, or the folder when today
-                         has nothing in it yet. -->
-                    <Button Content="Open the log"
-                            Style="{StaticResource Quietly}"
-                            Margin="0,3,0,0"
-                            HorizontalAlignment="Left"
-                            Click="OpenTheLog"
-                            ToolTip="What DiscWright did and what the drives said, one file a day. It stays on this PC."
-                            AutomationProperties.AutomationId="OpenTheLog" />
                 </StackPanel>
 
                 <!-- About the whole window rather than about one more game, which

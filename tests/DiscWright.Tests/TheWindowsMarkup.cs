@@ -399,23 +399,38 @@ public class TheWindowsMarkup
             .Parent!
             .Parent!;
 
+        // Three rows at most: the name, the program's own links on ONE line,
+        // and the answer to the update link when there is one. Stacked, the
+        // links made this corner four rows beside two rows of buttons, and
+        // the owner saw the empty space it left on 2026-11-10.
         Assert.Equal(
-            ["StackPanel", "TextBlock", "Button", "Button", "Button"],
+            ["StackPanel", "WrapPanel", "TextBlock"],
             block.Elements().Select(each => each.Name.LocalName));
 
+        XElement links = block.Elements().ElementAt(1);
+
         Assert.Equal(
-            ["WhatTheVersionSays", "CheckForANewVersion", "Appearance", "OpenTheLog"],
-            block.Elements().Skip(1).Select(IdOf));
+            ["CheckForANewVersion", "Appearance", "OpenTheLog"],
+            links.Elements(Xaml + "Button").Select(IdOf));
+
+        // A dot between each, as the totals bar under the list has.
+        Assert.Equal(
+            ["Button", "TextBlock", "Button", "TextBlock", "Button"],
+            links.Elements().Select(each => each.Name.LocalName));
+        Assert.All(links.Elements(Xaml + "TextBlock"), dot => Assert.Equal("·", (string?)dot.Attribute("Text")));
+
+        Assert.Equal("WhatTheVersionSays", IdOf(block.Elements().ElementAt(2)));
 
         // And it is there to be used. A link in the markup that the markup
         // then hides or disables is the exact thing this change is undoing:
         // a working, tested capability with no way in. The first round of
         // faults walked straight through the assertions above by collapsing
         // it, which is as good as deleting it and leaves no trace in a diff.
-        XElement link = block.Elements().ElementAt(2);
+        XElement link = links.Elements(Xaml + "Button").First();
 
         Assert.Null(link.Attribute("Visibility"));
         Assert.Null(link.Attribute("IsEnabled"));
+        Assert.Null(links.Attribute("Visibility"));
     }
 
     [Fact]
@@ -1429,9 +1444,11 @@ public class TheWindowsMarkup
         // With everything unticked the total says nothing at all, and a
         // separator with nothing on its left is a smudge leading the line.
         // Collapsed unless both sentences are there to separate.
+        // The one beside the totals: the corner's dots sit between links
+        // that are always there, and need no such care.
         XElement dot = Window()
             .Descendants(Xaml + "TextBlock")
-            .Single(each => (string?)each.Attribute("Text") == "·");
+            .Single(each => (string?)each.Attribute("Text") == "·" && each.Descendants(Xaml + "Style").Any());
 
         XElement style = dot.Descendants(Xaml + "Style").Single();
 
