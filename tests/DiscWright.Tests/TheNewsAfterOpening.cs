@@ -164,7 +164,8 @@ public class TheNewsAfterOpening
             new NoPreview(),
             new PicturesThatRead(),
             "2.0.0",
-            _ => 1000));
+            _ => 1000,
+            Patience: new AClockThatMovesItself().Patience));
 
     private sealed class NoEncoding : IAutorunEncoding
     {

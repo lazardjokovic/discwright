@@ -3713,7 +3713,8 @@ public class TheMainWindowWithoutAWindow
             pictures ?? new PicturesThatRead(),
             "2.0.0",
             _ => 1000,
-            places));
+            places,
+            new AClockThatMovesItself().Patience));
 
     /// <summary>The note beside the discs, kept in memory.</summary>
     private sealed class ANoteInMemory(string? says = null) : IKeepTheSetsPlace

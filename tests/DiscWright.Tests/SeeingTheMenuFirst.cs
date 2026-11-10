@@ -713,7 +713,8 @@ public class SeeingTheMenuFirst
             preview ?? new APreviewOfTheMenu(new RecordingWriter(), new PicturesThatRead()),
             new PicturesThatRead(),
             "2.0.0",
-            _ => 1000));
+            _ => 1000,
+            Patience: new AClockThatMovesItself().Patience));
 
     private sealed class NoEncoding : IAutorunEncoding
     {

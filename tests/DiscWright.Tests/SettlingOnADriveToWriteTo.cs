@@ -143,17 +143,74 @@ public class SettlingOnADriveToWriteTo
     }
 
     [Fact]
-    public async Task Does_not_wait_when_nobody_named_a_drive_and_there_is_none()
+    public async Task Waits_while_windows_lists_no_drives_even_when_none_was_named()
     {
-        // The wait is for a drive known to exist. A machine with no writer
-        // at all, asked without one named, is told so at once.
+        // Erase a disc names no drive. On 2026-11-10 it told the owner
+        // "There is no disc writer on this machine" with two of them plugged
+        // in, because the first ask came back empty while E: was waking up.
+        AWriterThatVanishesForAMoment drives = new(missingFor: 3, listsNothing: true, holding: AUsedRewritable);
+        AClockThatMovesItself clock = new();
+
+        Outcome<IReadOnlyList<Recorder>> couldBe = await Settling(drives, patience: clock.Patience)
+            .WhichCouldBeErased();
+
+        Assert.Equal("D:", Assert.Single(Assert.IsType<Outcome<IReadOnlyList<Recorder>>.Ok>(couldBe).Value).Drive);
+        Assert.Equal(3, clock.Waits);
+    }
+
+    [Fact]
+    public async Task A_machine_with_no_writer_is_told_so_after_the_same_wait()
+    {
+        // Nothing tells a busy burning service from a machine without a
+        // drive, so the machine without one pays fifteen seconds before the
+        // same refusal it always got.
         AClockThatMovesItself clock = new();
 
         Settled settled = await Settling(new NoDrivesAtAll(), patience: clock.Patience)
             .OnWhicheverIsReady(ASmallImage, NeverAsksWhichDrive, NeverAsksAboutErasing);
 
-        Assert.Equal(0, clock.Waits);
+        Assert.Equal(15, clock.Waits);
         Assert.IsType<Settled.No>(settled);
+    }
+
+    [Fact]
+    public async Task Never_asks_the_drives_on_the_windows_own_thread()
+    {
+        // One slow drive holds the whole ask. Asked on the window's thread,
+        // pressing Erase a disc froze the window until E: answered.
+        AskedFromWhere drives = new();
+        int windowsThread = 0;
+
+        await OnTheWindowsThread.Run(async () =>
+        {
+            windowsThread = Environment.CurrentManagedThreadId;
+
+            await Settling(drives, new AnEraserThatWorks())
+                .OnWhicheverIsReady(ASmallImage, NeverAsksWhichDrive, NeverAsksAboutErasing);
+
+            await Settling(drives).WhichCouldBeErased();
+        });
+
+        Assert.Equal(2, drives.AskedOn.Count);
+        Assert.DoesNotContain(windowsThread, drives.AskedOn);
+    }
+
+    [Fact]
+    public async Task Never_asks_the_drives_on_the_windows_own_thread_after_an_erase()
+    {
+        AskedFromWhere drives = new(usedUntilErased: true);
+        int windowsThread = 0;
+
+        await OnTheWindowsThread.Run(async () =>
+        {
+            windowsThread = Environment.CurrentManagedThreadId;
+
+            await Settling(drives, new AnEraserThatWorks(() => drives.Erased = true))
+                .OnThatOne("D:", ASmallImage, could => Task.FromResult<Recorder?>(could[0]));
+        });
+
+        Assert.Equal(2, drives.AskedOn.Count);
+        Assert.DoesNotContain(windowsThread, drives.AskedOn);
     }
 
     [Fact]
@@ -709,7 +766,8 @@ public class SettlingOnADriveToWriteTo
     /// the ASUS writer was the moment a blank went in for disc 2: either
     /// nothing listed at all, or only the machine's other drive.
     /// </summary>
-    private sealed class AWriterThatVanishesForAMoment(int missingFor, bool listsNothing) : IFindRecorders
+    private sealed class AWriterThatVanishesForAMoment(
+        int missingFor, bool listsNothing, Recorder? holding = null) : IFindRecorders
     {
         private int _asked;
 
@@ -723,7 +781,29 @@ public class SettlingOnADriveToWriteTo
                         "There is no media in the device.", NothingInIt: true)];
             }
 
-            return [new("id-D", "D:", "A Drive", 2, true, 360_000, [750])];
+            return [holding ?? new("id-D", "D:", "A Drive", 2, true, 360_000, [750])];
+        }
+    }
+
+    private static readonly Recorder AUsedRewritable = new("id-D", "D:", "A Drive", 3, false, 0, [750]);
+
+    /// <summary>D:, remembering which thread each ask came from.</summary>
+    private sealed class AskedFromWhere(bool usedUntilErased = false) : IFindRecorders
+    {
+        internal List<int> AskedOn { get; } = [];
+
+        internal bool Erased { get; set; }
+
+        public IReadOnlyList<Recorder> All()
+        {
+            lock (AskedOn)
+            {
+                AskedOn.Add(Environment.CurrentManagedThreadId);
+            }
+
+            return usedUntilErased && !Erased
+                ? [AUsedRewritable]
+                : [new("id-D", "D:", "A Drive", 3, !usedUntilErased || Erased, 360_000, [750])];
         }
     }
 

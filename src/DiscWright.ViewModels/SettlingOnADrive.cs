@@ -129,7 +129,7 @@ public sealed class SettlingOnADrive(
     public async Task<IReadOnlyList<Recorder>> OnceTheyHaveAnswered(
         string? onlyThisOne, CancellationToken ct = default)
     {
-        IReadOnlyList<Recorder> all = drives.All();
+        IReadOnlyList<Recorder> all = await Asked();
 
         // AN EMPTY TRAY HAS ANSWERED. It arrives as a WhyNot like a disc that
         // is still being read, and it is not one: nothing is going to change
@@ -148,8 +148,17 @@ public sealed class SettlingOnADrive(
         // writer that had just written and checked disc 1. Found by Lazar
         // burning his Hollow Knight set on 2026-11-10. The same breath the
         // drive takes after an erase, met at the swap.
+        //
+        // AND NO DRIVES AT ALL IS NOT AN ANSWER, named or not. Twenty minutes
+        // later the same evening, Erase a disc said "There is no disc writer
+        // on this machine" on a machine with two, while E: was still waking
+        // up. Windows' burning service lists nothing while a drive is busy,
+        // and nothing distinguishes that from a machine without one. The
+        // cost of waiting is fifteen seconds on a machine that truly has no
+        // writer, where nothing could be burned or erased anyway.
         bool StillThinking(IReadOnlyList<Recorder> found) =>
-            (onlyThisOne is not null
+            found.Count == 0
+            || (onlyThisOne is not null
                 && !found.Any(each => string.Equals(each.Drive, onlyThisOne, StringComparison.OrdinalIgnoreCase)))
             || found.Any(each =>
                 each.WhyNot is not null
@@ -168,7 +177,7 @@ public sealed class SettlingOnADrive(
         {
             await _patience.Waiting(_patience.Between, ct);
 
-            all = drives.All();
+            all = await Asked();
 
             if (!StillThinking(all))
             {
@@ -178,6 +187,19 @@ public sealed class SettlingOnADrive(
 
         return all;
     }
+
+    /// <summary>
+    /// Every drive and what is in it, asked on the pool.
+    /// </summary>
+    /// <remarks>
+    /// Never on the caller's thread, which is the window's. One drive that is
+    /// slow to answer holds the whole ask, and asked in front of the window
+    /// that froze it: the owner pressed Erase a disc on 2026-11-10 with E:
+    /// still waking up, and the window stopped answering until Windows did.
+    /// Reading the drives when the window opens has gone to the pool for the
+    /// same reason since the day it took thirteen seconds to open.
+    /// </remarks>
+    private Task<IReadOnlyList<Recorder>> Asked() => Task.Run(drives.All);
 
     /// <summary>
     /// The drives again, once the one that just blanked a disc is back among
@@ -214,7 +236,7 @@ public sealed class SettlingOnADrive(
             return it is null || (it.WhyNot is not null && !it.NothingInIt);
         }
 
-        IReadOnlyList<Recorder> all = drives.All();
+        IReadOnlyList<Recorder> all = await Asked();
 
         if (!StillAway(all))
         {
@@ -227,7 +249,7 @@ public sealed class SettlingOnADrive(
         {
             await _patience.Waiting(_patience.Between, ct);
 
-            all = drives.All();
+            all = await Asked();
 
             if (!StillAway(all))
             {

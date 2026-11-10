@@ -527,7 +527,8 @@ public class EveryKindOfDisc
             new NoPreview(),
             new PicturesThatRead(),
             "2.0.0",
-            HowBigIs));
+            HowBigIs,
+            Patience: new AClockThatMovesItself().Patience));
 
     private static long HowBigIs(string path) => 1000;
 
