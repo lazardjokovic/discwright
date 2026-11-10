@@ -1436,8 +1436,11 @@ function restoreSentence(scan, discIn, busy, folder) {
         return "Putting " + busy.joining + " back together. On a large file this takes a few minutes.";
     }
 
+    // Where it is going, named while it goes. The owner on 2026-11-10: "I
+    // had no idea where it will be copied", and on somebody else's machine
+    // it would be stranger still.
     if (busy.copying) {
-        return "Copying file " + busy.copying + " off this disc.";
+        return "Copying file " + busy.copying + " off this disc" + (folder ? " into " + folder : "") + ".";
     }
 
     if (busy.wanting) {
@@ -1514,6 +1517,37 @@ function restoreBarPercent(progress, now) {
     return percentDone(progress.done, seconds, progress.rate || startingRate(), progress.all);
 }
 
+// The question Install asks before a set copies anything: where it goes.
+//
+// ASKED, ONCE PER WINDOW, since 2026-11-10. Until then the folder was
+// offered rather than asked, because asking is a dialog on every disc, and
+// the owner pressed Install, had no idea where anything went, and found it
+// done at once: a whole copy from an earlier try was already in the folder
+// and the menu went straight to the installer without a word. On another
+// machine that would be stranger still. So the first press says where, and
+// what is already there, and OK takes it. The discs after it go to the same
+// place without asking again.
+//
+// scan is setScan's answer for that folder. Returns the sentence for an
+// OK / Cancel question, where Cancel always means somewhere else.
+function whereTheSetGoes(name, folder, needBytes, scan) {
+    var game = String(name || "This game");
+
+    if (scan && scan.complete) {
+        return "A complete copy of " + game + " is already in:\n\n" + folder
+            + "\n\nOK installs from it. Cancel picks a different folder to copy it to.";
+    }
+
+    if (scan && scan.ok > 0) {
+        return "Part of " + game + " is already copied to:\n\n" + folder
+            + "\n\nOK carries on there. Cancel picks a different folder.";
+    }
+
+    return game + " will be copied to:\n\n" + folder
+        + "\n\nIt needs about " + bytesInWords(needBytes) + " free there while it works, and the installer runs"
+        + " from that folder. OK copies it there. Cancel picks a different folder.";
+}
+
 // Where to put the game back together.
 //
 // Under the person's own profile when that drive has the room, the same
@@ -1522,7 +1556,8 @@ function restoreBarPercent(progress, now) {
 // drive with the most room, because a set is by definition bigger than one
 // disc. The name comes from the game and nothing else, so every disc of the
 // set proposes the same folder without anything being remembered between
-// them. Offered rather than asked, because asking is a dialog on every disc.
+// them. This is the suggestion; whereTheSetGoes is the question that offers
+// it, once, and Cancel there picks anywhere else.
 //
 // drives is a list of {letter: "D:", free: bytes}, and home is the profile
 // folder, so this can be worked out without a disk in a test.
@@ -1737,14 +1772,22 @@ function jobCode(job) {
 // script is sitting in a blocking call cannot redraw and cannot see a disc
 // being swapped, and on a real restore mshta answered a blocking copy with
 // "Stop running this script?", which somebody reading it presses Yes to.
-function waitForJob(job, after) {
+//
+// meanwhile, when given, is called on every look that finds the job still
+// running, so that something can be said while one long file works: the
+// disc check's percentage moves inside a file because of it.
+function waitForJob(job, after, meanwhile) {
     if (jobIsDone(job)) {
         after(jobCode(job));
         return;
     }
 
     if (typeof window !== "undefined" && window.setTimeout) {
-        window.setTimeout(function () { waitForJob(job, after); }, 400);
+        if (meanwhile) {
+            meanwhile();
+        }
+
+        window.setTimeout(function () { waitForJob(job, after, meanwhile); }, 400);
         return;
     }
 
@@ -2132,8 +2175,24 @@ function hashOutOf(text) {
 
 // Which file the check is on, because minutes of a still window is how
 // somebody decides it has hung.
-function checkStep(at, of) {
-    return "Checking file " + at + " of " + of + " against what was burned.";
+//
+// THE PERCENTAGE LEADS. On 2026-11-10 the owner watched "Checking file 39 of
+// 39" sit still for minutes: the last file was the second piece of a cut
+// installer, hundreds of megabytes, and a count of files cannot move inside
+// one. It read as stuck. The percentage is of the bytes, estimated inside a
+// file the same way the copy's bar is, so it keeps moving to the end.
+function checkStep(at, of, percent) {
+    return "Checking the disc, " + (percent || 0) + "%: file " + at + " of " + of + " against what was burned.";
+}
+
+// How far the check is through the disc's bytes: exact for the files done,
+// and the one being hashed estimated at the rate the ones before it read at,
+// or the usual guess before any has finished. Times are in milliseconds and
+// handed in, so a test can hold the clock still.
+function checkPercent(done, all, began, fileBegan, now) {
+    var rate = done > 0 && fileBegan > began ? done / ((fileBegan - began) / 1000) : startingRate();
+
+    return percentDone(done, Math.max(0, (now - fileBegan) / 1000), rate, all);
 }
 
 // The verdict, once every file has been looked at.
@@ -2158,14 +2217,30 @@ function checkTheDisc(dir, sums, saying, done) {
     var gone = [];
     var i, full;
 
+    var all = 0;
+    var hashed = 0;
+    var began = (new Date()).getTime();
+    var size;
+
     for (i = 0; i < sums.rows.length; i++) {
         full = onTheDisc(dir, sums.rows[i].path);
 
         if (files.FileExists(full)) {
-            here.push({ hash: sums.rows[i].hash, full: full, path: sums.rows[i].path });
+            try {
+                size = files.GetFile(full).Size;
+            } catch (cannotSize) {
+                size = 0;
+            }
+
+            all += size;
+            here.push({ hash: sums.rows[i].hash, full: full, path: sums.rows[i].path, bytes: size });
         } else {
             gone.push(sums.rows[i].path);
         }
+    }
+
+    function howFar(fileBegan) {
+        return checkPercent(hashed, all, began, fileBegan, (new Date()).getTime());
     }
 
     var tmp = onTheDisc(
@@ -2179,11 +2254,14 @@ function checkTheDisc(dir, sums, saying, done) {
             return;
         }
 
-        saying(checkStep(at + 1, here.length));
+        var fileBegan = (new Date()).getTime();
+
+        saying(checkStep(at + 1, here.length, howFar(fileBegan)));
 
         waitForJob(
             startAJob("certutil -hashfile " + setQuote(here[at].full) + " SHA256 > " + setQuote(tmp)),
             function () {
+                hashed += here[at].bytes;
                 var said = "";
                 var reading;
 
@@ -2202,6 +2280,9 @@ function checkTheDisc(dir, sums, saying, done) {
                 }
 
                 walk(at + 1, bad);
+            },
+            function () {
+                saying(checkStep(at + 1, here.length, howFar(fileBegan)));
             });
     }
 

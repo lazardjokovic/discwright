@@ -272,6 +272,12 @@ function doTheThing() {
         return;
     }
 
+    // Nor while the disc is being checked: two readers on one disc slow
+    // each other down and either can be the one that reads it wrong.
+    if (checking) {
+        return;
+    }
+
     if (SET && !where) {
         restoreGo();
         return;
@@ -641,7 +647,11 @@ function showTheSet(game) {
     document.getElementById("doIt").innerText = restoring.installing
         ? "Installing\u2026"
         : restoreButtonSays(scan, SET.discIn, SET.of, isInstalled(game), whatToDoWith(game, false));
-    document.getElementById("doIt").parentNode.className = "btn next" + (restoring.busy ? " dead" : "");
+    document.getElementById("doIt").parentNode.className = "btn next" + (restoring.busy || checking ? " dead" : "");
+
+    // The check is dead while the set is being worked on, the owner's catch
+    // on 2026-11-10: it stayed live under a copy reading the same disc.
+    document.getElementById("sums").className = restoring.busy ? "dead" : (checking ? "busy" : "");
 
     if (!restoring.installing) {
         sayTheSet(scan);
@@ -659,6 +669,21 @@ function restoreGo() {
     }
 
     var files = new ActiveXObject("Scripting.FileSystemObject");
+
+    // Where it goes, asked on the first press in this window and not on the
+    // discs after it. The wording and the rule are whereTheSetGoes in
+    // menu.js; this only shows it and takes the answer.
+    if (!SET.asked) {
+        var chosen = askWhereTheSetGoes();
+
+        if (!chosen) {
+            return;
+        }
+
+        SET.dir = chosen;
+        SET.asked = true;
+    }
+
     var dir = theRestoreFolder();
 
     try {
@@ -706,6 +731,42 @@ function restoreGo() {
     }
 
     copyThisDisc();
+}
+
+// The question before a set copies anything, and the folder picker behind
+// its Cancel. Nothing, when somebody closes the picker: nothing is copied.
+function askWhereTheSetGoes() {
+    var suggested = theRestoreFolder();
+    var picked;
+
+    if (confirm(whereTheSetGoes(DISC.game, suggested, setBytesNeeded(SET.rows, SET.joins), scanTheSet()))) {
+        return suggested;
+    }
+
+    picked = pickAFolder("Where should " + DISC.game + " be copied to?");
+
+    if (!picked) {
+        return null;
+    }
+
+    // A folder of its own inside the one picked, named the way the
+    // suggestion is, so a game never spills into somebody's Downloads.
+    return onTheDisc(picked, folderNameFor(DISC.game));
+}
+
+// Windows' own folder picker, and the path picked or nothing. On its own so
+// that a test can stand in for it: a real one would put a dialog up in the
+// middle of the suite.
+function pickAFolder(title) {
+    try {
+        var picked = new ActiveXObject("Shell.Application").BrowseForFolder(0, title, 0);
+
+        return picked ? String(picked.Self.Path) : null;
+    } catch (noPicker) {
+        // No picker on this machine. Cancel was a request for somewhere
+        // else, and there is no way to ask where, so nothing is copied.
+        return null;
+    }
 }
 
 function copyThisDisc() {
@@ -1035,6 +1096,12 @@ function checkThisDisc() {
         return;
     }
 
+    // Never under a copy off the same disc. The button is drawn dead then,
+    // and a press on it does nothing.
+    if (SET && restoring.busy) {
+        return;
+    }
+
     var text = "";
 
     try {
@@ -1058,9 +1125,15 @@ function checkThisDisc() {
     checking = true;
     document.getElementById("sums").className = "busy";
 
+    // The big button is dead while the check reads the disc, the mirror of
+    // the check being dead under a copy, and drawn so rather than ignoring
+    // a press that looks live.
+    document.getElementById("doIt").parentNode.className = "btn next dead";
+
     checkTheDisc(theDisc(), sums, sayTheCheck, function (verdict) {
         checking = false;
         document.getElementById("sums").className = "";
+        document.getElementById("doIt").parentNode.className = "btn next";
         sayTheCheck(verdict);
     });
 }
@@ -1146,7 +1219,7 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
         line-height: 28px; text-align: center; font-size: 15px; cursor: default;
         color: #CBD6DB; border: 1px solid #27353B;
         background: #080F12; background: rgba(18, 32, 38, 0.22); }
-#sums.busy { color: #5E727A; border-color: #1A2429; }
+#sums.busy, #sums.dead { color: #5E727A; border-color: #1A2429; }
 </style>
 </head>
 

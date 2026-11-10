@@ -145,10 +145,17 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "drain();\n"
                 + "out.push('title=' + document.title);\n"
                 + "said();\n"
+                + "out.push('asked=' + confirms.length + ' ' + (confirms.length ? confirms[0].split('\\n').join('~') : ''));\n"
                 + "out.push('alerts=' + alerts.length + (alerts.length ? ' ' + alerts.join(' / ') : ''));\n"
                 + "WScript.Echo(out.join('\\n'));\n");
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        // Asked where it goes once, on the first press, naming the folder,
+        // and not again when disc 2 went in.
+        string asked = Assert.Single(lines, each => each.StartsWith("asked=", StringComparison.Ordinal));
+        Assert.StartsWith("asked=1 Big Game will be copied to:~~" + dest + "~~", asked, StringComparison.Ordinal);
+        lines = [.. lines.Where(each => each != asked)];
 
         Assert.Equal(
             [
@@ -285,8 +292,13 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 // works starts nothing: no new certutil, no new timers.
                 + "out.push('busy=' + document.getElementById('sums').className + ' saying=' + document.getElementById('stillWanted').innerText);\n"
                 + "var before = window.timers.length; checkThisDisc(); out.push('press again=' + (window.timers.length - before));\n"
+
+                // The big button is dead while the check reads the disc, and
+                // a press on it starts nothing.
+                + "out.push('install=' + document.getElementById('doIt').parentNode.className);\n"
+                + "var starts = 0; startIt = function () { starts++; return null; }; doTheThing(); out.push('install pressed=' + starts);\n"
                 + "drain();\n"
-                + "out.push('after=' + document.getElementById('sums').className);\n"
+                + "out.push('after=' + document.getElementById('sums').className + ' install=' + document.getElementById('doIt').parentNode.className);\n"
                 + "out.push('line=' + document.getElementById('stillWanted').innerText.split('\\n').join('~'));\n"
                 + "out.push('alerts=' + alerts.length + (alerts.length ? ' ' + alerts.join(' / ') : ''));\n"
                 + "WScript.Echo(out.join('\\n'));\n");
@@ -295,12 +307,17 @@ public sealed class ThePageOnADiscOfASet : IDisposable
 
         // No music on this disc, so the check sits where the mute would.
         Assert.Equal("shown=block at=16px", lines[0]);
-        Assert.Equal("busy=busy saying=Checking file 1 of 2 against what was burned.", lines[1]);
+        // The percentage is an estimate against the clock, and files this
+        // small are most of the way through in a millisecond, so only its
+        // shape is pinned here. The arithmetic is TheMenuScript's.
+        Assert.Matches(@"^busy=busy saying=Checking the disc, \d{1,2}%: file 1 of 2 against what was burned\.$", lines[1]);
         Assert.Equal("press again=0", lines[2]);
-        Assert.Equal("after=", lines[3]);
-        Assert.StartsWith("line=2 of 3 files on this disc are wrong or missing:", lines[4], StringComparison.Ordinal);
-        Assert.Contains("bad.txt", lines[4], StringComparison.Ordinal);
-        Assert.Contains("gone.txt", lines[4], StringComparison.Ordinal);
+        Assert.Equal("install=btn next dead", lines[3]);
+        Assert.Equal("install pressed=0", lines[4]);
+        Assert.Equal("after= install=btn next", lines[5]);
+        Assert.StartsWith("line=2 of 3 files on this disc are wrong or missing:", lines[6], StringComparison.Ordinal);
+        Assert.Contains("bad.txt", lines[6], StringComparison.Ordinal);
+        Assert.Contains("gone.txt", lines[6], StringComparison.Ordinal);
         Assert.Equal("alerts=0", lines[^1]);
     }
 
@@ -438,6 +455,113 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.DoesNotContain("the page never settled", went, StringComparison.Ordinal);
     }
 
+    // ------------------------------------------- where it goes, and when not
+
+    [Fact]
+    public void Cancel_and_closing_the_picker_copies_nothing_and_asks_again_next_time()
+    {
+        string disc1 = AFirstDiscOfTwo();
+        string dest = Path.Combine(_folder, "suggested");
+
+        string went = RunOnDisc1(disc1, dest,
+            "answers = [false];\n"
+            + "pickAFolder = function (title) { out.push('picker=' + title); return null; };\n"
+            + "doTheThing();\n"
+            + "out.push('timers=' + window.timers.length + ' busy=' + restoring.busy + ' asked=' + (SET.asked ? 'yes' : 'no'));\n"
+            + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(["picker=Where should Big Game be copied to?", "timers=0 busy=false asked=no"], lines);
+        Assert.False(Directory.Exists(dest), "nothing is made when nobody said where");
+    }
+
+    [Fact]
+    public void Cancel_and_picking_a_folder_copies_into_a_folder_of_its_own_there()
+    {
+        string disc1 = AFirstDiscOfTwo();
+        string elsewhere = Path.Combine(_folder, "my games");
+        Directory.CreateDirectory(elsewhere);
+
+        string went = RunOnDisc1(disc1, Path.Combine(_folder, "suggested"),
+            "answers = [false];\n"
+            + "pickAFolder = function () { return " + AsJScript(elsewhere) + "; };\n"
+            + "doTheThing();\n"
+            + "pump(function () { return restoring.wanting > 0; });\n"
+            + "out.push('dir=' + SET.dir);\n"
+            + "out.push('line=' + document.getElementById('stillWanted').innerText);\n"
+            + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal("dir=" + Path.Combine(elsewhere, "Big Game"), lines[0]);
+        Assert.Equal("12345", File.ReadAllText(Path.Combine(elsewhere, "Big Game", "readme.txt")));
+        Assert.False(File.Exists(Path.Combine(elsewhere, "readme.txt")), "never spilled into the folder picked");
+    }
+
+    [Fact]
+    public void The_check_is_dead_while_the_set_copies_and_a_press_on_it_starts_nothing()
+    {
+        // The owner's catch on 2026-11-10: it stayed live under the copy.
+        // A list to check against, or a live press would do nothing anyway
+        // and the guard could go unnoticed.
+        string disc1 = AFirstDiscOfTwo();
+        File.WriteAllText(Path.Combine(disc1, "checksums.sha256"), ChecksumList.For("BIG GAME",
+            [new ChecksumEntry("readme.txt", HashOf("12345"), 5)]));
+
+        string went = RunOnDisc1(disc1, Path.Combine(_folder, "suggested"),
+            "restoring.busy = true;\n"
+            + "showTheSet(gameAt(DISC.games, 0));\n"
+            + "out.push('check=' + document.getElementById('sums').className);\n"
+            + "var before = window.timers.length; checkThisDisc();\n"
+            + "out.push('pressed=' + (window.timers.length - before) + ' check=' + document.getElementById('sums').className);\n"
+            + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(["check=dead", "pressed=0 check=dead"], lines);
+    }
+
+    /// <summary>
+    /// Disc 1 of a set of two, holding a readme and the first piece of an
+    /// installer, with the real set file. Returns where disc 1 is.
+    /// </summary>
+    private string AFirstDiscOfTwo()
+    {
+        string disc1 = Path.Combine(_folder, "first");
+        Directory.CreateDirectory(Path.Combine(disc1, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc1, "setup_big.exe.dwpart01"), "ABC");
+        File.WriteAllText(Path.Combine(disc1, "readme.txt"), "12345");
+        File.WriteAllText(Path.Combine(disc1, "AUTORUN", "menu.hta"), "<hta/>");
+
+        SetEntry[] entries =
+        [
+            new(1, "setup_big.exe.dwpart01", "a1", 3),
+            new(1, "readme.txt", "b2", 5),
+            new(2, "setup_big.exe.dwpart02", "c3", 4)
+        ];
+
+        File.WriteAllText(
+            Path.Combine(disc1, SetManifest.FileName),
+            SetManifest.For("BIG GAME", entries, 1, 2, "CD-R 700 MB", DateTimeOffset.UtcNow,
+                [new("setup_big.exe", "e5", 7, ["setup_big.exe.dwpart01", "setup_big.exe.dwpart02"])]));
+
+        return disc1;
+    }
+
+    /// <summary>The page on disc 1, its set loaded and its folder suggested, then the test.</summary>
+    private string RunOnDisc1(string disc1, string suggested, string test) =>
+        Run(
+            PageScriptFor(new MenuFacts(
+                "Big Game", "DiscWright.Test", 1, 2, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Big Game", "setup_big.exe", string.Empty)])),
+            menuUrl: new Uri(Path.Combine(disc1, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "SET = loadTheSet();\n"
+                + "SET.dir = " + AsJScript(suggested) + ";\n"
+                + "showTheSet(gameAt(DISC.games, 0));\n"
+                + test);
+
     // ------------------------------------------------------------------ helpers
 
     /// <summary>
@@ -463,6 +587,12 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         + "var widths = [];\n"
         + "var closed = false;\n"
         + "function alert(text) { alerts.push(String(text)); }\n"
+
+        // OK / Cancel, written down and answered from a queue the test fills,
+        // OK when it has said nothing.
+        + "var confirms = [];\n"
+        + "var answers = [];\n"
+        + "function confirm(text) { confirms.push(String(text)); return answers.length ? answers.shift() : true; }\n"
         + "var screen = { availWidth: 1920, availHeight: 1080 };\n"
         + "var discwright = {};\n"
         + "var document = {\n"

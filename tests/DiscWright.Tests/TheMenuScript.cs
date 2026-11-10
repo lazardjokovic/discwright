@@ -1117,6 +1117,53 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Names_the_folder_while_it_copies_into_it()
+    {
+        // "I had no idea where it will be copied", the owner on 2026-11-10.
+        Assert.Equal(
+            @"Copying file 3 of 9 off this disc into D:\Games\Big.",
+            Ask(@"restoreSentence(null, 1, {copying: '3 of 9'}, 'D:\\Games\\Big')"));
+    }
+
+    // ------------------------------------------ where a set goes, asked
+
+    [Fact]
+    public void Asks_where_a_new_copy_goes_and_says_how_much_room_it_needs()
+    {
+        string asked = Ask(
+            @"whereTheSetGoes('Hollow Knight', 'C:\\Users\\somebody\\Games\\Hollow Knight', 1288490189, {ok: 0, total: 9})")
+            .Replace("\r", string.Empty, StringComparison.Ordinal);
+
+        Assert.Equal(
+            "Hollow Knight will be copied to:\n\n"
+                + @"C:\Users\somebody\Games\Hollow Knight"
+                + "\n\nIt needs about 1.2 GB free there while it works, and the installer runs from that folder."
+                + " OK copies it there. Cancel picks a different folder.",
+            asked);
+    }
+
+    [Fact]
+    public void Says_a_complete_copy_is_already_there_rather_than_using_it_without_a_word()
+    {
+        // What the owner met: a whole copy from an earlier try, and Install
+        // went straight to the installer, done at once, nothing said.
+        string asked = Ask(@"whereTheSetGoes('Hollow Knight', 'C:\\Games\\Hollow Knight', 1, {complete: true, ok: 9, total: 9})");
+
+        Assert.StartsWith("A complete copy of Hollow Knight is already in:", asked, StringComparison.Ordinal);
+        Assert.Contains(@"C:\Games\Hollow Knight", asked, StringComparison.Ordinal);
+        Assert.EndsWith("OK installs from it. Cancel picks a different folder to copy it to.", asked, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Says_part_of_it_is_already_copied_and_offers_to_carry_on()
+    {
+        string asked = Ask(@"whereTheSetGoes('Hollow Knight', 'C:\\Games\\Hollow Knight', 1, {ok: 4, total: 9})");
+
+        Assert.StartsWith("Part of Hollow Knight is already copied to:", asked, StringComparison.Ordinal);
+        Assert.EndsWith("OK carries on there. Cancel picks a different folder.", asked, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Moves_the_bar_through_a_file_by_the_clock_and_the_rate()
     {
         // Nothing on a disc can see inside a copy, so the bar sat at nothing
@@ -1739,12 +1786,52 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
-    public void Says_which_file_the_check_is_on()
+    public void Says_how_far_through_the_disc_the_check_is_and_which_file_it_is_on()
     {
         // Minutes of a still window is how somebody decides it has hung.
         Assert.Equal(
-            "Checking file 3 of 9 against what was burned.",
-            Ask("checkStep(3, 9)"));
+            "Checking the disc, 87%: file 3 of 9 against what was burned.",
+            Ask("checkStep(3, 9, 87)"));
+    }
+
+    [Fact]
+    public void The_check_moves_inside_one_long_file()
+    {
+        // The owner's 2026-11-10 night: "file 39 of 39" sat still for
+        // minutes on a 600 MB piece. 100 MB done in 10 s is 10 MB/s, so 30 s
+        // into a 600 MB file is another 300 MB of 1 GB: 40%, then 60% at 50 s.
+        string at30 = Ask("checkPercent(104857600, 1048576000, 0, 10000, 40000)");
+        string at50 = Ask("checkPercent(104857600, 1048576000, 0, 10000, 60000)");
+
+        Assert.Equal("40", at30);
+        Assert.Equal("60", at50);
+    }
+
+    [Fact]
+    public void Waiting_on_a_job_says_something_on_every_look_that_finds_it_running()
+    {
+        // What moves the check's percentage inside one long file. A window
+        // stood in, so the wait queues its next look rather than sleeping.
+        string asked = Ask(
+            "(function () {"
+            + " var looks = []; var heard = 0;"
+            + " window = { setTimeout: function (fn, ms) { looks.push(ms); } };"
+            + " waitForJob({ flag: 'C:\\\\no such folder\\\\never.done' }, function () { }, function () { heard++; });"
+            + " window = undefined;"
+            + " return heard + '|' + looks.length;"
+            + " }())");
+
+        Assert.Equal("1|1", asked);
+    }
+
+    [Fact]
+    public void The_check_guesses_before_any_file_has_finished_and_never_says_100()
+    {
+        // Nothing done yet: the usual 8x guess, 1.2 MB a second.
+        Assert.Equal("10", Ask("checkPercent(0, 12288000, 0, 0, 1000)"));
+
+        // Long past the end of the estimate, it still is not finished.
+        Assert.Equal("99", Ask("checkPercent(100, 1000, 0, 1000, 999999)"));
     }
 
     [Fact]
@@ -1800,7 +1887,7 @@ public sealed class TheMenuScript : IDisposable
         // Three files are there to hash; the fourth is missing and never
         // reaches certutil.
         Assert.Equal("3", parts[0]);
-        Assert.Equal("Checking file 1 of 3 against what was burned.", parts[1]);
+        Assert.Matches(@"^Checking the disc, \d{1,2}%: file 1 of 3 against what was burned\.$", parts[1]);
         Assert.StartsWith("2 of 4 files on this disc are wrong or missing:", parts[2], StringComparison.Ordinal);
         Assert.Contains("bad.txt", parts[2], StringComparison.Ordinal);
         Assert.Contains("gone.txt", parts[2], StringComparison.Ordinal);
