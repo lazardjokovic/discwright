@@ -834,7 +834,9 @@ Both ways in now give the drive fifteen seconds to wake up before its silence co
 
 The rewrite carries on from the PowerShell app's numbering rather than starting again. That one goes to 0.11.0, so this picks up at **0.12.0** and the two read as one project at different stages, which is what they are. A round 2.0.0 claimed a finished thing, and an app nobody can be given yet does not get one.
 
-The installer is named **DiscWright**, not "DiscWright 2.0", and installs to `DiscWright (rewrite)`: a folder named for what it is rather than for a version it will outgrow. It keeps its own AppId so it sits beside the PowerShell install instead of taking over a working one.
+The installer is named **DiscWright**, not "DiscWright 2.0". While the rewrite was being tested it installed to `DiscWright (rewrite)` under an AppId of its own, so it sat beside the PowerShell install instead of taking over a working one.
+
+That changed on 2026-11-10, when the owner settled the release: the C# app is released as 2.0.0 and is the one called DiscWright. Its installer carries **v1's AppId** and installs to `DiscWright`, so on a machine with the PowerShell app installed it is an upgrade in place: the same row in Add/Remove Programs, the same Start Menu entry, the same folder with v1's scripts cleared out of it, and the same winget package at a new version. It also quietly removes a testing install under the rewrite's old AppId, whose Start Menu entry has the same name. The PowerShell app, where it is still installed fresh, becomes "DiscWright (PowerShell)" with an AppId and a folder of its own.
 
 #### The cover art always goes on the disc
 

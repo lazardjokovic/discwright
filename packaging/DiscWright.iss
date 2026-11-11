@@ -25,30 +25,29 @@
 #endif
 
 ; Plain "DiscWright", because this is not a second product. It is the same
-; program rewritten, carrying on from where the PowerShell one leaves off, and
-; calling it 2.0 claimed a finished thing that does not exist yet.
-;
-; It still has its own AppId, so it installs beside the PowerShell one rather
-; than taking over a working install while it is unfinished. The release that
-; genuinely replaces that one takes its AppId.
+; program rewritten, and from 2.0 it is the one called DiscWright. The
+; PowerShell one, where it is still installed fresh, is "DiscWright
+; (PowerShell)" with an AppId and a folder of its own.
 #define AppName      "DiscWright"
+
+; The AppId the rewrite carried while it was installed beside v1 for testing,
+; as "DiscWright (rewrite)". Whatever is installed under it is removed before
+; this installs, so a machine that tried the rewrite does not end up with two
+; programs both called DiscWright.
+#define RewriteAppId "{14016040-B21A-4EA6-844E-FF7AE4E18176}"
 #define AppPublisher "DiscWright"
 #define AppUrl       "https://discwright.com"
 
 [Setup]
-; A NEW AppId, deliberately, and not the one in the v1 repo.
+; v1's AppId, deliberately. Never change it.
 ;
-; AppId is how Windows recognises an install as the same product. Reusing v1's
-; would make this an upgrade: it would take over the Start Menu entry, the
-; Add/Remove Programs row and the install folder of a working app, while 2.0 is
-; still being tested. So 2.0 sits beside v1 and either can be removed without
-; touching the other.
-;
-; When 2.0 is genuinely the one to run, the release that replaces v1 takes
-; v1's AppId {{20F71A81-9D66-445E-BDC3-394B940F190E} so that an existing
-; install upgrades in place rather than being left behind as an orphan nothing
-; can find. That is a decision for then, not a default for now.
-AppId={{14016040-B21A-4EA6-844E-FF7AE4E18176}
+; AppId is how Windows and winget recognise an install as the same product, so
+; carrying v1's makes 2.0 an upgrade: on a machine with the PowerShell
+; DiscWright installed, this takes over its Add/Remove Programs row, its Start
+; Menu entry and its folder, and winget sees the same package move to a new
+; version. With a new AppId that install would be left behind as a second
+; "DiscWright" nothing upgrades. Settled with the owner on 2026-11-10.
+AppId={{20F71A81-9D66-445E-BDC3-394B940F190E}
 AppName={#AppName}
 AppVersion={#AppVersion}
 ; Add/Remove Programs shows the version in a column of its own, from
@@ -56,8 +55,8 @@ AppVersion={#AppVersion}
 AppVerName={#AppName}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppUrl}
-AppSupportURL=https://github.com/lazardjokovic/discwright-csharp/issues
-AppUpdatesURL=https://github.com/lazardjokovic/discwright-csharp/releases
+AppSupportURL=https://github.com/lazardjokovic/discwright/issues
+AppUpdatesURL=https://github.com/lazardjokovic/discwright/releases
 VersionInfoVersion={#AppVersion}
 
 ; Per-user, so installing never shows a UAC prompt and never needs an admin
@@ -69,11 +68,10 @@ VersionInfoVersion={#AppVersion}
 ; simply the friendlier of two paths that both work.
 PrivilegesRequired=lowest
 
-; Its own folder, not the PowerShell one's. Two installs at once must not
-; write into one directory, or removing either takes pieces of the other with
-; it. The folder is named for the rewrite rather than for a version, so it
-; does not have to be renamed on the way to 1.0.
-DefaultDirName={autopf}\DiscWright (rewrite)
+; The same folder v1 installs to, because this replaces it there. On an
+; upgrade Inno keeps whatever folder v1 was put in, and [InstallDelete] below
+; clears v1's scripts out of it.
+DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 ; Nothing here needs a decision, so the wizard opens on the one page that does:
@@ -81,9 +79,8 @@ DisableProgramGroupPage=yes
 DisableWelcomePage=yes
 DisableReadyPage=yes
 
-; No LicenseFile. This repository has no LICENSE yet, and a wizard page that
-; demands agreement to a document nobody has written would be a lie. It goes
-; back the moment there is one.
+; MIT, the same page v1's installer shows.
+LicenseFile=..\LICENSE
 SetupIconFile=..\src\DiscWright.App\DiscWright.ico
 UninstallDisplayIcon={app}\DiscWright.App.exe
 UninstallDisplayName={#AppName}
@@ -112,6 +109,19 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "..\build\payload\DiscWright.App.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md";                        DestDir: "{app}"; Flags: ignoreversion
 
+; What the PowerShell DiscWright put in this folder, every version of it, so an
+; upgrade leaves the C# app alone in it rather than beside a dead script. Its
+; README.md is replaced by this one's, and nothing of the person's lives here:
+; v1 wrote every project into the output folder that was chosen.
+[InstallDelete]
+Type: files;           Name: "{app}\DiscWright.ps1"
+Type: files;           Name: "{app}\DiscWright.vbs"
+Type: files;           Name: "{app}\Run DiscWright.cmd"
+Type: files;           Name: "{app}\DiscWright.ico"
+Type: files;           Name: "{app}\LICENSE"
+Type: filesandordirs;  Name: "{app}\burn"
+Type: filesandordirs;  Name: "{app}\print"
+
 [Icons]
 Name: "{group}\{#AppName}"; \
     Filename: "{app}\DiscWright.App.exe"; \
@@ -130,3 +140,29 @@ Description: "{cm:LaunchProgram,{#AppName}}"; \
     Filename: "{app}\DiscWright.App.exe"; \
     WorkingDir: "{app}"; \
     Flags: postinstall nowait skipifsilent
+
+[Code]
+// The rewrite's own uninstaller, run quietly before anything is written, when
+// this machine has the rewrite installed under its testing AppId. Per-user,
+// like this installer, so it is under HKCU. Its Start Menu entry has the same
+// name as this one's, so it has to go first or removing it later would take
+// this one's shortcut with it.
+procedure RemoveTheRewrite();
+var
+  Key, Uninstaller: String;
+  Code: Integer;
+begin
+  Key := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#RewriteAppId}_is1';
+  if RegQueryStringValue(HKCU, Key, 'UninstallString', Uninstaller) then
+  begin
+    Uninstaller := RemoveQuotes(Uninstaller);
+    if FileExists(Uninstaller) then
+      Exec(Uninstaller, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    RemoveTheRewrite();
+end;

@@ -110,4 +110,4 @@ if (-not (Test-Path $setup)) { throw "Inno Setup said it worked but there is no 
 
 Write-Host ""
 Write-Host ("{0}  ({1:N1} MB)" -f $setup, ((Get-Item $setup).Length / 1MB)) -ForegroundColor Green
-Write-Host "Per-user, so it installs with no UAC prompt. It sits beside v1 and does not touch it."
+Write-Host "Per-user, so it installs with no UAC prompt. It upgrades the PowerShell DiscWright in place where that is installed."
