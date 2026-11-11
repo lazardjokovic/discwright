@@ -5,8 +5,33 @@ changes how the app runs or how it is downloaded from the README.
 
 | | what it is | who it is for |
 | --- | --- | --- |
-| `DiscWright-<v>.zip` | the six files that matter, in one folder | anyone; unzip and double-click, exactly as before |
-| `DiscWright-<v>-setup.exe` | Inno Setup installer, per-user, no UAC | Start menu entry, clean uninstall, and **winget** |
+| `DiscWright-PowerShell-<v>.zip` | the six files that matter, in one folder | anyone; unzip and double-click, exactly as before |
+| `DiscWright-PowerShell-<v>-setup.exe` | Inno Setup installer, per-user, no UAC | Start menu entry and clean uninstall |
+
+## Since 2.0: DiscWright (PowerShell)
+
+From 2.0 the C# app is the one called DiscWright, and it is released from this
+repository's `main`. This app is **DiscWright (PowerShell)**: its installer has
+a name, an `AppId` and a folder of its own (`%LOCALAPPDATA%\Programs\DiscWright
+(PowerShell)`), so the two install side by side and neither can overwrite the
+other. Its files are named `DiscWright-PowerShell-<v>` because they share a
+releases page with the C# app's.
+
+The C# installer took the old `AppId`, `{20F71A81-9D66-445E-BDC3-394B940F190E}`,
+so that it upgrades an existing install in place. This installer removes an
+install under that `AppId` first, quietly, but only when its folder holds
+`DiscWright.ps1` and not `DiscWright.App.exe`, which is how it tells this app
+from the C# one.
+
+Two things follow for every release cut from here:
+
+- **Untick "Set as the latest release"** when publishing it. "Latest" is what
+  the download button on discwright.com, the README and the C# app's own update
+  check all ask for, and they want the C# app. A PowerShell release published
+  as latest sends every one of them to the wrong program.
+- **No winget.** `DiscWright.DiscWright` is the C# app's package, so
+  `winget\New-WingetManifest.ps1` refuses to run. What is written below about
+  winget is the record of how it was done up to 0.11.1.
 
 ## Why there is an installer at all
 

@@ -21,7 +21,16 @@
   #error AppVersion must be passed in with /DAppVersion=x.y.z
 #endif
 
-#define AppName    "DiscWright"
+; "DiscWright (PowerShell)" since 2.0, when the C# app became the one called
+; DiscWright. The two can be installed side by side, and a Start Menu with two
+; entries both called DiscWright gives nobody a way to tell them apart.
+#define AppName    "DiscWright (PowerShell)"
+
+; The AppId every installer of this app used up to 0.11.1. The C# app's
+; installer carries it from 2.0, so that it upgrades an old install in place;
+; this one has its own below, so that it can never be mistaken for the C# app
+; or install over it.
+#define OldAppId   "{20F71A81-9D66-445E-BDC3-394B940F190E}"
 // The project publishes itself. This is what Add/Remove Programs shows and what
 // the .exe's file properties carry, so it matches the winget publisher and the
 // DiscWright.DiscWright identifier rather than naming a person.
@@ -29,10 +38,12 @@
 #define AppUrl     "https://discwright.com"
 
 [Setup]
-; Never change AppId. It is how Windows and winget recognise an existing
-; install as the same product, so a new one here would leave the old install
-; behind as an orphan that nothing can upgrade or remove.
-AppId={{20F71A81-9D66-445E-BDC3-394B940F190E}
+; Its own AppId since the C# app took the old one on 2026-11-11. AppId is how
+; Windows recognises an existing install as the same product, so sharing one
+; with the C# app would let either installer overwrite the other. An install
+; under the old AppId that really is this app is removed first, in [Code]
+; below, so nobody is left with an orphan. Never change this one.
+AppId={{6FC4469E-5231-4F83-BC18-AE868E923003}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
@@ -65,7 +76,9 @@ UninstallDisplayIcon={app}\DiscWright.ico
 UninstallDisplayName={#AppName} {#AppVersion}
 
 OutputDir=..\build
-OutputBaseFilename=DiscWright-{#AppVersion}-setup
+; Named for the app, because it shares a releases page with the C# app's
+; DiscWright-<version>-setup.exe.
+OutputBaseFilename=DiscWright-PowerShell-{#AppVersion}-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -175,4 +188,37 @@ Description: "{cm:LaunchProgram,{#AppName}}"; \
 function HasVBScript(): Boolean;
 begin
   Result := FileExists(ExpandConstant('{sys}\vbscript.dll'));
+end;
+
+// This app installed under the old AppId, by 0.11.1 or earlier, removed
+// quietly before anything is written, so that installing it again leaves one
+// DiscWright (PowerShell) and not that plus an orphan called DiscWright.
+//
+// The old AppId is the C# app's from 2.0, and that must be left alone. They
+// are told apart by what is in the folder rather than by the version number:
+// this app is DiscWright.ps1 and the C# app is DiscWright.App.exe, which no
+// renumbering can change.
+procedure RemoveTheOldInstall();
+var
+  Key, Folder, Uninstaller: String;
+  Code: Integer;
+begin
+  Key := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{#OldAppId}_is1';
+  if not RegQueryStringValue(HKCU, Key, 'InstallLocation', Folder) then
+    exit;
+  Folder := AddBackslash(RemoveQuotes(Folder));
+  if (not FileExists(Folder + 'DiscWright.ps1')) or FileExists(Folder + 'DiscWright.App.exe') then
+    exit;
+  if RegQueryStringValue(HKCU, Key, 'UninstallString', Uninstaller) then
+  begin
+    Uninstaller := RemoveQuotes(Uninstaller);
+    if FileExists(Uninstaller) then
+      Exec(Uninstaller, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    RemoveTheOldInstall();
 end;

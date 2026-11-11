@@ -58,8 +58,10 @@ $payload = @(
     'burn\DiscWright.Burn.ps1'
 )
 
-$stage = Join-Path $OutDir "DiscWright-$version"
-$zip   = Join-Path $OutDir "DiscWright-$version.zip"
+# Named for the app, because from 2.0 the releases page also carries the C#
+# app's files, and DiscWright-<version> alone would not say which is which.
+$stage = Join-Path $OutDir "DiscWright-PowerShell-$version"
+$zip   = Join-Path $OutDir "DiscWright-PowerShell-$version.zip"
 
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 if (Test-Path $zip)   { Remove-Item $zip -Force }
@@ -93,7 +95,11 @@ if ($Installer) {
     $iscc = Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue |
             Select-Object -First 1 -ExpandProperty Source
     if (-not $iscc) {
+        # winget's package puts it under the user's own Programs folder, not
+        # Program Files, so a machine that installed it that way was told it
+        # had no Inno Setup at all.
         $iscc = @(
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
             "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
             "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
         ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
@@ -109,7 +115,7 @@ if ($Installer) {
     & $iscc "/DAppVersion=$version" "/O$OutDir" $iss
     if ($LASTEXITCODE -ne 0) { throw "ISCC.exe failed with exit code $LASTEXITCODE" }
 
-    $setup = Join-Path $OutDir "DiscWright-$version-setup.exe"
+    $setup = Join-Path $OutDir "DiscWright-PowerShell-$version-setup.exe"
     if (-not (Test-Path $setup)) { throw "ISCC.exe reported success but $setup is missing" }
     $setupSha = (Get-FileHash -Path $setup -Algorithm SHA256).Hash
 }
