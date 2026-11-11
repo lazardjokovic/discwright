@@ -465,10 +465,16 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 "Big Game", "DiscWright.Test", 1, 2, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
                 Games: [new MenuGame("Big Game", "setup_big.exe", string.Empty)])),
             menuUrl: new Uri(Path.Combine(_folder, "AUTORUN", "menu.hta")).AbsoluteUri,
-            test: "pump(function () { return false; });\n",
+            test: "alert('That folder could not be made: X');\npump(function () { return false; });\n",
             mustSucceed: false);
 
         Assert.Contains("the page stopped with nothing left to run", went, StringComparison.Ordinal);
+
+        // With whatever the page said in an alert, because a refusal is the
+        // usual reason a page stops early and the alert is the only place it
+        // says which. The release dry run of 2026-11-11 stopped on the install
+        // page with nothing queued, and the message could not say why.
+        Assert.Contains("alerts=That folder could not be made: X", went, StringComparison.Ordinal);
 
         // And not by running out of patience, which is the other way out and
         // would pass this test while meaning something else entirely.
@@ -767,8 +773,8 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         + "function pump(until) {\n"
         + "    var deadline = (new Date()).getTime() + 60 * 1000;\n"
         + "    while (!until()) {\n"
-        + "        if ((new Date()).getTime() > deadline) { throw new Error('the page never settled: ' + out.join(' | ')); }\n"
-        + "        if (!window.timers.length) { throw new Error('the page stopped with nothing left to run, before what this was waiting for happened: ' + out.join(' | ')); }\n"
+        + "        if ((new Date()).getTime() > deadline) { throw new Error('the page never settled: ' + out.join(' | ') + ' | alerts=' + alerts.join(' / ')); }\n"
+        + "        if (!window.timers.length) { throw new Error('the page stopped with nothing left to run, before what this was waiting for happened: ' + out.join(' | ') + ' | alerts=' + alerts.join(' / ')); }\n"
         + "        WScript.Sleep(10);\n"
         + "        (window.timers.shift())();\n"
         + "    }\n"
@@ -787,7 +793,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         + "function drain() {\n"
         + "    var deadline = (new Date()).getTime() + 60 * 1000;\n"
         + "    while (window.timers.length) {\n"
-        + "        if ((new Date()).getTime() > deadline) { throw new Error('the page never ran out of work: ' + out.join(' | ')); }\n"
+        + "        if ((new Date()).getTime() > deadline) { throw new Error('the page never ran out of work: ' + out.join(' | ') + ' | alerts=' + alerts.join(' / ')); }\n"
         + "        WScript.Sleep(10);\n"
         + "        (window.timers.shift())();\n"
         + "    }\n"
