@@ -7,6 +7,20 @@ versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Whil
 version stays below 1.0.0, the project file format and the on-disc layout may change
 between minor versions.
 
+## Unreleased
+
+### Changed
+
+- **This app is DiscWright (PowerShell) from 2.0.** The C# app is the one called
+  DiscWright, and its installer upgrades an install of this one in place. This
+  installer has a name, an AppId and a folder of its own, so the two install
+  side by side and neither can overwrite the other. Installing it over 0.11.1 or
+  earlier removes the old install first, and never touches the C# app.
+- **The release files are named `DiscWright-PowerShell-<version>`**, because
+  they share a releases page with the C# app's.
+- **No more winget.** `DiscWright.DiscWright` is the C# app's package, so the
+  manifest script refuses to run.
+
 ## [0.11.1] — 2026-11-09
 
 Nearly all of this came from one comment on GitHub. Thank you to

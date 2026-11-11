@@ -5283,97 +5283,74 @@ Describe 'Executable files stay pure ASCII' -Tag 'Unit' {
     }
 }
 
-Describe 'The winget manifests the generator writes' -Tag 'Unit' {
+Describe 'The installer is DiscWright (PowerShell)' -Tag 'Unit' {
 
-    # Run rather than read. What goes into microsoft/winget-pkgs is the file
-    # this script writes, and the one bug it has had was invisible in the
-    # source: the wording of a description made the YAML unparseable.
+    # From 2.0 the C# app is DiscWright and carries the AppId every installer of
+    # this app used up to 0.11.1, so that it upgrades an old install in place.
+    # This one therefore has a name, an AppId and a folder of its own. Each is a
+    # single line a tidy-up could quietly undo, and undoing any of them lets one
+    # installer overwrite the other on somebody's machine.
+
     BeforeAll {
-        $script:WingetRoot = Split-Path $PSScriptRoot -Parent
-        $script:WingetOut  = Join-Path ([IO.Path]::GetTempPath()) ('winget-' + [guid]::NewGuid().ToString('N'))
-
-        & (Join-Path $script:WingetRoot 'packaging\winget\New-WingetManifest.ps1') -Version '9.9.9' -Sha256 ('A' * 64) -OutDir $script:WingetOut | Out-Null
-
-        $script:WingetFiles = @(Get-ChildItem -LiteralPath $script:WingetOut -Filter *.yaml)
+        $script:Root = Split-Path $PSScriptRoot -Parent
+        $script:IssText = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'packaging\DiscWright.iss')
+        $script:Release = Get-Content -Raw -LiteralPath (Join-Path $script:Root 'packaging\Build-Release.ps1')
+        $script:Old = '{20F71A81-9D66-445E-BDC3-394B940F190E}'
     }
 
-    AfterAll {
-        if ($script:WingetOut -and (Test-Path -LiteralPath $script:WingetOut)) {
-            Remove-Item -LiteralPath $script:WingetOut -Recurse -Force
-        }
+    It 'is called DiscWright (PowerShell)' {
+        $script:IssText | Should -Match '(?m)^#define AppName\s+"DiscWright \(PowerShell\)"\s*$'
+        # And the folder, the Start Menu entry and the uninstall entry follow it.
+        $script:IssText | Should -Match '(?m)^DefaultDirName=\{autopf\}\\\{#AppName\}\s*$'
+        $script:IssText | Should -Match '(?m)^DefaultGroupName=\{#AppName\}\s*$'
+        $script:IssText | Should -Match '(?m)^UninstallDisplayName=\{#AppName\} \{#AppVersion\}\s*$'
     }
 
-    It 'writes the three files a multi file manifest is' {
-        ($script:WingetFiles.Name | Sort-Object) -join ', ' |
-            Should -Be 'DiscWright.DiscWright.installer.yaml, DiscWright.DiscWright.locale.en-US.yaml, DiscWright.DiscWright.yaml'
+    It 'has an AppId of its own, not the one the C# app took' {
+        $id = [regex]::Match($script:IssText, '(?m)^AppId=\{(\{[0-9A-F-]+\})\s*$').Groups[1].Value
+        $id | Should -Be '{6FC4469E-5231-4F83-BC18-AE868E923003}'
+        $id | Should -Not -Be $script:Old
     }
 
-    It 'quotes every value that carries a colon' {
-        # ShortDescription was reworded in 0.9.0 to "a real game disc: the
-        # game's own icon", and an unquoted YAML value holding a colon and a
-        # space is a mapping rather than a string, so every manifest the script
-        # wrote from then on failed to parse at the first line of real content.
-        # Nothing after 0.7.1 had been submitted, so it went unnoticed for six
-        # weeks and turned up only when winget validate was finally run.
-        $unsafe = foreach ($file in $script:WingetFiles) {
-            $number = 0
-            foreach ($line in [IO.File]::ReadAllLines($file.FullName)) {
-                $number++
-                if ($line -notmatch '^\s*([A-Za-z][\w-]*):\s+(\S.*)$') { continue }
-
-                $value = $Matches[2]
-
-                # Already a quoted scalar, or a block scalar, which may carry
-                # anything at all.
-                if ($value -match '^[''"|>]') { continue }
-
-                if ($value -match ':\s') { "$($file.Name) line $number" }
-            }
-        }
-
-        $unsafe | Should -BeNullOrEmpty
+    It 'removes this app''s old install before writing anything, and never the C# app' {
+        $script:IssText | Should -Match ('(?m)^#define OldAppId\s+"' + [regex]::Escape($script:Old) + '"\s*$')
+        $script:IssText | Should -Match ([regex]::Escape('Uninstall\{#OldAppId}_is1'))
+        # Told apart by what is in the folder: this app is DiscWright.ps1, the
+        # C# app is DiscWright.App.exe.
+        $script:IssText | Should -Match ([regex]::Escape("(not FileExists(Folder + 'DiscWright.ps1')) or FileExists(Folder + 'DiscWright.App.exe')"))
+        $script:IssText | Should -Match '/VERYSILENT'
+        $script:IssText | Should -Match '(?s)if CurStep = ssInstall then\s+RemoveTheOldInstall\(\);'
     }
 
-    It 'names the identifier that cannot be renamed, and the publisher to match' {
-        # DiscWright.DiscWright, filed the way Git.Git and 7zip.7zip are,
-        # because the publisher is the project. winget will not rename an
-        # identifier once it has accepted one, only deprecate it, and the
-        # publisher has to be what the installer itself declares or the
-        # submission gets asked about it, which is what happened on #433767.
-        $declared = (Select-String -Path (Join-Path $script:WingetRoot 'packaging\DiscWright.iss') -Pattern '^#define AppPublisher\s+"([^"]+)"').Matches[0].Groups[1].Value
+    It 'names its files for the app, since they share a releases page with the C# app''s' {
+        $script:IssText | Should -Match '(?m)^OutputBaseFilename=DiscWright-PowerShell-\{#AppVersion\}-setup\s*$'
+        $script:Release | Should -Match ([regex]::Escape('"DiscWright-PowerShell-$version.zip"'))
+        $script:Release | Should -Match ([regex]::Escape('"DiscWright-PowerShell-$version-setup.exe"'))
+    }
+}
 
-        $declared | Should -Be 'DiscWright'
+Describe 'The winget manifest generator, retired' -Tag 'Unit' {
 
-        foreach ($file in $script:WingetFiles) {
-            [IO.File]::ReadAllText($file.FullName) | Should -Match 'PackageIdentifier: DiscWright\.DiscWright'
+    # DiscWright.DiscWright belongs to the C# app from 2.0, and that app's
+    # installer carries the AppId this script writes as the ProductCode. Run on
+    # this branch it would write a manifest claiming the C# app's identity for a
+    # PowerShell installer, and an update to an existing winget package merges
+    # without a human. So it refuses before writing anything, and says why.
+    # The tests of what it wrote went with it to the C# repository.
+
+    It 'refuses to write anything, and says winget is the C# app now' {
+        $out = Join-Path ([IO.Path]::GetTempPath()) ('winget-' + [guid]::NewGuid().ToString('N'))
+        $generator = Join-Path (Split-Path $PSScriptRoot -Parent) 'packaging\winget\New-WingetManifest.ps1'
+        $said = $null
+
+        try {
+            & $generator -Version '9.9.9' -Sha256 ('A' * 64) -OutDir $out | Out-Null
+        } catch {
+            $said = $_.Exception.Message
         }
 
-        [IO.File]::ReadAllText((Join-Path $script:WingetOut 'DiscWright.DiscWright.locale.en-US.yaml')) |
-            Should -Match ('Publisher: ' + [regex]::Escape($declared))
-    }
-
-    It 'says one manifest version, in every manifest and every schema line' {
-        # Six places carry the number and a half done bump is the easy
-        # mistake: three ManifestVersion lines and three $schema URLs.
-        $versions = foreach ($file in $script:WingetFiles) {
-            $text = [IO.File]::ReadAllText($file.FullName)
-
-            ([regex]::Matches($text, 'ManifestVersion:\s*([\d.]+)') | ForEach-Object { $_.Groups[1].Value })
-            ([regex]::Matches($text, 'winget-manifest\.[A-Za-z]+\.([\d.]+)\.schema\.json') | ForEach-Object { $_.Groups[1].Value })
-        }
-
-        @($versions).Count | Should -Be 6
-        ($versions | Sort-Object -Unique) | Should -Be '1.28.0'
-    }
-
-    It 'passes winget validate' -Skip:(-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        # The real thing, which is the only reason the colon was ever found.
-        # Skipped where winget is not installed, which includes the CI runner,
-        # so the test above stands in for it there.
-        $said = (winget validate --manifest $script:WingetOut 2>&1 | Out-String)
-
-        $said | Should -Not -Match 'validation failed'
-        $said | Should -Match 'succeeded'
+        $said | Should -Match 'the C# app'
+        Test-Path -LiteralPath $out | Should -BeFalse
     }
 }
 

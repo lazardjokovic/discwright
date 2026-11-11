@@ -94,8 +94,14 @@ else proves it was built from what was tagged.
 ## 8. Publish
 
 ```powershell
-gh release edit vx.y.z --draft=false --title "DiscWright x.y.z" --notes-file <notes>
+gh release edit vx.y.z --draft=false --latest=false --title "DiscWright (PowerShell) x.y.z" --notes-file <notes>
 ```
+
+**`--latest=false`, every time, since 2.0.** "Latest" belongs to the C# app,
+which is released from `main`: the download button on discwright.com, the README
+and the C# app's own update check all ask GitHub for the latest release. A
+PowerShell release published as latest sends every one of them here. Check the
+releases page afterwards: the Latest badge must still be on the C# release.
 
 Notes in the house style, which previous releases show: what changed and why, in
 prose rather than a bullet list of commits, then a checksums block, then a line
@@ -115,7 +121,9 @@ what CI covered, and what the sandbox proved.
 
 ## winget, which is not part of this
 
-It comes later and on its own:
+**Since 2.0, not at all.** `DiscWright.DiscWright` is the C# app's package, and
+`packaging/winget/New-WingetManifest.ps1` refuses to run. What follows is how it
+was done up to 0.11.1:
 
 - Only when the previous submission has merged. One version at a time.
 - Only after everything above, installer included.

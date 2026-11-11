@@ -38,6 +38,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Retired with 2.0. The winget package DiscWright.DiscWright is the C# app from
+# then on, and that app's installer carries the AppId written below as the
+# ProductCode, so a manifest made here would claim the C# app's identity for a
+# PowerShell installer. An update to an existing winget package merges without
+# a human, which is why this refuses rather than trusting a comment. The
+# PowerShell app is released on GitHub only. The rest of the script is kept as
+# the record of how the manifests were made.
+throw ("DiscWright.DiscWright in winget is the C# app since 2.0. The PowerShell " +
+       "app is released on GitHub only, so there is no manifest to write here.")
+
 if (-not $OutDir) {
     $OutDir = Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')) "build\winget\$Version"
 }
