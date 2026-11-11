@@ -6,14 +6,12 @@
       version set, .NET stamps 1.0.0 on everything, and a program that cannot
       say which version it is cannot tell whether a newer one exists.
 
-      0.12.0 carries on from the PowerShell app rather than starting again.
-      That one is at 0.10.0 and goes to 0.11.0, so this picks up at 0.12.0 and
-      the two read as one project at different stages, which is what they are.
-
-      It was 2.0.0 for a while, and that claimed a finished thing. An app
-      nobody can be given yet does not get a round number.
+      2.0.0, the first release of the C# app. It ran as 0.12.0 while it was
+      being built beside the PowerShell app, carrying on from that one's 0.11,
+      and took the round number on 2026-11-11 when it became the app called
+      DiscWright. The release workflow refuses a tag that disagrees with this.
     -->
-    <Version>0.12.0</Version>
+    <Version>2.0.0</Version>
 
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>

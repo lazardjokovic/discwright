@@ -41,7 +41,11 @@ public class TheReadme
     /// </remarks>
     private const char Separator = (char)92;
 
-    private static string Readme() => File.ReadAllText(Repository.File("README.md"));
+    /// <summary>The file for people working on the code, which the facts below are held to.</summary>
+    private static string Readme() => File.ReadAllText(Repository.File("DEVELOPING.md"));
+
+    /// <summary>Both files that go public, the one for people using the app and the one for people working on it.</summary>
+    public static TheoryData<string> WhatGoesPublic => new() { "README.md", "DEVELOPING.md" };
 
     [Fact]
     public void Says_how_many_tests_there_are()
@@ -127,6 +131,21 @@ public class TheReadme
     }
 
     [Fact]
+    public void Offers_the_files_the_release_really_attaches()
+    {
+        // The README is the download page as much as the release is, and the
+        // names it gives are the ones Build-TheRelease.ps1 makes from the
+        // version the build stamps. A README still offering last version's
+        // file sends people looking for something that is not there.
+        string readme = File.ReadAllText(Repository.File("README.md"));
+        string? stamped = XDocument.Load(Repository.File("Directory.Build.props")).Descendants("Version").FirstOrDefault()?.Value;
+
+        Assert.Contains($"DiscWright-{stamped}-setup.exe", readme, StringComparison.Ordinal);
+        Assert.Contains($"DiscWright-{stamped}-portable.exe", readme, StringComparison.Ordinal);
+        Assert.DoesNotMatch(@"DiscWright-(?!" + Regex.Escape(stamped ?? string.Empty) + @"-)[0-9]+\.[0-9]+\.[0-9]+-(setup|portable)\.exe", readme);
+    }
+
+    [Fact]
     public void Says_how_many_cases_are_still_a_persons_job()
     {
         string matrix = File.ReadAllText(Repository.File("tests", "by-hand", "test-matrix.html"));
@@ -157,10 +176,11 @@ public class TheReadme
                 + $"and the matrix holds {run + byHand} cases, {run} run and {byHand} by hand.");
     }
 
-    [Fact]
-    public void Uses_no_dash_between_clauses()
+    [Theory]
+    [MemberData(nameof(WhatGoesPublic))]
+    public void Uses_no_dash_between_clauses(string file)
     {
-        string readme = Readme();
+        string readme = File.ReadAllText(Repository.File(file));
 
         // The owner's rule for anything written to be read by somebody else:
         // a comma, a full stop, or the sentence written again.
@@ -173,10 +193,11 @@ public class TheReadme
             "The README carries an em or en dash, which this project writes as a comma or a full stop.");
     }
 
-    [Fact]
-    public void Carries_nothing_that_cannot_be_made_public()
+    [Theory]
+    [MemberData(nameof(WhatGoesPublic))]
+    public void Carries_nothing_that_cannot_be_made_public(string file)
     {
-        string readme = Readme();
+        string readme = File.ReadAllText(Repository.File(file));
 
         Match address = Regex.Match(readme, "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+[.][A-Za-z]{2,}");
 
@@ -262,7 +283,7 @@ public class TheReadme
     {
         Dictionary<string, string[]> said = [];
 
-        foreach (string line in File.ReadAllLines(Repository.File("README.md")))
+        foreach (string line in File.ReadAllLines(Repository.File("DEVELOPING.md")))
         {
             Match row = Regex.Match(line, "^[|][^`]*`(DiscWright[.][A-Za-z]+)`[^|]*[|]([^|]*)[|]([^|]*)[|]");
 

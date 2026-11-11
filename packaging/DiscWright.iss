@@ -18,7 +18,7 @@
 ;
 ; Built by packaging/Build-TheInstaller.ps1, which publishes first and passes
 ; the version in:
-;     ISCC.exe /DAppVersion=0.12.0 packaging\DiscWright.iss
+;     ISCC.exe /DAppVersion=2.0.0 packaging\DiscWright.iss
 
 #ifndef AppVersion
   #error AppVersion must be passed in with /DAppVersion=x.y.z

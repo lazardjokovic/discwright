@@ -830,9 +830,9 @@ Taking that as an answer is worse than it sounds, because **`ErasingWouldHelp` i
 
 Both ways in now give the drive fifteen seconds to wake up before its silence counts, and the one that is waiting on a named drive waits only on that one.
 
-#### 0.12.0, not 2.0.0
+#### 0.12.0 while it was built, 2.0.0 when it shipped
 
-The rewrite carries on from the PowerShell app's numbering rather than starting again. That one goes to 0.11.0, so this picks up at **0.12.0** and the two read as one project at different stages, which is what they are. A round 2.0.0 claimed a finished thing, and an app nobody can be given yet does not get one.
+The rewrite carried on from the PowerShell app's numbering while it was being built, at **0.12.0** after that one's 0.11, so the two read as one project at different stages. A round number claimed a finished thing, and an app nobody could be given yet did not get one. It took **2.0.0** on 2026-11-11, when it became the app called DiscWright, released from the public repository's `main`.
 
 The installer is named **DiscWright**, not "DiscWright 2.0". While the rewrite was being tested it installed to `DiscWright (rewrite)` under an AppId of its own, so it sat beside the PowerShell install instead of taking over a working one.
 

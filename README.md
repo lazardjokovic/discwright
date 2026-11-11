@@ -1,137 +1,165 @@
-# DiscWright, in C#
+# DiscWright
 
-DiscWright puts a GOG game on a disc that still installs it in ten years, with a menu that runs itself, a printable cover in a folder anybody can open, and a checksum list so somebody can prove the disc is still good without this program.
+Turn a GOG offline installer into a real game disc. It shows the game's own icon and name in This PC, opens a menu when it goes in, and installs the game years from now on a machine that has never heard of DiscWright. A game too big for one blank becomes a set of discs, and every disc is read back and checked after it is burned. It is not only for GOG: any folder of game files goes on a disc the same way.
 
-This repository is the C# rewrite of it. The shipped app, written in PowerShell, lives at [lazardjokovic/discwright](https://github.com/lazardjokovic/discwright). That one is both what people are using today and **the reference**: when the two disagree about what a disc should hold, this one is wrong until proven otherwise.
+The way PC games came in a box.
 
-## Where things stand
+![A DiscWright disc in This PC with the game's own icon and name, and a double-click opening its menu](docs/the-disc.gif)
 
-It makes discs, and it has made real ones. The window reads a GOG download or a folder of game files, says what is going on the disc and what it will come to, plans that against the size chosen, writes the menu, the autorun, the artwork and the checksum list, builds the image, burns it, reads the disc back against what was written, and erases a rewritable when it is asked to. Everything in that sentence is finished, and `tests/by-hand/WITH-A-REAL-DISC.md` says which parts of it have been judged with a disc in a drive rather than only in a test.
+## Download
 
-A game too big for one disc comes out as a numbered set, and **any disc of a set can speak for the whole set**. Its menu copies what that disc holds behind a moving bar with the button dead, ejects, asks for the next disc, carries on by itself when one arrives, joins the cut files back together, runs the installer, waits for it, says Play when it closes, and then offers to remove the copy it made. The swap has been done twice on real discs, the second time with Hollow Knight's own GOG installer cut across two of them, and the game installed from the folder afterwards.
+**[DiscWright 2.0.0 for Windows](../../releases/latest)**
 
-**Nothing prints, and nothing will.** A disc gets an `ARTWORK` folder holding the cover and the disc face as ordinary pictures with a readme beside them, which is the ten year promise made real: somebody holding the disc needs a printer, not this program. Laying a cover out for one is the printer software's job, since it knows the case, the paper and the tray. v1 took its own printing out in 0.11.0 for the same reason.
+- **`DiscWright-2.0.0-setup.exe`** installs it for your user only, with no administrator prompt, and adds it to the Start menu.
+- **`DiscWright-2.0.0-portable.exe`** is the same app as one file. Put it anywhere and double-click it. Nothing is installed; like the installed app, it keeps its log in `%LOCALAPPDATA%\DiscWright`.
 
-Two things are not finished, and it is worth knowing which:
+Windows 10 or 11, 64-bit. Everything the app needs is inside it; there is nothing else to install.
 
-- **144 of the 213 cases in the pass by hand are still a person's job**, and the suite runs the other 69. The biggest part of what is left is the menu on the disc, which is an HTA and so invisible to UI Automation, although the set flow inside it now has a test that presses its real button under cscript.
-- **The version is `0.12.0` and not 2.0.0.** It carries on from v1's numbering rather than starting again, and the round number is held back until this is something somebody can be given. It is set once, in [Directory.Build.props](Directory.Build.props).
+**Already using the PowerShell DiscWright?** Installing 2.0 upgrades it in place, in the same Start menu entry and the same folder. Discs made with it work exactly as they did.
 
-Where to read next:
+**Looking for the PowerShell version?** It is still maintained, on the [`powershell` branch](../../tree/powershell), and its releases are the [`v0.11.x` tags](../../releases). It installs beside this one and neither touches the other.
 
-- **[READING-THE-CODE.md](READING-THE-CODE.md)** is a guided tour of what exists, in the order that makes it make sense. Twenty minutes. Start here.
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** is the plan and the reasoning: the one rule, the patterns, the decisions made and the gaps still open. Read it before writing anything.
-- **[CLAUDE.md](CLAUDE.md)** is the working rules, the facts already measured and the traps already paid for, so none of them is paid for twice.
+### What Windows is going to say
 
-## The one rule
+**"Windows protected your PC."** That is SmartScreen, on the first run of a program from the internet that is not code signed. DiscWright is not signed yet. **More info, then Run anyway.**
 
-**Arrows point inward, and the middle points at nothing.** `DiscWright.Core` references nothing of ours; everything else may reference `Core`; nothing may reference the window.
+**On some new Windows 11 machines it will not start at all.** Smart App Control, on by default after a clean install of Windows 11 22H2 or later, refuses unsigned programs outright: "An Application Control policy has blocked this file". Signing is what fixes that properly, and it is planned. Until then the setting lives under **Windows Security, App and browser control, Smart App Control**, and [Microsoft's page](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview) explains what turning it off means.
+
+## Why
+
+GOG sells DRM-free installers. You own them outright, you can back them up, and they never need the internet to install. But they sit in a folder called `setup_alan_wake_1.1_music_lang_fix_(80728).exe`, and that is not quite the same as a shelf.
+
+Burn one with any normal ISO tool and Windows shows you `DVD RW Drive (E:)`. Burn one with DiscWright and Windows shows you the game.
+
+## Making a disc
+
+### 1. Add a game
+
+Drop its GOG download folder on the window, or use **Add a game**. DiscWright reads the name out of the installer and the size of every file, and says what it will all come to.
+
+Anything else in that folder is explained, not just listed. GOG patches are read against the installer: a patch the installer already covers arrives unticked and says why, so a disc does not carry 650 MB it will never use. A patch that adds something goes on as an add-on.
+
+![The Hollow Knight folder goes on, and its three patches are explained as already covered by the installer](docs/add-a-game.gif)
+
+### 2. Choose how it looks
+
+An icon (a `.ico`, or any PNG or JPG and DiscWright makes the icon), a background picture or a plain colour behind the menu, music, a manual and an Extras folder, and a cover and a disc face to print later.
+
+![Artwork, music and extras: the icon, the background, the music and the manual are chosen](docs/artwork.gif)
+
+### 3. See what it will look like
+
+The menu opens exactly as the disc will show it, before anything is built.
+
+![The menu previewed before anything is built](docs/preview.gif)
+
+### 4. Build it then burn it
+
+DiscWright writes the disc as a folder and as an ISO and checks every file it wrote. Then burn it, or test it first: right-click the ISO and choose **Mount**, and Windows gives you a drive with the real icon, the real name and the real menu, at no cost in discs.
+
+![Build it: the image is written with a percentage, and the disc is ready](docs/build.gif)
+
+Every build writes a `discproject.json` beside the ISO. **Open one you built** loads it back, months later, to change one thing and build again. **Save it for later** writes the same file without building.
+
+## Bigger than one disc
+
+Choose the blank you have, and a game that does not fit becomes a **set**: as many discs as it takes, numbered, each with the manual and the extras so whichever disc somebody picks up has them. Tick **Split a file too big for one disc** and a single file larger than a disc is cut across them and put back together on the way in. Burning writes the discs one after another and asks for the next blank in between.
+
+Put any disc of the set in and press **Install disc 1 of 2**. A page asks where the installer should be put back together, suggesting the drive with the most room and saying how much it needs.
+
+![Install disc 1 of 2, and the page that asks where the installer goes](docs/set-install-page.gif)
+
+The menu copies the disc, opens the tray, asks for the next one, carries on by itself when it arrives, joins any cut files, checks them, and starts the game's own installer, which then asks where to install the game. Once it is installed the menu says **Play**, and offers to remove the copy it made.
+
+![Disc 1 is copied, disc 2 is asked for and copied, the installer is put back together and started](docs/set-copy-and-swap.gif)
+
+## More than one game, and not only GOG
+
+Add several and they go on one disc when they fit, with a chooser in the menu leading to each game's own screen. DLC, expansions, patches and mods go on the game they belong to, and stay greyed until that game is installed, because GOG's installer refuses a patch for a game that is not there several clicks into it. A game's patches fold into one **Update to 1.5.12620** button that runs them in order.
+
+**A game does not have to come from GOG.** Point DiscWright at any folder of game files and it goes on the disc as it stands, subfolders and all. Say which executable installs it, or which one starts it, and the menu gets that button; with neither, the menu copies the folder to your machine and opens it.
+
+## Burned and checked
+
+DiscWright burns the ISO to the drive you choose, offers to erase a rewritable that is in the way, and then **reads every file back off the disc** and compares it with what was built. A burn that ends without an error is not the same thing as a disc holding the right bytes, and that check is the reason to burn from here rather than from a file manager.
+
+Every disc also carries `checksums.sha256`, the same format `sha256sum` reads, so anybody can prove the disc is still good in twenty years without this program:
 
 ```
-    DiscWright.App
-      |
-      +--> ViewModels --> Staging --> Menu --+
-      +--> Platform ------------------------>+
-      +--> Imaging ------------------------->+--> DiscWright.Core
-      +--> Burning ------------------------->+
+sha256sum -c checksums.sha256
 ```
 
-`Core` targets `net10.0` while the edge projects target `net10.0-windows`, so the rule is enforced by the compiler and not only by a test: `Core` cannot reach a Windows API even by accident.
+The menu's **✓** button runs the same check from the disc itself.
 
-| Project | What it is for | What it references |
-|---|---|---|
-| `DiscWright.Core` | the rules, and pure: the planner, the refusals, the project file, the recognisers and the build steps | nothing of ours |
-| `DiscWright.Platform` | the answers only Windows can give: the real filesystem, hashes, icons, pictures, a file's version resource, what GitHub has released | `Core` |
-| `DiscWright.Imaging` | making an image with IMAPI, which is wanted on its own and works with no drive in the machine | `Core` |
-| `DiscWright.Burning` | writing a disc, reading the recorders and erasing a rewritable, all behind an interface | `Core` |
-| `DiscWright.Menu` | the menu a disc carries, as text: the page, its script and its icon, all embedded so a stale copy cannot be handed to the writer | `Core` |
-| `DiscWright.Staging` | assembling a whole disc, the image of one, and the preview of the menu before anything is burned | `Core`, `Menu` |
-| `DiscWright.ViewModels` | everything the window knows and can do, with no window in it | `Staging` |
-| `DiscWright.App` | the window. WPF, and nothing but the window: no arithmetic, no judgement, no refusal wording | `ViewModels`, `Platform`, `Imaging`, `Burning` |
-| `DiscWright.Tests` | the suite, and deliberately not the window | `Core`, `Staging`, `Menu`, `Platform`, `Imaging`, `Burning`, `ViewModels` |
+**Open the log** keeps a plain text record of each day: what the drives said, every question and its answer, and every file a disc failed to read back. It stays on your PC.
 
-That third column is what each project **declares**, which is why `ViewModels` shows only `Staging`: it reaches `Core` through it and does not ask for it by name. `TheArchitecture` in the test project reads the same declared references and fails if any of this stops being true, because the compiler drops a reference nothing uses and a dependency that exists on paper is already a dependency. `TheReadme` holds this table to the project files, so a project added, renamed or newly referenced cannot leave the table saying what used to be true.
+## What ends up on the disc
 
-## Building it, and running the tests
+No black box. The disc is a plain folder tree any file manager can read:
+
+```
+E:\
+├─ autorun.inf              the drive's icon and name, and the menu on insert
+├─ Start Here.hta           opens the menu where AutoPlay is off
+├─ HOLLOWKNIGHT.ico         named after the disc, so Explorer cannot show the last disc's icon
+├─ checksums.sha256         every file's SHA-256, for sha256sum
+├─ setup_hollow_knight_....exe
+├─ ARTWORK\                 the cover and disc face exactly as given, with a READ ME
+├─ AUTORUN\                 the menu, its background and its music
+└─ Extras\                  the manual and whatever else you added
+```
+
+A disc of a set adds `Disc set.txt`, which lists every file of the whole set with its disc number, size and SHA-256.
+
+**`Start Here.hta` is there because AutoPlay often is not.** Windows has switched it off on a great many machines, and there a disc looks like a folder of installers with no way in. It can be left off under **More options**.
+
+## Known limitations
+
+- **The menu needs `mshta.exe`.** It ships with Windows, but some locked down machines disable it. The icon and the name still work; only the menu is affected.
+- **Disc names are limited to what Windows can show.** AutoRun reads `autorun.inf` in the system codepage, so accented Latin letters are fine and Cyrillic, Greek and Chinese are not. DiscWright shows exactly what This PC will display.
+- **A set installs from a copy, never straight off the discs.** GOG's installer asks for its parts out of order and more than once, so the discs are copied back into one folder first.
+- **Windows XP and older cannot read the disc** unless **Readable by Windows 98 and Mac OS 9** is ticked under More options, which adds the older file systems beside UDF. A game whose installer comes in parts over 2 GB cannot have them.
+
+## How much fits
+
+| Up to | Disc |
+|---|---|
+| 0.68 GB | CD-R 700 MB |
+| 4.37 GB | DVD5 4.7 GB |
+| 7.95 GB | DVD9 8.5 GB dual layer |
+| 23.3 GB | BD-R 25 GB |
+| 46.6 GB | BD-R DL 50 GB dual layer |
+| 93 GB | BD-R XL 100 GB |
+
+## Where to go
+
+- **Show off a disc you made**: [Show and tell](../../discussions/categories/show-and-tell)
+- **Ask for something**: [Ideas](../../discussions/categories/ideas)
+- **Report something broken**: [Issues](../../issues), with today's file from **Open the log** if you have it
+- **What changed**: the notes on each [release](../../releases), and [discwright.com](https://discwright.com) for the app with pictures
+
+## Building it
+
+DiscWright is C# on .NET 10, WPF for the window, IMAPI for the burning, and an HTA for the menu on the disc.
 
 ```
 dotnet build
 dotnet test
-dotnet test --filter FullyQualifiedName~ThePlanner
-tools\Invoke-TestsOnTheVM.ps1
-```
-
-**1782 tests, and about half a minute.** Every pull request runs that same suite on a hosted Windows runner, in Release, and publishes the one self-contained file the app ships as. `.github/workflows/checks.yml` says what it runs, what leaves itself out, and why.
-
-**The test project does not reference `DiscWright.App`, on purpose**, so no test can press a button or open a window, and `dotnet test` does not compile the XAML. The window is covered three other ways instead: tests that read `MainWindow.xaml.cs` as text and fail when a case goes unhandled, tests that read the XAML as XML and hold the ids and the bindings in place, and `TheWindowChecksItself`, a stateful walk over the view models that presses Make, Burn, Erase and Open and asks the same two questions after every step, whether the window still adds up and whether it said what changed. Nearly every bug this rewrite has found came from that walk, from a planted fault, or from reaching code nothing reached. Not one came from an example based test.
-
-Nothing is excluded from a run. The tests that want something a machine may not have read an environment variable and leave themselves out when it is unset, which is every run on the hosted runner:
-
-| | |
-|---|---|
-| `DISCWRIGHT_CHECK_A_DISC` | a disc in a real drive, with `DISCWRIGHT_CHECK_AGAINST` naming the folder to check it against |
-| `DISCWRIGHT_SPEND_A_DISC` | permission to write to one |
-| `DISCWRIGHT_KIT` | the testing kit, the folders and discs built by hand |
-| `DISCWRIGHT_FIXTURES` | the folders `tests/by-hand/Build-TheFixtures.ps1` makes |
-| `DISCWRIGHT_ASK_GITHUB` | a real call to the releases API |
-| `DISCWRIGHT_SOAK` | ten thousand random sequences through the walk rather than two hundred |
-
-**Some of this used to be impossible on the machine it is written on.** Smart App Control was on and enforcing there, and it refused to load our own freshly built, unsigned `DiscWright.Platform.dll`: `An Application Control policy has blocked this file (0x800711C7)`. Everything that stayed inside `Core` was unaffected, which was most of the suite and all of the fast part. It has been off here since 2026-10-16 and the whole suite now runs on both machines. The single file publish stays exactly as it is, because somebody who has it on meets all of that.
-
-The VM is still where a long run goes, because it is not this desktop. The runner sends the **working tree**, not the last commit, because the point of a test loop is to run what is on disk this second. It takes a `-Filter` that goes straight through to `dotnet test`, and it needs the VM password once per terminal:
-
-```
-$env:DISCWRIGHT_VM_PASSWORD = '...'
-```
-
-Every run is stamped with the local commit and the time it was sent, and the VM echoes that stamp back. If the two disagree the run is refused rather than reported, because a result from a run that never fired reads exactly like a pass.
-
-### Whether the tests are worth anything
-
-A suite is worth what it objects to, so there are two ways of asking. `tools\Mutate.py` plants a fault somebody chose, runs the suite, and refuses to draw a conclusion without evidence that the run happened, because a blocked run and a fault nothing caught look exactly alike. `tests\by-hand\Invoke-Stryker.ps1` is the other half: every fault Stryker can think of across one project, which is the only honest answer to whether these tests are worth having. On `DiscWright.ViewModels`, where the decisions live, the score was **89.78% on 2026-10-24**, up from 72.03% four days before that, and `stryker-config.json` is the configuration it runs with.
-
-### Testing by hand
-
-`tests/by-hand/test-matrix.html` is the pass somebody works through with the real program in front of them. Open it in a browser; it is one file, it needs nothing else, and it keeps its ticks, so a pass can be left half finished and picked up later. **213 cases, 69 of them run by the suite and 144 still by hand**, and every case that claims to be covered names the test that covers it, so the claim can be checked rather than believed.
-
-It covers what no automated test can reach: whether the window changes when it should, whether every control is live when it should be, whether a sentence still reads right at none and at one as well as at many, and the menu on the disc, which is an HTA and so invisible to UI Automation.
-
-It is held to the windows by `TheTestMatrix`, so a control added to a window and not written down there breaks the build. `tests/by-hand/README.md` says how.
-
-`tests/by-hand/WITH-A-REAL-DISC.md` is the part of that pass which needs a hand and a disc, written so that the hand is all it needs, and it carries what each pass actually found, including the rewritables that failed to read back after a day of being erased and rewritten while a write once disc took the same burn first time.
-
-### Driving the real window
-
-The scripts in `tools` open the app and work it through UI Automation: `See-TheWindow.ps1` asks for every control the markup promises, which is the only thing that proves the ids arrive rather than merely being written, `Drive-TheWindow.ps1` takes the testing kit through the window all the way to discs on a disk, `Sweep-TheKit.ps1` does that for every folder in the kit in turn, and `Burn-FromTheWindow.ps1` presses Burn and answers everything it asks.
-
-**These take the desktop**, so say so before running one: windows open and take the focus, and typing is not possible while they do. They read the window rather than photographing it, because `SetForegroundWindow` is refused for a background process and two attempts at a screenshot captured whatever was in front instead.
-
-### What the build insists on
-
-The SDK is pinned in `global.json` to the 10.0.4xx band, because this machine has 10.0.401 and the test VM has 10.0.402 and the same solution should not quietly build differently in two places.
-
-`TreatWarningsAsErrors` is on, and `.editorconfig` turns the naming rules in ARCHITECTURE.md into warnings, so a name that breaks the convention breaks the build. If that ever gets in the way more than it helps, it is one line in `Directory.Build.props`.
-
-## Running it, and what ships
-
-```
 dotnet run --project src\DiscWright.App
-packaging\Build-TheInstaller.ps1
-packaging\Build-TheMsix.ps1
 ```
 
-The app ships as **one self-contained file**, and that is not a preference. Smart App Control refuses a freshly built unsigned DLL by name, so an app published as an exe beside eight loose DLLs starts and then dies with `0xE0434352`; inside a bundle the assemblies load from memory and there is nothing for Code Integrity to check. `Build-TheInstaller.ps1` publishes that file and wraps it with Inno Setup, carrying a guard against wrapping an exe plus loose DLLs because that has gone wrong once already, and the hosted runner does the publish and the same guard on every pull request, so a packaging break is found before a tag is pushed rather than after. `Build-TheMsix.ps1` lays the same payload out as a package for the Store route, which has to be launched by its identity to be worth testing at all. Both read the version from `Directory.Build.props`, so an installer cannot name a different version from the app inside it.
+[DEVELOPING.md](DEVELOPING.md) is where to start: building, the tests and how they are judged, and how a release is made. [READING-THE-CODE.md](READING-THE-CODE.md) is a twenty minute tour of how it fits together, [ARCHITECTURE.md](ARCHITECTURE.md) is the reasoning behind it, and [tests/by-hand](tests/by-hand) is the part of the testing that needs a person and a disc. Pull requests run the whole suite on a hosted Windows runner.
 
-**A release is made by pushing a tag**, `v2.0.0` for 2.0.0, and nowhere else. `.github/workflows/release.yml` runs `packaging\Build-TheRelease.ps1`, which refuses a tag that is not `vX.Y.Z`, a tag that disagrees with `Directory.Build.props`, and a release with no notes in `packaging/release-notes`. It then runs the suite on the tagged commit, builds the installer, the same app as a portable exe and a `SHA256SUMS.txt`, and makes a **draft** release called "DiscWright 2.0.0" carrying all three. A draft is seen by nobody else and is never "latest", so publishing it stays a person's decision. Run by hand from the Actions tab, the workflow builds everything and releases nothing.
+Commit messages before 2.0 end in numbers like `(csharp#161)`. Those are pull requests in the private repository where the rewrite was made, not this repository's issues. The history of the PowerShell app is on the [powershell](../../tree/powershell) branch.
 
-**winget comes after, by hand, one version at a time.** `packaging\winget\New-WingetManifest.ps1 -Version 2.0.0 -Sha256 <hash>` writes the three manifest files for a published release, taking the installer's hash from its `SHA256SUMS.txt` and the `ProductCode` from the installer's own `AppId`, so the package `DiscWright.DiscWright` sees the C# app as the next version of the one it already had. Writing them submits nothing. An update to an existing winget package merges without a human, so nothing is submitted until the release has been proven, and never automatically.
+## License
 
-## Where it ends up
+MIT. See [LICENSE](LICENSE).
 
-This repository is private and temporary. When 2.0 is ready the C# app becomes `main` in the public `discwright` repository, where the releases, the issues, the winget package and discwright.com already point, and the PowerShell app keeps a `v1` branch and its tags.
+## Not affiliated with GOG
 
-So it is worth saying twice: **a secret committed here cannot be taken back later.** Going public publishes the whole history. Credentials go in an environment variable or a gitignored `*.local.json`.
+DiscWright is an independent hobby project. It is **not affiliated with, endorsed by, or connected to GOG.com, GOG sp. z o.o., or CD PROJEKT**. "GOG" is their trademark and is used here only to describe what the tool reads.
 
-## Licence
+It works with GOG offline installers because those installers are DRM-free by design. That is GOG's whole proposition, and the only reason a tool like this can exist. DiscWright circumvents nothing. Use it with games you own, to make copies for yourself.
 
-MIT, the same as v1, and the text is in [LICENSE](LICENSE) rather than in this sentence. It said "to match v1" for as long as there was no file to match it with, which is a licence nobody can actually rely on: GitHub reported this repository as having none, and a repository that goes public carrying an intention instead of a licence is one nobody may use.
+Game names, logos and artwork shown here are the property of their respective owners, and appear only to demonstrate what the tool does. The recordings show *Hollow Knight*, made by Team Cherry, whose name, artwork and music belong to them. DiscWright is not affiliated with Team Cherry.

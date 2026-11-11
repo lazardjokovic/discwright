@@ -55,3 +55,7 @@ secrets/
 # Left behind only when a mutation run is killed before it can put a
 # deliberate fault back. It names what is still in the tree.
 tools/.a-fault-is-planted
+
+# The working notes for this repository's sessions. Kept out of the public
+# history by the 2.0 move, and kept as a local file from then on.
+CLAUDE.md
