@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Text.RegularExpressions;
 using DiscWright.Core;
 
 namespace DiscWright.ViewModels;
@@ -23,17 +22,18 @@ namespace DiscWright.ViewModels;
 /// rebuilt from screenshots.
 /// </para>
 /// <para>
-/// A line about progress that differs from the last only in its numbers is
-/// not written again. A burn reports its percentage hundreds of times, and
-/// what anybody reading the log afterwards wants is when each stage started.
+/// Progress is written once a stage and once more each time its percentage
+/// reaches a new tenth, which <see cref="TheProgressWorthWriting"/> decides. A
+/// burn reports its percentage hundreds of times, and what anybody reading the
+/// log afterwards wants is when each stage started and that it kept moving.
 /// </para>
 /// </remarks>
-public sealed partial class WhatTheLogHears
+public sealed class WhatTheLogHears
 {
     private readonly MakeADisc _screen;
     private readonly IKeepALog _log;
     private readonly Lock _oneAtATime = new();
-    private string? _lastDoing;
+    private readonly TheProgressWorthWriting _progress = new();
     private Refusal? _lastRefusal;
     private DiscCheck? _lastCheck;
     private TheSetSoFar? _lastSet;
@@ -107,20 +107,10 @@ public sealed partial class WhatTheLogHears
 
     private void Doing(string doing)
     {
-        if (doing.Length == 0)
+        if (_progress.Worth(doing))
         {
-            return;
+            _log.Write($"Doing: {doing}");
         }
-
-        string shape = ShapeOf(doing);
-
-        if (shape == _lastDoing)
-        {
-            return;
-        }
-
-        _lastDoing = shape;
-        _log.Write($"Doing: {doing}");
     }
 
     /// <summary>
@@ -159,12 +149,6 @@ public sealed partial class WhatTheLogHears
         return string.Join("; ", parts) + (came.Good ? ". Good." : ". NOT GOOD.");
     }
 
-    /// <summary>
-    /// A progress line with its numbers taken out, so that 45% and 46% of the
-    /// same stage are the same line and the next stage is a new one.
-    /// </summary>
-    public static string ShapeOf(string doing) => Numbers().Replace(doing, "#");
-
-    [GeneratedRegex(@"\d+")]
-    private static partial Regex Numbers();
+    /// <inheritdoc cref="TheProgressWorthWriting.ShapeOf"/>
+    public static string ShapeOf(string doing) => TheProgressWorthWriting.ShapeOf(doing);
 }
