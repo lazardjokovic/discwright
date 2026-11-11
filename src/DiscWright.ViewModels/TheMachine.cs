@@ -61,4 +61,9 @@ public sealed record TheMachine(
     // How long a drive gets to say what is in it, which is as much a fact
     // about this machine as the drives themselves. A real one needs seconds
     // and a test needs none. Null means what a real one needs.
-    HowLongADriveGets? Patience = null);
+    HowLongADriveGets? Patience = null,
+
+    // What fetches and runs a newer installer, when somebody presses Update.
+    // Null means this copy cannot update itself, and a newer release offers
+    // its page, which is what it did before there was an Update.
+    IUpdateThisCopy? Updater = null);

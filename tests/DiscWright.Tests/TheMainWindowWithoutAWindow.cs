@@ -3746,7 +3746,8 @@ public class TheMainWindowWithoutAWindow
         IFileSystem? disk = null,
         IHasher? hasher = null,
         IKeepTheSetsPlace? note = null,
-        WhereDiscsWouldGo? places = null) =>
+        WhereDiscsWouldGo? places = null,
+        IUpdateThisCopy? updater = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -3764,7 +3765,8 @@ public class TheMainWindowWithoutAWindow
             "2.0.0",
             _ => 1000,
             places,
-            new AClockThatMovesItself().Patience));
+            new AClockThatMovesItself().Patience,
+            updater));
 
     /// <summary>The note beside the discs, kept in memory.</summary>
     private sealed class ANoteInMemory(string? says = null) : IKeepTheSetsPlace
@@ -3842,7 +3844,7 @@ public class TheMainWindowWithoutAWindow
     private static LeftBehind AnExtra(string name, int bytes) =>
         new(new ListedFile(name, bytes), LeftBehindKind.LooksLikeAnAddOn);
 
-    private static GameFolder AGame(string name, int bytes, int parts = 0)
+    internal static GameFolder AGame(string name, int bytes, int parts = 0)
     {
         List<ListedFile> files = [new($"setup_{name}.exe", bytes)];
 

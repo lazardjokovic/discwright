@@ -141,6 +141,15 @@ Description: "{cm:LaunchProgram,{#AppName}}"; \
     WorkingDir: "{app}"; \
     Flags: postinstall nowait skipifsilent
 
+; After an update DiscWright asked for itself. The app starts this installer
+; with /SILENT and its own /RELAUNCH and closes, so the entry above, which a
+; silent install skips, would leave nobody looking at the new copy. Only with
+; both: a quiet install by winget or by hand opens nothing.
+Filename: "{app}\DiscWright.App.exe"; \
+    WorkingDir: "{app}"; \
+    Flags: nowait; \
+    Check: ReopenAfterwards
+
 [Code]
 // The rewrite's own uninstaller, run quietly before anything is written, when
 // this machine has the rewrite installed under its testing AppId. Per-user,
@@ -159,6 +168,19 @@ begin
     if FileExists(Uninstaller) then
       Exec(Uninstaller, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, Code);
   end;
+end;
+
+// Whether the app started this installer to update itself, which is the only
+// time a silent install opens the program afterwards.
+function ReopenAfterwards(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  if WizardSilent() then
+    for I := 1 to ParamCount do
+      if CompareText(ParamStr(I), '/RELAUNCH') = 0 then
+        Result := True;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

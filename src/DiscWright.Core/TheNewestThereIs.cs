@@ -6,17 +6,18 @@ namespace DiscWright.Core;
 /// <param name="Tag">What that release is called, as published.</param>
 /// <param name="Where">The page to send somebody to, if there is one.</param>
 /// <param name="WhyNot">Why it could not be asked, when it could not.</param>
-public sealed record WhatWasReleased(string? Tag, string? Where, string? WhyNot = null);
+/// <param name="Files">What is attached to it, when that was said.</param>
+public sealed record WhatWasReleased(
+    string? Tag, string? Where, string? WhyNot = null, IReadOnlyList<AReleasedFile>? Files = null);
 
 /// <summary>
 /// How the build somebody is running compares with the newest one released.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>It only ever says that a version exists.</strong> Downloading and
-/// replacing a running program is a far bigger thing than reading a number,
-/// and doing it to an unsigned program that Windows already distrusts would be
-/// worse than not offering it at all.
+/// <strong>It only ever says that a version exists.</strong> Fetching it is
+/// <see cref="TheUpdate"/>'s decision, made only when somebody presses Update,
+/// and only for the installer the release itself publishes with its checksum.
 /// </para>
 /// <para>
 /// Nothing here goes near a network. It is handed what was said and works out

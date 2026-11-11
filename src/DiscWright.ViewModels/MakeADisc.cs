@@ -94,6 +94,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private bool _thePlanIsSound;
     private Recorder? _theDrive;
     private bool _asking;
+    private TheUpdate? _update;
+    private Updating _updating;
+    private long _downloaded;
+    private string? _downloadedInstaller;
+    private string? _updateWentWrong;
     private IReadOnlyList<Recorder> _lastSeen = [];
 
     /// <summary>
@@ -358,7 +363,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// reporting a problem, and every other field in this window says what it
     /// has to say in a quiet line under itself.
     /// </remarks>
-    public string WhatTheVersionSays => AboutTheVersion?.InWords ?? string.Empty;
+    public string WhatTheVersionSays =>
+        _update is TheUpdate update ? AboutTheUpdate(update) : AboutTheVersion?.InWords ?? string.Empty;
 
     /// <summary>
     /// What the one pressable thing on the version line is called.
@@ -372,6 +378,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     public string WhatTheVersionLinkSays =>
         _asking ? "Asking GitHub"
+            : _update is TheUpdate update
+                ? _updating switch
+                {
+                    Updating.Downloading or Updating.Checking or Updating.Closing => "Updating",
+                    Updating.Waiting => $"Install {update.Version}",
+                    _ => $"Update to {update.Version}",
+                }
             : AboutTheVersion is null ? "Check for new version"
             : AboutTheVersion.WorthGetting ? "Get it"
             : "Check again";
@@ -389,6 +402,18 @@ public sealed class MakeADisc : INotifyPropertyChanged
         AboutTheVersion is { WorthGetting: true } how ? how.Where : null;
 
     /// <summary>
+    /// Whether the version link updates this copy when pressed, rather than
+    /// opening a page or asking again.
+    /// </summary>
+    /// <remarks>
+    /// True once a newer release has been found that publishes an installer
+    /// with its checksum, and only on a copy the installer put here. The
+    /// release page is then a second link of its own, What's new, so the page
+    /// is never lost to the button.
+    /// </remarks>
+    public bool TheUpdateOnOffer => _update is not null;
+
+    /// <summary>
     /// Asks what the newest released version is.
     /// </summary>
     /// <remarks>
@@ -399,14 +424,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </para>
     /// <para>
     /// It never acts on the answer. Saying a newer one exists is the whole of
-    /// it: replacing a running program is a far bigger thing than reading a
-    /// number, and doing it to an unsigned one that Windows already distrusts
-    /// would be worse than not offering it.
+    /// it, and offering Update when this copy can take one. Fetching it waits
+    /// for a second press, <see cref="UpdateThisCopy"/>.
     /// </para>
     /// </remarks>
     public async Task CheckForANewVersion(CancellationToken ct = default)
     {
-        if (_asking)
+        if (_asking || _updating != Updating.NotYet)
         {
             return;
         }
@@ -420,6 +444,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
             AboutTheVersion = new HowThisBuildCompares(
                 _machine.ThisBuild, said.Tag, said.Where, said.WhyNot);
+
+            _update = _machine.Updater is { CanUpdateItself: true }
+                ? TheUpdate.Offered(AboutTheVersion, said.Files)
+                : null;
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
@@ -428,24 +456,197 @@ public sealed class MakeADisc : INotifyPropertyChanged
             // a poor trade for a version number.
             AboutTheVersion = new HowThisBuildCompares(
                 _machine.ThisBuild, null, null, "Something went wrong asking.");
+            _update = null;
         }
         finally
         {
             _asking = false;
         }
 
+        _updateWentWrong = null;
         TellAboutTheVersion();
     }
 
     /// <summary>
-    /// Everything on the version line, which changes together or not at all.
+    /// Downloads the newer installer, checks it against the release's own
+    /// checksum, and runs it, closing this copy so it can be replaced.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Only when somebody presses Update</strong>, after asking found
+    /// one. Nothing about it starts by itself.
+    /// </para>
+    /// <para>
+    /// <strong>Never while something is running.</strong> Updating closes the
+    /// program, and closing it during a burn ruins the disc. Pressed during a
+    /// build, a burn or an erase it says so and does nothing. If one starts
+    /// while the download is on its way, the checked installer waits, and the
+    /// link says Install until it is pressed again with nothing running.
+    /// </para>
+    /// <para>
+    /// <strong>A download that does not match is never run.</strong> It is
+    /// thrown away and the line says why, with the release page still a link
+    /// away. So is one whose checksums do not list it, and one that did not
+    /// finish.
+    /// </para>
+    /// </remarks>
+    public async Task UpdateThisCopy(CancellationToken ct = default)
+    {
+        if (_update is not TheUpdate update
+            || _machine.Updater is not IUpdateThisCopy updater
+            || _updating is Updating.Downloading or Updating.Checking or Updating.Closing)
+        {
+            return;
+        }
+
+        if (_updating == Updating.Waiting && _downloadedInstaller is string ready)
+        {
+            InstallOnceNothingRuns(updater, ready);
+            return;
+        }
+
+        if (IsWorking)
+        {
+            _updateWentWrong = "Something is running. Updating closes DiscWright, so press "
+                + $"Update to {update.Version} once it is done.";
+            TellAboutTheVersion();
+            return;
+        }
+
+        _updateWentWrong = null;
+        _downloaded = 0;
+        _updating = Updating.Downloading;
+        TellAboutTheVersion();
+
+        string installer = updater.WhereTheDownloadGoes(update.Installer.Name);
+        string? why;
+
+        try
+        {
+            why = await Fetch(update, updater, installer, ct);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            why = "The download did not finish. Try again, or get it from What's new.";
+        }
+
+        if (why is not null)
+        {
+            try
+            {
+                updater.ThrowAway(installer);
+            }
+            catch (Exception wrong) when (wrong is IOException or UnauthorizedAccessException)
+            {
+                // A file that will not delete in the temporary folder is
+                // Windows' to tidy. It is never run, which is what matters.
+            }
+
+            _updating = Updating.NotYet;
+            _updateWentWrong = why;
+            TellAboutTheVersion();
+            return;
+        }
+
+        _downloadedInstaller = installer;
+        InstallOnceNothingRuns(updater, installer);
+    }
+
+    /// <summary>
+    /// The checksums, then the installer, then whether the two agree, or why
+    /// it cannot go on.
+    /// </summary>
+    private async Task<string?> Fetch(TheUpdate update, IUpdateThisCopy updater, string installer, CancellationToken ct)
+    {
+        string sums = await updater.Read(update.Sums.Url, ct);
+
+        if (TheUpdate.TheHashIn(sums, update.Installer.Name) is not string expected)
+        {
+            return "The release's checksums do not list its installer, so nothing was downloaded. "
+                + "Get it from What's new instead.";
+        }
+
+        await updater.Download(
+            update.Installer.Url,
+            installer,
+            new Progress<long>(bytes =>
+            {
+                _downloaded = bytes;
+                Tell(nameof(WhatTheVersionSays));
+            }),
+            ct);
+
+        _updating = Updating.Checking;
+        TellAboutTheVersion();
+
+        string hashed = await Task.Run(() => _machine.Hasher.Sha256(installer, ct), ct);
+
+        return TheUpdate.Matches(expected, hashed)
+            ? null
+            : "The download did not match the checksum the release publishes, so it was thrown away "
+                + "and nothing ran. Try again, or get it from What's new.";
+    }
+
+    private void InstallOnceNothingRuns(IUpdateThisCopy updater, string installer)
+    {
+        if (IsWorking)
+        {
+            _updating = Updating.Waiting;
+            TellAboutTheVersion();
+            return;
+        }
+
+        _updating = Updating.Closing;
+        TellAboutTheVersion();
+
+        try
+        {
+            updater.InstallAndClose(installer);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            _updating = Updating.NotYet;
+            _downloadedInstaller = null;
+            _updateWentWrong = $"The installer would not start, so this is still {_machine.ThisBuild}. "
+                + "Try again, or get it from What's new.";
+            TellAboutTheVersion();
+        }
+    }
+
+    /// <summary>What the line says once an update is on offer.</summary>
+    private string AboutTheUpdate(TheUpdate update) => _updating switch
+    {
+        Updating.Downloading => $"Downloading DiscWright {update.Version}, {TheDownloadPercent(update)}%.",
+        Updating.Checking => "Checking the download against the checksum the release publishes.",
+        Updating.Waiting => $"DiscWright {update.Version} is downloaded and checked. Updating closes "
+            + $"DiscWright, so it waits until nothing is running. Press Install {update.Version} then.",
+        Updating.Closing => $"DiscWright closes now, updates to {update.Version} and opens again by itself.",
+        _ => _updateWentWrong ?? AboutTheVersion?.InWords ?? string.Empty,
+    };
+
+    private int TheDownloadPercent(TheUpdate update) =>
+        update.Installer.Size > 0
+            ? (int)Math.Clamp(_downloaded * 100 / update.Installer.Size, 0, 100)
+            : 0;
+
+    /// <summary>Everything on the version line, which changes together or not at all.</summary>
     private void TellAboutTheVersion()
     {
         Tell(nameof(AboutTheVersion));
         Tell(nameof(WhatTheVersionSays));
         Tell(nameof(WhatTheVersionLinkSays));
         Tell(nameof(TheVersionPage));
+        Tell(nameof(TheUpdateOnOffer));
+    }
+
+    /// <summary>Where an update is, between being offered and the program closing for it.</summary>
+    private enum Updating
+    {
+        NotYet,
+        Downloading,
+        Checking,
+        Waiting,
+        Closing,
     }
 
     /// <summary>

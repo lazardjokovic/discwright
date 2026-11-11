@@ -410,14 +410,23 @@ public class TheWindowsMarkup
         XElement links = block.Elements().ElementAt(1);
 
         Assert.Equal(
-            ["CheckForANewVersion", "Appearance", "OpenTheLog"],
+            ["CheckForANewVersion", "WhatsNew", "Appearance", "OpenTheLog"],
             links.Elements(Xaml + "Button").Select(IdOf));
 
         // A dot between each, as the totals bar under the list has.
         Assert.Equal(
-            ["Button", "TextBlock", "Button", "TextBlock", "Button"],
+            ["Button", "TextBlock", "Button", "TextBlock", "Button", "TextBlock", "Button"],
             links.Elements().Select(each => each.Name.LocalName));
         Assert.All(links.Elements(Xaml + "TextBlock"), dot => Assert.Equal("·", (string?)dot.Attribute("Text")));
+
+        // What's new, and the dot before it, only while the version link is
+        // Update. Before that the version link opens the page itself, and two
+        // links to one page side by side would be one too many.
+        XElement[] whatsNew = [.. links.Elements().Skip(1).Take(2)];
+        Assert.All(whatsNew, each => Assert.Equal(
+            "{Binding TheUpdateOnOffer, Converter={StaticResource WhenSo}}", (string?)each.Attribute("Visibility")));
+        Assert.Equal("OpenWhatsNew", (string?)whatsNew[1].Attribute("Click"));
+        Assert.Equal("What's new", (string?)whatsNew[1].Attribute("Content"));
 
         Assert.Equal("WhatTheVersionSays", IdOf(block.Elements().ElementAt(2)));
 
