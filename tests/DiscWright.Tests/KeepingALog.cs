@@ -268,6 +268,61 @@ public sealed class KeepingALog : IDisposable
     }
 
     [Fact]
+    public void A_climb_inside_one_stage_is_written_at_every_tenth()
+    {
+        // The check of the owner's set on 2026-11-11 spent two and a half
+        // minutes on one 600 MB file, 0% to 87%, and the log held one line for
+        // all of it, so it could not say whether the number had moved. Every
+        // percent of that climb is heard here, as the window hears it.
+        TheProgressWorthWriting progress = new();
+        List<string> written = [];
+
+        for (int percent = 0; percent <= 87; percent++)
+        {
+            string line = $"disc 1 of 2: checking the disc, {percent}%, file 5 of 41: big.dwpart01";
+
+            if (progress.Worth(line))
+            {
+                written.Add(line);
+            }
+        }
+
+        string next = "disc 1 of 2: checking the disc, 88%, file 6 of 41: Start Here.hta";
+
+        if (progress.Worth(next))
+        {
+            written.Add(next);
+        }
+
+        Assert.Equal(
+            [
+                .. Enumerable.Range(0, 9).Select(tenth => $"disc 1 of 2: checking the disc, {tenth * 10}%, file 5 of 41: big.dwpart01"),
+                next,
+            ],
+            written);
+    }
+
+    [Fact]
+    public void A_stage_without_a_percentage_is_still_one_line()
+    {
+        TheProgressWorthWriting progress = new();
+
+        Assert.True(progress.Worth("waiting for the drive"));
+        Assert.False(progress.Worth("waiting for the drive"));
+
+        Assert.True(progress.Worth("checking file 38 of 39"));
+        Assert.False(progress.Worth("checking file 39 of 39"));
+
+        // And a percentage that goes back within a stage is not news.
+        Assert.True(progress.Worth("writing disc 2 of 2, 45%"));
+        Assert.False(progress.Worth("writing disc 2 of 2, 41%"));
+        Assert.False(progress.Worth("writing disc 2 of 2, 49%"));
+        Assert.True(progress.Worth("writing disc 2 of 2, 50%"));
+
+        Assert.False(progress.Worth(string.Empty));
+    }
+
+    [Fact]
     public void A_read_back_names_every_file_that_failed()
     {
         // The window shows the first few. The night of 2026-11-10 had seven,

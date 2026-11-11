@@ -133,6 +133,50 @@ public class ErasingADiscOnItsOwn
     }
 
     [Fact]
+    public async Task Writes_a_counting_erase_in_the_log_once_rather_than_every_second()
+    {
+        // The window says how far an erase has got every second, thirty times
+        // a minute. The log wants the stage once; a line every second buries
+        // the answers and the refusals around it.
+        List<string> log = [];
+        List<string> said = [];
+        MakeADisc window = null!;
+
+        AnEraserThatCounts eraser = new(untilHeard: () =>
+        {
+            lock (said)
+            {
+                return said.Any(each => each.Contains("30 of about 30 seconds", StringComparison.Ordinal));
+            }
+        });
+
+        window = AWindow(new OneUsedRewritable(), eraser);
+        WhatTheLogHears.Listen(window, new IntoTheLog(log));
+
+        window.PropertyChanged += (sender, about) =>
+        {
+            if (about.PropertyName == nameof(MakeADisc.Doing))
+            {
+                lock (said)
+                {
+                    said.Add(window.Doing);
+                }
+            }
+        };
+
+        await OnTheWindowsThread.Run(() => window.EraseADisc(could => Task.FromResult<Recorder?>(could[0])));
+
+        List<string> counting;
+
+        lock (log)
+        {
+            counting = [.. log.Where(each => each.Contains("of about 30 seconds", StringComparison.Ordinal))];
+        }
+
+        Assert.Single(counting);
+    }
+
+    [Fact]
     public async Task Erases_nothing_when_somebody_closes_the_question()
     {
         AnEraserThatWorks eraser = new();
@@ -370,6 +414,35 @@ public class ErasingADiscOnItsOwn
             andSoTheDiscIsBlank?.Invoke();
 
             return Task.FromResult<Outcome<string>>("blank again");
+        }
+    }
+
+    /// <summary>An erase that counts its seconds aloud, the way a drive does.</summary>
+    private sealed class AnEraserThatCounts(Func<bool> untilHeard) : IEraseDiscs
+    {
+        public Task<Outcome<string>> BlankIt(
+            Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct)
+        {
+            for (int second = 1; second <= 30; second++)
+            {
+                progress?.Report(new EraseProgress($"erasing the disc, {second} of about 30 seconds", second / 30.0));
+            }
+
+            Assert.True(OnTheWindowsThread.WaitUntil(untilHeard), "the erase counted and nothing heard it");
+
+            return Task.FromResult<Outcome<string>>("blank again");
+        }
+    }
+
+    /// <summary>The log, as lines in a list.</summary>
+    private sealed class IntoTheLog(List<string> lines) : IKeepALog
+    {
+        public void Write(string line)
+        {
+            lock (lines)
+            {
+                lines.Add(line);
+            }
         }
     }
 

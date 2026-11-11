@@ -25,6 +25,11 @@ public sealed class Sha256Hasher : IHasher
     public string Sha256(string path, CancellationToken ct) => Sha256(path, null, ct);
 
     /// <summary>How often the bytes read are said: every 8 MB, a few times a second off a disc.</summary>
+    /// <remarks>
+    /// And once straight after the first bite. A CD spinning up took eleven
+    /// seconds to give its first 8 MB on 2026-11-11, measured on the owner's
+    /// drive, and the check sat at 0% for all of them.
+    /// </remarks>
     private const long SayEvery = 8L * 1024 * 1024;
 
     public string Sha256(string path, IProgress<long>? read, CancellationToken ct)
@@ -46,14 +51,19 @@ public sealed class Sha256Hasher : IHasher
             sha.TransformBlock(buffer, 0, got, null, 0);
             sofar += got;
 
-            if (read is not null && sofar - said >= SayEvery)
+            if (read is not null && (said == 0 || sofar - said >= SayEvery))
             {
                 read.Report(sofar);
                 said = sofar;
             }
         }
 
-        read?.Report(sofar);
+        // The whole file, unless the last report already said exactly that.
+        // An empty file still says its nothing once.
+        if (read is not null && (sofar != said || sofar == 0))
+        {
+            read.Report(sofar);
+        }
 
         sha.TransformFinalBlock([], 0, 0);
 
