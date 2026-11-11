@@ -23,6 +23,8 @@ Windows 10 or 11, 64-bit. Everything the app needs is inside it; there is nothin
 
 **"Windows protected your PC."** That is SmartScreen, on the first run of a program from the internet that is not code signed. DiscWright is not signed yet. **More info, then Run anyway.**
 
+![Windows' SmartScreen warning in two steps: first press the More info link, then press Run anyway](docs/smartscreen-steps.png)
+
 **On some new Windows 11 machines it will not start at all.** Smart App Control, on by default after a clean install of Windows 11 22H2 or later, refuses unsigned programs outright: "An Application Control policy has blocked this file". Signing is what fixes that properly, and it is planned. Until then the setting lives under **Windows Security, App and browser control, Smart App Control**, and [Microsoft's page](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview) explains what turning it off means.
 
 ## Why
