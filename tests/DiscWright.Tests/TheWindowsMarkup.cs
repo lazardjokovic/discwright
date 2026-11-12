@@ -1632,6 +1632,50 @@ public class TheWindowsMarkup
         Assert.DoesNotContain("Expander", split.Ancestors().Select(up => up.Name.LocalName));
     }
 
+    [Fact]
+    public void The_disc_face_is_shown_as_a_disc_round_and_with_its_hole()
+    {
+        // The frame was round and the picture inside it square, because a
+        // Border's CornerRadius rounds its own background and cuts nothing
+        // inside it. Every disc face anybody chose showed as a square. Found
+        // while taking the Store screenshots, by the owner asking whether the
+        // picture for the disc should be round.
+        XElement dialog = Markup("WhatElseGoesOnIt.xaml");
+        XElement picture = dialog.Descendants(Xaml + "Image")
+            .Single(each => IdOf(each) == "TheDiscFacePicture");
+
+        // Cut to a circle that fills the picture's own square, centred, so no
+        // corner of the square shows and no edge of the circle is lost.
+        XElement circle = Assert.Single(picture.Element(Xaml + "Image.Clip")!.Elements(Xaml + "EllipseGeometry"));
+        XElement slot = picture.Parent!;
+        double width = double.Parse((string)slot.Attribute("Width")!, CultureInfo.InvariantCulture);
+        double height = double.Parse((string)slot.Attribute("Height")!, CultureInfo.InvariantCulture);
+        Assert.Equal(width, height);
+        Assert.Equal($"{width / 2},{height / 2}", (string?)circle.Attribute("Center"));
+        Assert.Equal($"{width / 2}", (string?)circle.Attribute("RadiusX"));
+        Assert.Equal($"{width / 2}", (string?)circle.Attribute("RadiusY"));
+
+        // Filling the circle, not fitting inside it, which would leave the
+        // corners of a square picture's circle empty.
+        Assert.Equal("UniformToFill", (string?)picture.Attribute("Stretch"));
+
+        // The hole drawn over it, after it, in the page's own colour, and
+        // centred: a Grid cell centres a fixed size Ellipse by default, so
+        // any alignment written on it would move it.
+        XElement hole = slot.Elements(Xaml + "Ellipse").Single(each => IdOf(each) == "TheDiscFaceHole");
+        Assert.True(slot.Elements().ToList().IndexOf(hole) > slot.Elements().ToList().IndexOf(picture));
+        Assert.Equal("{DynamicResource Page}", (string?)hole.Attribute("Fill"));
+        Assert.Null(hole.Attribute("HorizontalAlignment"));
+        Assert.Null(hole.Attribute("VerticalAlignment"));
+        Assert.Null(hole.Attribute("Margin"));
+        double across = double.Parse((string)hole.Attribute("Width")!, CultureInfo.InvariantCulture);
+        Assert.Equal((string?)hole.Attribute("Width"), (string?)hole.Attribute("Height"));
+
+        // A real disc's hole is 15 mm on 120, an eighth; the unprinted hub
+        // round it is wider. Somewhere between reads as a disc at this size.
+        Assert.InRange(across / width, 1.0 / 8, 1.0 / 3);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     private static XElement Window() => Markup("MainWindow.xaml");
