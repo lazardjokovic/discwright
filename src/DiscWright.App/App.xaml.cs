@@ -41,7 +41,11 @@ public partial class App : Application
 
         // First, so that everything after it has somewhere to write. One file
         // a day under the user's local application data, never sent anywhere.
-        TheLogOnDisk log = new(TheLogOnDisk.ForThisUser());
+        // A copy from the Microsoft Store, or nothing. It decides where the
+        // log goes and whether this copy updates itself.
+        string? package = ThisCopy.PackageFamilyName();
+
+        TheLogOnDisk log = new(TheLogOnDisk.ForThisUser(package));
         log.Write($"DiscWright {WhatThisBuildIs()} started.");
         WorthAsking.Log = log;
 
@@ -79,8 +83,12 @@ public partial class App : Application
             AppContext.BaseDirectory,
             () => Dispatcher.BeginInvoke(() => Shutdown()));
 
-        // The installer an earlier Update ran, which nothing else would delete.
-        updater.ClearWhatAnEarlierUpdateLeft();
+        // The installer an earlier Update ran, which nothing else would
+        // delete. A Store copy never ran one.
+        if (package is null)
+        {
+            updater.ClearWhatAnEarlierUpdateLeft();
+        }
 
         MakeADisc screen = new(new TheMachine(
             new WindowsAutorunEncoding(),
@@ -99,7 +107,10 @@ public partial class App : Application
             WhatThisBuildIs(),
             HowBigIs(disk),
             WhereADiscWouldGo(),
-            Updater: new TheUpdateWrittenDown(updater, log)));
+            // The Store updates a Store copy, so it has no Updater and its
+            // version link is its Store page.
+            Updater: package is null ? new TheUpdateWrittenDown(updater, log) : null,
+            StorePage: package is null ? null : ThisCopy.StorePage));
 
         // Everything the window says, as it says it.
         WhatTheLogHears.Listen(screen, log);

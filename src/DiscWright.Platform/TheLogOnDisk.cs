@@ -49,11 +49,29 @@ public sealed class TheLogOnDisk(string folder, Func<DateTime>? now = null) : IK
     private bool _fullToday;
 
     /// <summary>The folder every user's log lives in on a real machine.</summary>
-    public static string ForThisUser() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "DiscWright",
-            "logs");
+    /// <param name="package">
+    /// The package family name of a copy from the Microsoft Store, or nothing
+    /// for an installed or portable one.
+    /// </param>
+    /// <remarks>
+    /// A packaged copy's writes into AppData are redirected to a private place
+    /// that only it can see, so "Open the log" would hand Explorer or Notepad a
+    /// folder they find empty. So a packaged copy writes its log into the
+    /// package's own folder, LocalState, which is where Windows keeps a
+    /// package's data in the open and every program can read it.
+    /// </remarks>
+    public static string ForThisUser(string? package = null) =>
+        package is null
+            ? Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "DiscWright",
+                "logs")
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Packages",
+                package,
+                "LocalState",
+                "logs");
 
     /// <summary>Where the folder is, for the link that opens it.</summary>
     public string Folder => folder;

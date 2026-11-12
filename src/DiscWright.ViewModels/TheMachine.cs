@@ -66,4 +66,9 @@ public sealed record TheMachine(
     // What fetches and runs a newer installer, when somebody presses Update.
     // Null means this copy cannot update itself, and a newer release offers
     // its page, which is what it did before there was an Update.
-    IUpdateThisCopy? Updater = null);
+    IUpdateThisCopy? Updater = null,
+
+    // The copy's page in the Microsoft Store, when it came from there, and
+    // nothing otherwise. The Store keeps such a copy up to date, so it never
+    // asks GitHub and never updates itself: its version link is this page.
+    string? StorePage = null);

@@ -377,7 +377,7 @@ public sealed class KeepingALog : IDisposable
         // the markup guards.
         string app = File.ReadAllText(Repository.File("src", "DiscWright.App", "App.xaml.cs"));
 
-        Assert.Contains("TheLogOnDisk log = new(TheLogOnDisk.ForThisUser());", app, StringComparison.Ordinal);
+        Assert.Contains("TheLogOnDisk log = new(TheLogOnDisk.ForThisUser(package));", app, StringComparison.Ordinal);
         Assert.Contains("new TheDrivesWrittenDown(new WindowsRecorders(log), log)", app, StringComparison.Ordinal);
         Assert.Contains("WhatTheLogHears.Listen(screen, log)", app, StringComparison.Ordinal);
         Assert.Contains("WorthAsking.Log = log", app, StringComparison.Ordinal);

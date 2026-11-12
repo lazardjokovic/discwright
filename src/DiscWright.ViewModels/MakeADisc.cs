@@ -396,7 +396,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// broken.
     /// </remarks>
     public string WhatTheVersionLinkSays =>
-        _asking ? "Asking GitHub"
+        _machine.StorePage is not null ? "See it in the Store"
+        : _asking ? "Asking GitHub"
             : _update is TheUpdate update
                 ? _updating switch
                 {
@@ -416,9 +417,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// Whether a page is worth offering is a judgement, so it is made here
     /// rather than in the window. The window asks for a page and either gets
     /// one or asks again, and never sees <see cref="HowThisBuildCompares"/>.
+    /// A copy from the Microsoft Store always has one, its Store page, which
+    /// is where its updates come from.
     /// </remarks>
     public string? TheVersionPage =>
-        AboutTheVersion is { WorthGetting: true } how ? how.Where : null;
+        _machine.StorePage
+        ?? (AboutTheVersion is { WorthGetting: true } how ? how.Where : null);
 
     /// <summary>
     /// Whether the version link updates this copy when pressed, rather than
@@ -449,7 +453,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     public async Task CheckForANewVersion(CancellationToken ct = default)
     {
-        if (_asking || _updating != Updating.NotYet)
+        // A copy from the Store is updated by the Store, and asking GitHub
+        // about it would be a network call that could only ever say
+        // something the Store already decides.
+        if (_machine.StorePage is not null || _asking || _updating != Updating.NotYet)
         {
             return;
         }
