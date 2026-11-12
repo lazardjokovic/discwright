@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -50,6 +50,10 @@ public partial class MainWindow : Window
 
         InitializeComponent();
         DataContext = screen;
+
+        // Before it is shown, so it never appears at a size and then jumps.
+        OnThisScreen.Fit(this);
+        SourceInitialized += (_, _) => TakingAwayMaximise.From(new WindowInteropHelper(this).Handle);
 
         // The one control not about the disc being made, so it reads its
         // words from the choice rather than from the screen.
