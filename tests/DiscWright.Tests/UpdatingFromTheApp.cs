@@ -695,6 +695,65 @@ public sealed class UpdatingFromTheApp : IDisposable
             new Sha256Hasher().Sha256(into, CancellationToken.None)));
     }
 
+    [Fact]
+    public async Task The_link_says_Updating_while_the_download_is_checked()
+    {
+        // Stryker found this one link unwatched on 2026-11-12: a press during
+        // the check would have read as a fresh offer.
+        string? whileChecking = null;
+        MakeADisc? window = null;
+
+        window = AWindow(new AnUpdater(), hasher: new AHasherThatLooks(TheHash, () => whileChecking = window!.WhatTheVersionLinkSays));
+        await window.CheckForANewVersion();
+
+        await window.UpdateThisCopy();
+
+        Assert.Equal("Updating", whileChecking);
+    }
+
+    [Fact]
+    public async Task An_installer_whose_size_is_not_known_says_none_of_it_has_arrived_rather_than_failing()
+    {
+        string? heard = null;
+        MakeADisc? window = null;
+
+        AnUpdater updater = new()
+        {
+            WhileDownloading = sofar =>
+            {
+                sofar.Report(1_000);
+                OnTheWindowsThread.WaitUntil(() => window!.WhatTheVersionSays.StartsWith("Downloading", StringComparison.Ordinal));
+                heard = window!.WhatTheVersionSays;
+            },
+        };
+
+        window = AWindow(updater, released: Released([new AReleasedFile(Setup, From + Setup, 0), TheSums()]));
+
+        await OnTheWindowsThread.Run(async () =>
+        {
+            await window.CheckForANewVersion();
+            await window.UpdateThisCopy();
+        });
+
+        Assert.Equal("Downloading DiscWright 2.0.1, 0%.", heard);
+        Assert.Equal("DiscWright closes now, updates to 2.0.1 and opens again by itself.", window.WhatTheVersionSays);
+    }
+
+    [Fact]
+    public async Task A_download_that_will_not_be_thrown_away_is_still_never_run()
+    {
+        AnUpdater updater = new() { ThrowAwayFails = true };
+        MakeADisc window = AWindow(updater, hasher: new AHasher(new string('d', 64)));
+        await window.CheckForANewVersion();
+
+        await window.UpdateThisCopy();
+
+        // Windows tidies its temporary folder; what matters is that it never ran.
+        Assert.Empty(updater.Installed);
+        Assert.StartsWith("The download did not match the checksum", window.WhatTheVersionSays, StringComparison.Ordinal);
+        Assert.Equal("Update to 2.0.1", window.WhatTheVersionLinkSays);
+    }
+
     // ---- What the log says -----------------------------------------------------
 
     [Fact]
@@ -941,6 +1000,16 @@ public sealed class UpdatingFromTheApp : IDisposable
         public string Sha256(string path, CancellationToken ct) => says;
     }
 
+    /// <summary>A hasher that looks at something while it hashes.</summary>
+    private sealed class AHasherThatLooks(string says, Action look) : IHasher
+    {
+        public string Sha256(string path, CancellationToken ct)
+        {
+            look();
+            return says;
+        }
+    }
+
     /// <summary>Each answer in turn, the last one for ever after.</summary>
     private sealed class OneAfterAnother(params WhatWasReleased[] said) : IAskWhatIsReleased
     {
@@ -991,6 +1060,8 @@ public sealed class UpdatingFromTheApp : IDisposable
 
         internal bool InstallFails { get; init; }
 
+        internal bool ThrowAwayFails { get; init; }
+
         internal Task? Holding { get; init; }
 
         internal Action<IProgress<long>>? WhileDownloading { get; init; }
@@ -1036,7 +1107,15 @@ public sealed class UpdatingFromTheApp : IDisposable
             }
         }
 
-        public void ThrowAway(string path) => ThrownAway.Add(path);
+        public void ThrowAway(string path)
+        {
+            if (ThrowAwayFails)
+            {
+                throw new IOException("in use");
+            }
+
+            ThrownAway.Add(path);
+        }
 
         public void InstallAndClose(string installer)
         {

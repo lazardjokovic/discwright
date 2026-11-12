@@ -97,6 +97,11 @@ public sealed class WhatTheLogHears
                 case nameof(MakeADisc.HowTheBurnWent):
                     string burn = _screen.HowTheBurnWent;
 
+                    // Stryker's "burn == _lastBurn" survives here and no test
+                    // can kill it. The window announces a new result twice,
+                    // once as it lands and again from Started as the run ends,
+                    // so writing only on the repeat writes the same one line a
+                    // moment later. The comparison is what keeps it one line.
                     if (burn.Length > 0 && burn != _lastBurn)
                     {
                         _log.Write($"Shown: {burn}");

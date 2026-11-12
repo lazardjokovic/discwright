@@ -103,6 +103,41 @@ public class WalkingThroughASet
     }
 
     [Fact]
+    public async Task The_log_keeps_how_a_whole_set_went_and_what_the_window_showed_once_each()
+    {
+        // Stryker found nothing reaching either line on 2026-11-12.
+        TheLogAsAList log = new();
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers());
+        WhatTheLogHears.Listen(window, log);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        Assert.Equal(["The set: 3 of 3 written."], log.Lines.Where(each => each.StartsWith("The set:", StringComparison.Ordinal)));
+        Assert.Single(log.Lines, each => each == "Shown: " + window.HowTheBurnWent);
+
+        // The line clears as each burn starts, and an empty line is not news.
+        Assert.DoesNotContain("Shown: ", log.Lines);
+    }
+
+    [Fact]
+    public async Task The_log_keeps_where_a_set_stopped_and_why()
+    {
+        TheLogAsAList log = new();
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers());
+        WhatTheLogHears.Listen(window, log);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes,
+            (number, of, drive) => Task.FromResult(number < 3),
+            NeverAsksToCarryOn);
+
+        Assert.Equal(
+            [$"The set: 2 of 3 written, stopped because {window.HowTheSetWent?.WhyItStopped}."],
+            log.Lines.Where(each => each.StartsWith("The set:", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public async Task Stops_where_it_is_when_nobody_puts_the_next_blank_in()
     {
         ABurnerThatRemembers burner = new();
@@ -401,6 +436,21 @@ public class WalkingThroughASet
         Assert.True(went.Whole);
         Assert.Equal(3, went.Written);
         Assert.Equal(2, went.BroughtForward);
+    }
+
+    [Fact]
+    public async Task The_log_says_how_many_discs_of_a_set_were_written_before_this_run()
+    {
+        TheLogAsAList log = new();
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers(), note: new ANoteInMemory(NoteSaying(2, 3)));
+        WhatTheLogHears.Listen(window, log);
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, (number, of) => Task.FromResult(true));
+
+        Assert.Equal(
+            ["The set: 3 of 3 written, 2 of them before this run."],
+            log.Lines.Where(each => each.StartsWith("The set:", StringComparison.Ordinal)));
     }
 
     [Fact]
