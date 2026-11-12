@@ -459,10 +459,14 @@ public class EveryKindOfDisc
             return null;
         }
 
-        // The splitting line belongs to the splitting box and to nothing else.
-        if (screen.WhatSplittingWouldDo.Length > 0 && !wanted.Split)
+        // With the box off the splitting line can only say how many discs
+        // whole files come to, never that anything is cut.
+        if (screen.WhatSplittingWouldDo.Length > 0
+            && !wanted.Split
+            && !(screen.WhatSplittingWouldDo.StartsWith("Needs ", StringComparison.Ordinal)
+                && screen.WhatSplittingWouldDo.EndsWith("nothing is cut.", StringComparison.Ordinal)))
         {
-            return $"The splitting line is up with the box off: \"{screen.WhatSplittingWouldDo}\".";
+            return $"The splitting line is about cutting with the box off: \"{screen.WhatSplittingWouldDo}\".";
         }
 
         // A file too big for the disc, with nothing to cut it, is a refusal.

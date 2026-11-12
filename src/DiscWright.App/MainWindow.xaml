@@ -761,7 +761,11 @@
                      worked that way: it cuts a file into however many pieces
                      the file and the disc come to between them, which for a
                      DVD image on CDs is seven. The promise of two was the
-                     whole of the bug. -->
+                     whole of the bug.
+
+                     It also says "Needs 2 discs" whenever the size chosen
+                     means more than one, with the box ticked or not, which
+                     the owner found missing on 2026-11-12. -->
                 <TextBlock Margin="22,2,0,0"
                            TextWrapping="Wrap"
                            Text="{Binding WhatSplittingWouldDo}"

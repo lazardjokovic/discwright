@@ -855,10 +855,22 @@ public class TheWindowChecksItself
             return "The preview is live with no game or no name.";
         }
 
-        // The line under the split box belongs to the split box.
-        if (screen.WhatSplittingWouldDo.Length > 0 && !screen.CutFiles)
+        // The line under the split box says "Needs N discs" exactly when
+        // what it will make is more than one disc, ticked or not, which the
+        // owner found missing on 2026-11-12. With the box unticked it says
+        // nothing else: nothing can be cut, and one disc asked nothing.
+        bool moreThanOne = screen.WhatItWillMake.Length > 0 && screen.WhatItWillMake != "one disc";
+
+        if (screen.WhatSplittingWouldDo.StartsWith("Needs ", StringComparison.Ordinal) != moreThanOne)
         {
-            return $"The splitting line is up with the box unticked: \"{screen.WhatSplittingWouldDo}\".";
+            return $"The splitting line says \"{screen.WhatSplittingWouldDo}\" about {screen.WhatItWillMake}.";
+        }
+
+        if (!screen.CutFiles
+            && screen.WhatSplittingWouldDo.Length > 0
+            && !screen.WhatSplittingWouldDo.EndsWith("nothing is cut.", StringComparison.Ordinal))
+        {
+            return $"The splitting line is about cutting with the box unticked: \"{screen.WhatSplittingWouldDo}\".";
         }
 
         // The amber line and the ink it is drawn in have to agree.

@@ -2564,8 +2564,11 @@ public class TheMainWindowWithoutAWindow
     [InlineData("a big game", "DVD5", false, "", "")]
     [InlineData("a big game", "CD", false, "One file is bigger than a whole disc", "")]
     [InlineData("a big game", "CD", true, "", "cut into 2 pieces")]
-    [InlineData("a big game", "DVD5", true, "", "Nothing here is bigger than one disc")]
-    [InlineData("a small game", "CD", true, "", "Nothing here is bigger than one disc")]
+    [InlineData("a big game", "DVD5", true, "", "Fits on one disc, so nothing will be cut.")]
+    [InlineData("a small game", "CD", true, "", "Fits on one disc, so nothing will be cut.")]
+    [InlineData("a game in two files", "CD", false, "", "Needs 2 discs. Every file fits on one")]
+    [InlineData("a game in two files", "CD", true, "", "Needs 2 discs. Every file fits on one")]
+    [InlineData("a big game", "CD", true, "", "Needs 2 discs. setup_Hollow Knight.exe is")]
     public void Says_the_right_things_for_what_is_chosen(
         string whatIsOnIt, string size, bool split, string redLine, string splittingLine)
     {
@@ -2576,6 +2579,10 @@ public class TheMainWindowWithoutAWindow
         {
             case "a small game": window.Add(AGame("Hollow Knight", 400_000_000)); break;
             case "a big game": window.Add(AGame("Hollow Knight", 1_000_000_000)); break;
+
+            // Dead Space on a DVD5 on 2026-11-12, made small: no file bigger
+            // than the disc, the two together bigger, so a set of whole files.
+            case "a game in two files": window.Add(AGame("Hollow Knight", 400_000_000, parts: 1)); break;
         }
 
         window.Medium = size == "CD" ? Media.Cd : Media.Dvd5;
@@ -4543,8 +4550,32 @@ public class TheMainWindowWithoutAWindow
         // Bigger again, and now it fits whole.
         screen.Medium = ADiscHolding(9000);
         Assert.Equal(
-            "Nothing here is bigger than one disc, so nothing will be cut.",
+            "Fits on one disc, so nothing will be cut.",
             screen.WhatSplittingWouldDo);
+    }
+
+    [Fact]
+    public void Says_a_set_of_whole_files_needs_more_discs_ticked_or_not()
+    {
+        // Dead Space on a DVD5, the owner's screenshot of 2026-11-12: 8.13 GB
+        // with no file over 3.91 GB. Ticked, the line said "Nothing here is
+        // bigger than one disc, so nothing will be cut", which read as "it
+        // fits"; unticked it said nothing. Both now say there are two.
+        MakeADisc screen = New();
+        screen.OutputFolder = @"C:\out";
+        screen.Medium = Media.Dvd5;
+        screen.Add(AGame("Dead Space", 2_000_000_000, parts: 2));
+
+        Assert.Equal("a set of 2 discs", screen.WhatItWillMake);
+        Assert.Null(screen.WhyNot);
+
+        const string Said = "Needs 2 discs. Every file fits on one, so each disc gets whole files and nothing is cut.";
+
+        Assert.False(screen.CutFiles);
+        Assert.Equal(Said, screen.WhatSplittingWouldDo);
+
+        screen.CutFiles = true;
+        Assert.Equal(Said, screen.WhatSplittingWouldDo);
     }
 
     [Fact]
@@ -4557,7 +4588,7 @@ public class TheMainWindowWithoutAWindow
         screen.Add(AGame("Big", 2500));
         screen.Add(AGame("Huge", 2500));
 
-        Assert.Equal("2 files will be cut, into 6 pieces between them.", screen.WhatSplittingWouldDo);
+        Assert.Equal("Needs 6 discs. 2 files will be cut, into 6 pieces between them.", screen.WhatSplittingWouldDo);
     }
 
     [Fact]
@@ -4596,7 +4627,7 @@ public class TheMainWindowWithoutAWindow
         // And it speaks up the moment somebody does ask.
         screen.CutFiles = true;
         Assert.Equal(
-            "Nothing here is bigger than one disc, so nothing will be cut.",
+            "Fits on one disc, so nothing will be cut.",
             screen.WhatSplittingWouldDo);
     }
 
