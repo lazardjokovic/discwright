@@ -20,21 +20,23 @@
     build can go back to an ordinary layout, because Microsoft signs that.
 
 .PARAMETER Identity
-    The package identity name. The real one comes from Partner Center once the
-    app name is reserved, and must match exactly or the submission is rejected.
+    The package identity name. Partner Center assigned it when the name
+    DiscWright was reserved, on 2026-11-12, and a submission that differs from
+    it by a character is rejected.
 
 .PARAMETER Publisher
-    The certificate subject. For a development registration this is any valid
-    X.500 name. For the Store it is assigned and cannot be chosen.
+    The publisher, as Partner Center assigned it to the account. Not a name
+    anybody chose: the Store signs the package with a certificate whose
+    subject is exactly this.
 
 .PARAMETER PublisherDisplayName
-    Must match the Publisher display name on the Partner Center account, or
-    submission fails validation.
+    The publisher name the account shows, which the Store checks against the
+    package.
 #>
 [CmdletBinding()]
 param(
-    [string] $Identity = 'DiscWright.DiscWright',
-    [string] $Publisher = 'CN=Lazar Djokovic',
+    [string] $Identity = 'LazarDjokovic.DiscWright',
+    [string] $Publisher = 'CN=E9DAEFBA-A2F5-4E0B-8F70-D637310F2D3F',
     [string] $PublisherDisplayName = 'Lazar Djokovic',
     [string] $Version,
     [switch] $SkipPublish,
@@ -92,34 +94,18 @@ if ($loose) {
 
 # ---------------------------------------------------------------- the logos
 #
-# Drawn from the app's own .ico so the package cannot drift from the window.
-Add-Type -AssemblyName System.Drawing
+# Rendered from the vector icon, packaging\msix\discwright.svg, at every size
+# Windows and the Store ask for, by packaging\msix\Render-TheLogos.py, and
+# committed. They used to be drawn here from the .ico, which has seven fixed
+# frames, so every other size was a frame scaled by GDI+.
+$drawn = Join-Path $PSScriptRoot 'msix\Assets'
+if (-not (Test-Path (Join-Path $drawn 'StoreLogo.scale-100.png'))) {
+    throw "No logos in $drawn. Run packaging\msix\Render-TheLogos.py."
+}
+
 New-Item -ItemType Directory -Path $assets -Force | Out-Null
-
-$ico = Join-Path $repo 'src\DiscWright.App\DiscWright.ico'
-if (-not (Test-Path $ico)) { throw "No icon at $ico" }
-
-$sizes = @{
-    'Square44x44Logo.png'   = 44
-    'Square150x150Logo.png' = 150
-    'StoreLogo.png'         = 50
-}
-
-foreach ($name in $sizes.Keys) {
-    $side = $sizes[$name]
-
-    # Asked for at the size wanted, so Windows picks the closest frame in the
-    # .ico rather than scaling the first one it finds.
-    $icon = New-Object Drawing.Icon $ico, $side, $side
-    $bmp = New-Object Drawing.Bitmap $side, $side
-    $g = [Drawing.Graphics]::FromImage($bmp)
-    $g.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $g.DrawIcon($icon, (New-Object Drawing.Rectangle 0, 0, $side, $side))
-    $bmp.Save((Join-Path $assets $name), [Drawing.Imaging.ImageFormat]::Png)
-    $g.Dispose(); $bmp.Dispose(); $icon.Dispose()
-}
-
-Write-Host "  logos: $($sizes.Keys -join ', ')" -ForegroundColor DarkGray
+Copy-Item (Join-Path $drawn '*.png') $assets
+Write-Host ("  logos: {0}" -f (Get-ChildItem $assets -Filter *.png).Count) -ForegroundColor DarkGray
 
 # ------------------------------------------------------------- the manifest
 #
@@ -162,8 +148,8 @@ $manifest = @"
         Executable="DiscWright.App.exe"
         EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-          DisplayName="DiscWright (packaged)"
-          Description="Turn a folder of installers into a burnable game disc"
+          DisplayName="DiscWright"
+          Description="Turns a game's offline installer into a disc that works like one from a box"
           BackgroundColor="transparent"
           Square150x150Logo="Assets\Square150x150Logo.png"
           Square44x44Logo="Assets\Square44x44Logo.png" />
@@ -179,6 +165,50 @@ $manifest = @"
 $manifestPath = Join-Path $into 'AppxManifest.xml'
 [IO.File]::WriteAllText($manifestPath, $manifest, (New-Object Text.UTF8Encoding $false))
 
+# ------------------------------------------------------------ resources.pri
+#
+# The index Windows reads to pick a logo for a scale and a size. Without it a
+# logo named StoreLogo.scale-200.png is a file nothing asks for, and Windows
+# falls back to drawing a blank. MakePri comes with the Windows SDK, as
+# MakeAppx does, and is found the same way.
+function Find-SdkTool([string] $name) {
+    # Only folders that start with a digit are versions: see -Pack below.
+    Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin', 'C:\Program Files\Windows Kits\10\bin' `
+        -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^\d' } |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName "x64\$name" } |
+        Where-Object { Test-Path $_ } |
+        Select-Object -First 1
+}
+
+$pri = Find-SdkTool 'makepri.exe'
+if (-not $pri) {
+    throw 'MakePri is not installed. It comes with the Windows SDK: winget install --id Microsoft.WindowsSDK.10.0.26100'
+}
+
+# The configuration is kept out of the package folder, or it would be packed.
+$priWork = Join-Path $repo 'build\msix-pri'
+New-Item -ItemType Directory -Path $priWork -Force | Out-Null
+$priConfig = Join-Path $priWork 'priconfig.xml'
+
+& $pri createconfig /cf $priConfig /dq en-US /pv 10.0.0 /o | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "MakePri createconfig failed with $LASTEXITCODE." }
+
+# One index for one package. The configuration MakePri writes splits it into
+# a file per scale, which is how a bundle carries a package per scale, and
+# this is a single package with every scale in it: left in, the first build
+# put resources.scale-125.pri and four more beside resources.pri.
+[xml] $config = Get-Content $priConfig -Raw
+foreach ($split in @($config.resources.packaging)) {
+    if ($split) { [void] $config.resources.RemoveChild($split) }
+}
+$config.Save($priConfig)
+
+& $pri new /pr $into /cf $priConfig /mn $manifestPath /of (Join-Path $into 'resources.pri') /o | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "MakePri new failed with $LASTEXITCODE." }
+Write-Host "  resources.pri" -ForegroundColor DarkGray
+
 Write-Host ""
 Write-Host "$into" -ForegroundColor Green
 Get-ChildItem $into | ForEach-Object {
@@ -191,13 +221,7 @@ if ($Pack) {
     # top is how this was got wrong once: 'x86' sorts above '10.0.26100.0', so
     # the search looked in x86\x64 and concluded the SDK was not installed at
     # all. Only folders that start with a digit are versions.
-    $maker = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin', 'C:\Program Files\Windows Kits\10\bin' `
-                -Directory -ErrorAction SilentlyContinue |
-             Where-Object { $_.Name -match '^\d' } |
-             Sort-Object Name -Descending |
-             ForEach-Object { Join-Path $_.FullName 'x64\makeappx.exe' } |
-             Where-Object { Test-Path $_ } |
-             Select-Object -First 1
+    $maker = Find-SdkTool 'makeappx.exe'
 
     if (-not $maker) {
         throw 'MakeAppx is not installed. It comes with the Windows SDK: winget install --id Microsoft.WindowsSDK.10.0.26100'
