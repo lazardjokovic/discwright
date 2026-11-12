@@ -342,6 +342,25 @@ public sealed class KeepingALog : IDisposable
     }
 
     [Fact]
+    public void A_read_back_names_what_is_missing_what_was_not_expected_and_why_it_could_not_check()
+    {
+        // Stryker found nothing reaching these three on 2026-11-12, so a log
+        // that dropped them would have passed every test.
+        string line = WhatTheLogHears.AboutTheCheck(new DiscCheck(
+            5,
+            [],
+            ["setup-1.bin"],
+            ["stray.txt"],
+            [],
+            "the drive stopped answering"));
+
+        Assert.Equal(
+            "Read back: 5 matched; missing: setup-1.bin; not expected: stray.txt; "
+                + "could not check: the drive stopped answering. NOT GOOD.",
+            line);
+    }
+
+    [Fact]
     public void A_good_read_back_says_so()
     {
         Assert.Equal(
