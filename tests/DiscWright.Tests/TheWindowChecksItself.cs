@@ -371,7 +371,7 @@ public class TheWindowChecksItself
 
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(40);
+        int which = dice.Next(41);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -501,6 +501,12 @@ public class TheWindowChecksItself
             // a game's name, so everything that follows from it has to be
             // announced like everything else.
             39 => new($"rename game {row} in place", desk => desk.RenameOne(row)),
+
+            // Update, once asking has found one, or nothing before that. The
+            // updater below writes down what it would do and takes turns at
+            // going right and going wrong, so the walk meets the line saying
+            // every one of them, and holds each to being announced.
+            40 => new("press Update", desk => desk.Screen.UpdateThisCopy().GetAwaiter().GetResult()),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -883,6 +889,23 @@ public class TheWindowChecksItself
             return "It says a game will only be copied and no game on it would be.";
         }
 
+        // Update is offered beside the page it came from, and the link says
+        // Update, Updating or Install exactly while it is.
+        if (screen.TheUpdateOnOffer && screen.TheVersionPage is null)
+        {
+            return "Update is on offer with no release page beside it.";
+        }
+
+        bool linkIsAboutAnUpdate =
+            screen.WhatTheVersionLinkSays.StartsWith("Update", StringComparison.Ordinal)
+            || screen.WhatTheVersionLinkSays.StartsWith("Install ", StringComparison.Ordinal);
+
+        if (screen.TheUpdateOnOffer != linkIsAboutAnUpdate)
+        {
+            return $"The version link says '{screen.WhatTheVersionLinkSays}' while an update is "
+                + $"{(screen.TheUpdateOnOffer ? string.Empty : "not ")}on offer.";
+        }
+
         return null;
     }
 
@@ -1184,15 +1207,16 @@ public class TheWindowChecksItself
             new ABurnerThatDoesNothing(),
             new AnEraserThatDoesNothing(),
             new ADiskThatMatchesWhatWasBuilt(),
-            new NoHashing(),
+            new HashingThatKnowsTheUpdate(),
             new NothingIsRemembered(),
             new ATrayThatShuts(),
-            new NothingIsReleased(),
+            new ANewerOneWithAnInstaller(),
             new APreviewThatWorks(),
             new PicturesThatRead(),
             "2.0.0",
             _ => 1000,
-            Patience: new AClockThatMovesItself().Patience));
+            Patience: new AClockThatMovesItself().Patience,
+            Updater: new AnUpdaterThatTakesTurns()));
 
     // --------------------------------------------------------------- the words
 
@@ -1302,10 +1326,69 @@ public class TheWindowChecksItself
         public bool CanShutItsOwnTray(Recorder drive) => true;
     }
 
-    private sealed class NothingIsReleased : IAskWhatIsReleased
+    private const string TheUpdatesHash = "3f1c0a9e5b7d2468ace13579bdf02468ace13579bdf02468ace13579bdf0246a";
+
+    private const string WhereTheUpdateGoes = @"C:\Temp\DiscWright update\";
+
+    /// <summary>A 2.0.1 released with its installer and checksums, as the release workflow publishes one.</summary>
+    private sealed class ANewerOneWithAnInstaller : IAskWhatIsReleased
     {
-        public Task<WhatWasReleased> TheLatest(CancellationToken ct) =>
-            Task.FromResult(new WhatWasReleased(null, null, "nobody asked"));
+        public Task<WhatWasReleased> TheLatest(CancellationToken ct)
+        {
+            string from = TheUpdate.Downloads + "v2.0.1/";
+
+            return Task.FromResult(new WhatWasReleased(
+                "v2.0.1",
+                "https://github.com/lazardjokovic/discwright/releases/tag/v2.0.1",
+                Files:
+                [
+                    new AReleasedFile("DiscWright-2.0.1-setup.exe", from + "DiscWright-2.0.1-setup.exe", 26_000_000),
+                    new AReleasedFile(TheUpdate.SumsName, from + TheUpdate.SumsName, 200),
+                ]));
+        }
+    }
+
+    /// <summary>Hashes nothing, except that a downloaded update comes out as its checksum says.</summary>
+    private sealed class HashingThatKnowsTheUpdate : IHasher
+    {
+        public string Sha256(string path, CancellationToken ct) =>
+            path.StartsWith(WhereTheUpdateGoes, StringComparison.Ordinal) ? TheUpdatesHash : string.Empty;
+    }
+
+    /// <summary>
+    /// Writes down an update rather than doing one, going wrong a different
+    /// way on each of its first three presses and right on the fourth.
+    /// </summary>
+    private sealed class AnUpdaterThatTakesTurns : IUpdateThisCopy
+    {
+        private int _presses;
+
+        public bool CanUpdateItself => true;
+
+        public string WhereTheDownloadGoes(string named) => WhereTheUpdateGoes + named;
+
+        public Task<string> Read(string url, CancellationToken ct) =>
+            (_presses++ % 4) switch
+            {
+                0 => Task.FromResult($"{TheUpdatesHash}  something-else.exe\n"),
+                1 => Task.FromResult($"{new string('d', 64)}  DiscWright-2.0.1-setup.exe\n"),
+                2 => Task.FromException<string>(new IOException("the line dropped")),
+                _ => Task.FromResult($"{TheUpdatesHash}  DiscWright-2.0.1-setup.exe\n"),
+            };
+
+        public Task Download(string url, string into, IProgress<long> sofar, CancellationToken ct)
+        {
+            sofar.Report(13_000_000);
+            return Task.CompletedTask;
+        }
+
+        public void ThrowAway(string path)
+        {
+        }
+
+        public void InstallAndClose(string installer)
+        {
+        }
     }
 
     /// <summary>

@@ -89,6 +89,19 @@
                                 Click="CheckForANewVersion"
                                 AutomationProperties.AutomationId="CheckForANewVersion" />
 
+                        <!-- The release page, once the link above has become
+                             Update. Before that the link itself opens the page,
+                             so this is only there when it would otherwise be
+                             lost. -->
+                        <TextBlock Text="·" Style="{StaticResource Aside}" Margin="7,0" VerticalAlignment="Center"
+                                   Visibility="{Binding TheUpdateOnOffer, Converter={StaticResource WhenSo}}" />
+
+                        <Button Content="What's new"
+                                Style="{StaticResource Quietly}"
+                                Click="OpenWhatsNew"
+                                Visibility="{Binding TheUpdateOnOffer, Converter={StaticResource WhenSo}}"
+                                AutomationProperties.AutomationId="WhatsNew" />
+
                         <TextBlock Text="·" Style="{StaticResource Aside}" Margin="7,0" VerticalAlignment="Center" />
 
                         <!-- About the program, not about the disc being made.

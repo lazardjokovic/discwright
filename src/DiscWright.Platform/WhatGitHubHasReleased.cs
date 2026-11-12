@@ -70,7 +70,8 @@ public sealed class WhatGitHubHasReleased : IAskWhatIsReleased, IDisposable
 
             return new WhatWasReleased(
                 Text(json.RootElement, "tag_name"),
-                Text(json.RootElement, "html_url"));
+                Text(json.RootElement, "html_url"),
+                Files: FilesOf(json.RootElement));
         }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -84,6 +85,30 @@ public sealed class WhatGitHubHasReleased : IAskWhatIsReleased, IDisposable
         {
             return new WhatWasReleased(null, null, "What came back was not something this could read.");
         }
+    }
+
+    /// <summary>What the release says is attached to it, leaving out anything it does not say fully.</summary>
+    private static List<AReleasedFile> FilesOf(JsonElement release)
+    {
+        List<AReleasedFile> files = [];
+
+        if (!release.TryGetProperty("assets", out JsonElement assets) || assets.ValueKind != JsonValueKind.Array)
+        {
+            return files;
+        }
+
+        foreach (JsonElement asset in assets.EnumerateArray())
+        {
+            if (Text(asset, "name") is string name
+                && Text(asset, "browser_download_url") is string url
+                && asset.TryGetProperty("size", out JsonElement size)
+                && size.TryGetInt64(out long bytes))
+            {
+                files.Add(new AReleasedFile(name, url, bytes));
+            }
+        }
+
+        return files;
     }
 
     private static string? Text(JsonElement element, string named) =>

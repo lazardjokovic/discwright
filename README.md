@@ -15,6 +15,8 @@ The way PC games came in a box.
 
 Windows 10 or 11, 64-bit. Everything the app needs is inside it; there is nothing else to install.
 
+**Updating.** Press **Check for new version** under the app's name. When there is a newer one, the installed app offers **Update to** it: it downloads the release's installer, checks it against the checksum the release publishes, then closes, updates and opens again by itself. It only ever does that when you press it, and never while a disc is being built, burned or erased. The portable exe offers the release page instead, where you download the new one in place of the old. With winget, `winget upgrade DiscWright.DiscWright`.
+
 **Already using the PowerShell DiscWright?** Installing 2.0 upgrades it in place, in the same Start menu entry and the same folder. Discs made with it work exactly as they did.
 
 **Looking for the PowerShell version?** It is still maintained, on the [`powershell` branch](../../tree/powershell), and its releases are the [`v0.11.x` tags](../../releases). It installs beside this one and neither touches the other.

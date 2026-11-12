@@ -73,6 +73,15 @@ public partial class App : Application
 
         WindowsBurner burner = new();
 
+        // Closing is the window's thread's business, so it is queued there
+        // rather than done from wherever the download finished.
+        UpdatingFromGitHub updater = new(
+            AppContext.BaseDirectory,
+            () => Dispatcher.BeginInvoke(() => Shutdown()));
+
+        // The installer an earlier Update ran, which nothing else would delete.
+        updater.ClearWhatAnEarlierUpdateLeft();
+
         MakeADisc screen = new(new TheMachine(
             new WindowsAutorunEncoding(),
             builder,
@@ -89,7 +98,8 @@ public partial class App : Application
             new WindowsImages(),
             WhatThisBuildIs(),
             HowBigIs(disk),
-            WhereADiscWouldGo()));
+            WhereADiscWouldGo(),
+            Updater: updater));
 
         // Everything the window says, as it says it.
         WhatTheLogHears.Listen(screen, log);

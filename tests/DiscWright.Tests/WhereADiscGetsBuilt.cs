@@ -84,7 +84,7 @@ public class WhereADiscGetsBuilt
         // the machine a null instead left every test above perfectly green
         // over an app that suggests nothing.
         Assert.Contains(
-            "HowBigIs(disk)," + Environment.NewLine + "            WhereADiscWouldGo()))",
+            "HowBigIs(disk)," + Environment.NewLine + "            WhereADiscWouldGo(),",
             code,
             StringComparison.Ordinal);
         Assert.Contains("SpecialFolder.DesktopDirectory", code, StringComparison.Ordinal);

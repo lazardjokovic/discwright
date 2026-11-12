@@ -496,11 +496,16 @@
     except the one place noted in D.</p>
     <div class="panel" data-cases>
 
-      <div class="sub">The main window · 26 controls</div>
+      <div class="sub">The main window · 27 controls</div>
       <label class="case"><input type="checkbox" id="c1" data-controls="CheckForANewVersion"><span class="id">C1</span>
-        <span class="what">Check for new version, first of the three links under the name</span>
+        <span class="what">Check for new version, first of the links under the name</span>
         <span class="look"><span class="live">Never grey.</span> It is the only way to ask, and one that
         disappeared after its first press would work once a session.</span></label>
+      <label class="case"><input type="checkbox" id="c1c" data-controls="WhatsNew"><span class="id">C1c</span>
+        <span class="what">What's new, beside Update once asking has found one</span>
+        <span class="look"><span class="live">Hidden until then, never grey.</span> Only on an installed copy, once
+        the version link has become Update to x. It opens the release page, so the page is never lost to the
+        button. A portable copy keeps Get it, which opens the page itself.</span></label>
       <label class="case"><input type="checkbox" id="c1b" data-controls="Appearance"><span class="id">C1b</span>
         <span class="what">Appearance, beside Check for new version</span>
         <span class="look"><span class="live">Never grey.</span> Cycles following Windows, light, dark; the window

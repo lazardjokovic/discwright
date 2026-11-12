@@ -774,12 +774,35 @@ public partial class MainWindow : Window
     /// </remarks>
     private async void CheckForANewVersion(object sender, RoutedEventArgs e)
     {
+        // Once asking has found an update this copy can take, the same link
+        // fetches it. What it does is the screen's decision, including
+        // refusing while a burn runs, so the window only routes the press.
+        if (_screen.TheUpdateOnOffer)
+        {
+            await _screen.UpdateThisCopy();
+            return;
+        }
+
         if (_screen.TheVersionPage is not string page)
         {
             await _screen.CheckForANewVersion();
             return;
         }
 
+        OpenTheReleasePage(page);
+    }
+
+    /// <summary>What's new, beside Update, so the release page is never lost to the button.</summary>
+    private void OpenWhatsNew(object sender, RoutedEventArgs e)
+    {
+        if (_screen.TheVersionPage is string page)
+        {
+            OpenTheReleasePage(page);
+        }
+    }
+
+    private void OpenTheReleasePage(string page)
+    {
         try
         {
             Process.Start(new ProcessStartInfo(page) { UseShellExecute = true });
