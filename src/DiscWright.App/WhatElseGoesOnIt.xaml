@@ -358,16 +358,36 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
+                    <!--
+                        Drawn as the disc it will be printed on: round, with the
+                        hole in the middle. The picture itself stays square, which
+                        is what disc printing software takes, and the software
+                        cuts the shape and the hole to suit the printer.
+
+                        A Border's CornerRadius rounds its own background and does
+                        not cut what is inside it, so the picture used to sit
+                        square over a round frame. The Clip is what makes it round.
+                    -->
                     <Border Grid.Column="0" Width="72" Height="72"
                             HorizontalAlignment="Left"
                             Background="{DynamicResource Panel}"
                             BorderBrush="{DynamicResource Edge}"
                             BorderThickness="1"
                             CornerRadius="36">
-                        <Image Source="{Binding DiscFace, Converter={StaticResource APicture}}"
-                               Stretch="UniformToFill"
-                               Margin="2"
-                               AutomationProperties.AutomationId="TheDiscFacePicture" />
+                        <Grid Width="66" Height="66">
+                            <Image Source="{Binding DiscFace, Converter={StaticResource APicture}}"
+                                   Stretch="UniformToFill"
+                                   AutomationProperties.AutomationId="TheDiscFacePicture">
+                                <Image.Clip>
+                                    <EllipseGeometry Center="33,33" RadiusX="33" RadiusY="33" />
+                                </Image.Clip>
+                            </Image>
+                            <Ellipse Width="14" Height="14"
+                                     Fill="{DynamicResource Page}"
+                                     Stroke="{DynamicResource Edge}"
+                                     StrokeThickness="1"
+                                     AutomationProperties.AutomationId="TheDiscFaceHole" />
+                        </Grid>
                     </Border>
 
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,10,0">
