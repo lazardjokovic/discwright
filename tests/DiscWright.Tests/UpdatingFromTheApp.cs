@@ -653,7 +653,7 @@ public sealed class UpdatingFromTheApp : IDisposable
         Assert.Contains("UpdatingFromGitHub updater = new(", app, StringComparison.Ordinal);
         Assert.Contains("AppContext.BaseDirectory", app, StringComparison.Ordinal);
         // Through the log, so every step of an update is written down.
-        Assert.Contains("Updater: new TheUpdateWrittenDown(updater, log)));", app, StringComparison.Ordinal);
+        Assert.Contains("Updater: package is null ? new TheUpdateWrittenDown(updater, log) : null,", app, StringComparison.Ordinal);
 
         // And it tidies the installer an earlier update ran, as it starts.
         Assert.Contains("updater.ClearWhatAnEarlierUpdateLeft();", app, StringComparison.Ordinal);

@@ -301,7 +301,110 @@ public class AskingIfThereIsANewerOne
         Assert.StartsWith("https://github.com/", said.Where, StringComparison.Ordinal);
     }
 
-    private static MakeADisc TheScreen(IAskWhatIsReleased asker) =>
+    // ---------------------------------------------- a copy from the Store
+
+    private const string TheStorePage = "ms-windows-store://pdp/?productid=9NS2FK1N3KKC";
+
+    [Fact]
+    public async Task A_Store_copy_links_to_its_Store_page_and_never_asks_GitHub()
+    {
+        // The Store keeps a Store copy up to date, so the version link is the
+        // page, there before anything is pressed, and asking goes nowhere.
+        ARecordingAsker asker = new(new WhatWasReleased("v2.1.0", "https://example.invalid/x"));
+        AnUpdaterThatMustNotBeUsed updater = new();
+        MakeADisc window = TheScreen(asker, updater, TheStorePage);
+
+        Assert.Equal("See it in the Store", window.WhatTheVersionLinkSays);
+        Assert.Equal(TheStorePage, window.TheVersionPage);
+
+        await window.CheckForANewVersion();
+
+        Assert.Equal(0, asker.Asked);
+        Assert.Equal(0, updater.Asked);
+        Assert.False(window.TheUpdateOnOffer);
+        Assert.Equal("See it in the Store", window.WhatTheVersionLinkSays);
+        Assert.Equal(TheStorePage, window.TheVersionPage);
+        Assert.Equal(string.Empty, window.WhatTheVersionSays);
+    }
+
+    [Fact]
+    public async Task A_copy_not_from_the_Store_asks_GitHub_as_it_always_has()
+    {
+        ARecordingAsker asker = new(new WhatWasReleased("v2.1.0", "https://example.invalid/x"));
+        MakeADisc window = TheScreen(asker, null, storePage: null);
+
+        Assert.Equal("Check for new version", window.WhatTheVersionLinkSays);
+        Assert.Null(window.TheVersionPage);
+
+        await window.CheckForANewVersion();
+
+        Assert.Equal(1, asker.Asked);
+        Assert.Equal("https://example.invalid/x", window.TheVersionPage);
+    }
+
+    [Fact]
+    public void A_Store_copy_keeps_its_log_in_the_package_folder_every_program_can_read()
+    {
+        // Its writes into AppData are redirected somewhere only it can see,
+        // so Explorer and Notepad would open an empty folder. LocalState is
+        // the package's own folder, kept in the open.
+        string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
+        Assert.Equal(
+            Path.Combine(local, "Packages", "LazarDjokovic.DiscWright_abc123", "LocalState", "logs"),
+            DiscWright.Platform.TheLogOnDisk.ForThisUser("LazarDjokovic.DiscWright_abc123"));
+
+        // Every other copy keeps it where it always was.
+        Assert.Equal(Path.Combine(local, "DiscWright", "logs"), DiscWright.Platform.TheLogOnDisk.ForThisUser());
+    }
+
+    [Fact]
+    public void A_process_outside_any_package_is_told_it_is_not_a_Store_copy()
+    {
+        // This test is such a process, as every copy but the Store's is.
+        Assert.Null(DiscWright.Platform.ThisCopy.PackageFamilyName());
+
+        // And the page a Store copy opens is the one reserved for it.
+        Assert.Equal(TheStorePage, DiscWright.Platform.ThisCopy.StorePage);
+    }
+
+    [Fact]
+    public void The_app_gives_a_Store_copy_no_Updater_its_Store_page_and_its_own_log()
+    {
+        string app = File.ReadAllText(Repository.File("src", "DiscWright.App", "App.xaml.cs"));
+
+        Assert.Contains("string? package = ThisCopy.PackageFamilyName();", app, StringComparison.Ordinal);
+        Assert.Contains("TheLogOnDisk log = new(TheLogOnDisk.ForThisUser(package));", app, StringComparison.Ordinal);
+        Assert.Contains("Updater: package is null ? new TheUpdateWrittenDown(updater, log) : null,", app, StringComparison.Ordinal);
+        Assert.Contains("StorePage: package is null ? null : ThisCopy.StorePage", app, StringComparison.Ordinal);
+    }
+
+    private sealed class AnUpdaterThatMustNotBeUsed : IUpdateThisCopy
+    {
+        internal int Asked { get; private set; }
+
+        public bool CanUpdateItself
+        {
+            get
+            {
+                Asked++;
+                return true;
+            }
+        }
+
+        public string WhereTheDownloadGoes(string named) => throw new InvalidOperationException("A Store copy never downloads.");
+
+        public Task<string> Read(string url, CancellationToken ct) => throw new InvalidOperationException("A Store copy never reads a release.");
+
+        public Task Download(string url, string into, IProgress<long> sofar, CancellationToken ct) =>
+            throw new InvalidOperationException("A Store copy never downloads.");
+
+        public void ThrowAway(string path) => throw new InvalidOperationException("A Store copy has nothing to throw away.");
+
+        public void InstallAndClose(string installer) => throw new InvalidOperationException("A Store copy never runs an installer.");
+    }
+
+    private static MakeADisc TheScreen(IAskWhatIsReleased asker, IUpdateThisCopy? updater = null, string? storePage = null) =>
         new(new TheMachine(
             new NoEncoding(),
             new ABuilderThatDoesNothing(),
@@ -318,7 +421,9 @@ public class AskingIfThereIsANewerOne
             new PicturesThatRead(),
             "2.0.0",
             _ => 1000,
-            Patience: new AClockThatMovesItself().Patience));
+            Patience: new AClockThatMovesItself().Patience,
+            Updater: updater,
+            StorePage: storePage));
 
     private sealed class ARecordingAsker(WhatWasReleased said) : IAskWhatIsReleased
     {
