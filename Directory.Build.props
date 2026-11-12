@@ -13,8 +13,11 @@
 
       2.0.1 on 2026-11-12: Update from the app, Needs N discs, and the disc
       check moving from its first megabyte.
+
+      2.0.2 on 2026-11-12: what a set burned and installed on an older laptop
+      turned up, and what taking the Microsoft Store screenshots did.
     -->
-    <Version>2.0.1</Version>
+    <Version>2.0.2</Version>
 
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
