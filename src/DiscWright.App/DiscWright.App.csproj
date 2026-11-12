@@ -18,6 +18,10 @@
          the taskbar, the Start menu and the file in Explorer all get one that
          was drawn for the size they show it at. -->
     <ApplicationIcon>DiscWright.ico</ApplicationIcon>
+
+    <!-- Per Monitor V2 and the rest of what the exe says about itself: see
+         the file. -->
+    <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <ItemGroup>
