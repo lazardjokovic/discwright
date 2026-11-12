@@ -423,6 +423,17 @@ function theDiscIsAbove(menuUrl) {
         cleaned = cleaned.substring(0, at);
     }
 
+    // A disc at the top of its drive is "D:\", never "D:". To Windows, "D:"
+    // means whichever folder is current on D, so a set copied robocopy "D:"
+    // from D:\AUTORUN when somebody had opened the disc in Explorer and
+    // double-clicked menu.hta there, and said its files "would not copy" and
+    // the disc "may be scratched". The check and Copy and play read the same
+    // root. AutoPlay starts the menu from the top of the disc, which is why
+    // every disc burned so far installed. Found on the VM on 2026-11-12.
+    if (/^[A-Za-z]:$/.test(cleaned)) {
+        cleaned += BACKSLASH;
+    }
+
     return cleaned;
 }
 
