@@ -88,7 +88,7 @@ Every run is stamped with the local commit and the time it was sent, and the VM 
 
 ### Whether the tests are worth anything
 
-A suite is worth what it objects to, so there are two ways of asking. `tools\Mutate.py` plants a fault somebody chose, runs the suite, and refuses to draw a conclusion without evidence that the run happened, because a blocked run and a fault nothing caught look exactly alike. `tests\by-hand\Invoke-Stryker.ps1` is the other half: every fault Stryker can think of across one project, which is the only honest answer to whether these tests are worth having. On `DiscWright.ViewModels`, where the decisions live, the score was **89.78% on 2026-10-24**, up from 72.03% four days before that, and `stryker-config.json` is the configuration it runs with.
+A suite is worth what it objects to, so there are two ways of asking. `tools\Mutate.py` plants a fault somebody chose, runs the suite, and refuses to draw a conclusion without evidence that the run happened, because a blocked run and a fault nothing caught look exactly alike. `tests\by-hand\Invoke-Stryker.ps1` is the other half: every fault Stryker can think of across one project, which is the only honest answer to whether these tests are worth having. On `DiscWright.ViewModels`, where the decisions live, the score was **88.91% on 2026-11-12**, measured against 2.0.1, after 89.78% on 2026-10-24 and 72.03% four days before that, and `stryker-config.json` is the configuration it runs with.
 
 ### Testing by hand
 
