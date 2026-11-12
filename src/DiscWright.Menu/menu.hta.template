@@ -367,6 +367,8 @@ function copyItAndPlayIt(game, fromFolder) {
             copying.all = progress.all;
             copying.startedAt = progress.startedAt || 0;
             copying.rate = progress.rate || 0;
+            copying.read = progress.read;
+            copying.bytes = progress.bytes;
 
             if (copying.copying && !copying.ticking) {
                 keepTheGameBarMoving();
@@ -857,6 +859,8 @@ function copyThisDisc() {
             restoring.all = progress.all;
             restoring.startedAt = progress.startedAt || 0;
             restoring.rate = progress.rate || 0;
+            restoring.read = progress.read;
+            restoring.bytes = progress.bytes;
 
             if (restoring.copying && !restoring.ticking) {
                 keepTheBarMoving();

@@ -40,12 +40,19 @@ function discTitle(gameName, discNumber, discsInSet) {
 // Only files that took more than a second count. A thousand tiny files copied
 // in no measurable time would otherwise divide by nearly nothing and claim a
 // rate of gigabytes a second, and the bar would jump to 99 and sit there.
+//
+// And only files of 16 MB or more. The first files on a disc are the small
+// ones, autorun.inf, the icon, the set's own list, and they are read while
+// the drive is still spinning up: 60 KB in a second and a half is a rate of
+// 40 KB a second, which says nothing about the drive and everything about
+// the moment. At that rate a 4 GB file barely moves the bar, and on the
+// owner's Dead Space set both big files sat at 0% until they were done.
 function rateFrom(samples, seedRate) {
     var bytes = 0;
     var seconds = 0;
 
     for (var i = 0; i < samples.length; i++) {
-        if (samples[i].seconds > 1 && samples[i].bytes > 0) {
+        if (samples[i].seconds > 1 && samples[i].bytes >= ENOUGH_TO_TIME) {
             bytes += samples[i].bytes;
             seconds += samples[i].seconds;
         }
@@ -64,6 +71,18 @@ function rateFrom(samples, seedRate) {
 // time has finished, after which rateFrom takes over with something measured.
 function startingRate() {
     return 1228800;
+}
+
+// The smallest file whose time says anything about the drive: see rateFrom.
+var ENOUGH_TO_TIME = 16777216;
+
+// The guess to start with for a disc holding this many bytes. More than a
+// CD can hold is a DVD, and a DVD drive reads several times faster than the
+// 8x CD guess, which crawled across a DVD's big files: 4x DVD, 5.5 MB a
+// second, which nearly every drive beats, so the bar is more likely to jump
+// forward at the end of a file than to run ahead and wait.
+function startingRateFor(bytesOnTheDisc) {
+    return bytesOnTheDisc > 943718400 ? 5540000 : startingRate();
 }
 
 // How far along the copy is, as a whole number.
@@ -1619,7 +1638,25 @@ function restoreSentence(scan, discIn, busy, folder) {
 // progress is what copyTheSetDisc says: done, all, startedAt in
 // milliseconds and rate in bytes a second. now is the clock, handed in so a
 // test can hold it still.
+//
+// UNLESS IT IS KNOWN. Since 2026-11-12 the copy asks Windows how many bytes
+// robocopy has read (bytesReadSoFar), and when it has an answer the page is
+// handed it as read, with the size of the file in flight as bytes. Then the
+// number is exact: the files done, and as much of this one as has been read.
+// Still never 100, for the same reason.
 function restoreBarPercent(progress, now) {
+    if (typeof progress.read === "number" && progress.read >= 0 && progress.all > 0) {
+        var read = progress.read;
+
+        if (typeof progress.bytes === "number" && read > progress.bytes) {
+            read = progress.bytes;
+        }
+
+        var exact = Math.floor(((progress.done + read) * 100) / progress.all);
+
+        return exact > 99 ? 99 : (exact < 0 ? 0 : exact);
+    }
+
     var seconds = progress.startedAt > 0 ? Math.max(0, (now - progress.startedAt) / 1000) : 0;
 
     return percentDone(progress.done, seconds, progress.rate || startingRate(), progress.all);
@@ -1916,6 +1953,59 @@ function jobCode(job) {
     return code;
 }
 
+// How many bytes the program a job started has read so far, or -1 when that
+// cannot be told.
+//
+// Nothing on a disc can see inside a copy that is happening, which is why the
+// bar used to be an estimate: robocopy sizes the destination to its full
+// length the moment it starts and holds its own percentages back until it
+// ends when its output goes to a file. But Windows counts the bytes every
+// process reads, and WMI will say how many. Measured on the test machine on
+// 2026-11-12: a 400 MB robocopy read 65, 129, 194, 258, 322 and 386 MB at
+// one second apart. certutil reads its file through a mapping that the count
+// does not see, so the check cannot do this and stays an estimate.
+//
+// A job is started through cmd with no handle on it, so the program is found
+// by its parent: the one cmd whose command line names this job's flag file,
+// and its child of that name. Found once and remembered on the job. Any
+// failure at all, WMI missing or refused or the program already gone, is -1,
+// and the caller goes on estimating.
+function bytesReadSoFar(job, program) {
+    try {
+        // Through wmiFor, never GetObject, which the menu's engine does not
+        // have: see wmiFor.
+        var wmi = wmiFor("cimv2");
+        var name, parents, children, found;
+
+        if (!job.reader) {
+            name = String(job.flag).split(BACKSLASH).join("/").split("/").pop();
+            parents = new Enumerator(wmi.ExecQuery(
+                "SELECT ProcessId FROM Win32_Process WHERE Name = 'cmd.exe' AND CommandLine LIKE '%" + name + "%'"));
+
+            for (; !parents.atEnd() && !job.reader; parents.moveNext()) {
+                children = new Enumerator(wmi.ExecQuery(
+                    "SELECT ProcessId FROM Win32_Process WHERE ParentProcessId = " + parents.item().ProcessId
+                        + " AND Name = '" + program + "'"));
+
+                if (!children.atEnd()) {
+                    job.reader = children.item().ProcessId;
+                }
+            }
+
+            if (!job.reader) {
+                return -1;
+            }
+        }
+
+        found = new Enumerator(wmi.ExecQuery(
+            "SELECT ReadTransferCount FROM Win32_Process WHERE ProcessId = " + job.reader));
+
+        return found.atEnd() ? -1 : Number(found.item().ReadTransferCount);
+    } catch (cannotTell) {
+        return -1;
+    }
+}
+
 // Waits for a job the way everything in here waits: on a timer where there
 // is a window to keep alive, and in place where there is not. A window whose
 // script is sitting in a blocking call cannot redraw and cannot see a disc
@@ -2062,20 +2152,25 @@ function copyAGameOff(work) {
         landing = onTheDisc(work.destination, relative);
 
         state.startedAt = (new Date()).getTime();
-        work.say({
+
+        var saying = {
             copying: (state.at + 1) + " of " + work.items.length,
             done: state.done,
             all: state.all,
             startedAt: state.startedAt,
-            rate: rateFrom(state.samples, startingRate())
-        });
+            rate: rateFrom(state.samples, startingRateFor(state.all))
+        };
+
+        work.say(saying);
 
         try {
             makeTheWholePath(work.files, work.files.GetParentFolderName(landing));
         } catch (cannotMake) {
         }
 
-        waitForJob(startAJob(setCopyCommand(work.from, work.destination, relative)), function (code) {
+        var job = startAJob(setCopyCommand(work.from, work.destination, relative));
+
+        waitForJob(job, function (code) {
             // Both questions, as the set copy asks them: robocopy says 8 and
             // up for a failure and the size says whether the bytes are there,
             // and neither answer is enough on its own.
@@ -2092,7 +2187,7 @@ function copyAGameOff(work) {
 
             state.at++;
             next();
-        });
+        }, howMuchHasBeenRead(job, saying, one.bytes, work.say));
     }
 
     next();
@@ -2136,20 +2231,25 @@ function copyTheSetDisc(work) {
         }
 
         state.startedAt = (new Date()).getTime();
-        work.say({
+
+        var saying = {
             copying: (state.at + 1) + " of " + mine.length,
             done: state.done,
             all: state.all,
             startedAt: state.startedAt,
-            rate: rateFrom(state.samples, startingRate())
-        });
+            rate: rateFrom(state.samples, startingRateFor(state.all))
+        };
+
+        work.say(saying);
 
         try {
             makeTheWholePath(work.files, work.files.GetParentFolderName(onTheDisc(work.dir, row.path)));
         } catch (cannotMake) {
         }
 
-        waitForJob(startAJob(setCopyCommand(work.discRoot, work.dir, row.path)), function (code) {
+        var job = startAJob(setCopyCommand(work.discRoot, work.dir, row.path));
+
+        waitForJob(job, function (code) {
             if (code >= 8 || sizeOf(row.path) !== row.bytes) {
                 state.bad++;
             } else {
@@ -2159,10 +2259,41 @@ function copyTheSetDisc(work) {
 
             state.at++;
             next();
-        });
+        }, howMuchHasBeenRead(job, saying, row.bytes, work.say));
     }
 
     next();
+}
+
+// What a copy does while one file works: about once a second, it asks how
+// much robocopy has read and, when that can be told, says the same progress
+// again with read and the file's size in it, so the bar is drawn from the
+// bytes rather than the clock. Every other look, because a look comes every
+// 400 ms and a WMI question is not free.
+function howMuchHasBeenRead(job, saying, bytes, say) {
+    var looks = 0;
+
+    return function () {
+        looks++;
+
+        if (looks % 2 !== 0) {
+            return;
+        }
+
+        var read = bytesReadSoFar(job, "robocopy.exe");
+
+        if (read >= 0) {
+            say({
+                copying: saying.copying,
+                done: saying.done,
+                all: saying.all,
+                startedAt: saying.startedAt,
+                rate: saying.rate,
+                read: read,
+                bytes: bytes
+            });
+        }
+    };
 }
 
 // Puts every cut file back together whose pieces are all here, one at a
@@ -2335,12 +2466,15 @@ function checkStep(at, of, percent) {
 }
 
 // How far the check is through the disc's bytes: exact for the files done,
-// and the one being hashed estimated at the rate the ones before it read at,
-// or the usual guess before any has finished. Times are in milliseconds and
-// handed in, so a test can hold the clock still.
-function checkPercent(done, all, began, fileBegan, now) {
-    var rate = done > 0 && fileBegan > began ? done / ((fileBegan - began) / 1000) : startingRate();
-
+// and the one being hashed estimated at rate, in bytes a second. Times are in
+// milliseconds and handed in, so a test can hold the clock still.
+//
+// The rate used to be everything done so far over the time it took, which on
+// a disc whose first files are tiny is the drive spinning up: 60 KB in a
+// second and a half. The owner's Dead Space check sat at 0% through both of
+// its big files that way. checkTheDisc now hands in rateFrom's answer, from
+// files big enough to time, or the guess for a disc that size.
+function checkPercent(done, all, rate, fileBegan, now) {
     return percentDone(done, Math.max(0, (now - fileBegan) / 1000), rate, all);
 }
 
@@ -2368,7 +2502,7 @@ function checkTheDisc(dir, sums, saying, done) {
 
     var all = 0;
     var hashed = 0;
-    var began = (new Date()).getTime();
+    var samples = [];
     var size;
 
     for (i = 0; i < sums.rows.length; i++) {
@@ -2389,7 +2523,7 @@ function checkTheDisc(dir, sums, saying, done) {
     }
 
     function howFar(fileBegan) {
-        return checkPercent(hashed, all, began, fileBegan, (new Date()).getTime());
+        return checkPercent(hashed, all, rateFrom(samples, startingRateFor(all)), fileBegan, (new Date()).getTime());
     }
 
     var tmp = onTheDisc(
@@ -2411,6 +2545,7 @@ function checkTheDisc(dir, sums, saying, done) {
             startAJob("certutil -hashfile " + setQuote(here[at].full) + " SHA256 > " + setQuote(tmp)),
             function () {
                 hashed += here[at].bytes;
+                samples.push({ bytes: here[at].bytes, seconds: ((new Date()).getTime() - fileBegan) / 1000 });
                 var said = "";
                 var reading;
 

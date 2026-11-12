@@ -1949,8 +1949,8 @@ public sealed class TheMenuScript : IDisposable
         // The owner's 2026-11-10 night: "file 39 of 39" sat still for
         // minutes on a 600 MB piece. 100 MB done in 10 s is 10 MB/s, so 30 s
         // into a 600 MB file is another 300 MB of 1 GB: 40%, then 60% at 50 s.
-        string at30 = Ask("checkPercent(104857600, 1048576000, 0, 10000, 40000)");
-        string at50 = Ask("checkPercent(104857600, 1048576000, 0, 10000, 60000)");
+        string at30 = Ask("checkPercent(104857600, 1048576000, 10485760, 10000, 40000)");
+        string at50 = Ask("checkPercent(104857600, 1048576000, 10485760, 10000, 60000)");
 
         Assert.Equal("40", at30);
         Assert.Equal("60", at50);
@@ -1977,10 +1977,168 @@ public sealed class TheMenuScript : IDisposable
     public void The_check_guesses_before_any_file_has_finished_and_never_says_100()
     {
         // Nothing done yet: the usual 8x guess, 1.2 MB a second.
-        Assert.Equal("10", Ask("checkPercent(0, 12288000, 0, 0, 1000)"));
+        Assert.Equal("10", Ask("checkPercent(0, 12288000, rateFrom([], startingRateFor(12288000)), 0, 1000)"));
 
         // Long past the end of the estimate, it still is not finished.
-        Assert.Equal("99", Ask("checkPercent(100, 1000, 0, 1000, 999999)"));
+        Assert.Equal("99", Ask("checkPercent(100, 1000, 100, 1000, 999999)"));
+    }
+
+    [Fact]
+    public void The_check_is_not_slowed_to_nothing_by_small_files_read_while_the_drive_spins_up()
+    {
+        // The owner's Dead Space set: a few small files first, read while
+        // the drive woke, then two big ones that sat at 0% until they were
+        // done. 60 KB in a second and a half is 40 KB a second, and at that
+        // rate a minute into a 4 GB disc is nothing. Not counted, it is the
+        // DVD guess instead: a minute is 332 MB, 8%.
+        Assert.Equal(
+            "8",
+            Ask("checkPercent(60000, 4000000000, rateFrom([{bytes: 60000, seconds: 1.5}], startingRateFor(4000000000)), 0, 60000)"));
+
+        // What it said before: the small file's rate, and nothing moving.
+        Assert.Equal("0", Ask("checkPercent(60000, 4000000000, 60000 / 1.5, 0, 60000)"));
+    }
+
+    [Fact]
+    public void Times_only_files_big_enough_to_say_something_about_the_drive()
+    {
+        // Small and slow is the drive spinning up, not the drive's speed.
+        Assert.Equal("1228800", Ask("rateFrom([{bytes: 60000, seconds: 1.5}, {bytes: 16777215, seconds: 4}], 1228800)"));
+
+        // 16 MB and more counts.
+        Assert.Equal("4194304", Ask("rateFrom([{bytes: 60000, seconds: 1.5}, {bytes: 16777216, seconds: 4}], 1228800)"));
+    }
+
+    [Fact]
+    public void Guesses_a_DVD_faster_than_a_CD()
+    {
+        // A full CD-R is about 703 MB; more than 900 MB is a DVD, read at a
+        // guess of 4x DVD rather than 8x CD.
+        Assert.Equal("1228800", Ask("startingRateFor(737280000)"));
+        Assert.Equal("5540000", Ask("startingRateFor(4700000000)"));
+    }
+
+    [Fact]
+    public void The_copy_bar_is_exact_once_it_is_known_how_much_has_been_read()
+    {
+        // Half of a 500 byte file read, with nothing done before it, of 1000.
+        Assert.Equal("25", Ask("restoreBarPercent({done: 0, all: 1000, startedAt: 5000, rate: 1, read: 250, bytes: 500}, 5000)"));
+
+        // The clock plays no part once it is known.
+        Assert.Equal("25", Ask("restoreBarPercent({done: 0, all: 1000, startedAt: 5000, rate: 1, read: 250, bytes: 500}, 99000)"));
+
+        // Reading more than the file holds counts as the file, and the end is
+        // still not 100.
+        Assert.Equal("70", Ask("restoreBarPercent({done: 200, all: 1000, read: 900, bytes: 500}, 0)"));
+        Assert.Equal("99", Ask("restoreBarPercent({done: 500, all: 1000, read: 500, bytes: 500}, 0)"));
+
+        // Not known is the estimate, as before.
+        Assert.Equal("50", Ask("restoreBarPercent({done: 0, all: 1000, startedAt: 5000, rate: 100, read: -1}, 10000)"));
+        Assert.Equal("50", Ask("restoreBarPercent({done: 0, all: 1000, startedAt: 5000, rate: 100}, 10000)"));
+    }
+
+    [Fact]
+    public void Asks_how_much_has_been_read_every_other_look_and_says_it_when_it_is_known()
+    {
+        string asked = Ask(
+            "(function () {"
+            + " var said = []; var asks = 0; var answer = -1;"
+            + " bytesReadSoFar = function (job, program) { asks++; return program === 'robocopy.exe' ? answer : -9; };"
+            + " var look = howMuchHasBeenRead({ flag: 'x' }, { copying: '1 of 2', done: 10, all: 1000, startedAt: 7, rate: 5 }, 500,"
+            + "   function (p) { said.push(p.copying + '/' + p.done + '/' + p.all + '/' + p.startedAt + '/' + p.rate + '/' + p.read + '/' + p.bytes); });"
+            + " look(); look();"
+            + " answer = 300; look(); look();"
+            + " return asks + '|' + said.join(',');"
+            + "}())");
+
+        // Asked on the second and fourth looks; the first answer was not
+        // known, so only the second was said.
+        Assert.Equal("2|1 of 2/10/1000/7/5/300/500", asked);
+    }
+
+    [Fact]
+    public void Cannot_tell_how_much_a_job_has_read_when_there_is_no_such_job()
+    {
+        // The menu's own engine, without GetObject. Nothing found is -1, and
+        // the copy goes on estimating.
+        Assert.Equal(
+            "-1",
+            Ask("bytesReadSoFar({ flag: 'C:' + BACKSLASH + 'no such' + BACKSLASH + 'dwjob0_never.done' }, 'robocopy.exe')", withoutGetObject: true));
+    }
+
+    [Fact]
+    public void Both_copies_watch_what_is_read_and_the_check_times_only_files_worth_timing()
+    {
+        // The parts that only run with a window: waitForJob looks in on a job
+        // only when there is a page to keep alive, which a test under cscript
+        // is not. So the wiring is read off the script itself.
+        string script = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.js"));
+
+        foreach (string copy in new[] { "function copyAGameOff(", "function copyTheSetDisc(" })
+        {
+            string body = FunctionIn(script, copy);
+
+            Assert.Contains("howMuchHasBeenRead(job, saying,", body, StringComparison.Ordinal);
+            Assert.Contains("rateFrom(state.samples, startingRateFor(state.all))", body, StringComparison.Ordinal);
+        }
+
+        string check = FunctionIn(script, "function checkTheDisc(");
+        Assert.Contains("rateFrom(samples, startingRateFor(all))", check, StringComparison.Ordinal);
+        Assert.Contains("samples.push(", check, StringComparison.Ordinal);
+    }
+
+    private static string FunctionIn(string script, string opening)
+    {
+        int start = script.IndexOf(opening, StringComparison.Ordinal);
+        Assert.True(start >= 0, opening + " is not in menu.js");
+
+        // To the next function at the left margin, which is where the next
+        // one starts in this file.
+        int end = script.IndexOf("\nfunction ", start + opening.Length, StringComparison.Ordinal);
+
+        return end < 0 ? script[start..] : script[start..end];
+    }
+
+    [Fact]
+    public void Watches_a_real_robocopy_read_its_file()
+    {
+        // The whole way, on this machine: a job started the way the menu
+        // starts one, the program found through its cmd, and its bytes read
+        // counted by Windows, in the engine the disc gets. Slowed with an
+        // inter-packet gap so there is a copy to watch.
+        string from = Path.Combine(_folder, "from");
+        string to = Path.Combine(_folder, "to");
+        Directory.CreateDirectory(from);
+
+        byte[] chunk = new byte[1 << 20];
+        new Random(7).NextBytes(chunk);
+
+        using (FileStream big = File.Create(Path.Combine(from, "big.bin")))
+        {
+            for (int i = 0; i < 32; i++)
+            {
+                big.Write(chunk);
+            }
+        }
+
+        string Js(string path) => path.Replace("\\", "\\\\", StringComparison.Ordinal);
+
+        string asked = Ask(
+            "(function () {"
+            + " var job = startAJob('robocopy \"" + Js(from) + "\" \"" + Js(to) + "\" big.bin /IPG:10 /R:1 /W:1 /NJH /NJS');"
+            + " var most = -1; var until = (new Date()).getTime() + 15000;"
+            + " while (!jobIsDone(job) && (new Date()).getTime() < until) {"
+            + "   var read = bytesReadSoFar(job, 'robocopy.exe');"
+            + "   if (read > most) { most = read; }"
+            + "   WScript.Sleep(200);"
+            + " }"
+            + " var finished = false; waitForJob(job, function (code) { finished = code < 8; });"
+            + " return (most > 0 ? 'seen' : 'NOT SEEN ' + most) + '|' + (most <= 33554432 ? 'within' : 'MORE ' + most) + '|' + finished;"
+            + "}())",
+            withoutGetObject: true);
+
+        Assert.Equal("seen|within|true", asked);
+        Assert.Equal(32L << 20, new FileInfo(Path.Combine(to, "big.bin")).Length);
     }
 
     [Fact]
