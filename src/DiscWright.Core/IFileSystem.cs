@@ -63,4 +63,12 @@ public interface IFileSystem
     /// all have to grow a method none of them use.
     /// </remarks>
     string? ReadText(string path) => null;
+
+    /// <summary>Whether there is a file at that path.</summary>
+    /// <remarks>
+    /// Asked of every file somebody chose for a disc before the disc is built
+    /// or its menu previewed, because files get moved after they are chosen.
+    /// True by default, which is every fake that does not care.
+    /// </remarks>
+    bool FileExists(string path) => true;
 }

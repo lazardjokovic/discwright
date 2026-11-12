@@ -132,6 +132,24 @@ public static class Refusals
     /// been pulled out and a folder somebody emptied are different mistakes,
     /// and only one of them is worth going to look for the folder again.
     /// </remarks>
+    /// <summary>
+    /// Something chosen under Artwork, music and extras is not where it was
+    /// chosen from.
+    /// </summary>
+    /// <remarks>
+    /// It used to be "Something went wrong while writing the preview. This one
+    /// is not accounted for" followed by nothing but the path, which is what
+    /// Windows says about a picture that is not there, and it reads as a
+    /// crash. The owner met it on 2026-11-12 after moving his Hollow Knight
+    /// files into another folder once he had chosen them.
+    /// </remarks>
+    /// <param name="what">What it is, in the words of that window: "disc icon", "manual".</param>
+    /// <param name="path">Where it was chosen from.</param>
+    public static Refusal ThatChosenFileIsNotThere(string what, string path) =>
+        new($"The {what} is not where it was chosen from",
+            $"{path} is not there any more. It may have been moved or renamed since it was chosen. "
+                + "Choose it again under Artwork, music and extras, or clear it there.");
+
     public static Refusal ThatFolderIsNotThere(string path) =>
         new("That folder is not there",
             $"Nothing was found at {path}. It may have been moved, renamed, or be on a drive that is no longer attached.",
