@@ -990,55 +990,36 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Gets the disc back in so it can be read, and says whether it came back.
+    /// Gets the tray shut again so the disc can be read, and says whether it
+    /// is.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The drive is asked first, because a drive that can shut its own tray
     /// should not make somebody walk over to it. Most slim drives cannot, and
     /// then it is a person's job.
+    /// </para>
+    /// <para>
+    /// Asked through <see cref="WorthAsking"/> like every other question, so
+    /// the log has it and the moment it was answered. It was a bare message
+    /// box, the one question the log never heard, and on an older laptop the
+    /// log showed ten minutes of nothing between a burn and its check with
+    /// no way to tell whether that was the box waiting or the drive.
+    /// </para>
+    /// <para>
+    /// Waiting for the drive to read the disc in is not here any more. It is
+    /// <see cref="WaitingForTheDiscToComeBack"/>, which says the wait as it
+    /// goes and never asks the drive on this thread.
+    /// </para>
     /// </remarks>
-    private async Task<bool> ShutTheTray(Recorder drive)
-    {
-        if (_tray.ShutIt(drive))
-        {
-            return await WaitForTheDisc(drive);
-        }
-
-        MessageBoxResult go = MessageBox.Show(
+    private Task<bool> ShutTheTray(Recorder drive) =>
+        Task.FromResult(_tray.ShutIt(drive) || WorthAsking.Ask(
             this,
-            $"The disc is written, and {drive.Drive} has ejected it so it can be read back properly."
-                + Environment.NewLine + Environment.NewLine
-                + "Close the tray, then press OK to check every file on it.",
-            "Written",
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Information);
-
-        return go == MessageBoxResult.OK && await WaitForTheDisc(drive);
-    }
-
-    private static async Task<bool> WaitForTheDisc(Recorder drive)
-    {
-        string root = drive.Drive.TrimEnd(System.IO.Path.DirectorySeparatorChar)
-            + System.IO.Path.DirectorySeparatorChar;
-
-        for (int tries = 0; tries < 60; tries++)
-        {
-            try
-            {
-                if (Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root).Any())
-                {
-                    return true;
-                }
-            }
-            catch (IOException)
-            {
-            }
-
-            await Task.Delay(1000);
-        }
-
-        return false;
-    }
+            $"Push the tray of {drive.Drive} shut",
+            $"The disc is written, and {drive.Drive} has pushed it out so it can be read back properly. "
+                + "This drive cannot pull its own tray in. Once it is shut, every file on the disc is checked.",
+            "The tray is shut",
+            "Do not check it"));
 
     private void Say(BuiltDiscs made)
     {

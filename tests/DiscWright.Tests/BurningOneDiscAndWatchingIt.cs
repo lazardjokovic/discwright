@@ -56,6 +56,44 @@ public class BurningOneDiscAndWatchingIt
     }
 
     [Fact]
+    public async Task Says_it_is_waiting_for_the_drive_to_read_the_disc_and_for_how_long()
+    {
+        // A drive that takes three asks, a second apart, to read the disc it
+        // has just written. An older laptop's drive took minutes, and the
+        // window went on saying the last thing the burn had said.
+        AWindowWatched watched = new(discNotReadFor: 3);
+
+        await watched.Burn();
+
+        Assert.Contains("waiting for E: to read the disc back in, 0 sec", watched.Said);
+        Assert.Contains("waiting for E: to read the disc back in, 2 sec", watched.Said);
+        Assert.Contains("E: has read the disc back in after 3 sec", watched.Said);
+
+        // In that order, after the burn and before the check.
+        int waited = watched.Said.IndexOf("waiting for E: to read the disc back in, 0 sec");
+        int back = watched.Said.IndexOf("E: has read the disc back in after 3 sec");
+        int checking = watched.Said.FindIndex(said => said.StartsWith("checking the disc", StringComparison.Ordinal));
+        Assert.True(
+            watched.Said.IndexOf("waiting for the disc to come back") < waited && waited < back && back < checking,
+            string.Join(" | ", watched.Said));
+
+        Assert.True(watched.Window.HowTheDiscCameOut?.Good, "the disc that came back was not checked as good");
+    }
+
+    [Fact]
+    public async Task Gives_up_on_a_drive_that_never_reads_the_disc_and_says_it_was_not_checked()
+    {
+        AWindowWatched watched = new(discNotReadFor: -1);
+
+        await watched.Burn();
+
+        // A quarter of an hour of the fake clock, said the whole way.
+        Assert.Contains("waiting for E: to read the disc back in, 14 min 59 sec", watched.Said);
+        Assert.Null(watched.Window.HowTheDiscCameOut);
+        Assert.Equal(Refusals.TheDiscWasNotChecked("E:").Because, watched.Window.ItWentWrong?.Because);
+    }
+
+    [Fact]
     public async Task Moves_the_bar_with_what_the_drive_says()
     {
         AWindowWatched watched = new();
@@ -265,7 +303,7 @@ public class BurningOneDiscAndWatchingIt
     /// </summary>
     private sealed class AWindowWatched
     {
-        internal AWindowWatched(string? picturesRefuse = null)
+        internal AWindowWatched(string? picturesRefuse = null, int discNotReadFor = 0)
         {
             Window = new MakeADisc(new TheMachine(
                 new NoEncoding(),
@@ -277,7 +315,7 @@ public class BurningOneDiscAndWatchingIt
                 new ADiskThatMatchesWhatWasBuilt(),
                 new NoHashing(),
                 new NothingIsRemembered(),
-                new ATrayThatShuts(),
+                new ATrayThatShuts { NotReadFor = discNotReadFor },
                 new NothingIsReleased(),
                 new NoPreview(),
                 new PicturesThatRead { Refuse = picturesRefuse },
@@ -521,9 +559,17 @@ public class BurningOneDiscAndWatchingIt
 
     private sealed class ATrayThatShuts : IWorkTheTray
     {
+        private int _asked;
+
+        /// <summary>How many times it says the disc is not read yet; below nought, for ever.</summary>
+        internal int NotReadFor { get; init; }
+
         public bool ShutIt(Recorder drive) => true;
 
         public bool CanShutItsOwnTray(Recorder drive) => true;
+
+        public Task<bool> HasReadTheDisc(Recorder drive, CancellationToken ct) =>
+            Task.FromResult(NotReadFor >= 0 && Interlocked.Increment(ref _asked) > NotReadFor);
     }
 
     private sealed class NoEncoding : IAutorunEncoding
