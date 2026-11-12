@@ -652,7 +652,8 @@ public sealed class UpdatingFromTheApp : IDisposable
         string app = File.ReadAllText(Repository.File("src/DiscWright.App/App.xaml.cs"));
         Assert.Contains("UpdatingFromGitHub updater = new(", app, StringComparison.Ordinal);
         Assert.Contains("AppContext.BaseDirectory", app, StringComparison.Ordinal);
-        Assert.Contains("Updater: updater));", app, StringComparison.Ordinal);
+        // Through the log, so every step of an update is written down.
+        Assert.Contains("Updater: new TheUpdateWrittenDown(updater, log)));", app, StringComparison.Ordinal);
 
         // And it tidies the installer an earlier update ran, as it starts.
         Assert.Contains("updater.ClearWhatAnEarlierUpdateLeft();", app, StringComparison.Ordinal);
@@ -694,6 +695,201 @@ public sealed class UpdatingFromTheApp : IDisposable
             new Sha256Hasher().Sha256(into, CancellationToken.None)));
     }
 
+    // ---- What the log says -----------------------------------------------------
+
+    [Fact]
+    public async Task A_whole_update_is_written_step_by_step()
+    {
+        List<string> log = [];
+        MakeADisc? window = null;
+
+        AnUpdater updater = new()
+        {
+            WhileDownloading = sofar =>
+            {
+                sofar.Report(TheInstaller().Size);
+                OnTheWindowsThread.WaitUntil(() => window!.WhatTheVersionSays.Contains("100%", StringComparison.Ordinal));
+            },
+        };
+
+        window = AWindow(new TheUpdateWrittenDown(updater, new Into(log)));
+        WhatTheLogHears.Listen(window, new Into(log));
+
+        await OnTheWindowsThread.Run(async () =>
+        {
+            await window.CheckForANewVersion();
+            await window.UpdateThisCopy();
+        });
+
+        string into = updater.WhereTheDownloadGoes(Setup);
+
+        Assert.Equal(
+            [
+                "Update: this copy was installed, so it can update itself.",
+                "Version: " + Newer().InWords,
+                "Version: Downloading DiscWright 2.0.1, 0%.",
+                $"Update: reading the checksums at {From}SHA256SUMS.txt",
+                "Update: the checksums list 2 file(s).",
+                $"Update: downloading {From}{Setup} into {into}",
+                "Version: Downloading DiscWright 2.0.1, 100%.",
+                "Update: downloaded 26000000 bytes.",
+                "Version: Checking the download against the checksum the release publishes.",
+                "Version: DiscWright closes now, updates to 2.0.1 and opens again by itself.",
+                $"Update: starting {into} and closing.",
+            ],
+            log);
+    }
+
+    [Fact]
+    public async Task A_download_that_does_not_match_is_written_and_so_is_throwing_it_away()
+    {
+        List<string> log = [];
+        AnUpdater updater = new();
+        MakeADisc window = AWindow(new TheUpdateWrittenDown(updater, new Into(log)), hasher: new AHasher(new string('d', 64)));
+        WhatTheLogHears.Listen(window, new Into(log));
+        await window.CheckForANewVersion();
+
+        await window.UpdateThisCopy();
+
+        Assert.Contains(log, each => each.StartsWith("Version: The download did not match the checksum", StringComparison.Ordinal));
+        Assert.Contains($"Update: threw away {updater.WhereTheDownloadGoes(Setup)}", log);
+        Assert.DoesNotContain(log, each => each.StartsWith("Update: starting", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_download_that_fails_is_written_with_how_far_it_got_and_why()
+    {
+        List<string> log = [];
+        AnUpdater updater = new()
+        {
+            DownloadFails = true,
+            WhileDownloading = sofar => sofar.Report(1_234_567),
+        };
+
+        MakeADisc window = AWindow(new TheUpdateWrittenDown(updater, new Into(log)));
+        await window.CheckForANewVersion();
+
+        await window.UpdateThisCopy();
+
+        Assert.Contains("Update: the download stopped after 1234567 bytes, IOException: the line dropped", log);
+        Assert.DoesNotContain(log, each => each.StartsWith("Update: downloaded", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Checksums_that_will_not_download_are_written_with_why()
+    {
+        List<string> log = [];
+        MakeADisc window = AWindow(new TheUpdateWrittenDown(new AnUpdater { ReadFails = true }, new Into(log)));
+        await window.CheckForANewVersion();
+
+        await window.UpdateThisCopy();
+
+        Assert.Contains("Update: reading the checksums failed, HttpRequestException: no way out", log);
+        Assert.DoesNotContain(log, each => each.StartsWith("Update: downloading", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_installer_that_will_not_start_is_written_with_why()
+    {
+        List<string> log = [];
+        MakeADisc window = AWindow(new TheUpdateWrittenDown(new AnUpdater { InstallFails = true }, new Into(log)));
+        await window.CheckForANewVersion();
+
+        await window.UpdateThisCopy();
+
+        // Windows' own words, which are in the language of the machine.
+        Assert.Contains(log, each => each.StartsWith("Update: the installer would not start, Win32Exception: ", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(true, "Update: this copy was installed, so it can update itself.")]
+    [InlineData(false, "Update: this copy was not installed by the installer, so it is offered the page instead.")]
+    public async Task Whether_this_copy_can_update_itself_is_written_once(bool installed, string line)
+    {
+        List<string> log = [];
+        MakeADisc window = AWindow(new TheUpdateWrittenDown(new AnUpdater { CanUpdate = installed }, new Into(log)));
+
+        await window.CheckForANewVersion();
+        await window.CheckForANewVersion();
+
+        Assert.Equal([line], log.Where(each => each.StartsWith("Update: this copy", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task The_download_is_written_at_every_tenth_and_not_once_per_report()
+    {
+        List<string> log = [];
+        MakeADisc? window = null;
+        long size = TheInstaller().Size;
+
+        AnUpdater updater = new()
+        {
+            WhileDownloading = sofar =>
+            {
+                foreach (int percent in new[] { 1, 5, 9, 10, 14, 55, 56, 99, 100 })
+                {
+                    sofar.Report(size * percent / 100);
+                }
+
+                OnTheWindowsThread.WaitUntil(() => window!.WhatTheVersionSays.Contains("100%", StringComparison.Ordinal));
+            },
+        };
+
+        window = AWindow(updater);
+        WhatTheLogHears.Listen(window, new Into(log));
+
+        await OnTheWindowsThread.Run(async () =>
+        {
+            await window.CheckForANewVersion();
+            await window.UpdateThisCopy();
+        });
+
+        Assert.Equal(
+            ["0%", "10%", "55%", "99%", "100%"],
+            log.Where(each => each.StartsWith("Version: Downloading", StringComparison.Ordinal))
+               .Select(each => each.Split(", ")[^1].TrimEnd('.')));
+    }
+
+    [Fact]
+    public async Task A_line_that_differs_only_in_its_version_is_written_and_the_same_line_is_not()
+    {
+        List<string> log = [];
+        MakeADisc window = TheMainWindowWithoutAWindow.New(releases: new OneAfterAnother(
+            new WhatWasReleased("v2.0.1", Page),
+            new WhatWasReleased("v2.0.1", Page),
+            new WhatWasReleased("v2.0.2", Page)));
+        WhatTheLogHears.Listen(window, new Into(log));
+
+        await window.CheckForANewVersion();
+        await window.CheckForANewVersion();
+        await window.CheckForANewVersion();
+
+        Assert.Equal(
+            [
+                "Version: " + new HowThisBuildCompares("2.0.0", "v2.0.1", Page).InWords,
+                "Version: " + new HowThisBuildCompares("2.0.0", "v2.0.2", Page).InWords,
+            ],
+            log.Where(each => each.StartsWith("Version: ", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public async Task Every_failure_goes_on_unchanged_after_it_is_written()
+    {
+        List<string> log = [];
+        IOException dropped = new("the line dropped");
+        TheUpdateWrittenDown writing = new(new Throwing(dropped), new Into(log));
+
+        Assert.Same(dropped, await Assert.ThrowsAsync<IOException>(() => writing.Read("x", CancellationToken.None)));
+        Assert.Same(dropped, await Assert.ThrowsAsync<IOException>(
+            () => writing.Download("x", "y", new Heard([]), CancellationToken.None)));
+        Assert.Same(dropped, Assert.Throws<IOException>(() => writing.ThrowAway("y")));
+        Assert.Same(dropped, Assert.Throws<IOException>(() => writing.InstallAndClose("y")));
+
+        Assert.Contains("Update: could not throw away y, IOException: the line dropped", log);
+        Assert.Equal("because it was cancelled.", TheUpdateWrittenDown.Why(new OperationCanceledException()));
+        Assert.Equal("because it was cancelled.", TheUpdateWrittenDown.Why(new TaskCanceledException()));
+    }
+
     // ---- Helpers ---------------------------------------------------------------
 
     private static HowThisBuildCompares Newer() => new("2.0.0", Tag, Page);
@@ -719,7 +915,7 @@ public sealed class UpdatingFromTheApp : IDisposable
         new(Tag, Page, Files: files ?? TheFiles());
 
     private static MakeADisc AWindow(
-        AnUpdater updater, WhatWasReleased? released = null, IHasher? hasher = null, IBuildDiscs? builder = null) =>
+        IUpdateThisCopy updater, WhatWasReleased? released = null, IHasher? hasher = null, IBuildDiscs? builder = null) =>
         TheMainWindowWithoutAWindow.New(
             releases: new ARelease(released ?? Released()),
             hasher: hasher ?? new AHasher(TheHash),
@@ -743,6 +939,43 @@ public sealed class UpdatingFromTheApp : IDisposable
     private sealed class AHasher(string says) : IHasher
     {
         public string Sha256(string path, CancellationToken ct) => says;
+    }
+
+    /// <summary>Each answer in turn, the last one for ever after.</summary>
+    private sealed class OneAfterAnother(params WhatWasReleased[] said) : IAskWhatIsReleased
+    {
+        private int _asked;
+
+        public Task<WhatWasReleased> TheLatest(CancellationToken ct) =>
+            Task.FromResult(said[Math.Min(_asked++, said.Length - 1)]);
+    }
+
+    /// <summary>A log that is a list.</summary>
+    private sealed class Into(List<string> lines) : IKeepALog
+    {
+        public void Write(string line)
+        {
+            lock (lines)
+            {
+                lines.Add(line);
+            }
+        }
+    }
+
+    /// <summary>An update where every step throws the one exception it is given.</summary>
+    private sealed class Throwing(Exception wrong) : IUpdateThisCopy
+    {
+        public bool CanUpdateItself => true;
+
+        public string WhereTheDownloadGoes(string named) => named;
+
+        public Task<string> Read(string url, CancellationToken ct) => Task.FromException<string>(wrong);
+
+        public Task Download(string url, string into, IProgress<long> sofar, CancellationToken ct) => Task.FromException(wrong);
+
+        public void ThrowAway(string path) => throw wrong;
+
+        public void InstallAndClose(string installer) => throw wrong;
     }
 
     /// <summary>Everything an update would do, written down instead of done.</summary>

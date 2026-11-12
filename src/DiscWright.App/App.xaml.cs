@@ -99,7 +99,7 @@ public partial class App : Application
             WhatThisBuildIs(),
             HowBigIs(disk),
             WhereADiscWouldGo(),
-            Updater: updater));
+            Updater: new TheUpdateWrittenDown(updater, log)));
 
         // Everything the window says, as it says it.
         WhatTheLogHears.Listen(screen, log);

@@ -19,7 +19,8 @@ namespace DiscWright.ViewModels;
 /// <strong>What it writes:</strong> what the window is doing, every refusal
 /// with its reason, how a disc read back with the files that failed by name,
 /// and how a set went. Those are the lines the night of 2026-11-10 had to be
-/// rebuilt from screenshots.
+/// rebuilt from screenshots. And the line under the version, so an update that
+/// went wrong on somebody else's machine can be followed step by step.
 /// </para>
 /// <para>
 /// Progress is written once a stage and once more each time its percentage
@@ -34,10 +35,12 @@ public sealed class WhatTheLogHears
     private readonly IKeepALog _log;
     private readonly Lock _oneAtATime = new();
     private readonly TheProgressWorthWriting _progress = new();
+    private readonly TheProgressWorthWriting _versionClimb = new();
     private Refusal? _lastRefusal;
     private DiscCheck? _lastCheck;
     private TheSetSoFar? _lastSet;
     private string? _lastBurn;
+    private string? _lastVersion;
 
     private WhatTheLogHears(MakeADisc screen, IKeepALog log)
     {
@@ -101,6 +104,10 @@ public sealed class WhatTheLogHears
 
                     _lastBurn = burn;
                     break;
+
+                case nameof(MakeADisc.WhatTheVersionSays):
+                    Version(_screen.WhatTheVersionSays);
+                    break;
             }
         }
     }
@@ -111,6 +118,29 @@ public sealed class WhatTheLogHears
         {
             _log.Write($"Doing: {doing}");
         }
+    }
+
+    /// <summary>
+    /// The line under the version: what asking GitHub found, and every step of
+    /// an update, from the press to whether the download matched.
+    /// </summary>
+    /// <remarks>
+    /// A download reports its bytes hundreds of times, so its percentage is
+    /// written at every new tenth, the way a burn's is. Any other line is
+    /// written whenever its words change, including a line that differs only
+    /// in a version number, which is exactly the difference that matters here.
+    /// </remarks>
+    private void Version(string said)
+    {
+        bool climbed = _versionClimb.Worth(said);
+
+        if (said.Length > 0 && said != _lastVersion
+            && (climbed || TheProgressWorthWriting.TenthOf(said) < 0))
+        {
+            _log.Write($"Version: {said}");
+        }
+
+        _lastVersion = said;
     }
 
     /// <summary>
