@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- DiscWright's icon, redrawn as a vector from the 256 px frame of
+       src/DiscWright.App/DiscWright.ico, measured on 2026-11-12. -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0f1d22"/>
+      <stop offset="1" stop-color="#070d10"/>
+    </linearGradient>
+    <!-- The disc is shaded both ways at once: lighter on the left, more
+         saturated at the top. Two horizontal gradients, the top one faded
+         out downwards, give exactly that. -->
+    <linearGradient id="discBottom" gradientUnits="userSpaceOnUse" x1="53" y1="0" x2="203" y2="0">
+      <stop offset="0" stop-color="#76bcc1"/>
+      <stop offset="1" stop-color="#568186"/>
+    </linearGradient>
+    <linearGradient id="discTop" gradientUnits="userSpaceOnUse" x1="53" y1="0" x2="203" y2="0">
+      <stop offset="0" stop-color="#2ec3cb"/>
+      <stop offset="1" stop-color="#0e8890"/>
+    </linearGradient>
+    <linearGradient id="fade" gradientUnits="userSpaceOnUse" x1="0" y1="53" x2="0" y2="203">
+      <stop offset="0" stop-color="#fff" stop-opacity="1"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </linearGradient>
+    <mask id="topHalf" maskUnits="userSpaceOnUse" x="0" y="0" width="256" height="256">
+      <rect x="0" y="0" width="256" height="256" fill="url(#fade)"/>
+    </mask>
+  </defs>
+
+  <rect x="9" y="9" width="238" height="238" rx="51" fill="url(#plate)" stroke="#05b5be" stroke-width="1.6"/>
+
+  <circle cx="128" cy="128" r="75" fill="url(#discBottom)"/>
+  <circle cx="128" cy="128" r="75" fill="url(#discTop)" mask="url(#topHalf)"/>
+
+  <circle cx="128" cy="128" r="47.5" fill="none" stroke="#000" stroke-opacity="0.4" stroke-width="5"/>
+
+  <circle cx="128" cy="128" r="26" fill="#0a1519" stroke="#10bdc6" stroke-width="3.5"/>
+
+  <!-- The arc: radius 88.4, from 28.4 to 111.4 degrees, square ends. -->
+  <path d="M 205.7 170.1 A 88.4 88.4 0 0 1 95.7 210.3" fill="none" stroke="#f5741e" stroke-width="7.4"/>
+</svg>
