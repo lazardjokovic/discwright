@@ -55,6 +55,23 @@ public sealed class TheGeneratedDataBlock : IDisposable
         Assert.Equal(name, WhatJScriptReads(name));
     }
 
+    [Theory]
+    [InlineData("STAR WARS\u2122: Empire at War")]
+    [InlineData("Pok\u00E9mon Caf\u00E9")]
+    [InlineData("\u0110or\u0111e i \u010Ca\u010Dak")]
+    [InlineData("\u0414\u0430\u043D\u043D\u044B\u0435 \u0438\u0433\u0440\u044B")]
+    [InlineData("\u30B2\u30FC\u30E0")]
+    [InlineData("A face \U0001F600 outside the first plane")]
+    public void Gives_JScript_back_the_name_when_the_file_is_read_in_the_ANSI_codepage(string name)
+    {
+        // How mshta reads the menu: a file of UTF-8 with no byte order mark
+        // and no charset, taken a byte at a time in the machine's codepage.
+        // The owner's laptop showed "Starting" followed by three characters
+        // of mojibake that way, on a disc burned the same day, and the test
+        // above could not see it, because it hands cscript a byte order mark.
+        Assert.Equal(name, Run(DataBlockFor(name), "DISC.game", theWayTheMenuIsRead: true));
+    }
+
     [Fact]
     public void Gives_JScript_a_set_it_can_count()
     {
@@ -94,7 +111,7 @@ public sealed class TheGeneratedDataBlock : IDisposable
         return found.Groups[1].Value;
     }
 
-    private string Run(string dataBlock, string expression)
+    private string Run(string dataBlock, string expression, bool theWayTheMenuIsRead = false)
     {
         string job = Path.Combine(_folder, "ask.wsf");
         string answer = Path.Combine(_folder, "answer.txt");
@@ -113,9 +130,15 @@ public sealed class TheGeneratedDataBlock : IDisposable
         // UTF-8 with a byte order mark, and the job says so, or cscript reads
         // the job itself in the machine's ANSI codepage and the name is lost on
         // the way in rather than on the way out.
+        //
+        // Unless the question is exactly that loss: then the bytes are the
+        // menu's own, UTF-8 with no mark, and the job says Windows-1252,
+        // which is how mshta reads a menu on a Western machine.
         File.WriteAllText(
             job,
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            (theWayTheMenuIsRead
+                ? "<?xml version=\"1.0\" encoding=\"windows-1252\"?>\n"
+                : "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
             + "<job>\n"
             + "  <script language=\"JScript\">\n"
             + "    var DISC = " + dataBlock + ";\n"
@@ -125,7 +148,7 @@ public sealed class TheGeneratedDataBlock : IDisposable
             + "    out.Close();\n"
             + "  </script>\n"
             + "</job>\n",
-            new UTF8Encoding(true));
+            new UTF8Encoding(!theWayTheMenuIsRead));
 
         ProcessStartInfo how = new()
         {
