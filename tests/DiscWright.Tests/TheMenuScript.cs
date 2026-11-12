@@ -558,7 +558,29 @@ public sealed class TheMenuScript : IDisposable
         // AutoRun can start a disc file with no drive letter, so the menu has
         // to work out where it is from its own address. It lives in AUTORUN,
         // so the disc is one folder further up.
-        Assert.Equal(@"D:", Ask("theDiscIsAbove('file:///D:/AUTORUN/menu.hta')"));
+        //
+        // And it ends in a backslash. "D:" is whichever folder is current on
+        // D, which is D:\AUTORUN when somebody double-clicks menu.hta in
+        // Explorer, and a set's copy then said its files would not copy.
+        Assert.Equal(@"D:\", Ask("theDiscIsAbove('file:///D:/AUTORUN/menu.hta')"));
+        Assert.Equal(@"E:\", Ask("theDiscIsAbove('file:///E:/AUTORUN/menu.hta')"));
+    }
+
+    [Fact]
+    public void A_set_on_its_own_disc_copies_from_the_top_of_the_disc_whatever_folder_is_current()
+    {
+        // The path the copy really takes: the menu's own address, through
+        // theDiscIsAbove, into the robocopy line. Every earlier test handed
+        // setCopyCommand "D:\" by hand, so nothing ever saw the "D:" the
+        // menu actually worked out.
+        Assert.Equal(
+            "robocopy \"D:\\\\\" \"C:\\Games\\Big\" \"setup.exe\" /R:1 /W:1 /NJH /NJS",
+            Ask(@"setCopyCommand(theDiscIsAbove('file:///D:/AUTORUN/menu.hta'), 'C:\\Games\\Big', 'setup.exe')"));
+
+        // And a game at the top of the disc is the top of the disc, which
+        // Copy and play copies from and the check reads.
+        Assert.Equal(@"D:\", Ask("theGamesFolder(theDiscIsAbove('file:///D:/AUTORUN/menu.hta'), '')"));
+        Assert.Equal(@"D:\setup.exe", Ask("onTheDisc(theDiscIsAbove('file:///D:/AUTORUN/menu.hta'), 'setup.exe')"));
     }
 
     [Fact]
