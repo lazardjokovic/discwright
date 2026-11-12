@@ -16,8 +16,11 @@
 
       2.0.2 on 2026-11-12: what a set burned and installed on an older laptop
       turned up, and what taking the Microsoft Store screenshots did.
+
+      2.0.3 on 2026-11-13: the version the Microsoft Store is sent, knowing
+      when it is the Store's copy, and drawn sharp on every screen scale.
     -->
-    <Version>2.0.2</Version>
+    <Version>2.0.3</Version>
 
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
