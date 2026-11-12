@@ -285,6 +285,115 @@ public class SeeingTheMenuFirst
     }
 
     [Fact]
+    public void Names_a_chosen_file_that_has_moved_rather_than_calling_it_unaccounted_for()
+    {
+        // The owner's laptop on 2026-11-12: Hollow Knight's icon chosen from
+        // Downloads, the files then moved to another folder, and the preview
+        // said "Something went wrong while writing the preview. This one is
+        // not accounted for" and the path, which reads as a crash.
+        const string icon = @"C:\Users\someone\Downloads\hollow_knight_icon.png";
+        APreviewThatCounts preview = new();
+        MakeADisc screen = TheScreen(preview, new ADiskWhereSomethingMoved(icon));
+        screen.Add(AGame("Hollow Knight"));
+        screen.DiscIcon = icon;
+
+        List<string> told = [];
+        screen.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        screen.PreviewTheMenu(Look);
+
+        Assert.Equal(Refusals.ThatChosenFileIsNotThere("disc icon", icon), screen.ItWentWrong, new SameWords());
+        Assert.Equal("The disc icon is not where it was chosen from", screen.ItWentWrong?.Headline);
+        Assert.Contains(icon + " is not there any more.", screen.ItWentWrong?.Because, StringComparison.Ordinal);
+        Assert.DoesNotContain("not accounted for", screen.ItWentWrong?.Because, StringComparison.Ordinal);
+
+        // Nothing written, and the window told both ways.
+        Assert.Equal(0, preview.Written);
+        Assert.Empty(screen.ThePreviews);
+        Assert.Contains(nameof(MakeADisc.ItWentWrong), told);
+        Assert.Contains(nameof(MakeADisc.ThePreviews), told);
+    }
+
+    [Fact]
+    public async Task Refuses_to_build_with_a_chosen_file_that_has_moved_before_anything_starts()
+    {
+        const string manual = @"D:\Old place\Manual.pdf";
+        MakeADisc screen = TheScreen(disk: new ADiskWhereSomethingMoved(manual));
+        screen.OutputFolder = @"C:\out";
+        screen.Add(AGame("Hollow Knight"));
+        screen.Label = "HOLLOW KNIGHT";
+        screen.Manual = manual;
+
+        List<string> told = [];
+        screen.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        await screen.MakeIt();
+
+        Assert.Equal("The manual is not where it was chosen from", screen.ItWentWrong?.Headline);
+        Assert.Null(screen.Made);
+        Assert.False(screen.IsWorking);
+        Assert.DoesNotContain(nameof(MakeADisc.IsWorking), told);
+        Assert.Contains(nameof(MakeADisc.ItWentWrong), told);
+    }
+
+    [Fact]
+    public void Names_the_first_moved_one_in_the_order_the_window_lists_them()
+    {
+        MakeADisc screen = TheScreen(disk: new ADiskWhereSomethingMoved(@"C:\gone\face.png", @"C:\gone\extras", @"C:\gone\tune.mp3"));
+        screen.Add(AGame("Hollow Knight"));
+        screen.DiscFace = @"C:\gone\face.png";
+        screen.ExtrasFolder = @"C:\gone\extras";
+        screen.Music = @"C:\gone\tune.mp3";
+
+        Assert.Equal("The music is not where it was chosen from", screen.AChosenFileIsGone()?.Headline);
+
+        screen.Music = null;
+        Assert.Equal("The extras folder is not where it was chosen from", screen.AChosenFileIsGone()?.Headline);
+
+        screen.ExtrasFolder = null;
+        Assert.Equal("The disc face is not where it was chosen from", screen.AChosenFileIsGone()?.Headline);
+
+        screen.DiscFace = null;
+        Assert.Null(screen.AChosenFileIsGone());
+    }
+
+    [Fact]
+    public void Asks_the_disk_about_every_kind_of_thing_chosen()
+    {
+        // One by one, each moved and nothing else: each is named in its own
+        // words, so none of them can quietly go unchecked.
+        (string What, Action<MakeADisc, string> Choose)[] every =
+        [
+            ("disc icon", (s, p) => s.DiscIcon = p),
+            ("menu background", (s, p) => s.Background = p),
+            ("music", (s, p) => s.Music = p),
+            ("manual", (s, p) => s.Manual = p),
+            ("extras folder", (s, p) => s.ExtrasFolder = p),
+            ("extra", (s, p) => s.AlsoOnTheDisc([p])),
+            ("cover", (s, p) => s.Cover = p),
+            ("disc face", (s, p) => s.DiscFace = p)
+        ];
+
+        foreach ((string what, Action<MakeADisc, string> choose) in every)
+        {
+            string path = @"C:\moved\" + what;
+            MakeADisc screen = TheScreen(disk: new ADiskWhereSomethingMoved(path));
+            screen.Add(AGame("Hollow Knight"));
+            choose(screen, path);
+
+            Assert.Equal($"The {what} is not where it was chosen from", screen.AChosenFileIsGone()?.Headline);
+        }
+    }
+
+    /// <summary>Two refusals with the same headline and the same reason.</summary>
+    private sealed class SameWords : IEqualityComparer<Refusal?>
+    {
+        public bool Equals(Refusal? x, Refusal? y) => x?.Headline == y?.Headline && x?.Because == y?.Because;
+
+        public int GetHashCode(Refusal? obj) => obj?.Headline.GetHashCode(StringComparison.Ordinal) ?? 0;
+    }
+
+    [Fact]
     public void Forgets_the_last_preview_before_it_writes_the_next()
     {
         MakeADisc screen = TheScreen(new AMenuThenNothing());
@@ -696,7 +805,7 @@ public class SeeingTheMenuFirst
         return new BuildContext(project, new DiscLayout([disc], Media.Dvd5.Capacity, true), disc, Look, writer);
     }
 
-    private static MakeADisc TheScreen(IShowTheMenu? preview = null) =>
+    private static MakeADisc TheScreen(IShowTheMenu? preview = null, IFileSystem? disk = null) =>
         new(new TheMachine(
             new NoEncoding(),
             new ABuilderThatDoesNothing(),
@@ -704,7 +813,7 @@ public class SeeingTheMenuFirst
             new NoDrives(),
             new ABurnerThatDoesNothing(),
             new AnEraserThatDoesNothing(),
-            new ADiskWithNothingOnIt(),
+            disk ?? new ADiskWithNothingOnIt(),
             new NoHashing(),
             new NothingIsRemembered(),
             new ATrayThatShuts(),
@@ -752,6 +861,29 @@ public class SeeingTheMenuFirst
     {
         public Task<Outcome<string>> BlankIt(Recorder disc, IProgress<EraseProgress>? progress, CancellationToken ct) =>
             Task.FromResult<Outcome<string>>("blank");
+    }
+
+    /// <summary>Every file and folder is there, except the ones named as moved.</summary>
+    private sealed class ADiskWhereSomethingMoved(params string[] moved) : IFileSystem
+    {
+        public bool FolderExists(string path) => !moved.Contains(path, StringComparer.OrdinalIgnoreCase);
+
+        public bool FileExists(string path) => !moved.Contains(path, StringComparer.OrdinalIgnoreCase);
+
+        public FolderListing List(string path) => new(path, []);
+    }
+
+    /// <summary>A preview that counts how often it was asked to write.</summary>
+    private sealed class APreviewThatCounts : IShowTheMenu
+    {
+        internal int Written { get; private set; }
+
+        public Outcome<IReadOnlyList<string>> Write(
+            DiscProject project, Medium medium, Func<string, long> sizeOf, string into)
+        {
+            Written++;
+            return new List<string> { @"X:\one\menu.hta" };
+        }
     }
 
     private sealed class ADiskWithNothingOnIt : IFileSystem

@@ -9,6 +9,8 @@ public sealed class WindowsFileSystem : IFileSystem
 {
     public bool FolderExists(string path) => Directory.Exists(path);
 
+    public bool FileExists(string path) => File.Exists(path);
+
     /// <inheritdoc />
     public string? ReadText(string path)
     {

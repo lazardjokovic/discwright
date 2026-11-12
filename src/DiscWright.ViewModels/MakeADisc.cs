@@ -319,7 +319,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
 
         ThePreviews = [];
-        ItWentWrong = null;
+        ItWentWrong = AChosenFileIsGone();
+
+        if (ItWentWrong is not null)
+        {
+            Tell(nameof(ThePreviews));
+            Tell(nameof(ItWentWrong));
+            return;
+        }
 
         try
         {
@@ -1683,12 +1690,64 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// who pressed stop knows why it stopped.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The first thing chosen under Artwork, music and extras that is no
+    /// longer where it was chosen from, as a refusal naming it, or nothing.
+    /// </summary>
+    /// <remarks>
+    /// Asked before a preview and before a build, which both use every one of
+    /// them. In the order the window lists them, so the one named is the one
+    /// somebody finds first.
+    /// </remarks>
+    public Refusal? AChosenFileIsGone()
+    {
+        (string What, string? Path, bool AFolder)[] chosen =
+        [
+            ("disc icon", DiscIcon, false),
+            ("menu background", Background, false),
+            ("music", Music, false),
+            ("manual", Manual, false),
+            ("extras folder", ExtrasFolder, true),
+            .. _loose.Select(loose => ("extra", (string?)loose, false)),
+            ("cover", Cover, false),
+            ("disc face", DiscFace, false)
+        ];
+
+        foreach ((string what, string? path, bool aFolder) in chosen)
+        {
+            if (path is null || path.Length == 0)
+            {
+                continue;
+            }
+
+            bool there = aFolder
+                ? _machine.Disk.FolderExists(path)
+                : _machine.Disk.FileExists(path) || (what == "extra" && _machine.Disk.FolderExists(path));
+
+            if (!there)
+            {
+                return Refusals.ThatChosenFileIsNotThere(what, path);
+            }
+        }
+
+        return null;
+    }
+
     public async Task MakeIt(CancellationToken ct = default)
     {
         // CanMakeIt is already false while a build is running, so this is the
         // whole of the guard. Saying it twice was two things to keep in step.
         if (!CanMakeIt)
         {
+            return;
+        }
+
+        // Before anything starts, so a file moved since it was chosen is
+        // named rather than met half way through a build.
+        if (AChosenFileIsGone() is Refusal gone)
+        {
+            ItWentWrong = gone;
+            Tell(nameof(ItWentWrong));
             return;
         }
 
