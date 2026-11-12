@@ -214,22 +214,6 @@ public class TheWindowsMarkup
     }
 
     [Fact]
-    public void Is_the_size_the_design_was_drawn_at()
-    {
-        XElement window = Window();
-
-        // The design was drawn at exactly this size and the window does not
-        // resize, so every position in it was chosen against these numbers.
-        Assert.Equal("920", (string?)window.Attribute("Width"));
-        Assert.Equal("740", (string?)window.Attribute("Height"));
-
-        // And it cannot be stretched into a shape nobody drew. Every position
-        // in this window is fixed, so a maximise button would be an invitation
-        // to break it. Minimising is a different question and is allowed.
-        Assert.Equal("CanMinimize", (string?)window.Attribute("ResizeMode"));
-    }
-
-    [Fact]
     public void Has_exactly_one_button_wearing_the_accent_colour()
     {
         int accented = Window()

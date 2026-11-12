@@ -1,4 +1,4 @@
-<!--
+﻿<!--
     The main window.
 
     It holds no decisions. Every question it asks is answered by MakeADisc,
@@ -11,10 +11,19 @@
     is WPF.
 -->
 <!--
-    CanMinimize rather than NoResize. Every position in this window is fixed,
-    so a maximise button would be an invitation to break it, but NoResize takes
-    the minimise button away as well, and a burn can take a quarter of an hour
-    with this window sitting in front of everything else.
+    Drawn at 920 by 740, and resizable in height. It was fixed at that size,
+    which an older laptop at 1366 by 768 does not have room for once the
+    taskbar has its share, so it only just fitted, with no way to make it
+    smaller. Now the games list takes whatever height there is and the
+    column on the right scrolls, so the window can be made as short as its
+    MinHeight, and OnThisScreen opens it at the room there is when the drawn
+    size does not fit.
+
+    Not in width. The games list lines its sizes up at a fixed width
+    (AThingOnTheDisc.HowWideTheNameIs), so narrower cut the sizes off and
+    wider left them stranded in the middle of the list, both seen on the
+    test machine. So the width is held at what was drawn, and the maximise
+    button is taken off, because maximised is wider.
 -->
 <Window x:Class="DiscWright.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -23,7 +32,8 @@
         Icon="DiscWright.ico"
         Loaded="ListenForDiscs"
         Height="740" Width="920"
-        ResizeMode="CanMinimize"
+        MinHeight="560" MinWidth="920" MaxWidth="920"
+        ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource Page}"
         FontFamily="{StaticResource Face}"

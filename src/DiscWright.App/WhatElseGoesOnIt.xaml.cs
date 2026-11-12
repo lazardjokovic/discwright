@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using DiscWright.ViewModels;
 using Microsoft.Win32;
 
@@ -32,6 +32,11 @@ public partial class WhatElseGoesOnIt : Window
         InitializeComponent();
 
         DataContext = screen;
+
+        // Drawn 700 tall, which is more than an older laptop has once the
+        // taskbar has its share. What is in it scrolls, so shorter loses
+        // nothing.
+        OnThisScreen.NoTallerThanTheScreen(this);
     }
 
     private void ChooseTheDiscIcon(object sender, RoutedEventArgs e) =>
