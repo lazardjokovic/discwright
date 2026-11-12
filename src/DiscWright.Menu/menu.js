@@ -2006,6 +2006,55 @@ function bytesReadSoFar(job, program) {
     }
 }
 
+// Looks at whatever disc is in the drive without the window waiting for it.
+//
+// While a set waits for its next disc, the menu asks every second and a half
+// which disc is in, by reading the set file at the top of it. Read from the
+// page, that read is the window's own: a disc just pushed in spins up for
+// seconds before Windows answers, and the window is frozen until it does. On
+// the owner's laptop, on 2026-11-12, the menu went "Not responding" for a
+// moment when disc 2 of his Dead Space set went in.
+//
+// So the read is a job, like every copy: cmd copies the set file into the
+// temp folder, and the window only ever reads that copy, off the hard drive,
+// once the job is done. A drive taking its time holds the job, never the
+// window. Hands back {job, copy} for whatTheLookFound.
+function lookAtTheDisc(discRoot) {
+    var shell = new ActiveXObject("WScript.Shell");
+    var copy = onTheDisc(
+        shell.ExpandEnvironmentStrings("%TEMP%"),
+        "dwlook_" + (new Date()).getTime() + "_" + Math.floor(Math.random() * 1000000) + ".txt");
+
+    return {
+        job: startAJob("copy /y " + setQuote(onTheDisc(discRoot, "Disc set.txt")) + " " + setQuote(copy) + " >nul"),
+        copy: copy
+    };
+}
+
+// What a look found: the set file's text, or nothing when there was no disc,
+// no set file on it or no copy. Only asked once the job is done, and it
+// tidies up after itself, the copy and the job's flag both.
+function whatTheLookFound(look) {
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+    var text = "";
+
+    jobCode(look.job);
+
+    try {
+        if (files.FileExists(look.copy)) {
+            var reading = files.OpenTextFile(look.copy, 1);
+            text = reading.AtEndOfStream ? "" : reading.ReadAll();
+            reading.Close();
+        }
+    } catch (unreadable) {
+        text = "";
+    }
+
+    try { if (files.FileExists(look.copy)) { files.DeleteFile(look.copy, true); } } catch (left) { }
+
+    return text;
+}
+
 // Waits for a job the way everything in here waits: on a timer where there
 // is a window to keep alive, and in place where there is not. A window whose
 // script is sitting in a blocking call cannot redraw and cannot see a disc

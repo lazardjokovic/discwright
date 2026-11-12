@@ -2100,6 +2100,76 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void A_look_at_the_disc_finds_the_set_file_through_a_job()
+    {
+        string disc = Path.Combine(_folder, "a disc");
+        Directory.CreateDirectory(disc);
+        File.WriteAllText(Path.Combine(disc, "Disc set.txt"), "DISC 2 OF 3\r\nsomething else\r\n");
+
+        string asked = Ask(
+            "(function () {"
+            + " var look = lookAtTheDisc('" + disc.Replace("\\", "\\\\", StringComparison.Ordinal) + "');"
+            + " var copy = look.copy;"
+            + " var text = ''; waitForJob(look.job, function () { text = whatTheLookFound(look); });"
+            + " var fso = new ActiveXObject('Scripting.FileSystemObject');"
+            + " return text.split(String.fromCharCode(13)).join('').split(String.fromCharCode(10)).join('|')"
+            + "   + '#' + fso.FileExists(copy) + '#' + fso.FileExists(look.job.flag);"
+            + "}())");
+
+        // The text as the disc holds it, and nothing left behind.
+        Assert.Equal("DISC 2 OF 3|something else|#false#false", asked);
+    }
+
+    [Fact]
+    public void A_look_at_a_disc_with_no_set_file_finds_nothing()
+    {
+        string disc = Path.Combine(_folder, "an empty disc");
+        Directory.CreateDirectory(disc);
+
+        string asked = Ask(
+            "(function () {"
+            + " var look = lookAtTheDisc('" + disc.Replace("\\", "\\\\", StringComparison.Ordinal) + "');"
+            + " var text = 'unset'; waitForJob(look.job, function () { text = whatTheLookFound(look); });"
+            + " return '[' + text + ']';"
+            + "}())");
+
+        Assert.Equal("[]", asked);
+    }
+
+    [Fact]
+    public void A_look_hands_back_at_once_however_long_the_drive_takes()
+    {
+        // A share that does not exist takes Windows seconds to give up on,
+        // which is a fair stand in for a disc spinning up. The look is
+        // started and handed back straight away; the job is what waits.
+        string asked = Ask(
+            "(function () {"
+            + " var began = (new Date()).getTime();"
+            + " var look = lookAtTheDisc(BACKSLASH + BACKSLASH + 'dw-no-such-host-" + Guid.NewGuid().ToString("N")[..8] + "' + BACKSLASH + 'disc');"
+            + " var handedBack = (new Date()).getTime() - began;"
+            + " var text = 'unset'; waitForJob(look.job, function () { text = whatTheLookFound(look); });"
+            + " return (handedBack < 1000 ? 'at once' : 'took ' + handedBack) + '|[' + text + ']';"
+            + "}())");
+
+        Assert.Equal("at once|[]", asked);
+    }
+
+    [Fact]
+    public void The_page_never_reads_the_disc_itself_while_it_waits_for_the_next_one()
+    {
+        // The read that froze the menu at the swap on the owner's laptop.
+        string page = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.hta.template"));
+        int start = page.IndexOf("function checkForTheNextDisc()", StringComparison.Ordinal);
+        Assert.True(start >= 0, "checkForTheNextDisc is not in the template");
+        string body = page[start..page.IndexOf("\nfunction ", start + 10, StringComparison.Ordinal)];
+
+        Assert.Contains("lookAtTheDisc(theDisc())", body, StringComparison.Ordinal);
+        Assert.Contains("jobIsDone(restoring.looking.job)", body, StringComparison.Ordinal);
+        Assert.Contains("whatTheLookFound(restoring.looking)", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("readTheSetFile", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Watches_a_real_robocopy_read_its_file()
     {
         // The whole way, on this machine: a job started the way the menu

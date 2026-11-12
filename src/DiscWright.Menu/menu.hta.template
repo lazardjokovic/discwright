@@ -937,10 +937,21 @@ function waitForTheNextDisc(scan) {
     window.setTimeout(checkForTheNextDisc, 1500);
 }
 
+// Never reads the disc itself: see lookAtTheDisc. A look is started, and
+// asked after every half second until it is done, so the window stays free
+// however long the drive takes to spin a new disc up.
 function checkForTheNextDisc() {
     if (!restoring.wanting) {
         return;
     }
+
+    if (restoring.looking && !jobIsDone(restoring.looking.job)) {
+        window.setTimeout(checkForTheNextDisc, 500);
+        return;
+    }
+
+    var found = restoring.looking ? whatTheLookFound(restoring.looking) : null;
+    restoring.looking = null;
 
     var scan = scanTheSet();
 
@@ -951,7 +962,13 @@ function checkForTheNextDisc() {
         return;
     }
 
-    var inTheDrive = whichDiscTheSetFileSays(readTheSetFile());
+    if (found === null) {
+        restoring.looking = lookAtTheDisc(theDisc());
+        window.setTimeout(checkForTheNextDisc, 500);
+        return;
+    }
+
+    var inTheDrive = whichDiscTheSetFileSays(found);
     var wanted = false;
 
     for (var i = 0; i < scan.need.length; i++) {
