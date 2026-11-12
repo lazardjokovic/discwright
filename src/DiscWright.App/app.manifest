@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    What DiscWright tells Windows about itself before any of it runs.
+
+    Written on 2026-11-12 because Microsoft's certification kit warned that
+    the exe "is not DPI Aware": it neither declared per-monitor awareness nor
+    asked for it in code. WPF scales by itself either way, but without this a
+    window dragged onto a second screen at a different scale is stretched as
+    a picture rather than drawn again, and goes soft. Per Monitor V2 is the
+    one WPF supports in full; true/pm is the same answer for the older
+    Windows 10 builds that only read the first element.
+
+    The rest says what the exe already got with no manifest at all: it runs
+    as the person who started it, never asking to be an administrator, and it
+    is written for Windows 10 and 11.
+-->
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="DiscWright.App" />
+
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10 and Windows 11 share this one. -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}" />
+    </application>
+  </compatibility>
+
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>
