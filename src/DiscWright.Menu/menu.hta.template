@@ -990,7 +990,7 @@ function installFromTheFolder() {
     // Said first, and drawn, before the start that can hold the window: see
     // startingTheInstallerSays in menu.js.
     restoring.busy = true;
-    document.getElementById("doIt").innerText = "Starting…";
+    document.getElementById("doIt").innerText = "Starting\u2026";
     document.getElementById("doIt").parentNode.className = "btn next dead";
     document.getElementById("restoreBar").style.display = "none";
     document.getElementById("stillWanted").innerText = startingTheInstallerSays(dir);

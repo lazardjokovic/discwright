@@ -1,4 +1,5 @@
 ﻿using DiscWright.Core;
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 
@@ -177,12 +178,51 @@ public static class MenuWriter
     /// For text that lands in markup rather than in script: a title, a caption,
     /// the words on a button.
     /// </summary>
-    private static string Markup(string value) =>
-        value
-            .Replace("&", "&amp;", StringComparison.Ordinal)
-            .Replace("<", "&lt;", StringComparison.Ordinal)
-            .Replace(">", "&gt;", StringComparison.Ordinal)
-            .Replace("\"", "&quot;", StringComparison.Ordinal);
+    /// <remarks>
+    /// Anything past plain ASCII is written as a numbered character reference,
+    /// for the reason <see cref="JScript.Literal"/> gives: the menu has no
+    /// charset, so mshta reads its bytes in the machine's ANSI codepage, and a
+    /// name with an accent or a trademark sign in it came out as the bytes of
+    /// its UTF-8 read one by one. By character rather than by UTF-16 unit, so
+    /// a character outside the first plane is one reference and not two
+    /// halves of one, which markup does not accept.
+    /// </remarks>
+    private static string Markup(string value)
+    {
+        StringBuilder safe = new(value.Length);
+
+        foreach (Rune character in value.EnumerateRunes())
+        {
+            switch (character.Value)
+            {
+                case '&':
+                    safe.Append("&amp;");
+                    break;
+
+                case '<':
+                    safe.Append("&lt;");
+                    break;
+
+                case '>':
+                    safe.Append("&gt;");
+                    break;
+
+                case '"':
+                    safe.Append("&quot;");
+                    break;
+
+                case > 0x7E:
+                    safe.Append(CultureInfo.InvariantCulture, $"&#{character.Value};");
+                    break;
+
+                default:
+                    safe.Append(character.ToString());
+                    break;
+            }
+        }
+
+        return safe.ToString();
+    }
 
     /// <summary>
     /// An embedded file that is not text.

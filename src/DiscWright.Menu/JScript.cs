@@ -68,6 +68,23 @@ public static class JScript
                         break;
                     }
 
+                    // Anything past plain ASCII is written as its code. The
+                    // menu is a file with no byte order mark and no charset,
+                    // so mshta reads it in the machine's ANSI codepage, and
+                    // the UTF-8 bytes of "\u2026" came out on the owner's
+                    // laptop as "\u00E2\u20AC\u00A6" on the button. A name
+                    // with an accent in it would have done the same. As
+                    // "\\u2026" the file holds only ASCII and JScript reads
+                    // back exactly the character that was meant, on any
+                    // codepage. A character outside the first plane is two
+                    // UTF-16 units in a .NET string and two escapes here,
+                    // which is how JScript holds it too.
+                    if (character > '\u007E')
+                    {
+                        safe.Append(CultureInfo.InvariantCulture, $"\\u{(int)character:X4}");
+                        break;
+                    }
+
                     safe.Append(character);
                     break;
             }
