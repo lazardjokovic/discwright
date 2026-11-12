@@ -76,6 +76,27 @@ public interface IWorkTheTray
     /// </para>
     /// </remarks>
     bool CanShutItsOwnTray(Recorder drive);
+
+    /// <summary>
+    /// Whether the drive has read the disc in it far enough to show what is
+    /// on it, which is when the check of a freshly written disc can begin.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A disc is ejected after writing and comes back as a volume Windows has
+    /// not seen yet, and a drive can take a long while to read one in, more
+    /// than a minute on a worn rewritable in an older drive.
+    /// </para>
+    /// <para>
+    /// <strong>It can take as long as the drive does to answer</strong>, so
+    /// the answer is a task, and a real drive is asked on the pool, never on
+    /// the window's thread. A fake answers at once, which keeps a test's clock
+    /// in step with its asks. True by default, which is a drive that has the
+    /// disc the moment its tray shuts, and what every fake that does not care
+    /// about this wants.
+    /// </para>
+    /// </remarks>
+    Task<bool> HasReadTheDisc(Recorder drive, CancellationToken ct) => Task.FromResult(true);
 }
 
 /// <summary>One drive, and whatever is in it at the moment of asking.</summary>
@@ -195,6 +216,7 @@ public sealed record BurnProgress(string Doing, double? HowFar, int? SecondsLeft
             ? $"{Doing}, about {Clock(left)} left"
             : Doing;
 
-    private static string Clock(int seconds) =>
+    /// <summary>A number of seconds as somebody would say it: "4 min 7 sec", "40 sec".</summary>
+    public static string Clock(int seconds) =>
         seconds >= 60 ? $"{seconds / 60} min {seconds % 60} sec" : $"{seconds} sec";
 }

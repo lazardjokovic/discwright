@@ -136,11 +136,23 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     private readonly ReadingBackWhatWasWritten _reading;
 
+    /// <summary>
+    /// Waiting for a written disc to be read back in once its tray is shut,
+    /// and saying so while it takes.
+    /// </summary>
+    private readonly WaitingForTheDiscToComeBack _comingBack;
+
     public MakeADisc(TheMachine machine)
     {
         _machine = machine;
         _settling = new SettlingOnADrive(machine.Drives, machine.Eraser, Say, machine.Patience);
         _reading = new ReadingBackWhatWasWritten(machine.Disk, machine.Hasher, Say);
+        _comingBack = new WaitingForTheDiscToComeBack(
+            machine.Tray,
+            (machine.Patience ?? HowLongADriveGets.WhatARealOneNeeds) with
+            {
+                AtMost = WaitingForTheDiscToComeBack.AQuarterOfAnHour
+            });
         Reconsider();
     }
 
@@ -1943,7 +1955,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
                     // that whatever reads it next sees a freshly mounted volume.
                     Say("waiting for the disc to come back", 0);
 
-                    if (!await shutTheTray(onto))
+                    if (!await shutTheTray(onto)
+                        || await _comingBack.For(onto, said => Say(said, 0), ct) is null)
                     {
                         ItWentWrong = Refusals.TheDiscWasNotChecked(onto.Drive);
                         return;
@@ -2570,7 +2583,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
                         return;
                 }
 
-                if (!await shutTheTray(drive))
+                // Said before the tray, which may wait for a hand, so the
+                // window stops repeating the last thing the burn reported.
+                // It said "flushing the drive's buffer" for ten minutes on an
+                // older laptop while this went on.
+                Say(where.Saying("waiting for the disc to come back"), 0);
+
+                if (!await shutTheTray(drive)
+                    || await _comingBack.For(drive, said => Say(where.Saying(said), 0), ct) is null)
                 {
                     ItWentWrong = Refusals.TheDiscWasNotChecked(drive.Drive);
                     stopped = "the disc could not be read back";

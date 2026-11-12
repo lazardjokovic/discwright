@@ -222,6 +222,30 @@ public sealed class WindowsBurner : IBurnDiscs, IEraseDiscs, IWorkTheTray
         }
     }
 
+    /// <inheritdoc />
+    public Task<bool> HasReadTheDisc(Recorder drive, CancellationToken ct) =>
+        Task.Run(
+            () =>
+            {
+                // Built from the character code: a typed backslash is halved
+                // on the way into generated code.
+                string root = drive.Drive.TrimEnd((char)92) + (char)92;
+
+                try
+                {
+                    return Directory.Exists(root) && Directory.EnumerateFileSystemEntries(root).Any();
+                }
+                catch (IOException)
+                {
+                    return false;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return false;
+                }
+            },
+            ct);
+
     private static object Open(string id)
     {
         object recorder = Activator.CreateInstance(

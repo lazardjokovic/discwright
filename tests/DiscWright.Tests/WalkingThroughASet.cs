@@ -32,6 +32,53 @@ public class WalkingThroughASet
     }
 
     [Fact]
+    public async Task Says_which_disc_is_waiting_for_the_drive_to_read_it_back_in()
+    {
+        // An older laptop's window said "flushing the drive's buffer" for ten
+        // minutes between disc 2's burn and its check.
+        List<string> said = [];
+        MakeADisc window = await ASetOf(3, new ABurnerThatRemembers(), tray: new ADriveSlowToReadItBack(2));
+        window.PropertyChanged += (sender, about) =>
+        {
+            if (about.PropertyName == nameof(MakeADisc.Doing))
+            {
+                lock (said)
+                {
+                    said.Add(window.Doing);
+                }
+            }
+        };
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        Assert.True(window.HowTheSetWent?.Whole, window.HowTheSetWent?.InWords);
+
+        lock (said)
+        {
+            Assert.Contains("disc 2 of 3: waiting for the disc to come back", said);
+            Assert.Contains("disc 2 of 3: waiting for E: to read the disc back in, 1 sec", said);
+            Assert.Contains("disc 3 of 3: E: has read the disc back in after 2 sec", said);
+        }
+    }
+
+    [Fact]
+    public async Task Stops_the_set_when_the_drive_never_reads_a_disc_back_in()
+    {
+        ABurnerThatRemembers burner = new();
+        MakeADisc window = await ASetOf(3, burner, tray: new ADriveSlowToReadItBack(-1));
+
+        await window.BurnTheSet(
+            ThreeImages, OnlyOneDrive, NeverErases, Closes, AlwaysAnother, NeverAsksToCarryOn);
+
+        // Disc 2 is no use at all if disc 1 could not be checked.
+        Assert.Equal([@"C:\out\A SET D1.iso"], burner.Wrote);
+        Assert.False(window.HowTheSetWent?.Whole);
+        Assert.Contains("the disc could not be read back", window.HowTheSetWent?.InWords, StringComparison.Ordinal);
+        Assert.Equal(Refusals.TheDiscWasNotChecked("E:").Because, window.ItWentWrong?.Because);
+    }
+
+    [Fact]
     public async Task The_sets_sentence_is_the_line_that_stays_on_the_window()
     {
         List<string> announced = [];
@@ -925,7 +972,8 @@ public class WalkingThroughASet
         IKeepTheSetsPlace? note = null,
         Func<string, long>? howBig = null,
         IEraseDiscs? eraser = null,
-        AClockThatMovesItself? clock = null)
+        AClockThatMovesItself? clock = null,
+        IWorkTheTray? tray = null)
     {
         MakeADisc window = new(new TheMachine(
             new NoEncoding(),
@@ -937,7 +985,7 @@ public class WalkingThroughASet
             disk ?? (checksOut ? new ADiskThatMatches() : new ADiskThatDoesNot()),
             new NoHashing(),
             note ?? new ANoteInMemory(),
-            new ATrayThatShuts(),
+            tray ?? new ATrayThatShuts(),
             new NothingIsReleased(),
             new NoPreview(),
             new PicturesThatRead(),
@@ -971,6 +1019,37 @@ public class WalkingThroughASet
         public bool ShutIt(Recorder drive) => true;
 
         public bool CanShutItsOwnTray(Recorder drive) => true;
+    }
+
+    /// <summary>
+    /// A tray that shuts, in a drive slow to read what is pushed back in:
+    /// every disc is not read for so many asks, or never.
+    /// </summary>
+    private sealed class ADriveSlowToReadItBack(int notReadFor) : IWorkTheTray
+    {
+        private int _asked;
+
+        public bool ShutIt(Recorder drive) => true;
+
+        public bool CanShutItsOwnTray(Recorder drive) => true;
+
+        public Task<bool> HasReadTheDisc(Recorder drive, CancellationToken ct)
+        {
+            if (notReadFor < 0)
+            {
+                return Task.FromResult(false);
+            }
+
+            // Counted afresh for each disc: the ask that says yes starts the
+            // count again.
+            if (Interlocked.Increment(ref _asked) > notReadFor)
+            {
+                _asked = 0;
+                return Task.FromResult(true);
+            }
+
+            return Task.FromResult(false);
+        }
     }
 
     /// <summary>
