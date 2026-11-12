@@ -922,6 +922,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// these files and this size of disc. It is worked out from the same plan
     /// the disc count comes from, so the two cannot disagree.
     /// </para>
+    /// <para>
+    /// It also says when the disc chosen means more than one, ticked or not,
+    /// because that is where the size was chosen; see
+    /// <see cref="PlannedBuild.WhatCuttingComesTo"/>.
+    /// </para>
     /// </remarks>
     public string WhatSplittingWouldDo { get; private set; } = string.Empty;
 
@@ -3430,14 +3435,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 // own and has never needed that one.
                 _thePlanIsSound = true;
 
-                // Only while the box is ticked. Unticked, a file too big for
-                // a disc is a refusal with its own words and this would be a
-                // second sentence about the same thing.
-                WhatSplittingWouldDo = Options.CutFiles
-                    ? planned.WhatGetsCut.Length > 0
-                        ? planned.WhatGetsCut
-                        : "Nothing here is bigger than one disc, so nothing will be cut."
-                    : string.Empty;
+                // How many discs, and whether anything is cut to get there.
+                // The plan decides the words, ticked or not.
+                WhatSplittingWouldDo = planned.WhatCuttingComesTo(Options.CutFiles);
 
                 break;
 

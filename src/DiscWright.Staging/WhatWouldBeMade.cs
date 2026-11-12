@@ -257,6 +257,42 @@ public sealed record PlannedBuild(IReadOnlyList<PlannedOutput> Outputs)
             return $"{cut.Length} files will be cut, into {pieces} pieces between them.";
         }
     }
+
+    /// <summary>
+    /// The line under Split a file too big for one disc: how many discs this
+    /// comes to and whether anything is cut to get there, or nothing when
+    /// there is nothing worth saying.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>More than one disc is always said, ticked or not.</strong> On
+    /// 2026-11-12 the owner put Dead Space on a DVD5: 8.13 GB with no file over
+    /// 3.91 GB, so a set of two with whole files on each. Ticked, this said
+    /// "Nothing here is bigger than one disc, so nothing will be cut", which is
+    /// true and read, right under the size, as "it fits". Unticked it said
+    /// nothing at all, and the only sign of a second disc was the strip by the
+    /// buttons. Needing more discs is not a mistake, so it is not a refusal,
+    /// but it is said where the size was chosen.
+    /// </para>
+    /// <para>
+    /// One disc says something only when the box is ticked, because then the
+    /// question was asked. Unticked, a file too big for any disc is a refusal
+    /// with words of its own and never reaches here.
+    /// </para>
+    /// </remarks>
+    public string WhatCuttingComesTo(bool cuttingIsOn)
+    {
+        if (Discs > 1)
+        {
+            string cut = WhatGetsCut;
+
+            return cut.Length > 0
+                ? $"Needs {Discs} discs. {cut}"
+                : $"Needs {Discs} discs. Every file fits on one, so each disc gets whole files and nothing is cut.";
+        }
+
+        return cuttingIsOn ? "Fits on one disc, so nothing will be cut." : string.Empty;
+    }
 }
 
 /// <summary>One independent thing a build would produce: a disc, or a set.</summary>
