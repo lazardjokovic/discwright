@@ -108,6 +108,8 @@ public static class MenuWriter
                 ("runs", JScript.Literal(game.Runs)),
                 ("folder", JScript.Literal(game.Folder)),
                 ("plays", JScript.Literal(game.Plays)),
+                ("manual", JScript.Literal(game.Manual)),
+                ("extras", JScript.Literal(game.Extras)),
                 ("addOns", JScript.ArrayOf(game.AddOns.Select(addOn => JScript.Fields(
                     ("name", JScript.Literal(addOn.Name)),
                     ("runs", JScript.Literal(addOn.Runs)))))))))).Append('\n');
@@ -360,13 +362,23 @@ public sealed record MenuFacts(
 /// exactly one candidate: guessing which of six executables starts a game is
 /// how somebody ends up running an uninstaller.
 /// </param>
+/// <param name="Manual">
+/// What the game's own Manual button opens, from the root of the disc: its
+/// one manual, or the folder holding several. Empty when it has none, and then
+/// its screen offers the disc's.
+/// </param>
+/// <param name="Extras">
+/// The folder of the game's own extras, from the root of the disc, or empty.
+/// </param>
 public sealed record MenuGame(
     string Name,
     string Runs,
     string Folder,
     IReadOnlyList<MenuAddOn>? Given = null,
     string? MatchName = null,
-    string Plays = "")
+    string Plays = "",
+    string Manual = "",
+    string Extras = "")
 {
     /// <summary>Its add-ons, or none.</summary>
     public IReadOnlyList<MenuAddOn> AddOns => Given ?? [];

@@ -178,6 +178,41 @@ public sealed class EachGameHasItsOwn : IDisposable
     }
 
     [Fact]
+    public async Task The_menu_points_each_game_at_its_own_and_one_manual_opens_itself_while_several_open_their_folder()
+    {
+        GameFolder witcher = AGame("The Witcher", 500) with
+        {
+            Own =
+            [
+                new GameExtra(AFile("witcher manual.pdf", 100), GameExtraKind.Manual),
+                new GameExtra(AFolder("Maps", ("map.png", 10)), GameExtraKind.Extra)
+            ]
+        };
+        GameFolder knight = AGame("Hollow Knight", 500) with
+        {
+            Own =
+            [
+                new GameExtra(AFile("english.pdf", 100), GameExtraKind.Manual),
+                new GameExtra(AFile("deutsch.pdf", 100), GameExtraKind.Manual)
+            ]
+        };
+        GameFolder third = AGame("Third", 500);
+
+        BuiltDisc disc = Assert.Single((await Build(OnADisc(witcher, knight, third))).Discs);
+        string menu = File.ReadAllText(Path.Combine(disc.Folder, "AUTORUN", "menu.hta"));
+
+        Assert.Contains("manual: \"01 - The Witcher/Manual/witcher manual.pdf\"", menu, StringComparison.Ordinal);
+        Assert.Contains("extras: \"01 - The Witcher/Extras\"", menu, StringComparison.Ordinal);
+
+        // Several manuals, one per language: the folder, because which one
+        // somebody reads is not the menu's guess to make.
+        Assert.Contains("manual: \"02 - Hollow Knight/Manual\"", menu, StringComparison.Ordinal);
+
+        // And a game with none says so, so its screen offers the disc's.
+        Assert.Contains("manual: \"\"", menu, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Lands_inside_the_games_folder_under_its_own_name()
     {
         GameExtra manual = new(@"D:\goodies\The Witcher - manual.pdf", GameExtraKind.Manual);

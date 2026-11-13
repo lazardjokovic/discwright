@@ -531,6 +531,60 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     }
 
     [Fact]
+    public void Each_games_screen_opens_its_own_manual_and_extras_and_the_list_of_games_the_discs()
+    {
+        // The real page, pressed: The Witcher has its own manual, Hollow
+        // Knight only its own extras, and the disc a manual of its own,
+        // which Hollow Knight's screen falls back to and the list of games
+        // offers by itself.
+        string disc = Path.Combine(_folder, "several");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "AUTORUN", "menu.hta"), "<hta/>");
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Two Games", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games:
+                [
+                    new MenuGame("The Witcher", "01 - The Witcher/setup_the_witcher.exe", "01 - The Witcher",
+                        Manual: "01 - The Witcher/Manual/witcher manual.pdf"),
+                    new MenuGame("Hollow Knight", "02 - Hollow Knight/setup_hollow_knight.exe", "02 - Hollow Knight",
+                        Extras: "02 - Hollow Knight/Extras")
+                ],
+                Manual: "Extras/disc manual.pdf")),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "var opened = [];\n"
+                + "startIt = function (w) { opened.push('start ' + w.substring(theDisc().length)); return null; };\n"
+                + "openTheFolder = function (w) { opened.push('open ' + w.substring(theDisc().length)); return null; };\n"
+                + "function shown(id) { return document.getElementById(id).style.display; }\n"
+                + "showChooser();\n"
+                + "out.push('list manual=' + shown('chooserManual') + ' extras=' + shown('chooserExtras'));\n"
+                + "openTheDiscsManual();\n"
+                + "showGame(0);\n"
+                + "out.push('witcher manual=' + shown('manual') + ' extras=' + shown('extras'));\n"
+                + "openTheManual();\n"
+                + "showGame(1);\n"
+                + "out.push('knight manual=' + shown('manual') + ' extras=' + shown('extras'));\n"
+                + "openTheManual(); openTheExtras();\n"
+                + "out.push(opened.join(' | ').split(String.fromCharCode(92)).join('/'));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(
+            [
+                "list manual=block extras=none",
+                "witcher manual=block extras=none",
+                "knight manual=block extras=block",
+                "start Extras/disc manual.pdf | start 01 - The Witcher/Manual/witcher manual.pdf"
+                    + " | start Extras/disc manual.pdf | open 02 - Hollow Knight/Extras"
+            ],
+            lines.Select(line => line.Replace("start /", "start ", StringComparison.Ordinal)
+                .Replace("open /", "open ", StringComparison.Ordinal)));
+    }
+
+    [Fact]
     public void A_drive_without_the_room_leaves_the_page_s_button_dead()
     {
         // The words are installPageSays's; what is pinned here is that the

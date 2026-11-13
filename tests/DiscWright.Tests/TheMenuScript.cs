@@ -1013,6 +1013,36 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void A_games_Manual_and_Extras_are_its_own_and_the_discs_only_when_it_has_none()
+    {
+        // discwright#98 and Reddit, 2026-11-13: on a disc of several games
+        // every game's screen offered the disc's one manual.
+        Assert.Equal("[01 - A/Manual/a.pdf]", Ask("'[' + theManualFor({ manual: '01 - A/Manual/a.pdf' }, { manual: 'Extras/disc.pdf' }) + ']'"));
+        Assert.Equal("[Extras/disc.pdf]", Ask("'[' + theManualFor({ manual: '' }, { manual: 'Extras/disc.pdf' }) + ']'"));
+        Assert.Equal("[Extras/disc.pdf]", Ask("'[' + theManualFor(null, { manual: 'Extras/disc.pdf' }) + ']'"));
+        Assert.Equal("[]", Ask("'[' + theManualFor({}, { manual: '' }) + ']'"));
+
+        Assert.Equal("[01 - A/Extras]", Ask("'[' + theExtrasFor({ extras: '01 - A/Extras' }, { extras: 'Extras' }) + ']'"));
+        Assert.Equal("[Extras]", Ask("'[' + theExtrasFor({ extras: '' }, { extras: 'Extras' }) + ']'"));
+        Assert.Equal("[]", Ask("'[' + theExtrasFor({}, {}) + ']'"));
+    }
+
+    [Fact]
+    public void A_manual_that_is_one_file_is_started_and_a_folder_of_several_is_opened()
+    {
+        string folder = Path.Combine(_folder, "Manual");
+        Directory.CreateDirectory(folder);
+        string file = Path.Combine(folder, "manual.pdf");
+        File.WriteAllText(file, "a manual");
+
+        const string standIns =
+            "openTheFolder = function (w) { return 'opened ' + w; }, startIt = function (w) { return 'started ' + w; }, ";
+
+        Assert.Equal("opened " + folder, Ask("(" + standIns + "openAManual(" + AsJScript(folder) + "))"));
+        Assert.Equal("started " + file, Ask("(" + standIns + "openAManual(" + AsJScript(file) + "))"));
+    }
+
+    [Fact]
     public void Tells_a_missing_file_from_a_missing_folder()
     {
         // A folder is not a file to start, and a file is not a folder to
