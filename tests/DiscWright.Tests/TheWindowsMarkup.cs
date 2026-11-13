@@ -1752,6 +1752,37 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void A_games_own_says_what_it_is_as_a_link_and_the_picked_game_gets_two_links_under_the_list()
+    {
+        // 2.0.4, per game manual and extras. One of a game's own says "the
+        // manual" or "an extra" as a link that swaps it, where every other
+        // row keeps plain text; and the picked game's name leads two links
+        // under the list, there only while something is picked.
+        XElement window = Window();
+        XElement swap = Assert.Single(window.Descendants(Xaml + "Button"), each => IdOf(each) == "SwapWhatItIs");
+        Assert.Equal("{Binding CanBeEither, Converter={StaticResource WhenSo}}", (string?)swap.Attribute("Visibility"));
+        Assert.Equal("SwapWhatItIs", (string?)swap.Attribute("Click"));
+        Assert.Equal("{Binding WhatItCouldBe}", (string?)swap.Attribute("ToolTip"));
+
+        XElement plain = Assert.Single(swap.Parent!.Elements(Xaml + "TextBlock"));
+        Assert.Equal("{Binding What}", (string?)plain.Attribute("Text"));
+        Assert.Equal("{Binding CanBeEither, Converter={StaticResource WhenNot}}", (string?)plain.Attribute("Visibility"));
+
+        XElement manual = Assert.Single(window.Descendants(Xaml + "Button"), each => IdOf(each) == "AddAManual");
+        XElement extras = Assert.Single(window.Descendants(Xaml + "Button"), each => IdOf(each) == "AddExtras");
+        XElement line = manual.Parent!;
+        Assert.Same(line, extras.Parent);
+        Assert.Equal("{Binding ThePickedGame, Converter={StaticResource WhenAnything}}", (string?)line.Attribute("Visibility"));
+        Assert.Contains(line.Elements(Xaml + "TextBlock"), each => IdOf(each) == "ThePickedGame");
+        Assert.All([manual, extras], link => Assert.Equal("{Binding NothingIsRunning}", (string?)link.Attribute("IsEnabled")));
+
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+        Assert.Contains("_screen.AddTheGamesOwn(asking.FileNames, GameExtraKind.Manual);", code, StringComparison.Ordinal);
+        Assert.Contains("_screen.AddTheGamesOwn(asking.FolderNames, GameExtraKind.Extra);", code, StringComparison.Ordinal);
+        Assert.Contains("_screen.SwapWhatItIs(row);", code, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Every_option_under_More_options_says_what_it_does()
     {
         // Two had nothing to say on hover, and xniwo asked on 2.0.1 what the

@@ -375,6 +375,49 @@ public partial class MainWindow : Window
     private void TakeOffWhatIsLeftOff(object sender, RoutedEventArgs e) =>
         _screen.TakeOffWhatIsLeftOff();
 
+    /// <summary>One of a game's own, turned from its manual into an extra or back.</summary>
+    private void SwapWhatItIs(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is AThingOnTheDisc row)
+        {
+            _screen.SwapWhatItIs(row);
+        }
+    }
+
+    /// <summary>A manual of the picked game's own, from anywhere on the machine.</summary>
+    private void AddAManualToThePickedGame(object sender, RoutedEventArgs e)
+    {
+        Microsoft.Win32.OpenFileDialog asking = new()
+        {
+            Title = "The manual of " + _screen.ThePickedGame,
+            Filter = "A manual|*.pdf;*.txt;*.htm;*.html;*.rtf;*.chm|Anything|*.*",
+            Multiselect = true
+        };
+
+        if (asking.ShowDialog(this) == true)
+        {
+            _screen.AddTheGamesOwn(asking.FileNames, GameExtraKind.Manual);
+        }
+    }
+
+    /// <summary>
+    /// Extras of the picked game's own: folders, each going on whole, the
+    /// way an artbook or a folder of maps is kept.
+    /// </summary>
+    private void AddExtrasToThePickedGame(object sender, RoutedEventArgs e)
+    {
+        Microsoft.Win32.OpenFolderDialog asking = new()
+        {
+            Title = "Extras of " + _screen.ThePickedGame,
+            Multiselect = true
+        };
+
+        if (asking.ShowDialog(this) == true)
+        {
+            _screen.AddTheGamesOwn(asking.FolderNames, GameExtraKind.Extra);
+        }
+    }
+
     /// <summary>
     /// Erases a disc and nothing else.
     /// </summary>

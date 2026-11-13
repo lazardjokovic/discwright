@@ -371,7 +371,7 @@ public class TheWindowChecksItself
 
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(41);
+        int which = dice.Next(44);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -507,6 +507,20 @@ public class TheWindowChecksItself
             // going right and going wrong, so the walk meets the line saying
             // every one of them, and holds each to being announced.
             40 => new("press Update", desk => desk.Screen.UpdateThisCopy().GetAwaiter().GetResult()),
+
+            // A game's own manual and extras, 2.0.4: added to whichever game
+            // the picked row belongs to, and one of them swapped between
+            // manual and extra. Each rebuilds the game's branch, which is
+            // where a picked row goes stale and the line naming its game
+            // went blank with nobody told, found by this walk the day these
+            // were written.
+            41 => new($"add manual {row} to the picked game",
+                desk => desk.Screen.AddTheGamesOwn([$@"D:\goodies\manual {row}.pdf"], GameExtraKind.Manual)),
+
+            42 => new($"add the extras folder {row} to the picked game",
+                desk => desk.Screen.AddTheGamesOwn([$@"D:\goodies\extras {row}"], GameExtraKind.Extra)),
+
+            43 => new($"swap what row {row} of a game's own is", desk => desk.SwapOne(row)),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -1023,6 +1037,16 @@ public class TheWindowChecksItself
             AThingOnTheDisc[] rows = [.. Screen.WhatGoesOnIt.SelectMany(game => game.EveryThing())];
 
             Screen.WhatIsSelected = rows.Length == 0 ? null : rows[which % rows.Length];
+        }
+
+        internal void SwapOne(int which)
+        {
+            AThingOnTheDisc[] own = [.. Screen.WhatGoesOnIt.SelectMany(game => game.EveryThing()).Where(row => row.CanBeEither)];
+
+            if (own.Length > 0)
+            {
+                Screen.SwapWhatItIs(own[which % own.Length]);
+            }
         }
 
         internal void TakeAGameOff(int which)

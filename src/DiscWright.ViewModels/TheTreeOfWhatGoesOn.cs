@@ -23,6 +23,12 @@ public static class TheTreeOfWhatGoesOn
     /// <summary>What an add-on row says it is.</summary>
     public const string AnAddOn = "an add-on";
 
+    /// <summary>What a row of the game's own manual says it is.</summary>
+    public const string TheManual = "the manual";
+
+    /// <summary>What a row of one of the game's own extras says it is.</summary>
+    public const string AnExtra = "an extra";
+
     /// <summary>
     /// One game, with everything found in it and every add-on of its own.
     /// </summary>
@@ -89,6 +95,31 @@ public static class TheTreeOfWhatGoesOn
                 };
 
                 under.Holding(new AThingOnTheDisc(addOn.Name, addOn.Bytes, AnAddOn, addOn.Path, aside: aside));
+            }
+        }
+
+        // The game's own manual and extras, each under the folder it lands
+        // in on the disc, after its Add-ons, the way the design shows them.
+        // By their full path, like an add-on, so no file inside the folder
+        // can be mistaken for one.
+        foreach ((GameExtraKind kind, string folder, string says) in new[]
+        {
+            (GameExtraKind.Manual, GameExtra.ManualFolder, TheManual),
+            (GameExtraKind.Extra, GameExtra.ExtrasFolder, AnExtra)
+        })
+        {
+            GameExtra[] these = [.. game.OwnOrNone.Where(own => own.Kind == kind)];
+
+            if (these.Length == 0)
+            {
+                continue;
+            }
+
+            AThingOnTheDisc under = FolderIn(root, folder, folder);
+
+            foreach (GameExtra own in these)
+            {
+                under.Holding(new AThingOnTheDisc(own.Name, own.Bytes, says, own.Path));
             }
         }
 
@@ -171,10 +202,15 @@ public static class TheTreeOfWhatGoesOn
 
         bool theInstallerStayed = game.Installer is not null && on.Contains(game.Installer.RelativePath);
 
+        // The game's own too: a manual unticked stays on the list and off
+        // the disc, like any file.
+        GameExtra[] own = [.. game.OwnOrNone.Where(each => on.Contains(each.Path))];
+
         return game with
         {
             Files = kept,
-            Installer = theInstallerStayed ? game.Installer : null
+            Installer = theInstallerStayed ? game.Installer : null,
+            Own = own.Length > 0 ? own : null
         };
     }
 
