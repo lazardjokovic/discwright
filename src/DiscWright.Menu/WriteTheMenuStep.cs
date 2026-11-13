@@ -125,12 +125,17 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
         DiscExtras? extras = context.Project.Extras;
         bool thisDiscCarriesThem = context.Layout.CarriesTheExtras(context.Disc.Number);
 
-        if (extras?.ManualPath is not null && thisDiscCarriesThem)
+        // The game's own count as much as the disc's: its screen opens its
+        // own first and the disc's when it has none.
+        IReadOnlyList<GameExtra> own = game?.OwnOrNone ?? [];
+
+        if ((extras?.ManualPath is not null && thisDiscCarriesThem) || own.Any(each => each.Kind == GameExtraKind.Manual))
         {
             buttons.Add("Manual");
         }
 
-        if ((extras?.ExtrasFolderPath is not null || extras?.Loose.Count > 0) && thisDiscCarriesThem)
+        if (((extras?.ExtrasFolderPath is not null || extras?.Loose.Count > 0) && thisDiscCarriesThem)
+            || own.Any(each => each.Kind == GameExtraKind.Extra))
         {
             buttons.Add("Extras");
         }
@@ -230,7 +235,24 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
                 ? WithForwardSlashes(game.LauncherCandidates[0].RelativePath)
                 : string.Empty;
 
-            onTheMenu.Add(new MenuGame(game.Name, runs, folder, addOns, game.MatchName, plays));
+            // The game's own manual and extras, from where the build put
+            // them. One manual opens itself; several open the folder holding
+            // them, because guessing which language somebody reads is not the
+            // menu's to do.
+            GameExtra[] manuals = [.. game.OwnOrNone.Where(own => own.Kind == GameExtraKind.Manual)];
+
+            string manual = manuals.Length switch
+            {
+                0 => string.Empty,
+                1 => Join(folder, manuals[0].OnTheDisc(string.Empty)),
+                _ => Join(folder, GameExtra.ManualFolder)
+            };
+
+            string extras = game.OwnOrNone.Any(own => own.Kind == GameExtraKind.Extra)
+                ? Join(folder, GameExtra.ExtrasFolder)
+                : string.Empty;
+
+            onTheMenu.Add(new MenuGame(game.Name, runs, folder, addOns, game.MatchName, plays, manual, extras));
         }
 
         return onTheMenu;

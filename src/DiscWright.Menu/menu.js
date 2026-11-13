@@ -789,6 +789,48 @@ function thereIsNo(path, folder) {
     }
 }
 
+// What a game's Manual button opens, from the root of the disc: the game's
+// own when it has one, and the disc's when it has none. Empty for neither.
+//
+// The game's own since 2.0.4, asked for by xniwo on discwright#98 and on
+// Reddit: on a disc of nine games every game's screen used to offer the one
+// manual of the disc, which belonged to none of them.
+function theManualFor(game, disc) {
+    if (game && game.manual && String(game.manual).length > 0) {
+        return String(game.manual);
+    }
+
+    return disc && disc.manual ? String(disc.manual) : "";
+}
+
+// The same for Extras.
+function theExtrasFor(game, disc) {
+    if (game && game.extras && String(game.extras).length > 0) {
+        return String(game.extras);
+    }
+
+    return disc && disc.extras ? String(disc.extras) : "";
+}
+
+// Whether a path is certainly a folder. False when it cannot be told.
+function isAFolder(path) {
+    try {
+        return new ActiveXObject("Scripting.FileSystemObject").FolderExists(String(path));
+    } catch (cannotLook) {
+        return false;
+    }
+}
+
+// Opens a manual: one file is started with whatever reads it, and a folder,
+// which is what a game with several manuals has, is shown in Explorer.
+function openAManual(where) {
+    if (where && String(where).length > 0 && isAFolder(where)) {
+        return openTheFolder(where);
+    }
+
+    return startIt(where, "");
+}
+
 // Opens a folder in Explorer. Same shape, same reason.
 function openTheFolder(where) {
     var preview = whyNothingRuns();

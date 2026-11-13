@@ -162,6 +162,10 @@ function showChooser() {
 
     document.getElementById("gameList").innerHTML = rows;
 
+    // The disc's own, on the screen that belongs to the whole disc.
+    document.getElementById("chooserManual").style.display = DISC.manual ? "block" : "none";
+    document.getElementById("chooserExtras").style.display = DISC.extras ? "block" : "none";
+
     // Set as TEXT afterwards, never built into the markup above. A game called
     // "Command & Conquer" would otherwise arrive as "Command  Conquer", and one
     // with a bracket in it would arrive as something worse.
@@ -176,11 +180,11 @@ function showChooser() {
 // Measured after the rows are in, because the heading above can wrap.
 function fitTheGameList() {
     var list = document.getElementById("gameList");
-    var exit = document.getElementById("chooserExit");
+    var below = document.getElementById("chooserBelow");
     var room;
 
     list.style.height = "auto";
-    room = chooserListRoom(document.getElementById("panel").clientHeight, 28, list.offsetTop, exit.offsetHeight + 9);
+    room = chooserListRoom(document.getElementById("panel").clientHeight, 28, list.offsetTop, below.offsetHeight + 9);
 
     if (list.scrollHeight > room) {
         list.style.height = room + "px";
@@ -213,10 +217,10 @@ function showGame(index) {
     showAddOnsOf(game);
 
     // Only what this disc can honour. A Manual button on a disc with no manual
-    // is a promise discovered by somebody who has already burned it, and the
-    // one disc of a set that carries the extras is the only one that has them.
-    document.getElementById("manual").style.display = DISC.manual ? "block" : "none";
-    document.getElementById("extras").style.display = DISC.extras ? "block" : "none";
+    // is a promise discovered by somebody who has already burned it. The
+    // game's own first, and the disc's when the game has none.
+    document.getElementById("manual").style.display = theManualFor(game, DISC) ? "block" : "none";
+    document.getElementById("extras").style.display = theExtrasFor(game, DISC) ? "block" : "none";
 
     // Only offered when there is somewhere to go back to.
     document.getElementById("back").style.display = DISC.games.length > 1 ? "block" : "none";
@@ -494,25 +498,45 @@ function aCopyIsReadingTheDisc() {
     return !!(SET && restoring.busy && !restoring.installing);
 }
 
-// The manual, opened with whatever reads a PDF on this machine.
+// The manual of the game on screen, or the disc's when it has none, opened
+// with whatever reads a PDF on this machine.
 function openTheManual() {
     if (aCopyIsReadingTheDisc()) {
         return;
     }
 
-    var wrong = startIt(onTheDisc(theDisc(), DISC.manual), "");
+    var wrong = openAManual(onTheDisc(theDisc(), theManualFor(gameAt(DISC.games, showing), DISC)));
 
     if (wrong) {
         alert(wrong);
     }
 }
 
-// The extras, which are a folder rather than a thing to run.
+// The extras of the game on screen, or the disc's, which are a folder rather
+// than a thing to run.
 function openTheExtras() {
     if (aCopyIsReadingTheDisc()) {
         return;
     }
 
+    var wrong = openTheFolder(onTheDisc(theDisc(), theExtrasFor(gameAt(DISC.games, showing), DISC)));
+
+    if (wrong) {
+        alert(wrong);
+    }
+}
+
+// The disc's own manual, from the screen that picks a game.
+function openTheDiscsManual() {
+    var wrong = openAManual(onTheDisc(theDisc(), DISC.manual));
+
+    if (wrong) {
+        alert(wrong);
+    }
+}
+
+// The disc's own extras, from the screen that picks a game.
+function openTheDiscsExtras() {
     var wrong = openTheFolder(onTheDisc(theDisc(), DISC.extras));
 
     if (wrong) {
@@ -1378,8 +1402,13 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
             <div id="gameList"></div>
             <!-- Exit belongs to this screen too, under the list rather than in
                  it, so it stays put however far the list scrolls. It had none,
-                 discwright#98. -->
-            <a class="btn" id="chooserExit" href="#" onclick="doExit(); return false;">Exit</a>
+                 discwright#98. The disc's own manual and extras sit here on a
+                 disc of several games, apart from any one game's. -->
+            <div id="chooserBelow">
+                <a class="btn" id="chooserManual" href="#" onclick="openTheDiscsManual(); return false;">Manual</a>
+                <a class="btn" id="chooserExtras" href="#" onclick="openTheDiscsExtras(); return false;">Extras</a>
+                <a class="btn" id="chooserExit" href="#" onclick="doExit(); return false;">Exit</a>
+            </div>
         </div>
 
         <div id="gameScreen" style="display: none">

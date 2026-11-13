@@ -240,6 +240,19 @@ public class TheMenuWriter
         Assert.True(list >= 0 && exit > list, "Exit is not under the list on the screen that picks a game.");
         Assert.Contains("onclick=\"doExit(); return false;\">Exit</a>", chooser[exit..], StringComparison.Ordinal);
 
+        // The disc's own Manual and Extras sit with Exit under the list, and
+        // the list leaves room for all three, not only for Exit: measured
+        // against Exit alone, a disc with a manual pushed Exit off the panel.
+        int below = chooser.IndexOf("<div id=\"chooserBelow\">", StringComparison.Ordinal);
+        Assert.True(below > list && below < chooser.IndexOf("id=\"chooserManual\"", StringComparison.Ordinal)
+            && chooser.IndexOf("id=\"chooserExtras\"", StringComparison.Ordinal) < exit,
+            "Manual and Extras are not with Exit under the list.");
+
+        string fitted = page[page.IndexOf("function fitTheGameList()", StringComparison.Ordinal)..];
+        fitted = fitted[..fitted.IndexOf("\nfunction ", 10, StringComparison.Ordinal)];
+        Assert.Contains("getElementById(\"chooserBelow\")", fitted, StringComparison.Ordinal);
+        Assert.Contains("below.offsetHeight + 9", fitted, StringComparison.Ordinal);
+
         // The list scrolls rather than running off the panel, and is fitted
         // every time the screen is drawn, the way back from a game included.
         Assert.Contains("#gameList { overflow-x: hidden; overflow-y: auto;", page, StringComparison.Ordinal);
