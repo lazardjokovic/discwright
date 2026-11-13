@@ -242,8 +242,23 @@ public partial class MainWindow : Window
     /// WhatWasDropped's judgement; everything after that is the same road
     /// Add a game takes, questions and all.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Handled the moment it arrives, whatever becomes of it.</strong>
+    /// The list sits inside the panel and both take drops with this same
+    /// handler, and Drop bubbles: left unhandled, a drop over the list ran
+    /// here twice, once for the list and again for the panel. xniwo found it
+    /// on 2.0.1, discwright#98: every folder dragged in was added twice, ten
+    /// games meant ten "already on the disc" boxes, and "Add all separately"
+    /// seemed to come back, because the second run asked its own question.
+    /// A drop on the panel below the rows ran once, which is why it was not
+    /// every time.
+    /// </para>
+    /// </remarks>
     private void SomethingWasDropped(object sender, DragEventArgs e)
     {
+        e.Handled = true;
+
         if (!_screen.NothingIsRunning || e.Data.GetData(DataFormats.FileDrop) is not string[] dropped)
         {
             return;
