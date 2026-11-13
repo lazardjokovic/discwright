@@ -1737,6 +1737,21 @@ public sealed class MakeADisc : INotifyPropertyChanged
             }
         }
 
+        // Each game's own, after the disc's, in the order of the list. A
+        // file or a folder can be either, so both are looked for, and the
+        // refusal names the game, because "the manual" alone would send
+        // somebody to Artwork, music and extras, where it is not.
+        foreach (GameFolder game in _games)
+        {
+            foreach (GameExtra own in game.OwnOrNone)
+            {
+                if (!_machine.Disk.FileExists(own.Path) && !_machine.Disk.FolderExists(own.Path))
+                {
+                    return Refusals.ThatGamesOwnIsNotThere(game.Name, own);
+                }
+            }
+        }
+
         return null;
     }
 

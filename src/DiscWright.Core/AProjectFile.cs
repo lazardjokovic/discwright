@@ -178,7 +178,15 @@ public static class AProjectFile
 
                     // Version 9. Anything older could only hold GOG downloads,
                     // so a file without it describes one.
-                    WasAGogDownload: Text(game, "Source") != "Files");
+                    WasAGogDownload: Text(game, "Source") != "Files",
+
+                    // 2.0.4. Older files have neither, which is no manual
+                    // and no extras of the game's own, exactly what they held.
+                    Own:
+                    [
+                        .. Strings(game, "OwnManuals").Select(path => new GameExtra(path, GameExtraKind.Manual)),
+                        .. Strings(game, "OwnExtras").Select(path => new GameExtra(path, GameExtraKind.Extra))
+                    ]);
             }
 
             yield break;

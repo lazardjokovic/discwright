@@ -337,6 +337,35 @@ public class SeeingTheMenuFirst
     }
 
     [Fact]
+    public void Names_a_games_own_manual_that_has_moved_and_sends_nobody_to_the_artwork_window()
+    {
+        const string manual = @"D:\goodies\The Witcher - manual.pdf";
+        MakeADisc screen = TheScreen(disk: new ADiskWhereSomethingMoved(manual));
+        screen.Add(AGame("Hollow Knight"));
+        screen.Add(AGame("The Witcher") with { Own = [new GameExtra(manual, GameExtraKind.Manual)] });
+
+        Refusal? gone = screen.AChosenFileIsGone();
+
+        // It names the game, because "the manual" alone would send somebody
+        // to Artwork, music and extras, where it never was.
+        Assert.Equal(
+            "The manual The Witcher - manual.pdf of The Witcher is not where it was chosen from", gone?.Headline);
+        Assert.Contains(manual + " is not there any more.", gone?.Because, StringComparison.Ordinal);
+        Assert.Contains("Take it off The Witcher in the list", gone?.Because, StringComparison.Ordinal);
+        Assert.DoesNotContain("Artwork, music and extras", gone?.Because, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_games_own_extra_may_be_a_folder()
+    {
+        const string artbook = @"D:\goodies\Artbook";
+        MakeADisc screen = TheScreen(disk: new ADiskWithOnlyFolders(artbook));
+        screen.Add(AGame("The Witcher") with { Own = [new GameExtra(artbook, GameExtraKind.Extra)] });
+
+        Assert.Null(screen.AChosenFileIsGone());
+    }
+
+    [Fact]
     public void Names_the_first_moved_one_in_the_order_the_window_lists_them()
     {
         MakeADisc screen = TheScreen(disk: new ADiskWhereSomethingMoved(@"C:\gone\face.png", @"C:\gone\extras", @"C:\gone\tune.mp3"));
@@ -869,6 +898,16 @@ public class SeeingTheMenuFirst
         public bool FolderExists(string path) => !moved.Contains(path, StringComparer.OrdinalIgnoreCase);
 
         public bool FileExists(string path) => !moved.Contains(path, StringComparer.OrdinalIgnoreCase);
+
+        public FolderListing List(string path) => new(path, []);
+    }
+
+    /// <summary>A disk where these are folders, and no file is anywhere.</summary>
+    private sealed class ADiskWithOnlyFolders(params string[] folders) : IFileSystem
+    {
+        public bool FolderExists(string path) => folders.Contains(path, StringComparer.OrdinalIgnoreCase);
+
+        public bool FileExists(string path) => false;
 
         public FolderListing List(string path) => new(path, []);
     }

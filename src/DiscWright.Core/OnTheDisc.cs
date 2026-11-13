@@ -30,6 +30,39 @@ public static class OnTheDisc
     /// </param>
     public static string FolderFor(int number, string name, int howManyGames, IEnumerable<string> itsFiles)
     {
+        return FolderFor(number, name, howManyGames, itsFiles, []);
+    }
+
+    /// <summary>
+    /// The folder one game goes in, counting its own manual and extras as
+    /// part of what it carries.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The one every part of the program asks, so the builder that copies a
+    /// game's manual and the menu that opens it can never disagree about
+    /// where it went.
+    /// </para>
+    /// <para>
+    /// A game's own extras would sit in <c>Extras</c>, which at the root is
+    /// the disc's own, so a lone game that has extras of its own takes a
+    /// folder of its own exactly as it does when it brings an
+    /// <c>autorun.inf</c>: two things called <c>Extras</c> at the root would
+    /// have had one land on top of the other. A lone game with only a manual
+    /// keeps the root, because <c>Manual</c> belongs to nothing else there.
+    /// </para>
+    /// </remarks>
+    public static string FolderFor(int number, GameFolder game, int howManyGames) =>
+        FolderFor(
+            number,
+            game.Name,
+            howManyGames,
+            game.Files.Select(file => file.RelativePath),
+            game.OwnOrNone.Select(own => own.OnTheDisc(string.Empty)));
+
+    private static string FolderFor(
+        int number, string name, int howManyGames, IEnumerable<string> itsFiles, IEnumerable<string> itsOwn)
+    {
         if (howManyGames > 1)
         {
             return $"{number:00} - {Tidied(name)}";
@@ -43,7 +76,7 @@ public static class OnTheDisc
         // quietly replaced by ours and nobody would be told: the disc would
         // build, burn, and be missing something somebody chose to put on it.
         // It gets a folder of its own instead, and keeps everything.
-        return ReservedDiscNames.WouldBeWrittenOver(itsFiles) ? Tidied(name) : string.Empty;
+        return ReservedDiscNames.WouldBeWrittenOver(itsFiles.Concat(itsOwn)) ? Tidied(name) : string.Empty;
     }
 
     /// <summary>A name that is safe to use as a folder on a disc.</summary>

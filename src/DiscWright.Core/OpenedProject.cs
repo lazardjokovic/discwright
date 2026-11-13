@@ -58,6 +58,10 @@ public sealed record OpenedProject(
 /// <param name="WasAGogDownload">
 /// Whether it was recognised as a GOG download rather than a folder of files.
 /// </param>
+/// <param name="Own">
+/// The game's own manual and extras, as the file names them. None in a file
+/// older than 2.0.4.
+/// </param>
 public sealed record ProjectEntry(
     string Folder,
     string? Name,
@@ -65,7 +69,12 @@ public sealed record ProjectEntry(
     string? Installer,
     bool IsAnAddOn,
     int BelongsTo,
-    bool WasAGogDownload);
+    bool WasAGogDownload,
+    IReadOnlyList<GameExtra>? Own = null)
+{
+    /// <summary>Its own manual and extras, or none.</summary>
+    public IReadOnlyList<GameExtra> OwnOrNone => Own ?? [];
+}
 
 /// <summary>The pictures a project pointed at.</summary>
 public sealed record ProjectArtwork(

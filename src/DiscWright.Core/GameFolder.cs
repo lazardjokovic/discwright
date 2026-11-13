@@ -34,6 +34,11 @@ namespace DiscWright.Core;
 /// fails when somebody runs the installer off the burned disc, which is the
 /// worst possible place to find out.
 /// </param>
+/// <param name="Own">
+/// Its own manual and extras, chosen rather than found, or none. Last and
+/// optional, the way the disc's artwork came, so every place a game is made
+/// did not have to change for it.
+/// </param>
 public sealed record GameFolder(
     string Path,
     GameKind Kind,
@@ -42,8 +47,12 @@ public sealed record GameFolder(
     ListedFile? Installer,
     IReadOnlyList<ListedFile> Files,
     IReadOnlyList<ListedFile> LauncherCandidates,
-    string? Warning)
+    string? Warning,
+    IReadOnlyList<GameExtra>? Own = null)
 {
+    /// <summary>Its own manual and extras, or none.</summary>
+    public IReadOnlyList<GameExtra> OwnOrNone => Own ?? [];
+
     /// <summary>Everything that will go on the disc, summed.</summary>
     public long Bytes => Files.Sum(file => file.Bytes);
 

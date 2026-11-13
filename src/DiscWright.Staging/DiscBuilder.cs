@@ -41,6 +41,7 @@ public sealed class DiscBuilder(
     [
         new CopyTheFilesStep(),
         new CopyTheExtrasStep(files),
+        new CopyEachGamesOwnStep(files),
         new CopyTheMusicStep(),
         new WriteTheAutorunStep(),
         new CopyTheArtworkStep(images),

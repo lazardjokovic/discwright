@@ -60,6 +60,25 @@ public static class ReopenAProject
                     // have typed it. The match name does not: an older file
                     // has none, and the one found by reading the folder is the
                     // registered one.
+                    // Its own manual and extras come back if they are still
+                    // where they were, and are named as gone if not, the same
+                    // as a game folder that moved.
+                    List<GameExtra> own = [];
+
+                    foreach (GameExtra each in entry.OwnOrNone)
+                    {
+                        if (files.FileExists(each.Path) || files.FolderExists(each.Path))
+                        {
+                            own.Add(each);
+                        }
+                        else
+                        {
+                            gone.Add(each.Path);
+                        }
+                    }
+
+                    found = found with { Own = own.Count > 0 ? own : null };
+
                     games.Add(entry.Name is string named && named.Length > 0
                         ? found with { Name = named }
                         : found);
