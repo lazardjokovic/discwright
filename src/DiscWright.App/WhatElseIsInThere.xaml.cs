@@ -26,8 +26,16 @@ public partial class WhatElseIsInThere : Window, INotifyPropertyChanged
     /// </remarks>
     private bool _answered;
 
-    private WhatElseIsInThere(IReadOnlyList<LeftBehind> left, string? installer)
+    /// <summary>What the tick for the games after this one says, or nothing when none follow.</summary>
+    public string? TheSameForTheRestSays { get; }
+
+    /// <summary>Whether the games after this one are to be answered the same way.</summary>
+    public bool TheSameForTheRest { get; set; }
+
+    private WhatElseIsInThere(IReadOnlyList<LeftBehind> left, string? installer, int after)
     {
+        TheSameForTheRestSays = WhatWasLeftBehind.TheSameForTheRest(after);
+
         // A folder is one row, not one per file inside it: an artbook is one
         // answer, not forty.
         IReadOnlyList<LeftBehind> rows = WhatWasLeftBehind.Gathered(left);
@@ -107,15 +115,15 @@ public partial class WhatElseIsInThere : Window, INotifyPropertyChanged
     /// game files and most downloads. A dialog that appears to say "there is
     /// nothing to tell you" is worse than silence.
     /// </remarks>
-    internal static (GameFolder Game, IReadOnlyList<LeftBehind> AddOns)? Ask(
-        Window owner, GameFolder game, IReadOnlyList<LeftBehind> left)
+    internal static (GameFolder Game, IReadOnlyList<LeftBehind> AddOns, TheSameAnswers? ForTheRest)? Ask(
+        Window owner, GameFolder game, IReadOnlyList<LeftBehind> left, int after)
     {
         if (left.Count == 0)
         {
-            return (game, []);
+            return (game, [], null);
         }
 
-        WhatElseIsInThere asking = new(left, game.Installer?.Name) { Owner = owner };
+        WhatElseIsInThere asking = new(left, game.Installer?.Name, after) { Owner = owner };
 
         bool? said = asking.ShowDialog();
 
@@ -126,14 +134,22 @@ public partial class WhatElseIsInThere : Window, INotifyPropertyChanged
             return null;
         }
 
+        // The same answers for the games after this one: None of them
+        // included, which is an answer too.
+        TheSameAnswers? forTheRest = asking.TheSameForTheRest && asking.TheSameForTheRestSays is not null
+            ? TheSameAnswers.From(asking.Files.Select(one => (one.What, one.Wanted && said == true, (WhatBecomesOfIt)one.Treatment)))
+            : null;
+
         if (said != true)
         {
-            return (game, []);
+            return (game, [], forTheRest);
         }
 
-        return WhatWasLeftBehind.Answered(
+        (GameFolder taken, IReadOnlyList<LeftBehind> addOns) = WhatWasLeftBehind.Answered(
             game,
             asking.Files.Where(one => one.Wanted).Select(one => (one.What, (WhatBecomesOfIt)one.Treatment)));
+
+        return (taken, addOns, forTheRest);
     }
 
     private void TakeThem(object sender, RoutedEventArgs e)

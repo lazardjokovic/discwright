@@ -134,7 +134,18 @@
             </ScrollViewer>
         </Border>
 
-        <Grid Grid.Row="2" Margin="0,16,0,0">
+        <StackPanel Grid.Row="2">
+        <!-- Only when several folders are being added together, so a
+             compilation is asked once rather than once a game, which xniwo
+             met adding nine (discwright#98). -->
+        <CheckBox Margin="0,12,0,0"
+                  IsChecked="{Binding TheSameForTheRest}"
+                  Visibility="{Binding TheSameForTheRestSays, Converter={StaticResource WhenAnything}}"
+                  AutomationProperties.AutomationId="TheSameForTheRest">
+            <TextBlock Text="{Binding TheSameForTheRestSays}" />
+        </CheckBox>
+
+        <Grid Margin="0,16,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -158,5 +169,6 @@
                     IsEnabled="{Binding AnyWanted}"
                     AutomationProperties.AutomationId="TakeThem" />
         </Grid>
+        </StackPanel>
     </Grid>
 </Window>

@@ -61,7 +61,7 @@ dotnet test --filter FullyQualifiedName~ThePlanner
 tools\Invoke-TestsOnTheVM.ps1
 ```
 
-**1965 tests, and about half a minute.** Every pull request runs that same suite on a hosted Windows runner, in Release, and publishes the one self-contained file the app ships as. `.github/workflows/checks.yml` says what it runs, what leaves itself out, and why.
+**1977 tests, and about half a minute.** Every pull request runs that same suite on a hosted Windows runner, in Release, and publishes the one self-contained file the app ships as. `.github/workflows/checks.yml` says what it runs, what leaves itself out, and why.
 
 **The test project does not reference `DiscWright.App`, on purpose**, so no test can press a button or open a window, and `dotnet test` does not compile the XAML. The window is covered three other ways instead: tests that read `MainWindow.xaml.cs` as text and fail when a case goes unhandled, tests that read the XAML as XML and hold the ids and the bindings in place, and `TheWindowChecksItself`, a stateful walk over the view models that presses Make, Burn, Erase and Open and asks the same two questions after every step, whether the window still adds up and whether it said what changed. Nearly every bug this rewrite has found came from that walk, from a planted fault, or from reaching code nothing reached. Not one came from an example based test.
 
@@ -92,7 +92,7 @@ A suite is worth what it objects to, so there are two ways of asking. `tools\Mut
 
 ### Testing by hand
 
-`tests/by-hand/test-matrix.html` is the pass somebody works through with the real program in front of them. Open it in a browser; it is one file, it needs nothing else, and it keeps its ticks, so a pass can be left half finished and picked up later. **217 cases, 69 of them run by the suite and 148 still by hand**, and every case that claims to be covered names the test that covers it, so the claim can be checked rather than believed.
+`tests/by-hand/test-matrix.html` is the pass somebody works through with the real program in front of them. Open it in a browser; it is one file, it needs nothing else, and it keeps its ticks, so a pass can be left half finished and picked up later. **218 cases, 69 of them run by the suite and 149 still by hand**, and every case that claims to be covered names the test that covers it, so the claim can be checked rather than believed.
 
 It covers what no automated test can reach: whether the window changes when it should, whether every control is live when it should be, whether a sentence still reads right at none and at one as well as at many, and the menu on the disc, which is an HTA and so invisible to UI Automation.
 

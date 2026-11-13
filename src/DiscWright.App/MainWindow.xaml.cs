@@ -291,7 +291,7 @@ public partial class MainWindow : Window
         TakingFoldersOn.TheQuestions asking = new(
             AddingThemSeparately,
             LeavingItForItsGame,
-            (game, left) => WhatElseIsInThere.Ask(this, game, left),
+            (game, left, after) => WhatElseIsInThere.Ask(this, game, left, after),
             WhicheverStartsIt);
 
         foreach (TakingFoldersOn.WhatToDo step in new TakingFoldersOn(_disk, _reader).From(folders, asking, _screen.IsOnAlready))
