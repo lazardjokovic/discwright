@@ -8,10 +8,10 @@ The way PC games came in a box.
 
 ## Download
 
-**[DiscWright 2.0.2 for Windows](../../releases/latest)**
+**[DiscWright 2.0.3 for Windows](../../releases/latest)**
 
-- **`DiscWright-2.0.2-setup.exe`** installs it for your user only, with no administrator prompt, and adds it to the Start menu.
-- **`DiscWright-2.0.2-portable.exe`** is the same app as one file. Put it anywhere and double-click it. Nothing is installed; like the installed app, it keeps its log in `%LOCALAPPDATA%\DiscWright`.
+- **`DiscWright-2.0.3-setup.exe`** installs it for your user only, with no administrator prompt, and adds it to the Start menu.
+- **`DiscWright-2.0.3-portable.exe`** is the same app as one file. Put it anywhere and double-click it. Nothing is installed; like the installed app, it keeps its log in `%LOCALAPPDATA%\DiscWright`.
 
 Windows 10 or 11, 64-bit. Everything the app needs is inside it; there is nothing else to install.
 

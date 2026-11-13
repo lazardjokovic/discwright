@@ -15,7 +15,7 @@ A game too big for one disc comes out as a numbered set, and **any disc of a set
 Two things are not finished, and it is worth knowing which:
 
 - **145 of the 214 cases in the pass by hand are still a person's job**, and the suite runs the other 69. The biggest part of what is left is the menu on the disc, which is an HTA and so invisible to UI Automation, although the set flow inside it now has a test that presses its real button under cscript.
-- **The version is `2.0.2`**. 2.0.0 was the first release of this app, after the PowerShell app's 0.11. It is set once, in [Directory.Build.props](Directory.Build.props), and the release workflow refuses a tag that disagrees with it.
+- **The version is `2.0.3`**. 2.0.0 was the first release of this app, after the PowerShell app's 0.11. It is set once, in [Directory.Build.props](Directory.Build.props), and the release workflow refuses a tag that disagrees with it.
 
 Where to read next:
 
