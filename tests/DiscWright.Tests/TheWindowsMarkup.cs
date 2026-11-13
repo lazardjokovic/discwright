@@ -1714,6 +1714,26 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void A_drop_is_taken_once_though_the_list_and_its_panel_both_take_it()
+    {
+        // The test above is why: the list sits inside the panel with the same
+        // handler, and Drop bubbles. Unhandled, one drop over the list ran
+        // twice, and xniwo's ten games were added and then refused ten times,
+        // discwright#98. Handled before anything else, so not even a drop
+        // that is refused carries on up to the panel to be judged again.
+        string code = File.ReadAllText(
+            Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        int start = code.IndexOf("private void SomethingWasDropped(object sender, DragEventArgs e)", StringComparison.Ordinal);
+        Assert.True(start >= 0, "SomethingWasDropped is not where it was");
+
+        string body = code[code.IndexOf('{', start)..];
+        string first = body[1..].TrimStart().Split('\n')[0].Trim();
+
+        Assert.Equal("e.Handled = true;", first);
+    }
+
+    [Fact]
     public void A_drop_walks_the_same_road_as_the_add_button()
     {
         // The one piece of judgement in a drop is WhatWasDropped's, where a
