@@ -1752,6 +1752,28 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void Every_option_under_More_options_says_what_it_does()
+    {
+        // Two had nothing to say on hover, and xniwo asked on 2.0.1 what the
+        // list of every file was, discwright#98: ticked off, he found nothing
+        // missing. Every option there explains itself now.
+        XElement more = Assert.Single(
+            Window().Descendants(Xaml + "Expander"), each => IdOf(each) == "MoreOptions");
+
+        XElement[] options = [.. more.Descendants(Xaml + "CheckBox")];
+        Assert.True(options.Length >= 4, $"More options holds {options.Length} options.");
+
+        Assert.All(options, option => Assert.True(
+            option.Attribute("ToolTip") is not null || option.Element(Xaml + "CheckBox.ToolTip") is not null,
+            $"\"{(string?)option.Attribute("Content")}\" says nothing when hovered."));
+
+        string checksums = Assert.Single(options, option => IdOf(option) == "Checksums")
+            .Element(Xaml + "CheckBox.ToolTip")!.Value;
+        Assert.Contains("checksums.sha256", checksums, StringComparison.Ordinal);
+        Assert.Contains("only that check is gone", checksums, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void A_drop_walks_the_same_road_as_the_add_button()
     {
         // The one piece of judgement in a drop is WhatWasDropped's, where a
