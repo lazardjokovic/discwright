@@ -28,11 +28,13 @@ public partial class WhatElseIsInThere : Window, INotifyPropertyChanged
 
     private WhatElseIsInThere(IReadOnlyList<LeftBehind> left, string? installer)
     {
-        Files = [.. left.Select(each => new OneOfThem(each, installer))];
+        // A folder is one row, not one per file inside it: an artbook is one
+        // answer, not forty.
+        IReadOnlyList<LeftBehind> rows = WhatWasLeftBehind.Gathered(left);
 
-        Headline = left.Count == 1
-            ? "There is one more file in that folder"
-            : $"There are {left.Count} more files in that folder";
+        Files = [.. rows.Select(each => new OneOfThem(each, installer))];
+
+        Headline = WhatWasLeftBehind.Headline(rows);
 
         AboutPatches = WhatWasLeftBehind.AboutThePatches(installer, left);
 
@@ -129,15 +131,10 @@ public partial class WhatElseIsInThere : Window, INotifyPropertyChanged
             return (game, []);
         }
 
-        List<LeftBehind> wanted = [.. asking.Files.Where(one => one.Wanted).Select(one => one.What)];
-
-        return (
-            WhatWasLeftBehind.Taking(game, wanted.Where(one => Treat(asking, one) == 0)),
-            [.. wanted.Where(one => Treat(asking, one) == 1)]);
+        return WhatWasLeftBehind.Answered(
+            game,
+            asking.Files.Where(one => one.Wanted).Select(one => (one.What, (WhatBecomesOfIt)one.Treatment)));
     }
-
-    private static int Treat(WhatElseIsInThere asking, LeftBehind one) =>
-        asking.Files.First(each => each.What == one).Treatment;
 
     private void TakeThem(object sender, RoutedEventArgs e)
     {
@@ -170,7 +167,7 @@ public sealed class OneOfThem : INotifyPropertyChanged
         // provably already covers, which starts off with its reason on its
         // line, the owner's design on 2026-11-09.
         _wanted = what.WantedAgainst(installer);
-        _treatment = what.Kind == LeftBehindKind.LooksLikeAnAddOn ? 1 : 0;
+        _treatment = (int)what.Suggested;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -207,7 +204,7 @@ public sealed class OneOfThem : INotifyPropertyChanged
         }
     }
 
-    /// <summary>Nought to copy it onto the disc, one to attach it as an add-on.</summary>
+    /// <summary>Which of the four answers, by <see cref="WhatBecomesOfIt"/>, in the dropdown's order.</summary>
     public int Treatment
     {
         get => _treatment;

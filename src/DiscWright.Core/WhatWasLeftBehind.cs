@@ -50,7 +50,126 @@ public static class WhatWasLeftBehind
     /// came from beside the installer belongs beside the installer.
     /// </remarks>
     public static GameFolder Taking(GameFolder game, IEnumerable<LeftBehind> chosen) =>
-        game with { Files = [.. game.Files, .. chosen.Select(each => each.File)] };
+        game with { Files = [.. game.Files, .. chosen.SelectMany(each => each.Inside ?? [each.File])] };
+
+    /// <summary>
+    /// The same files, with everything inside a folder gathered into one row
+    /// for the folder.
+    /// </summary>
+    /// <remarks>
+    /// An artbook is a folder of forty pictures, and asking about it picture
+    /// by picture is forty questions with one answer. A file at the top of
+    /// the folder stays a row of its own, in the order the folder listed it;
+    /// a folder takes the place of its first file.
+    /// </remarks>
+    public static IReadOnlyList<LeftBehind> Gathered(IReadOnlyList<LeftBehind> left)
+    {
+        List<LeftBehind> rows = [];
+        Dictionary<string, List<ListedFile>> folders = new(StringComparer.OrdinalIgnoreCase);
+        List<string> order = [];
+
+        foreach (LeftBehind each in left)
+        {
+            string path = each.File.RelativePath;
+            int slash = path.IndexOfAny(['/', (char)92]);
+
+            if (slash < 0)
+            {
+                rows.Add(each);
+                order.Add(path);
+                continue;
+            }
+
+            string folder = path[..slash];
+
+            if (!folders.TryGetValue(folder, out List<ListedFile>? inside))
+            {
+                folders[folder] = inside = [];
+                rows.Add(null!);
+                order.Add(folder);
+            }
+
+            inside.Add(each.File);
+        }
+
+        for (int at = 0; at < rows.Count; at++)
+        {
+            if (rows[at] is null)
+            {
+                List<ListedFile> inside = folders[order[at]];
+
+                rows[at] = new LeftBehind(
+                    new ListedFile(order[at], inside.Sum(file => file.Bytes)),
+                    LeftBehindKind.LooksLikeSomethingToKeep,
+                    inside);
+            }
+        }
+
+        return rows;
+    }
+
+    /// <summary>The dialog's headline, counting rows as somebody sees them.</summary>
+    public static string Headline(IReadOnlyList<LeftBehind> rows)
+    {
+        string what = rows.All(row => !row.IsAFolder) ? "file" : "thing";
+
+        return rows.Count == 1
+            ? $"There is one more {what} in that folder"
+            : $"There are {rows.Count} more {what}s in that folder";
+    }
+
+    /// <summary>
+    /// The game as the answers make it, and what is to be attached to it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Here rather than in the dialog, which no test can open, so what each
+    /// of the four answers does can be asked.
+    /// </para>
+    /// <para>
+    /// The game's manual and its extras become its own, pointing at where
+    /// they are in the folder, and get its menu's Manual and Extras buttons.
+    /// Beside the installer goes in with the game's files, with no button,
+    /// which is what "Copy it onto the disc" always did. An add-on is
+    /// something that installs, so a folder answered as one goes on as an
+    /// extra: there is nothing in a folder to run.
+    /// </para>
+    /// </remarks>
+    public static (GameFolder Game, IReadOnlyList<LeftBehind> AddOns) Answered(
+        GameFolder game, IEnumerable<(LeftBehind What, WhatBecomesOfIt As)> answers)
+    {
+        List<LeftBehind> beside = [];
+        List<LeftBehind> addOns = [];
+        List<GameExtra> own = [.. game.OwnOrNone];
+
+        foreach ((LeftBehind what, WhatBecomesOfIt becomes) in answers)
+        {
+            WhatBecomesOfIt really = becomes == WhatBecomesOfIt.AddOn && what.IsAFolder
+                ? WhatBecomesOfIt.Extra
+                : becomes;
+
+            switch (really)
+            {
+                case WhatBecomesOfIt.BesideTheInstaller:
+                    beside.Add(what);
+                    break;
+
+                case WhatBecomesOfIt.AddOn:
+                    addOns.Add(what);
+                    break;
+
+                default:
+                    own.Add(new GameExtra(
+                        System.IO.Path.Combine(game.Path, what.File.RelativePath),
+                        really == WhatBecomesOfIt.Manual ? GameExtraKind.Manual : GameExtraKind.Extra));
+                    break;
+            }
+        }
+
+        GameFolder taken = Taking(game, beside);
+
+        return (own.Count > 0 ? taken with { Own = own } : taken, addOns);
+    }
 
     /// <summary>
     /// What a left behind file looks like it is.
@@ -93,9 +212,49 @@ public static class WhatWasLeftBehind
     }
 }
 
-/// <summary>One file the game did not take.</summary>
-public sealed record LeftBehind(ListedFile File, LeftBehindKind Kind)
+/// <summary>One file the game did not take, or one folder of them.</summary>
+/// <param name="File">
+/// The file, or for a folder, its name and everything in it summed.
+/// </param>
+/// <param name="Inside">
+/// The files in it, when it is a folder, each by its path in the game's
+/// folder. None for a file.
+/// </param>
+public sealed record LeftBehind(ListedFile File, LeftBehindKind Kind, IReadOnlyList<ListedFile>? Inside = null)
 {
+    /// <summary>Whether this row is a whole folder.</summary>
+    public bool IsAFolder => Inside is not null;
+
+    /// <summary>
+    /// What the dialog suggests for it, which is only ever a suggestion.
+    /// </summary>
+    /// <remarks>
+    /// The table in the design the owner approved on 2026-11-13: something
+    /// with manual or guide in its name is the game's manual, an executable
+    /// is an add-on, and everything else, folders, archives, music and
+    /// pictures, is one of the game's extras.
+    /// </remarks>
+    public WhatBecomesOfIt Suggested =>
+        Kind == LeftBehindKind.LooksLikeAnAddOn && !IsAFolder ? WhatBecomesOfIt.AddOn
+        : LooksLikeAManual ? WhatBecomesOfIt.Manual
+        : WhatBecomesOfIt.Extra;
+
+    private static readonly string[] ManualsAre = [".pdf", ".chm", ".htm", ".html", ".txt", ".rtf"];
+
+    private bool LooksLikeAManual
+    {
+        get
+        {
+            string bare = IsAFolder ? Name : System.IO.Path.GetFileNameWithoutExtension(Name);
+
+            bool named = bare.Contains("manual", StringComparison.OrdinalIgnoreCase)
+                || bare.Contains("guide", StringComparison.OrdinalIgnoreCase);
+
+            return named && (IsAFolder || ManualsAre.Contains(
+                System.IO.Path.GetExtension(Name), StringComparer.OrdinalIgnoreCase));
+        }
+    }
+
     /// <summary>What to call it on the window.</summary>
     public string Name => File.Name;
 
@@ -113,9 +272,16 @@ public sealed record LeftBehind(ListedFile File, LeftBehindKind Kind)
     /// </summary>
     public string ExplainedAgainst(string? installerFileName)
     {
+        if (Inside is { } inside)
+        {
+            return inside.Count == 1 ? "A folder of 1 file" : $"A folder of {inside.Count} files";
+        }
+
         if (Kind != LeftBehindKind.LooksLikeAnAddOn)
         {
-            return "Looks like something to read or look at";
+            return Suggested == WhatBecomesOfIt.Manual
+                ? "Looks like the game's manual"
+                : "Looks like something to read or look at";
         }
 
         return APatchAgainstTheInstaller.For(installerFileName, File.Name) switch
@@ -136,6 +302,29 @@ public sealed record LeftBehind(ListedFile File, LeftBehindKind Kind)
     /// </summary>
     public bool WantedAgainst(string? installerFileName) =>
         APatchAgainstTheInstaller.For(installerFileName, File.Name) != WhatAPatchAdds.NothingTheInstallerLacks;
+}
+
+/// <summary>
+/// The four answers the dialog offers for each row, in the order it lists
+/// them.
+/// </summary>
+public enum WhatBecomesOfIt
+{
+    /// <summary>The game's manual, behind its menu's Manual button.</summary>
+    Manual,
+
+    /// <summary>One of the game's extras, behind its menu's Extras button.</summary>
+    Extra,
+
+    /// <summary>Something that installs onto the game, dead until it is installed.</summary>
+    AddOn,
+
+    /// <summary>
+    /// With the game's files, beside its installer, with no button. Called
+    /// "Copy it onto the disc" before 2.0.4, which xniwo found said nothing
+    /// about where it went or that nothing on the menu would show it.
+    /// </summary>
+    BesideTheInstaller
 }
 
 /// <summary>What a left behind file looks like it is.</summary>
