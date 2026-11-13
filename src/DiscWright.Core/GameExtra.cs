@@ -26,7 +26,12 @@ namespace DiscWright.Core;
 /// </remarks>
 /// <param name="Path">Where it is now: a file, or a folder taken whole.</param>
 /// <param name="Kind">Whether it is the game's manual or one of its extras.</param>
-public sealed record GameExtra(string Path, GameExtraKind Kind)
+/// <param name="Bytes">
+/// How big it is, a folder counted whole, for the list to show. The planner
+/// measures it again for itself, so a wrong figure here can mislead the eye
+/// and never the disc.
+/// </param>
+public sealed record GameExtra(string Path, GameExtraKind Kind, long Bytes = 0)
 {
     /// <summary>Where a game's manuals sit, inside the game's own folder.</summary>
     public const string ManualFolder = "Manual";

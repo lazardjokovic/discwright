@@ -356,6 +356,118 @@ public class SeeingTheMenuFirst
     }
 
     [Fact]
+    public void A_games_own_shows_under_Manual_and_Extras_and_one_click_makes_the_manual_an_extra()
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Hollow Knight") with
+        {
+            Own =
+            [
+                new GameExtra(@"D:\goodies\manual.pdf", GameExtraKind.Manual, 40),
+                new GameExtra(@"D:\goodies\Artbook", GameExtraKind.Extra, 90)
+            ]
+        });
+
+        AThingOnTheDisc game = Assert.Single(screen.WhatGoesOnIt);
+
+        // After the game's own files, under the folders they land in.
+        Assert.Equal(["setup_Hollow Knight.exe", "Manual", "Extras"], game.Inside.Select(row => row.Name));
+
+        AThingOnTheDisc manual = Assert.Single(game.Inside[1].Inside);
+        Assert.Equal(("manual.pdf", "the manual", 40L), (manual.Name, manual.What, manual.Bytes));
+        Assert.True(manual.CanBeEither);
+        Assert.Equal("Make it one of the game's extras instead", manual.WhatItCouldBe);
+        Assert.Equal("Make it the game's manual instead", Assert.Single(game.Inside[2].Inside).WhatItCouldBe);
+        Assert.False(game.Inside[0].CanBeEither);
+        Assert.Null(game.Inside[0].WhatItCouldBe);
+
+        List<string> told = [];
+        screen.PropertyChanged += (_, what) => told.Add(what.PropertyName ?? string.Empty);
+
+        screen.SwapWhatItIs(manual);
+
+        Assert.Equal(
+            [new GameExtra(@"D:\goodies\manual.pdf", GameExtraKind.Extra, 40), new GameExtra(@"D:\goodies\Artbook", GameExtraKind.Extra, 90)],
+            Assert.Single(screen.AsAProject().Games).OwnOrNone);
+
+        game = Assert.Single(screen.WhatGoesOnIt);
+        Assert.Equal(["setup_Hollow Knight.exe", "Extras"], game.Inside.Select(row => row.Name));
+        Assert.Equal(2, game.Inside[1].Inside.Count);
+
+        // The game stays picked, so the line naming it stays put.
+        Assert.Same(game, screen.WhatIsSelected);
+        Assert.Equal("Hollow Knight", screen.ThePickedGame);
+        Assert.Contains(nameof(MakeADisc.ThePickedGame), told);
+
+        // And back: an extra is as swappable as the manual.
+        AThingOnTheDisc extra = game.Inside[1].Inside.Single(row => row.Name == "Artbook");
+        Assert.True(extra.CanBeEither);
+        screen.SwapWhatItIs(extra);
+        Assert.Equal(
+            [new GameExtra(@"D:\goodies\manual.pdf", GameExtraKind.Extra, 40), new GameExtra(@"D:\goodies\Artbook", GameExtraKind.Manual, 90)],
+            Assert.Single(screen.AsAProject().Games).OwnOrNone);
+
+        // A row that is not one of the game's own changes nothing at all:
+        // not the game, not the branch, and nobody is told anything moved.
+        game = Assert.Single(screen.WhatGoesOnIt);
+        told.Clear();
+        screen.SwapWhatItIs(game.Inside[0]);
+        Assert.Same(game, Assert.Single(screen.WhatGoesOnIt));
+        Assert.Empty(told);
+        Assert.Equal(2, Assert.Single(screen.AsAProject().Games).OwnOrNone.Count);
+    }
+
+    [Fact]
+    public void Adds_a_manual_and_extras_to_the_picked_game_once_each_and_to_no_other()
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Gothic"));
+        screen.Add(AGame("Hollow Knight"));
+
+        // Nothing picked, nowhere to put it.
+        Assert.Null(screen.ThePickedGame);
+        screen.AddTheGamesOwn([@"D:\goodies\manual.pdf"], GameExtraKind.Manual);
+        Assert.All(screen.AsAProject().Games, game => Assert.Null(game.Own));
+
+        screen.WhatIsSelected = screen.WhatGoesOnIt[1].Inside[0];
+        Assert.Equal("Hollow Knight", screen.ThePickedGame);
+
+        screen.AddTheGamesOwn([@"D:\goodies\manual.pdf", @"D:\goodies\manual.pdf"], GameExtraKind.Manual);
+        screen.AddTheGamesOwn([@"D:\GOODIES\manual.pdf"], GameExtraKind.Manual);
+        screen.AddTheGamesOwn([@"D:\goodies\Maps"], GameExtraKind.Extra);
+
+        DiscProject project = screen.AsAProject();
+        Assert.Null(project.Games[0].Own);
+        Assert.Equal(
+            [new GameExtra(@"D:\goodies\manual.pdf", GameExtraKind.Manual, 1000), new GameExtra(@"D:\goodies\Maps", GameExtraKind.Extra, 1000)],
+            project.Games[1].OwnOrNone);
+        Assert.Equal("Hollow Knight", screen.ThePickedGame);
+    }
+
+    [Fact]
+    public void A_games_own_unticked_or_crossed_off_stays_off_the_disc()
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Hollow Knight") with { Own = [new GameExtra(@"D:\goodies\manual.pdf", GameExtraKind.Manual, 40)] });
+
+        AThingOnTheDisc manual = Assert.Single(screen.WhatGoesOnIt[0].Inside[1].Inside);
+
+        manual.IsOn = false;
+        Assert.Null(Assert.Single(screen.AsAProject().Games).Own);
+
+        manual.IsOn = true;
+        Assert.Single(Assert.Single(screen.AsAProject().Games).OwnOrNone);
+
+        screen.TakeOff(manual);
+
+        // Off the list as well as the disc, and the game, which still has
+        // its installer, stays.
+        GameFolder game = Assert.Single(screen.AsAProject().Games);
+        Assert.Null(game.Own);
+        Assert.DoesNotContain(screen.WhatGoesOnIt[0].Inside, row => row.Name == "Manual");
+    }
+
+    [Fact]
     public void A_games_own_extra_may_be_a_folder()
     {
         const string artbook = @"D:\goodies\Artbook";

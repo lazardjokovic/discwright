@@ -79,6 +79,7 @@ public sealed class EachGamesOwnComesBack : IDisposable
         string moved = Path.Combine(_root, "goodies", "moved.zip");
         Directory.CreateDirectory(artbook);
         File.WriteAllText(manual, "a manual");
+        File.WriteAllText(Path.Combine(artbook, "page.png"), "twelve bytes");
 
         OpenedProject opened = Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(TheProjectAsJson.Of(
             new DiscProject("A DISC",
@@ -101,7 +102,7 @@ public sealed class EachGamesOwnComesBack : IDisposable
         // A folder counts as much as a file, and a moved one is said rather
         // than dropped in silence, the way a moved game folder is.
         Assert.Equal(
-            [new GameExtra(manual, GameExtraKind.Manual), new GameExtra(artbook, GameExtraKind.Extra)],
+            [new GameExtra(manual, GameExtraKind.Manual, 8), new GameExtra(artbook, GameExtraKind.Extra, 12)],
             Assert.Single(back.Project.Games).OwnOrNone);
         Assert.Equal([moved], back.Gone);
     }

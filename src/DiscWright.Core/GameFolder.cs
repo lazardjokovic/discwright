@@ -66,15 +66,27 @@ public sealed record GameFolder(
     /// greying things out, and the window says out loud that a disc without it
     /// will not install the game.
     /// </remarks>
-    public GameFolder Without(string relativePath) =>
-        this with
+    /// <remarks>
+    /// One of the game's own manual or extras comes off the same way, by its
+    /// full path, which no file inside the folder can carry.
+    /// </remarks>
+    public GameFolder Without(string relativePath)
+    {
+        GameExtra[] own =
+        [
+            .. OwnOrNone.Where(each => !string.Equals(each.Path, relativePath, StringComparison.OrdinalIgnoreCase))
+        ];
+
+        return this with
         {
             Files =
             [
                 .. Files.Where(file =>
                     !string.Equals(file.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase))
-            ]
+            ],
+            Own = own.Length > 0 ? own : null
         };
+    }
 
     /// <summary>
     /// Whether a file is among the game's files, by the path it has inside

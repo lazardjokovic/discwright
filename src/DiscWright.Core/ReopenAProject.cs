@@ -67,9 +67,13 @@ public static class ReopenAProject
 
                     foreach (GameExtra each in entry.OwnOrNone)
                     {
-                        if (files.FileExists(each.Path) || files.FolderExists(each.Path))
+                        if (files.FolderExists(each.Path))
                         {
-                            own.Add(each);
+                            own.Add(each with { Bytes = files.List(each.Path).Files.Sum(file => file.Bytes) });
+                        }
+                        else if (files.FileExists(each.Path))
+                        {
+                            own.Add(each with { Bytes = howBigIs(each.Path) });
                         }
                         else
                         {

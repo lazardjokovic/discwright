@@ -122,6 +122,20 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     public string? What { get; }
 
     /// <summary>
+    /// Whether it is one of its game's own, which one click turns from the
+    /// manual into an extra or back.
+    /// </summary>
+    public bool CanBeEither => What is TheTreeOfWhatGoesOn.TheManual or TheTreeOfWhatGoesOn.AnExtra;
+
+    /// <summary>What clicking what it is would do, said on hover.</summary>
+    public string? WhatItCouldBe => What switch
+    {
+        TheTreeOfWhatGoesOn.TheManual => "Make it one of the game's extras instead",
+        TheTreeOfWhatGoesOn.AnExtra => "Make it the game's manual instead",
+        _ => null
+    };
+
+    /// <summary>
     /// Where it is. A file's path relative to its game folder, or an add-on's
     /// own path.
     /// </summary>

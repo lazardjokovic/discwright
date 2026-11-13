@@ -1920,7 +1920,109 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _selected = value;
             Tell(nameof(CanTakeSomethingOff));
+            Tell(nameof(ThePickedGame));
         }
+    }
+
+    /// <summary>
+    /// The name of the game the picked row belongs to, for the line under the
+    /// list that adds a manual or extras to it, or nothing.
+    /// </summary>
+    public string? ThePickedGame => GameOf(_selected) is int at and >= 0 ? _tree[at].Name : null;
+
+    private int GameOf(AThingOnTheDisc? row)
+    {
+        if (row is null)
+        {
+            return -1;
+        }
+
+        for (int at = 0; at < _tree.Count; at++)
+        {
+            if (_tree[at].EveryRow().Contains(row))
+            {
+                return at;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Gives the picked game manuals or extras of its own, from anywhere on
+    /// the machine.
+    /// </summary>
+    /// <remarks>
+    /// For goodies kept apart from the installer, the way the owner's test
+    /// kit keeps each game's manual and extras in folders of their own. One
+    /// already its own is not added twice.
+    /// </remarks>
+    public void AddTheGamesOwn(IEnumerable<string> paths, GameExtraKind kind)
+    {
+        int at = GameOf(_selected);
+
+        if (at < 0 || IsWorking)
+        {
+            return;
+        }
+
+        List<GameExtra> own = [.. _asFound[at].OwnOrNone];
+
+        foreach (string path in paths)
+        {
+            if (!own.Any(each => string.Equals(each.Path, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                own.Add(new GameExtra(path, kind, _machine.HowBigIs(path)));
+            }
+        }
+
+        _asFound[at] = _asFound[at] with { Own = own.Count > 0 ? own : null };
+        BuildTheBranchAgain(at);
+    }
+
+    /// <summary>
+    /// Turns one of a game's own from its manual into one of its extras, or
+    /// back, which is a click on what the row says it is.
+    /// </summary>
+    public void SwapWhatItIs(AThingOnTheDisc row)
+    {
+        int at = GameOf(row);
+
+        if (at < 0 || IsWorking || !row.CanBeEither)
+        {
+            return;
+        }
+
+        _asFound[at] = _asFound[at] with
+        {
+            Own =
+            [
+                .. _asFound[at].OwnOrNone.Select(each =>
+                    string.Equals(each.Path, row.ItsPath, StringComparison.OrdinalIgnoreCase)
+                        ? each with { Kind = each.Kind == GameExtraKind.Manual ? GameExtraKind.Extra : GameExtraKind.Manual }
+                        : each)
+            ]
+        };
+
+        BuildTheBranchAgain(at);
+    }
+
+    /// <summary>
+    /// The game's branch built again from what it now holds, remembering
+    /// what the old rows held, with the game itself picked so the line under
+    /// the list stays on it.
+    /// </summary>
+    private void BuildTheBranchAgain(int at)
+    {
+        _tree[at] = TheTreeOfWhatGoesOn.For(
+            _asFound[at],
+            _addOnsAsFound.Where(addOn => addOn.BelongsTo == at),
+            TakeTheTicksAsTheAnswer).Remembering(_tree[at]);
+
+        WhatIsSelected = _tree[at];
+
+        // Which carries the ticks into the games and ends at Reconsider.
+        TakeTheTicksAsTheAnswer();
     }
 
     /// <summary>
@@ -3486,6 +3588,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
     private void Reconsider()
     {
+        // The picked row may have gone with whatever changed, and the line
+        // under the list that names its game goes with it.
+        Tell(nameof(ThePickedGame));
+
         Worry = Label.Length == 0 ? null : DiscLabel.WhatWindowsWillMakeOfIt(Label, _machine.Encoding);
 
         // Settled below with the plan, and nothing until then.

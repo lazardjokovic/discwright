@@ -77,8 +77,8 @@ public sealed class WhatEachAnswerDoes
 
         Assert.Equal(
             [
-                new GameExtra(@"D:\GOG\The Witcher\The Witcher - manual.pdf", GameExtraKind.Manual),
-                new GameExtra(@"D:\GOG\The Witcher\Artbook", GameExtraKind.Extra)
+                new GameExtra(@"D:\GOG\The Witcher\The Witcher - manual.pdf", GameExtraKind.Manual, 40),
+                new GameExtra(@"D:\GOG\The Witcher\Artbook", GameExtraKind.Extra, 10)
             ],
             game.OwnOrNone);
 
@@ -115,7 +115,7 @@ public sealed class WhatEachAnswerDoes
         // There is nothing in a folder to run, so it cannot install onto
         // anything; it is kept as something to look at instead.
         Assert.Equal([patch], addOns);
-        Assert.Equal([new GameExtra(@"D:\GOG\The Witcher\Maps", GameExtraKind.Extra)], game.OwnOrNone);
+        Assert.Equal([new GameExtra(@"D:\GOG\The Witcher\Maps", GameExtraKind.Extra, 5)], game.OwnOrNone);
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public sealed class WhatEachAnswerDoes
         (GameFolder game, _) = WhatWasLeftBehind.Answered(
             TheWitcher with { Own = [had] }, [(Kept("manual.pdf", 1), WhatBecomesOfIt.Manual)]);
 
-        Assert.Equal([had, new GameExtra(@"D:\GOG\The Witcher\manual.pdf", GameExtraKind.Manual)], game.OwnOrNone);
+        Assert.Equal([had, new GameExtra(@"D:\GOG\The Witcher\manual.pdf", GameExtraKind.Manual, 1)], game.OwnOrNone);
     }
 
     [Fact]
