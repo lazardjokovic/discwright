@@ -121,6 +121,21 @@ function percentDone(bytesFinished, secondsOnTheCurrentFile, rate, bytesInAll) {
     return percent;
 }
 
+// How tall the list of games may be on the screen that picks one, in pixels.
+//
+// The panel is 480 high and never scrolls, and each game takes 47 of it, so
+// a disc of more than seven games used to lose the rest off the bottom with
+// no way to reach them. xniwo found it on 2.0.1, discwright#98, together
+// with the screen having no Exit at all. The list now gets whatever is left
+// above the Exit button, and scrolls when the games need more than that.
+// Never less than one game's worth, so a heading that wraps over three lines
+// still leaves something to pick.
+function chooserListRoom(panelHeight, bottomPadding, listTop, belowTheList) {
+    var room = panelHeight - bottomPadding - listTop - belowTheList;
+
+    return room < 47 ? 47 : room;
+}
+
 // Which screen the menu opens on.
 //
 // One game and it opens on that game, because a chooser offering one choice is
