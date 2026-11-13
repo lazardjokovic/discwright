@@ -429,7 +429,7 @@ public class TheTreeOfWhatGoesOnIt
             .. everyDepth.Select(row => (row.HowDeep * 19) + row.HowWideTheNameIs)
         ];
 
-        Assert.Equal([240, 240, 240, 240], whereTheNameEnds);
+        Assert.Equal([224, 224, 224, 224], whereTheNameEnds);
     }
 
     [Fact]
