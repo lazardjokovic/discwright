@@ -2170,6 +2170,18 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void The_list_of_games_gets_the_room_above_Exit_and_never_less_than_one_game()
+    {
+        // A 480 panel with 28 of padding at the bottom, the list starting
+        // 80 down under its heading and hint, and Exit taking 47 under it.
+        Assert.Equal("325", Ask("chooserListRoom(480, 28, 80, 47)"));
+
+        // A heading wrapped so far that nothing is left still leaves one
+        // game's worth, to scroll through.
+        Assert.Equal("47", Ask("chooserListRoom(480, 28, 400, 47)"));
+    }
+
+    [Fact]
     public void Watches_a_real_robocopy_read_its_file()
     {
         // The whole way, on this machine: a job started the way the menu

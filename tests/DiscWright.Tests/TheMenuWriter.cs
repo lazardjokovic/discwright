@@ -224,6 +224,33 @@ public class TheMenuWriter
     }
 
     [Fact]
+    public void The_screen_that_picks_a_game_scrolls_its_list_and_has_an_Exit_under_it()
+    {
+        // xniwo on 2.0.1, discwright#98: a disc of many games lost the ones
+        // past the seventh off the bottom of the panel, and the screen had no
+        // Exit at all.
+        string page = MenuWriter.MenuPage(Facts());
+
+        string chooser = page[page.IndexOf("<div id=\"chooserScreen\"", StringComparison.Ordinal)..];
+        chooser = chooser[..chooser.IndexOf("<div id=\"gameScreen\"", StringComparison.Ordinal)];
+
+        // Exit after the list and outside it, so scrolling never takes it away.
+        int list = chooser.IndexOf("<div id=\"gameList\"></div>", StringComparison.Ordinal);
+        int exit = chooser.IndexOf("id=\"chooserExit\"", StringComparison.Ordinal);
+        Assert.True(list >= 0 && exit > list, "Exit is not under the list on the screen that picks a game.");
+        Assert.Contains("onclick=\"doExit(); return false;\">Exit</a>", chooser[exit..], StringComparison.Ordinal);
+
+        // The list scrolls rather than running off the panel, and is fitted
+        // every time the screen is drawn, the way back from a game included.
+        Assert.Contains("#gameList { overflow-x: hidden; overflow-y: auto;", page, StringComparison.Ordinal);
+
+        string drawn = page[page.IndexOf("function showChooser()", StringComparison.Ordinal)..];
+        drawn = drawn[..drawn.IndexOf("\nfunction ", 10, StringComparison.Ordinal)];
+        Assert.Contains("fitTheGameList();", drawn, StringComparison.Ordinal);
+        Assert.Contains("chooserListRoom(", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Puts_a_game_s_name_on_the_chooser_as_text_and_never_as_markup()
     {
         string page = MenuWriter.MenuPage(Facts());

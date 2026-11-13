@@ -168,6 +168,23 @@ function showChooser() {
     for (var j = 0; j < DISC.games.length; j++) {
         document.getElementById("gameRow" + j).innerText = DISC.games[j].name;
     }
+
+    fitTheGameList();
+}
+
+// The list gets the room above Exit and scrolls past it: see chooserListRoom.
+// Measured after the rows are in, because the heading above can wrap.
+function fitTheGameList() {
+    var list = document.getElementById("gameList");
+    var exit = document.getElementById("chooserExit");
+    var room;
+
+    list.style.height = "auto";
+    room = chooserListRoom(document.getElementById("panel").clientHeight, 28, list.offsetTop, exit.offsetHeight + 9);
+
+    if (list.scrollHeight > room) {
+        list.style.height = room + "px";
+    }
 }
 
 // One game's own screen.
@@ -1309,6 +1326,14 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 #restoreBar { margin-top: 18px; height: 4px; background: #1A2429; }
 #restoreBarIn { height: 4px; width: 0; background: #00BEC8; }
 .hint { margin: 0 0 14px 0; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #5E727A; }
+/* The games, scrolling when there are more than the panel holds. The
+   scrollbar colours are the old IE ones, the only ones an HTA reads, so it
+   is a dark bar on the dark panel rather than a grey Windows one. */
+#gameList { overflow-x: hidden; overflow-y: auto; margin-bottom: 9px;
+            scrollbar-face-color: #1B2A30; scrollbar-track-color: #060E11;
+            scrollbar-arrow-color: #8FA3AA; scrollbar-shadow-color: #060E11;
+            scrollbar-highlight-color: #060E11; scrollbar-3dlight-color: #060E11;
+            scrollbar-darkshadow-color: #060E11; }
 /* A button that cannot be pressed yet looks like one, rather than looking like
    a button that does nothing when you press it. */
 .btn.dead { color: #5E727A; border-color: #1A2429;
@@ -1351,6 +1376,10 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
             <h1 id="discName"></h1>
             <p class="hint">Pick a game</p>
             <div id="gameList"></div>
+            <!-- Exit belongs to this screen too, under the list rather than in
+                 it, so it stays put however far the list scrolls. It had none,
+                 discwright#98. -->
+            <a class="btn" id="chooserExit" href="#" onclick="doExit(); return false;">Exit</a>
         </div>
 
         <div id="gameScreen" style="display: none">
