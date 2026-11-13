@@ -927,14 +927,35 @@
                             </CheckBox.ToolTip>
                         </CheckBox>
 
+                        <!-- Said, because it was asked: xniwo ticked it off on
+                             2.0.1 and found nothing missing, discwright#98. Only
+                             the list is, and the check that reads it. -->
                         <CheckBox Content="A list of what every file should be"
                                   IsChecked="{Binding Checksums}"
                                   IsEnabled="{Binding NothingIsRunning}"
-                                  AutomationProperties.AutomationId="Checksums" />
+                                  AutomationProperties.AutomationId="Checksums">
+                            <CheckBox.ToolTip>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="360">
+                                    Puts checksums.sha256 at the top of the disc, a fingerprint of every
+                                    file on it. The tick beside the music button in the disc's menu checks
+                                    the disc against it, and so can sha256sum anywhere, years from now.
+                                    Left off, everything else on the disc is the same; only that check is gone.
+                                </TextBlock>
+                            </CheckBox.ToolTip>
+                        </CheckBox>
                         <CheckBox Content="Readable by Windows 98 and Mac OS 9"
                                   IsChecked="{Binding LegacyFileSystems}"
                                   IsEnabled="{Binding NothingIsRunning}"
-                                  AutomationProperties.AutomationId="LegacyFileSystems" />
+                                  AutomationProperties.AutomationId="LegacyFileSystems">
+                            <CheckBox.ToolTip>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="360">
+                                    Adds the older ways of laying out a disc beside the modern one, for
+                                    computers older than Windows Vista. They cannot hold a file over 2 GB,
+                                    so with one of those on the disc they are left off and it still reads on
+                                    anything from Windows 2000 on.
+                                </TextBlock>
+                            </CheckBox.ToolTip>
+                        </CheckBox>
                     </StackPanel>
                 </Expander>
             </StackPanel>
