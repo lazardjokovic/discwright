@@ -109,12 +109,12 @@ public static class WhatWouldBeMade
             ],
             medium,
             overhead,
-            ExtrasBytes(project, sizeOf),
+            ExtrasBytes(project, games, sizeOf),
             project.Options.CutFiles);
 
     private static string WhereItGoes(IReadOnlyList<GameFolder> games, GameFolder game, ListedFile file)
     {
-        string folder = OnTheDisc.FolderFor(games.ToList().IndexOf(game) + 1, game.Name, games.Count, game.Files.Select(file => file.RelativePath));
+        string folder = OnTheDisc.FolderFor(games.ToList().IndexOf(game) + 1, game, games.Count);
 
         return folder.Length == 0 ? file.RelativePath : System.IO.Path.Combine(folder, file.RelativePath);
     }
@@ -124,7 +124,7 @@ public static class WhatWouldBeMade
     {
         for (int at = 0; at < games.Count; at++)
         {
-            string folder = OnTheDisc.FolderFor(at + 1, games[at].Name, games.Count, games[at].Files.Select(file => file.RelativePath));
+            string folder = OnTheDisc.FolderFor(at + 1, games[at], games.Count);
             int which = project.Games.ToList().IndexOf(games[at]);
 
             foreach (AddOn addOn in project.AddOnsFor(which))
@@ -137,16 +137,25 @@ public static class WhatWouldBeMade
         }
     }
 
-    private static long ExtrasBytes(DiscProject project, Func<string, long> sizeOf)
+    /// <summary>
+    /// What rides every disc: the disc's own manual, extras and loose files,
+    /// and each game's own manual and extras.
+    /// </summary>
+    /// <remarks>
+    /// A game's own count only for the games going on these discs. When the
+    /// games get a disc each, one game's artbook must not take room from
+    /// another game's disc it is not on.
+    /// </remarks>
+    private static long ExtrasBytes(DiscProject project, IReadOnlyList<GameFolder> games, Func<string, long> sizeOf)
     {
+        long bytes = games.Sum(game => game.OwnOrNone.Sum(own => sizeOf(own.Path)));
+
         DiscExtras? extras = project.Extras;
 
         if (extras is null)
         {
-            return 0;
+            return bytes;
         }
-
-        long bytes = 0;
 
         if (extras.ManualPath is not null)
         {

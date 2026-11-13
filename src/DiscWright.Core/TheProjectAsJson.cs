@@ -107,6 +107,24 @@ public static class TheProjectAsJson
                 writing.WriteNumber("Parent", -1);
                 writing.WriteNull("Manual");
                 writing.WriteNull("Extras");
+
+                // The game's own manual and extras, since 2.0.4. Under new
+                // names rather than in Manual and Extras above, which v1
+                // read as one path each and would misread a list as.
+                writing.WriteStartArray("OwnManuals");
+                foreach (GameExtra own in game.OwnOrNone.Where(own => own.Kind == GameExtraKind.Manual))
+                {
+                    writing.WriteStringValue(own.Path);
+                }
+
+                writing.WriteEndArray();
+                writing.WriteStartArray("OwnExtras");
+                foreach (GameExtra own in game.OwnOrNone.Where(own => own.Kind == GameExtraKind.Extra))
+                {
+                    writing.WriteStringValue(own.Path);
+                }
+
+                writing.WriteEndArray();
                 writing.WriteEndObject();
             }
 

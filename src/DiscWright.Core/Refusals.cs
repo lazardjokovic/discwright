@@ -150,6 +150,19 @@ public static class Refusals
             $"{path} is not there any more. It may have been moved or renamed since it was chosen. "
                 + "Choose it again under Artwork, music and extras, or clear it there.");
 
+    /// <summary>
+    /// One game's own manual or extra has moved since it was chosen.
+    /// </summary>
+    /// <remarks>
+    /// Its own refusal rather than the one above, which sends somebody to
+    /// Artwork, music and extras: a game's own manual is not there, it is
+    /// with the game in the list.
+    /// </remarks>
+    public static Refusal ThatGamesOwnIsNotThere(string game, GameExtra own) =>
+        new($"The {(own.Kind == GameExtraKind.Manual ? "manual" : "extra")} {own.Name} of {game} is not where it was chosen from",
+            $"{own.Path} is not there any more. It may have been moved or renamed since it was chosen. "
+                + $"Take it off {game} in the list and add it again from where it is now.");
+
     public static Refusal ThatFolderIsNotThere(string path) =>
         new("That folder is not there",
             $"Nothing was found at {path}. It may have been moved, renamed, or be on a drive that is no longer attached.",

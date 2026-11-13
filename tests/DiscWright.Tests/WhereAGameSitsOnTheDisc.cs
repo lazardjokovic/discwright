@@ -18,6 +18,24 @@ public class WhereAGameSitsOnTheDisc
     }
 
     [Fact]
+    public void A_lone_game_with_extras_of_its_own_gets_a_folder_and_with_only_a_manual_keeps_the_root()
+    {
+        ListedFile setup = new("setup_hollow_knight.exe", 10);
+        GameFolder game = new(@"C:\g", GameKind.GogInstaller, "Hollow Knight", "Hollow Knight", setup, [setup], [], null);
+
+        // Its own Extras would meet the disc's at the root. Manual belongs to
+        // nothing else there, so a manual alone moves nothing.
+        Assert.Equal(
+            "Hollow Knight",
+            OnTheDisc.FolderFor(1, game with { Own = [new GameExtra(@"C:\x\Artbook", GameExtraKind.Extra)] }, 1));
+        Assert.Equal(
+            string.Empty,
+            OnTheDisc.FolderFor(1, game with { Own = [new GameExtra(@"C:\x\manual.pdf", GameExtraKind.Manual)] }, 1));
+        Assert.Equal(string.Empty, OnTheDisc.FolderFor(1, game, 1));
+        Assert.Equal("02 - Hollow Knight", OnTheDisc.FolderFor(2, game, 3));
+    }
+
+    [Fact]
     public void Several_games_each_get_a_numbered_folder()
     {
         Assert.Equal("01 - Gothic", OnTheDisc.FolderFor(1, "Gothic", 3, ["setup_gothic.exe"]));
