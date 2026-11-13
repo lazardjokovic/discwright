@@ -10,7 +10,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="There is more in that folder"
-        Height="460" Width="620"
+        Height="460" Width="700"
         ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         ShowInTaskbar="False"
@@ -115,13 +115,17 @@
                                      something that installs onto it, but a
                                      standalone tool is not. -->
                                 <ComboBox Grid.Column="2"
-                                          Width="150"
+                                          Width="210"
                                           VerticalAlignment="Center"
                                           SelectedIndex="{Binding Treatment}"
                                           IsEnabled="{Binding Wanted}"
                                           AutomationProperties.AutomationId="{Binding WhatToDoWithIt}">
-                                    <ComboBoxItem Content="Copy it onto the disc" />
+                                    <!-- In the order of WhatBecomesOfIt, which
+                                         the selected index is cast to. -->
+                                    <ComboBoxItem Content="The game's manual" />
+                                    <ComboBoxItem Content="One of the game's extras" />
                                     <ComboBoxItem Content="Attach as an add-on" />
+                                    <ComboBoxItem Content="Beside the installer, no button" />
                                 </ComboBox>
                             </Grid>
                         </DataTemplate>
