@@ -108,6 +108,18 @@ public static class WhatWasLeftBehind
         return rows;
     }
 
+    /// <summary>
+    /// What the tick offering the same answers for the games after this one
+    /// says, or nothing when no game comes after it, and then there is no
+    /// tick at all.
+    /// </summary>
+    public static string? TheSameForTheRest(int after) => after switch
+    {
+        <= 0 => null,
+        1 => "Answer the same way for the other game being added",
+        _ => $"Answer the same way for the other {after} games being added"
+    };
+
     /// <summary>The dialog's headline, counting rows as somebody sees them.</summary>
     public static string Headline(IReadOnlyList<LeftBehind> rows)
     {

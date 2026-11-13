@@ -32,6 +32,11 @@ namespace DiscWright.ViewModels;
 /// </remarks>
 public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
 {
+    // The answers somebody asked to give every game after the one they were
+    // given for. One of these is made for each adding, so they never outlive
+    // the folders they were asked about.
+    private TheSameAnswers? _same;
+
     /// <summary>What the window is to do about a folder.</summary>
     public abstract record WhatToDo
     {
@@ -69,12 +74,15 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
     /// refusal, so false really does put it on.
     /// </param>
     /// <param name="WhatElseIsInThere">
-    /// Given the game and what the folder held beyond it: the game as it
-    /// should now be, and whatever is to be attached to it. Not asked when
-    /// the folder left nothing behind. Nothing at all when the question was
-    /// closed rather than answered, and then the folder is left alone: the X
-    /// is not "none of them", because leaving files off is a decision and
-    /// only the button that says so can make it.
+    /// Given the game, what the folder held beyond it, and how many folders
+    /// are still to come in this same adding: the game as it should now be,
+    /// whatever is to be attached to it, and the answers to give the games
+    /// after it when somebody asked for the same answers for all of them. Not
+    /// asked when the folder left nothing behind, nor once the same answers
+    /// were asked for. Nothing at all when the question was closed rather
+    /// than answered, and then the folder is left alone: the X is not "none
+    /// of them", because leaving files off is a decision and only the button
+    /// that says so can make it.
     /// </param>
     /// <param name="WhicheverStartsIt">
     /// Given a folder of files with more than one plausible launcher: the game
@@ -85,7 +93,7 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
     public sealed record TheQuestions(
         Func<string, IReadOnlyList<string>, int, bool> AddingThemSeparately,
         Func<GameFolder, bool> LeavingItForItsGame,
-        Func<GameFolder, IReadOnlyList<LeftBehind>, (GameFolder Game, IReadOnlyList<LeftBehind> AddOns)?> WhatElseIsInThere,
+        Func<GameFolder, IReadOnlyList<LeftBehind>, int, (GameFolder Game, IReadOnlyList<LeftBehind> AddOns, TheSameAnswers? ForTheRest)?> WhatElseIsInThere,
         Func<GameFolder, GameFolder> WhicheverStartsIt)
     {
         /// <summary>
@@ -96,7 +104,7 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
         public static TheQuestions NobodyIsAsked { get; } = new(
             (folder, inside, loose) => false,
             game => false,
-            (game, left) => (game, []),
+            (game, left, after) => (game, [], null),
             game => game);
     }
 
@@ -114,8 +122,12 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
     public IEnumerable<WhatToDo> From(
         IEnumerable<string> folders, TheQuestions asking, Func<string, bool>? isOnAlready = null)
     {
-        foreach (string folder in folders)
+        string[] all = [.. folders];
+
+        for (int at = 0; at < all.Length; at++)
         {
+            string folder = all[at];
+
             FolderListing listing = disk.List(folder);
 
             // Settled before the folder is taken apart. A folder of several
@@ -185,8 +197,29 @@ public sealed class TakingFoldersOn(IFileSystem disk, GameFolderReader reader)
                     // that appears to say there is nothing to tell you is
                     // worse than silence. The dialog guards this too; the
                     // decision belongs here, where it can be tested.
-                    (GameFolder Game, IReadOnlyList<LeftBehind> AddOns)? answer =
-                        left.Count > 0 ? asking.WhatElseIsInThere(game, left) : (game, []);
+                    // Answered once for every game added together, when
+                    // somebody asked for that, and asked otherwise.
+                    (GameFolder Game, IReadOnlyList<LeftBehind> AddOns)? answer;
+
+                    if (left.Count == 0)
+                    {
+                        answer = (game, []);
+                    }
+                    else if (_same is TheSameAnswers same)
+                    {
+                        answer = WhatWasLeftBehind.Answered(
+                            game, same.For(WhatWasLeftBehind.Gathered(left), game.Installer?.Name));
+                    }
+                    else if (asking.WhatElseIsInThere(game, left, all.Length - at - 1)
+                        is (GameFolder said, IReadOnlyList<LeftBehind> attached, var forTheRest))
+                    {
+                        _same = forTheRest;
+                        answer = (said, attached);
+                    }
+                    else
+                    {
+                        answer = null;
+                    }
 
                     // Closed rather than answered. The folder is left alone,
                     // the whole of it: the game does not go on without the

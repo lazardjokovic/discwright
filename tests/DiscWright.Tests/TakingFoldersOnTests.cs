@@ -70,6 +70,54 @@ public class TakingFoldersOnTests
     }
 
     [Fact]
+    public void Games_added_together_are_asked_once_when_the_same_answers_were_asked_for()
+    {
+        ADisk disk = new();
+        disk.Holds(@"C:\g\Gothic", ("setup_gothic.exe", 1000), ("Gothic manual.pdf", 40));
+        disk.Holds(@"C:\g\Arcanum", ("setup_arcanum.exe", 1000), ("arcanum_manual.pdf", 50), ("map.png", 5));
+        disk.Holds(@"C:\g\Celeste", ("setup_celeste.exe", 1000), ("celeste-guide.pdf", 60));
+
+        WhatWasAsked asked = new()
+        {
+            AnswerAboutWhatElse = (game, left) => WhatWasLeftBehind.Answered(
+                game, left.Select(each => (each, WhatBecomesOfIt.Manual))),
+            TheSameForTheRest = left => TheSameAnswers.From(left.Select(each => (each, true, WhatBecomesOfIt.Manual)))
+        };
+
+        Step.PutItOn[] put =
+        [
+            .. Taking(disk).From([@"C:\g\Gothic", @"C:\g\Arcanum", @"C:\g\Celeste"], asked.Questions).OfType<Step.PutItOn>()
+        ];
+
+        // Asked about the first, told two come after it, and never again.
+        Assert.Equal(["what else: Gothic, 1 left behind, 2 after"], asked.InOrder);
+        Assert.Equal(3, put.Length);
+
+        // Each later manual is its own game's manual; the map, a kind the
+        // first game did not have, gets its own suggestion.
+        Assert.Equal(
+            [new GameExtra(@"C:\g\Arcanum\arcanum_manual.pdf", GameExtraKind.Manual, 50), new GameExtra(@"C:\g\Arcanum\map.png", GameExtraKind.Extra, 5)],
+            put[1].Game.OwnOrNone);
+        Assert.Equal([new GameExtra(@"C:\g\Celeste\celeste-guide.pdf", GameExtraKind.Manual, 60)], put[2].Game.OwnOrNone);
+    }
+
+    [Fact]
+    public void Without_the_same_answers_every_game_is_asked_and_told_how_many_come_after()
+    {
+        ADisk disk = new();
+        disk.Holds(@"C:\g\Gothic", ("setup_gothic.exe", 1000), ("readme.txt", 4));
+        disk.Holds(@"C:\g\Arcanum", ("setup_arcanum.exe", 1000), ("readme.txt", 4));
+
+        WhatWasAsked asked = new();
+
+        _ = Taking(disk).From([@"C:\g\Gothic", @"C:\g\Arcanum"], asked.Questions).ToList();
+
+        Assert.Equal(
+            ["what else: Gothic, 1 left behind, 1 after", "what else: Arcanum, 1 left behind, 0 after"],
+            asked.InOrder);
+    }
+
+    [Fact]
     public void A_question_closed_rather_than_answered_leaves_the_folder_alone()
     {
         ADisk disk = new();
@@ -88,7 +136,7 @@ public class TakingFoldersOnTests
         // leaves the whole folder alone, game and all, so nothing is lost
         // because nothing happened. The next folder still goes on.
         Assert.Equal("Celeste", Assert.IsType<Step.PutItOn>(Assert.Single(steps)).Game.Name);
-        Assert.Equal(["what else: Hollow Knight, 1 left behind"], asked.InOrder);
+        Assert.Equal(["what else: Hollow Knight, 1 left behind, 1 after"], asked.InOrder);
     }
 
     [Fact]
@@ -526,6 +574,9 @@ public class TakingFoldersOnTests
         public Func<GameFolder, IReadOnlyList<LeftBehind>, (GameFolder, IReadOnlyList<LeftBehind>)?>?
             AnswerAboutWhatElse { get; init; }
 
+        /// <summary>The answers to give every game after the first one asked about, or none.</summary>
+        public Func<IReadOnlyList<LeftBehind>, TheSameAnswers>? TheSameForTheRest { get; init; }
+
         public Func<GameFolder, GameFolder>? AnswerAboutTheLauncher { get; init; }
 
         public TakingFoldersOn.TheQuestions Questions => new(
@@ -539,10 +590,14 @@ public class TakingFoldersOnTests
                 InOrder.Add("leave the add-on: " + game.Installer?.Name);
                 return LeaveTheAddOn;
             },
-            (game, left) =>
+            (game, left, after) =>
             {
-                InOrder.Add($"what else: {game.Name}, {left.Count} left behind");
-                return AnswerAboutWhatElse is null ? (game, left) : AnswerAboutWhatElse(game, left);
+                InOrder.Add($"what else: {game.Name}, {left.Count} left behind, {after} after");
+                (GameFolder, IReadOnlyList<LeftBehind>)? said = AnswerAboutWhatElse is null ? (game, left) : AnswerAboutWhatElse(game, left);
+
+                return said is (GameFolder taken, IReadOnlyList<LeftBehind> addOns)
+                    ? (taken, addOns, TheSameForTheRest?.Invoke(left))
+                    : null;
             },
             game =>
             {
