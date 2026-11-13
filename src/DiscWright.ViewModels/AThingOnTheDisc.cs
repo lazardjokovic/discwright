@@ -261,8 +261,17 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// because the name is the one thing on the row that can lose a little
     /// width without losing anything, and the row width guard holds the
     /// whole sum to the panel.
+    /// <para>
+    /// Then 240 until 2026-11-13, when it gave up another 16. xniwo found on
+    /// 2.0.1 that with enough games for the list to scroll, the cross was
+    /// gone from every row, discwright#98: the row ran 10 pixels past the
+    /// visible edge, under the scrollbar. The guard had counted the whole
+    /// 920 of the window as the window's inside, when its frame takes 16 of
+    /// them, measured on the test machine as a list 480 wide where the guard
+    /// worked out 496.
+    /// </para>
     /// </remarks>
-    private const double TheNameGets = 240;
+    private const double TheNameGets = 224;
 
     /// <summary>
     /// How far a tree pushes a row in for each level it is down, in pixels.

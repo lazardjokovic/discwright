@@ -1234,7 +1234,15 @@ public class TheWindowsMarkup
             .Where(each => each != "*")
             .Sum(each => double.Parse(each!, CultureInfo.InvariantCulture));
 
-        double list = window - margin[0] - margin[2] - besideTheList;
+        // The window's Width is its outside. Its frame takes 16 of it, eight
+        // a side, measured on the test machine: a window 920 wide holds a
+        // list 480 wide, where taking the whole 920 as the inside worked out
+        // 496, and a row that fitted 496 ran under the scrollbar of a real
+        // one. xniwo found that on 2.0.1 as a cross gone from every row once
+        // the list scrolled, discwright#98.
+        const double TheFrame = 16;
+
+        double list = window - TheFrame - margin[0] - margin[2] - besideTheList;
 
         // What the list spends on itself before a row gets any of it: the
         // panel's border, the tree's padding, the column a tree keeps for the
@@ -1243,9 +1251,19 @@ public class TheWindowsMarkup
         const double TheBorder = 2;
         const double ThePadding = 8;
         const double TheArrow = 19;
-        const double TheScrollbar = 17;
 
-        double room = list - TheBorder - ThePadding - TheArrow - TheScrollbar;
+        // The scrollbar as Look.xaml draws it, read rather than remembered:
+        // it took its own column at 17 here while the real one is 10, which
+        // is a guard over a window that does not exist.
+        double theScrollbar = XDocument.Load(Repository.File("src", "DiscWright.App", "Look.xaml")).Root!
+            .Elements(Xaml + "Style")
+            .Where(style => (string?)style.Attribute("TargetType") == "ScrollBar")
+            .SelectMany(style => style.Elements(Xaml + "Setter"))
+            .Where(setter => (string?)setter.Attribute("Property") == "Width")
+            .Select(setter => Figure(setter.Attribute("Value")))
+            .First();
+
+        double room = list - TheBorder - ThePadding - TheArrow - theScrollbar;
 
         // Everything a row declares for itself, and the box, which takes the
         // size WPF gives it.
