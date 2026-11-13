@@ -330,6 +330,129 @@ if ($ffmpeg) {
 
 Words "$music\not-a-tune.mp3" 'This has a tune name and is a sentence.'
 
+# ==================================== each game's own manual and extras, 2.0.4
+#
+# The folders section F's own cases start from. Every manual is a real PDF of
+# one page that says which file it is and which game it belongs to, so when a
+# menu button opens something, whoever is watching can see at once whether it
+# opened the right one. A sparse file of zeros called manual.pdf opens as an
+# error in every reader, and that reads as a bug in the menu.
+
+# A PDF a reader really opens, one page, the lines given written on it.
+#
+# Built by hand rather than by a library, because nothing on a clean Windows
+# writes one. The cross reference table holds the byte offset of every object,
+# so the text is ASCII and every line ends in a bare line feed, or the offsets
+# drift and a strict reader refuses the file.
+function Pdf([string] $path, [string[]] $lines) {
+    $parent = Split-Path $path -Parent
+    if (-not (Test-Path $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+
+    $text = 'BT /F1 22 Tf 60 770 Td 30 TL'
+    foreach ($line in $lines) {
+        # Brackets would close the PDF string early, and nothing here needs them.
+        $plain = ($line -replace '[()]', '')
+        $text += " ($plain) '"
+    }
+    $text += ' ET'
+
+    $objects = @(
+        '<< /Type /Catalog /Pages 2 0 R >>',
+        '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+        "<< /Length $($text.Length) >>`nstream`n$text`nendstream",
+        '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+    )
+
+    $out = "%PDF-1.4`n"
+    $offsets = @()
+    for ($i = 0; $i -lt $objects.Count; $i++) {
+        $offsets += $out.Length
+        $out += "$($i + 1) 0 obj`n$($objects[$i])`nendobj`n"
+    }
+
+    $xref = $out.Length
+    $out += "xref`n0 $($objects.Count + 1)`n0000000000 65535 f `n"
+    foreach ($at in $offsets) { $out += ("{0:D10} 00000 n `n" -f $at) }
+    $out += "trailer`n<< /Size $($objects.Count + 1) /Root 1 0 R >>`nstartxref`n$xref`n%%EOF`n"
+
+    [System.IO.File]::WriteAllBytes($path, [System.Text.Encoding]::ASCII.GetBytes($out))
+}
+
+# F15 to F19  one GOG download with every kind of goodie beside it: two
+# manuals by name, a folder of manuals, a zipped manual that is never guessed
+# to be one, an artbook with a folder inside it, maps, a readme, a patch the
+# installer already covers and a patch past it.
+$at = Folder 'own-gog-goodies'
+Lump "$at\setup_lantern_keep_1.5_(70300).exe" (300 * $MB)
+Lump "$at\setup_lantern_keep_1.5_(70300)-1.bin" (200 * $MB)
+Lump "$at\patch_lantern_keep_1.4_(70100)_to_1.5_(70300).exe" (30 * $MB)
+Lump "$at\patch_lantern_keep_1.5_(70300)_to_1.6_(70400).exe" (12 * $MB)
+Pdf "$at\Lantern Keep Manual.pdf" 'Lantern Keep', 'Lantern Keep Manual.pdf', 'The game''s manual, by its name.'
+Pdf "$at\Lantern Keep Game Guide.pdf" 'Lantern Keep', 'Lantern Keep Game Guide.pdf', 'A guide counts as a manual.'
+Pdf "$at\Manuals\Manual English.pdf" 'Lantern Keep', 'Manual English.pdf', 'Inside the folder called Manuals.'
+Pdf "$at\Manuals\Manual Deutsch.pdf" 'Lantern Keep', 'Manual Deutsch.pdf', 'Inside the folder called Manuals.'
+Lump "$at\lantern_keep_manual.zip" (2 * $MB)
+Words "$at\README.txt" 'Lantern Keep. This README sits beside the installer.'
+1..6 | ForEach-Object { Picture "$at\Artbook\page $_.png" 800 600 'DarkSlateBlue' "Lantern Keep artbook page $_" }
+1..3 | ForEach-Object { Picture "$at\Artbook\Sketches\sketch $_.png" 600 600 'DimGray' "Lantern Keep sketch $_" }
+1..2 | ForEach-Object { Picture "$at\Maps\map $_.png" 800 800 'DarkGreen' "Lantern Keep map $_" }
+
+# F20, F21  one manual, so Manual opens the file itself, and extras of its
+# own, so a lone game takes a folder on the disc.
+$at = Folder 'own-one-manual'
+Lump "$at\setup_quiet_harbour_2.0_(71000).exe" (250 * $MB)
+Pdf "$at\Quiet Harbour manual.pdf" 'Quiet Harbour', 'Quiet Harbour manual.pdf', 'The only manual, so Manual opens this page.'
+1..3 | ForEach-Object { Picture "$at\Wallpapers\wallpaper $_.png" 1280 720 'Teal' "Quiet Harbour wallpaper $_" }
+
+# F21  a manual and nothing else, so a lone game keeps the root.
+$at = Folder 'own-manual-only'
+Lump "$at\setup_cinder_road_1.0_(71500).exe" (250 * $MB)
+Pdf "$at\Cinder Road Manual.pdf" 'Cinder Road', 'Cinder Road Manual.pdf', 'A lone game with only a manual keeps the root.'
+
+# F22, F23  a game with nothing beside it, and its goodies kept somewhere
+# else, which is how the owner's own test kit is laid out.
+$at = Folder 'own-bare-game'
+Lump "$at\setup_bare_game_1.0_(75000).exe" (200 * $MB)
+
+$at = Folder 'own-goodies-apart'
+Pdf "$at\Bare Game manual.pdf" 'Bare Game', 'Bare Game manual.pdf', 'Added from the list, not from the dialog.'
+Pdf "$at\Bare Game reference card.pdf" 'Bare Game', 'Bare Game reference card.pdf', 'A second manual, so Manual opens the folder.'
+1..3 | ForEach-Object { Picture "$at\Concept Art\concept $_.png" 800 600 'Maroon' "Bare Game concept $_" }
+1..2 | ForEach-Object { Picture "$at\Posters\poster $_.png" 600 900 'Indigo' "Bare Game poster $_" }
+
+# F22  the disc's own manual and extras, chosen in Artwork, music and extras,
+# to set beside the games' own.
+$at = Folder 'disc-wide'
+Pdf "$at\Disc manual.pdf" 'The disc', 'Disc manual.pdf', 'The disc''s own manual, not any one game''s.'
+Words "$at\Disc extras\About this disc.txt" 'The disc''s own extras, not any one game''s.'
+Picture "$at\Disc extras\poster.png" 600 900 'SaddleBrown' 'The disc''s poster'
+
+# F25  one game too big for a CD with a manual and extras of its own, which
+# ride every disc of the set and are counted on every one.
+$at = Folder 'own-for-a-set'
+Lump "$at\setup_long_winter_1.0_(74000).exe" ([long](1.2 * $GB))
+Pdf "$at\Long Winter manual.pdf" 'Long Winter', 'Long Winter manual.pdf', 'On every disc of the set.'
+Lump "$at\Making Of\making of.mp4" (150 * $MB)
+
+# F26  three games to add together, each with a manual and an artbook. Each
+# carries a patch the dialog judges against that game's own installer:
+# North Gate's and Ember Fall's go past theirs, Salt Marsh's installer already
+# is 1.2, so its patch arrives unticked even with the first game's answers.
+$at = Folder 'own-three-games'
+$three = @(
+    @{ Name = 'North Gate'; Setup = 'setup_north_gate_1.0_(72000).exe'; Patch = 'patch_north_gate_1.0_(72000)_to_1.1_(72100).exe'; Colour = 'SteelBlue' },
+    @{ Name = 'Salt Marsh'; Setup = 'setup_salt_marsh_1.2_(72500).exe'; Patch = 'patch_salt_marsh_1.1_(72400)_to_1.2_(72500).exe'; Colour = 'OliveDrab' },
+    @{ Name = 'Ember Fall'; Setup = 'setup_ember_fall_1.0_(73000).exe'; Patch = 'patch_ember_fall_1.0_(73000)_to_1.1_(73100).exe'; Colour = 'Firebrick' }
+)
+foreach ($game in $three) {
+    $in = Join-Path $at $game.Name
+    Lump "$in\$($game.Setup)" (150 * $MB)
+    Lump "$in\$($game.Patch)" (10 * $MB)
+    Pdf "$in\$($game.Name) manual.pdf" $game.Name, "$($game.Name) manual.pdf", 'Added together with two other games.'
+    1..2 | ForEach-Object { Picture "$in\Artbook\page $_.png" 800 600 $game.Colour "$($game.Name) artbook page $_" }
+}
+
 # ========================================================= a game that is real
 #
 # Everything above is sparse, because the recognisers only ever measure. Two

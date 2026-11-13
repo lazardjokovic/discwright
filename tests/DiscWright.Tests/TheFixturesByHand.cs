@@ -144,6 +144,126 @@ public class TheFixturesByHand
         Assert.Equal(left, WhatWasLeftBehind.In(listing, game).Count);
     }
 
+    [Theory]
+    // folder, the dialog's row, what it suggests, whether the row is a folder, whether it starts ticked
+    [InlineData("own-gog-goodies", "Lantern Keep Manual.pdf", WhatBecomesOfIt.Manual, false, true)]
+    [InlineData("own-gog-goodies", "Lantern Keep Game Guide.pdf", WhatBecomesOfIt.Manual, false, true)]
+    [InlineData("own-gog-goodies", "Manuals", WhatBecomesOfIt.Manual, true, true)]
+    [InlineData("own-gog-goodies", "lantern_keep_manual.zip", WhatBecomesOfIt.Extra, false, true)]
+    [InlineData("own-gog-goodies", "README.txt", WhatBecomesOfIt.Extra, false, true)]
+    [InlineData("own-gog-goodies", "Artbook", WhatBecomesOfIt.Extra, true, true)]
+    [InlineData("own-gog-goodies", "Maps", WhatBecomesOfIt.Extra, true, true)]
+    [InlineData("own-gog-goodies", "patch_lantern_keep_1.4_(70100)_to_1.5_(70300).exe", WhatBecomesOfIt.AddOn, false, false)]
+    [InlineData("own-gog-goodies", "patch_lantern_keep_1.5_(70300)_to_1.6_(70400).exe", WhatBecomesOfIt.AddOn, false, true)]
+    [InlineData("own-one-manual", "Quiet Harbour manual.pdf", WhatBecomesOfIt.Manual, false, true)]
+    [InlineData("own-one-manual", "Wallpapers", WhatBecomesOfIt.Extra, true, true)]
+    [InlineData("own-manual-only", "Cinder Road Manual.pdf", WhatBecomesOfIt.Manual, false, true)]
+    [InlineData("own-for-a-set", "Long Winter manual.pdf", WhatBecomesOfIt.Manual, false, true)]
+    [InlineData("own-for-a-set", "Making Of", WhatBecomesOfIt.Extra, true, true)]
+    [InlineData("own-three-games/North Gate", "North Gate manual.pdf", WhatBecomesOfIt.Manual, false, true)]
+    [InlineData("own-three-games/North Gate", "Artbook", WhatBecomesOfIt.Extra, true, true)]
+    [InlineData("own-three-games/North Gate", "patch_north_gate_1.0_(72000)_to_1.1_(72100).exe", WhatBecomesOfIt.AddOn, false, true)]
+    [InlineData("own-three-games/Salt Marsh", "patch_salt_marsh_1.1_(72400)_to_1.2_(72500).exe", WhatBecomesOfIt.AddOn, false, false)]
+    [InlineData("own-three-games/Ember Fall", "patch_ember_fall_1.0_(73000)_to_1.1_(73100).exe", WhatBecomesOfIt.AddOn, false, true)]
+    public void Each_games_own_goodie_is_suggested_what_its_case_says(
+        string folder, string row, WhatBecomesOfIt suggested, bool isAFolder, bool ticked)
+    {
+        if (Where is not string root)
+        {
+            return;
+        }
+
+        // The dialog's own reading, rows gathered exactly as it gathers them,
+        // so section F's cases say what the window will really show.
+        LeftBehind found = Assert.Single(Rows(root, folder, out GameFolder game), each => each.Name == row);
+
+        Assert.Equal(suggested, found.Suggested);
+        Assert.Equal(isAFolder, found.IsAFolder);
+        Assert.Equal(ticked, found.WantedAgainst(game.Installer?.Name));
+    }
+
+    [Fact]
+    public void The_download_with_every_goodie_asks_about_nine_rows()
+    {
+        if (Where is not string root)
+        {
+            return;
+        }
+
+        IReadOnlyList<LeftBehind> rows = Rows(root, "own-gog-goodies", out _);
+
+        // Two manuals, a folder of manuals, a zip, a readme, two folders of
+        // pictures and two patches. More would mean a folder came apart into
+        // its files, which is the forty questions the gathering is for.
+        Assert.Equal(9, rows.Count);
+
+        // The artbook's own folder of sketches is inside its one row, not a row of its own.
+        Assert.Equal(9, rows.Single(each => each.Name == "Artbook").Inside!.Count);
+        Assert.Equal(2, rows.Single(each => each.Name == "Manuals").Inside!.Count);
+    }
+
+    [Fact]
+    public void The_three_games_are_three_and_the_bare_one_asks_nothing()
+    {
+        if (Where is not string root)
+        {
+            return;
+        }
+
+        WindowsFileSystem disk = new();
+
+        Assert.Equal(3, GamesInside.Of(disk.List(Path.Combine(root, "own-three-games"))).Count);
+
+        // The game whose goodies are kept elsewhere has nothing beside it, so
+        // no dialog comes up and the list's links are the only way in.
+        Assert.Empty(Rows(root, "own-bare-game", out _));
+        Assert.Equal(GameKind.GogInstaller, Read(root, "own-bare-game").Kind);
+    }
+
+    [Fact]
+    public void Every_manual_is_a_pdf_a_reader_opens_and_says_which_it_is()
+    {
+        if (Where is not string root)
+        {
+            return;
+        }
+
+        // A file of zeros called manual.pdf opens as an error in every reader,
+        // and that reads as a bug in the menu. Each one's cross reference has
+        // to point at its objects, and its page has to name the file, so a
+        // button that opens the wrong manual is seen to.
+        string[] pdfs = Directory.GetFiles(root, "*.pdf", SearchOption.AllDirectories);
+
+        Assert.True(pdfs.Length >= 13, $"Only {pdfs.Length} manuals among the fixtures.");
+
+        foreach (string pdf in pdfs)
+        {
+            string text = System.Text.Encoding.ASCII.GetString(File.ReadAllBytes(pdf));
+            string name = Path.GetFileName(pdf);
+
+            Assert.StartsWith("%PDF-", text, StringComparison.Ordinal);
+            Assert.EndsWith("%%EOF\n", text, StringComparison.Ordinal);
+            Assert.Contains("(" + name + ")", text, StringComparison.Ordinal);
+
+            string[] tail = text.Split('\n');
+            int xref = int.Parse(tail[^3], System.Globalization.CultureInfo.InvariantCulture);
+
+            Assert.True(text[xref..].StartsWith("xref\n", StringComparison.Ordinal), $"{name}: startxref misses the table.");
+
+            string[] entries = text[xref..].Split('\n');
+            int objects = int.Parse(entries[1].Split(' ')[1], System.Globalization.CultureInfo.InvariantCulture);
+
+            for (int number = 1; number < objects; number++)
+            {
+                int at = int.Parse(entries[2 + number][..10], System.Globalization.CultureInfo.InvariantCulture);
+
+                Assert.True(
+                    text[at..].StartsWith($"{number} 0 obj\n", StringComparison.Ordinal),
+                    $"{name}: object {number} is not where its cross reference says.");
+            }
+        }
+    }
+
     [Fact]
     public void The_folder_of_folders_really_holds_two_games()
     {
@@ -190,6 +310,7 @@ public class TheFixturesByHand
     [InlineData("size-one-too-big-for-a-cd", 1100, 1400)]
     [InlineData("size-three-cds", 2000, 2300)]
     [InlineData("size-over-the-iso-ceiling", 2200, 2400)]
+    [InlineData("own-for-a-set", 1100, 1400)]
     public void The_sizes_are_the_sizes_the_cases_need(string folder, int leastMb, int mostMb)
     {
         if (Where is not string root)
@@ -376,6 +497,16 @@ public class TheFixturesByHand
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern uint GetCompressedFileSizeW(string name, out uint high);
+
+    /// <summary>The rows the folder dialog would ask about, gathered as it gathers them.</summary>
+    private static IReadOnlyList<LeftBehind> Rows(string root, string folder, out GameFolder game)
+    {
+        WindowsFileSystem disk = new();
+
+        game = Read(root, folder);
+
+        return WhatWasLeftBehind.Gathered(WhatWasLeftBehind.In(disk.List(Path.Combine(root, folder)), game));
+    }
 
     private static GameFolder Read(string root, string folder)
     {

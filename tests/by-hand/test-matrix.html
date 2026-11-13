@@ -745,8 +745,9 @@
         <span class="look">There only when there are add-ons, and it says why they are dead.</span></label>
       <label class="case"><input type="checkbox" id="c46"><span class="id">C46</span>
         <span class="what">Manual, and Extras</span>
-        <span class="look">Each shown only when the disc carries one, and only on the disc of a set that carries
-        it.</span></label>
+        <span class="look">On a game's screen, each shown only when that game has one of its own or the disc does,
+        and it opens the game's own first. On the list of games, each shown only when the disc has one of its own.
+        Every disc of a set carries both. Section F, F15 onwards, has the cases.</span></label>
       <label class="case"><input type="checkbox" id="c47"><span class="id">C47</span>
         <span class="what">Back</span>
         <span class="look">Shown only when there is more than one game to go back to.</span></label>
@@ -1067,6 +1068,11 @@
     <div class="step"><span class="letter">F</span><h2>Artwork, extras and music</h2><span class="of" data-of></span></div>
     <p class="note">Four pictures and four extras, each independent. The ones worth trying are the empty case,
     each one alone, all of them together, and all of them with the menu turned off.</p>
+    <p class="note">F15 onwards are each game's own manual and extras, new in 2.0.4. Every folder they name is made by
+    <code>Build-TheFixtures.ps1</code> in <code>DiscWright-Lab\fixtures</code>, and <code>TheFixturesByHand</code> holds
+    the dialog's suggestions for them to what these cases say. Every manual there is a one page PDF naming its own file
+    and its game, so whatever a button opens shows at once whether it is the right one. Build an ISO and double click it
+    to mount it: that is the disc, menu and all, without burning one.</p>
     <div class="panel" data-cases>
       <label class="case run" data-by="Choosing_it_and_putting_it_back"><input type="checkbox" id="f1"><span class="id">F1</span>
         <span class="what">Nothing chosen at all</span>
@@ -1088,10 +1094,10 @@
         FOR PRINTING now says.</span></label>
       <label class="case"><input type="checkbox" id="f6"><span class="id">F6</span>
         <span class="what">Manual only</span>
-        <span class="look">A <b>Manual</b> button on the menu, on the one disc of a set that carries it.</span></label>
+        <span class="look">A <b>Manual</b> button on the menu, on every disc of a set.</span></label>
       <label class="case"><input type="checkbox" id="f7"><span class="id">F7</span>
         <span class="what">Extras folder only</span>
-        <span class="look">An <b>Extras</b> button, same disc.</span></label>
+        <span class="look">An <b>Extras</b> button, on every disc of a set.</span></label>
       <label class="case"><input type="checkbox" id="f8"><span class="id">F8</span>
         <span class="what">Music only</span>
         <span class="look">It plays when the menu opens and loops, with a control at the <b>top</b> left to
@@ -1115,6 +1121,87 @@
       <label class="case run" data-by="A_tune_that_has_been_moved_since_it_was_chosen_is_a_sentence"><input type="checkbox" id="f14"><span class="id">F14</span>
         <span class="what">Choose a tune, move or rename the file, then preview</span>
         <span class="look">This took the program down once. It must arrive as a sentence.</span></label>
+      <div class="sub">Each game's own manual and extras</div>
+      <label class="case"><input type="checkbox" id="f15"><span class="id">F15</span>
+        <span class="what">Add <code>own-gog-goodies</code>: what the dialog suggests</span>
+        <span class="look">Nine rows. <i>Lantern Keep Manual.pdf</i> and <i>Lantern Keep Game Guide.pdf</i> suggest
+        <b>The game's manual</b>, saying "Looks like the game's manual". <i>Manuals</i> is one row, "A folder of 2 files",
+        also the manual. <i>Artbook</i> is one row, "A folder of 9 files", its Sketches folder counted inside it and not
+        asked about. <i>Maps</i>, <i>README.txt</i> and <i>lantern_keep_manual.zip</i> suggest <b>One of the game's
+        extras</b>: a zip is never guessed to be a manual. Both patches suggest <b>Attach as an add-on</b>, the 1.4 to 1.5
+        one unticked because the installer is already 1.5, the 1.5 to 1.6 one ticked.</span></label>
+      <label class="case"><input type="checkbox" id="f16"><span class="id">F16</span>
+        <span class="what">Put these on too, every suggestion kept</span>
+        <span class="look">Lantern Keep's branch has a <b>Manual</b> group holding the two PDFs and the Manuals folder,
+        each saying "the manual", and an <b>Extras</b> group holding Artbook, Maps, the readme and the zip, each saying
+        "an extra", with their sizes. The 1.6 patch is under Add-ons and the 1.5 one is nowhere. The total on the bar
+        counts all of it.</span></label>
+      <label class="case"><input type="checkbox" id="f17"><span class="id">F17</span>
+        <span class="what">Start again, add <code>own-gog-goodies</code> and answer against every suggestion</span>
+        <span class="look">The guide as an extra, the zip as the manual, Maps as the manual, README.txt as <b>Beside the
+        installer, no button</b>. Each lands in the group its answer names, not the one suggested. The readme is in no
+        group, carries no link, gets no button in the preview, and on the ISO sits beside the installer.</span></label>
+      <label class="case"><input type="checkbox" id="f18"><span class="id">F18</span>
+        <span class="what">Preview a game with several manuals, F16's list</span>
+        <span class="look">Lantern Keep's screen has Install, Manual, Extras, Update to 1.6 and Exit. <b>Manual and
+        Extras are live before the game is installed</b>, while the update is dead. Manual opens the game's Manual
+        folder in Explorer, holding both PDFs and the Manuals folder. Extras opens its Extras folder. Neither opens
+        Documents or anything of the disc's.</span></label>
+      <label class="case"><input type="checkbox" id="f19"><span class="id">F19</span>
+        <span class="what">Preview a game with one manual, <code>own-one-manual</code></span>
+        <span class="look">Manual opens <i>Quiet Harbour manual.pdf</i> itself in the PDF reader, the page naming that
+        file. Extras opens a folder holding Wallpapers.</span></label>
+      <label class="case"><input type="checkbox" id="f20"><span class="id">F20</span>
+        <span class="what">Where a lone game sits on the disc: make ISOs and mount them</span>
+        <span class="look"><code>own-one-manual</code> alone has extras of its own, so the game is in a folder of its own
+        holding the installer, <code>Manual</code> and <code>Extras</code>, and the root holds the menu.
+        <code>own-manual-only</code> alone keeps the root, with <code>Manual</code> beside the installer. Either with the
+        disc's extras chosen from <code>disc-wide</code>: the root <code>Extras</code> is the disc's only, nothing of the
+        game's in it. On the mounted disc the menu's Manual opens from the disc, and the check passes.</span></label>
+      <label class="case"><input type="checkbox" id="f21"><span class="id">F21</span>
+        <span class="what">Several games, with and without their own, and the disc's beside them</span>
+        <span class="look"><code>own-one-manual</code> and <code>own-bare-game</code>, with <i>Disc manual.pdf</i> and
+        <i>Disc extras</i> from <code>disc-wide</code> chosen in Artwork, music and extras. The list of games has Manual
+        and Extras, opening the disc's. Quiet Harbour's screen opens its own. Bare Game's screen falls back to the
+        disc's: its Manual opens <i>Disc manual.pdf</i>. Clear the disc's two: the list of games has only Exit, Bare
+        Game's screen has neither button, Quiet Harbour's is unchanged.</span></label>
+      <label class="case"><input type="checkbox" id="f22"><span class="id">F22</span>
+        <span class="what">Goodies kept apart: <code>own-bare-game</code>, then the links under the list</span>
+        <span class="look">No dialog when the game goes on, nothing is beside it. Pick it, Add a manual, choose
+        <i>Bare Game manual.pdf</i> from <code>own-goodies-apart</code>: a Manual group appears and the preview's Manual
+        opens that page. Add the reference card too: Manual now opens the folder holding both. Add extras, choose
+        Concept Art and Posters together: both under Extras, each with its size, and the preview's Extras shows them.
+        The same links on <code>files-one-to-run</code> give its screen a Manual as well.</span></label>
+      <label class="case"><input type="checkbox" id="f23"><span class="id">F23</span>
+        <span class="what">Changing your mind on the list</span>
+        <span class="look">"the manual" on the guide makes it an extra and back again, the game staying picked, and the
+        preview's buttons following each time. The cross on one own row takes that row only. The cross on the Manual
+        group takes every manual and the Manual button goes from the preview. An own row unticked stays off the disc,
+        the sentence on the bar counts it, and the total drops by its size.</span></label>
+      <label class="case"><input type="checkbox" id="f24"><span class="id">F24</span>
+        <span class="what">A set: <code>own-for-a-set</code> on a CD, Split a file ticked</span>
+        <span class="look">The bar says how many discs. Untick <i>Making Of</i> and the count can only fall: its 150 MB
+        rides every disc, so it comes off every disc. Tick it again. Preview, Open all: every disc's window has Manual
+        and Extras on the game's screen, and they open. Make the ISOs and mount each: every one holds the game's
+        <code>Manual</code> and <code>Extras</code>.</span></label>
+      <label class="case"><input type="checkbox" id="f25"><span class="id">F25</span>
+        <span class="what">Three games added together: drag the three folders inside <code>own-three-games</code> in at once</span>
+        <span class="look">North Gate asks first, with "Answer the same way for the other 2 games being added". Tick it,
+        set its Artbook to the manual, Put these on too. No more dialogs. Salt Marsh and Ember Fall each have their
+        manual and their Artbook under Manual. Ember Fall's 1.1 patch is under Add-ons, and Salt Marsh's patch is not
+        on: its own installer is already 1.2. Again with the tick and None of them: all three go on bare. Again
+        unticked: three dialogs, one per game.</span></label>
+      <label class="case"><input type="checkbox" id="f26"><span class="id">F26</span>
+        <span class="what">Save, open it again, then move a file</span>
+        <span class="look">F16's list with a swap or two, saved, Start again, opened: every own row is back in its
+        group with its size and its swap. Rename <i>Lantern Keep Game Guide.pdf</i> in Explorer and Preview: it refuses,
+        naming the manual of Lantern Keep that is not where it was chosen from, rather than building without it.
+        Open the project again while it is renamed: the window says one thing is not where it was. Rename it
+        back.</span></label>
+      <label class="case"><input type="checkbox" id="f27"><span class="id">F27</span>
+        <span class="what">Burn one, if a blank is to hand</span>
+        <span class="look">F21's disc on a real CD or DVD. The read back passes, and from the drive the menu opens each
+        game's own and the disc's exactly as the preview did.</span></label>
     </div>
   </section>
 
