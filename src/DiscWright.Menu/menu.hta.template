@@ -191,10 +191,16 @@ function fitAboveWhatIsBelow(listId, belowId) {
     var room;
 
     list.style.height = "auto";
+    list.style.marginBottom = "";
     room = chooserListRoom(document.getElementById("panel").clientHeight, 28, list.offsetTop, below.offsetHeight + 9);
 
+    // Cut short, a list ends in the middle of a button, whose own 9 pixels
+    // underneath are scrolled away with it. The 9 the room was worked out
+    // with goes under the list instead, so what follows sits as far below the
+    // cut as it would below a whole button, rather than touching it.
     if (list.scrollHeight > room) {
         list.style.height = room + "px";
+        list.style.marginBottom = "9px";
     }
 }
 
@@ -286,7 +292,8 @@ function showAddOnsOf(game) {
         document.getElementById("addOn" + i).parentNode.title = others[i].name;
     }
 
-    var line = (chain.length + others.length) > 0 ? whatAnAddOnSays(installed) : "";
+    var buttons = (chain.length > 0 ? 1 : 0) + others.length;
+    var line = buttons > 0 ? whatAnAddOnSays(installed, buttons) : "";
     document.getElementById("addOnNote").innerText = line;
     document.getElementById("addOnNote").style.display = line === "" ? "none" : "block";
 }

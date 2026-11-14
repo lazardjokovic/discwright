@@ -212,11 +212,19 @@ function canRunAddOnYet(gameIsInstalled) {
 //
 // Empty when it can be pressed, because a button that works needs no
 // explanation and a line of text under every button is a menu nobody reads.
-function whatAnAddOnSays(gameIsInstalled) {
+//
+// It says why, since 2026-11-14: "Install the game first, then this." under
+// seven DLC asked which "this", and did not say why the buttons were grey. The
+// count is of buttons, so a chain of patches folded into one Update is one.
+// "game first" is held together, because the line wraps in the panel and
+// "first." alone on a line of its own looked like something had fallen off.
+function whatAnAddOnSays(gameIsInstalled, buttons) {
     if (canRunAddOnYet(gameIsInstalled)) {
         return "";
     }
-    return "Install the game first, then this.";
+    return buttons > 1
+        ? "These add to the game, so install the game\u00a0first."
+        : "This adds to the game, so install the game\u00a0first.";
 }
 
 // How the add-ons of one game are ordered.
