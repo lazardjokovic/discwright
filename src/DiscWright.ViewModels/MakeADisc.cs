@@ -1972,7 +1972,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             if (!own.Any(each => string.Equals(each.Path, path, StringComparison.OrdinalIgnoreCase)))
             {
-                own.Add(new GameExtra(path, kind, _machine.HowBigIs(path)));
+                own.Add(new GameExtra(
+                    path,
+                    kind,
+                    _machine.HowBigIs(path),
+                    _machine.Disk.FolderExists(path) ? _machine.Disk.List(path).Files.Count : 1));
             }
         }
 

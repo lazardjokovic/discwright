@@ -119,7 +119,7 @@ public static class TheTreeOfWhatGoesOn
 
             foreach (GameExtra own in these)
             {
-                under.Holding(new AThingOnTheDisc(own.Name, own.Bytes, says, own.Path));
+                under.Holding(new AThingOnTheDisc(own.Name, own.Bytes, says, own.Path, files: own.Files));
             }
         }
 
@@ -285,7 +285,7 @@ public static class TheTreeOfWhatGoesOn
         {
             foreach (AThingOnTheDisc thing in game.EverythingOn())
             {
-                things++;
+                things += thing.Files;
                 bytes += thing.Bytes;
             }
         }

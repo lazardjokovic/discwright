@@ -28,6 +28,7 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     private readonly List<AThingOnTheDisc> _inside = [];
     private readonly Action? _tell;
     private readonly long _own;
+    private readonly int _files;
     private readonly string? _aside;
     private AThingOnTheDisc? _above;
     private bool _on = true;
@@ -51,10 +52,16 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// that the name and the path do not: for a patch, what it adds against
     /// the disc's installer, so the dialog's reason is not gone at OK.
     /// </param>
-    public AThingOnTheDisc(string name, long bytes, string? what, string itsPath, Action? tell = null, string? aside = null)
+    /// <param name="files">
+    /// How many files the row stands for: one, except for a folder of a
+    /// game's own taken whole, which is one row and every file inside it.
+    /// </param>
+    public AThingOnTheDisc(
+        string name, long bytes, string? what, string itsPath, Action? tell = null, string? aside = null, int files = 1)
     {
         Name = name;
         _own = bytes;
+        _files = files;
         What = what;
         ItsPath = itsPath;
         _tell = tell;
@@ -192,6 +199,12 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
     /// </para>
     /// </remarks>
     public long Bytes => _inside.Count == 0 ? _own : _inside.Sum(each => each.Bytes);
+
+    /// <summary>
+    /// How many files are on the disc for it: its own count for a row with
+    /// nothing under it, and the sum of what is under it otherwise.
+    /// </summary>
+    public int Files => _inside.Count == 0 ? _files : _inside.Sum(each => each.Files);
 
     /// <summary>How big it is, in words, for the row to show.</summary>
     /// <remarks>

@@ -69,7 +69,13 @@ public static class ReopenAProject
                     {
                         if (files.FolderExists(each.Path))
                         {
-                            own.Add(each with { Bytes = files.List(each.Path).Files.Sum(file => file.Bytes) });
+                            FolderListing inside = files.List(each.Path);
+
+                            own.Add(each with
+                            {
+                                Bytes = inside.Files.Sum(file => file.Bytes),
+                                Files = inside.Files.Count
+                            });
                         }
                         else if (files.FileExists(each.Path))
                         {

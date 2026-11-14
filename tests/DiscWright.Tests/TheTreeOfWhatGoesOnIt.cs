@@ -471,6 +471,32 @@ public class TheTreeOfWhatGoesOnIt
     }
 
     [Fact]
+    public void A_folder_of_a_games_own_counts_every_file_inside_it()
+    {
+        // Found on the VM on 2026-11-14: Lantern Keep's artbook of nine
+        // pictures, its maps and its manuals said "514.1 MB in 10 files"
+        // while twenty went on the disc. A folder taken whole is one row and
+        // every file inside it.
+        AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(
+            AGameWithOneFile() with
+            {
+                Own =
+                [
+                    new GameExtra(@"D:\goodies\Artbook", GameExtraKind.Extra, 90, 9),
+                    new GameExtra(@"D:\goodies\manual.pdf", GameExtraKind.Manual, 10)
+                ]
+            },
+            []);
+
+        Assert.EndsWith(" in 11 files", new[] { tree }.WhatItAllComesTo(), StringComparison.Ordinal);
+
+        // And the artbook turned off takes all nine off the count.
+        tree.EveryThing().Single(each => each.Name == "Artbook").IsOn = false;
+
+        Assert.EndsWith(" in 2 files", new[] { tree }.WhatItAllComesTo(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Says_one_file_rather_than_1_files()
     {
         AThingOnTheDisc tree = TheTreeOfWhatGoesOn.For(AGameWithOneFile(), []);

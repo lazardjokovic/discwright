@@ -748,7 +748,14 @@ public class TheWindowChecksItself
         {
             foreach (AThingOnTheDisc thing in game.EverythingOn())
             {
-                things++;
+                // A game's own is a file or a folder taken whole, and a folder
+                // is every file in it: asked of the walk's own disk, which is
+                // where every one of them came from, rather than of the row.
+                bool own = thing.What is TheTreeOfWhatGoesOn.TheManual or TheTreeOfWhatGoesOn.AnExtra;
+
+                things += own && TheWalksDisk.FolderExists(thing.ItsPath)
+                    ? TheWalksDisk.List(thing.ItsPath).Files.Count
+                    : 1;
                 bytes += thing.Bytes;
             }
 
@@ -1329,6 +1336,9 @@ public class TheWindowChecksItself
     /// The image beside them is what the window finds when it looks for
     /// something to burn, so Burn and the set walk are reachable at all.
     /// </remarks>
+    /// <summary>The disk every walk's machine reads, asked again by the sums.</summary>
+    private static readonly ADiskThatMatchesWhatWasBuilt TheWalksDisk = new();
+
     private sealed class ADiskThatMatchesWhatWasBuilt : IFileSystem
     {
         public bool FolderExists(string path) => true;
