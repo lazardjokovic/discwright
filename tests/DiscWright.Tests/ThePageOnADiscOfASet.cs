@@ -623,16 +623,28 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "el('gameBelow').offsetHeight = 3 * 47;\n"
                 + "el('addOns').scrollHeight = 7 * 47;\n"
                 + "showGame(0);\n"
-                + "out.push('many=' + el('addOns').style.height + ' buttons=' + el('addOns').innerHTML.split('runTheAddOn(').length);\n"
+                + "out.push('many=' + el('addOns').style.height + ' gap=' + el('addOns').style.marginBottom + ' buttons=' + el('addOns').innerHTML.split('runTheAddOn(').length);\n"
+                + "out.push('note=' + el('addOnNote').innerText.replace(/\\u00a0/g, '+'));\n"
                 + "el('addOns').scrollHeight = 47;\n"
                 + "showGame(1);\n"
-                + "out.push('few=' + el('addOns').style.height);\n"
+                + "out.push('few=' + el('addOns').style.height + ' gap=' + el('addOns').style.marginBottom);\n"
+                + "out.push('note=' + el('addOnNote').innerText.replace(/\\u00a0/g, '+'));\n"
                 + "WScript.Echo(out.join('\\n'));\n");
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-        // 480, less 28 of padding, the 100 above and the 141 and 9 below.
-        Assert.Equal(["many=202px buttons=8", "few=auto"], lines);
+        // 480, less 28 of padding, the 100 above and the 141 and 9 below. Cut
+        // short, the list ends mid-button, so the 9 it was given goes under it
+        // and the line beneath does not touch the cut; whole, the last
+        // button's own 9 is there and nothing is added.
+        Assert.Equal(
+            [
+                "many=202px gap=9px buttons=8",
+                "note=These add to the game, so install the game+first.",
+                "few=auto gap=",
+                "note=This adds to the game, so install the game+first.",
+            ],
+            lines);
     }
 
     [Fact]
@@ -671,6 +683,50 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 // it is cut at the version rather than at the game's name.
                 "the north isles 1.0... | harbour tales - the north isles 1.0 (80001)",
                 "Original Soundtrack | Original Soundtrack",
+            ],
+            lines);
+    }
+
+    [Fact]
+    public void The_line_under_the_add_ons_counts_a_chain_of_patches_as_the_one_button_it_is()
+    {
+        // Two patches fold into one Update button, so the line says "This";
+        // a patch and a DLC are two buttons, so it says "These".
+        string disc = Path.Combine(_folder, "patches-and-a-dlc");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "AUTORUN", "menu.hta"), "<hta/>");
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Two Games", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games:
+                [
+                    new MenuGame("Patched Game", "01 - Patched Game/setup.exe", "01 - Patched Game",
+                    [
+                        new MenuAddOn("Update 1.1", "01 - Patched Game/Add-ons/patch_1.0_to_1.1.exe"),
+                        new MenuAddOn("Update 1.2", "01 - Patched Game/Add-ons/patch_1.1_to_1.2.exe"),
+                    ]),
+                    new MenuGame("Other Game", "02 - Other Game/setup.exe", "02 - Other Game",
+                    [
+                        new MenuAddOn("Update 2.1", "02 - Other Game/Add-ons/patch_2.0_to_2.1.exe"),
+                        new MenuAddOn("Soundtrack", "02 - Other Game/Add-ons/soundtrack.exe"),
+                    ])
+                ])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "function el(id) { return document.getElementById(id); }\n"
+                + "showGame(0);\n"
+                + "out.push(el('addOnNote').innerText.replace(/\\u00a0/g, '+'));\n"
+                + "showGame(1);\n"
+                + "out.push(el('addOnNote').innerText.replace(/\\u00a0/g, '+'));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(
+            [
+                "This adds to the game, so install the game+first.",
+                "These add to the game, so install the game+first.",
             ],
             lines);
     }

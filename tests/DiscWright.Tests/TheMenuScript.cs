@@ -222,10 +222,15 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal("no", Ask("canRunAddOnYet(null) ? 'yes' : 'no'"));
     }
 
-    [Fact]
-    public void Says_why_an_add_on_cannot_be_pressed_yet()
+    [Theory]
+    [InlineData(1, "This adds to the game, so install the game+first.")]
+    [InlineData(2, "These add to the game, so install the game+first.")]
+    [InlineData(7, "These add to the game, so install the game+first.")]
+    public void Says_why_an_add_on_cannot_be_pressed_yet(int buttons, string expected)
     {
-        Assert.Equal("Install the game first, then this.", Ask("whatAnAddOnSays(false)"));
+        // "Install the game first, then this." under seven DLC asked which
+        // "this", and never said why the buttons were grey.
+        Assert.Equal(expected, Ask("whatAnAddOnSays(false, " + buttons + ").replace(/\\u00a0/g, '+')"));
     }
 
     [Fact]
@@ -233,7 +238,8 @@ public sealed class TheMenuScript : IDisposable
     {
         // A button that works needs no explanation, and a line of text under
         // every button is a menu nobody reads.
-        Assert.Equal("", Ask("whatAnAddOnSays(true)"));
+        Assert.Equal("", Ask("whatAnAddOnSays(true, 1)"));
+        Assert.Equal("", Ask("whatAnAddOnSays(true, 7)"));
     }
 
     [Fact]
