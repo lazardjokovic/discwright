@@ -146,6 +146,21 @@ public class TheReadme
     }
 
     [Fact]
+    public void Links_the_Store_page_the_app_itself_opens()
+    {
+        // The Store ID lives once in the app, where a Store copy's version
+        // link opens it. Every Store link in the README is held to it, so a
+        // typo in one sends nobody to somebody else's app.
+        string readme = File.ReadAllText(Repository.File("README.md"));
+        string id = Regex.Match(DiscWright.Platform.ThisCopy.StorePage, "productid=([A-Z0-9]+)$").Groups[1].Value;
+        MatchCollection links = Regex.Matches(readme, @"apps\.microsoft\.com/detail/([A-Za-z0-9]+)");
+
+        Assert.False(string.IsNullOrEmpty(id), "ThisCopy.StorePage should end in the Store ID.");
+        Assert.True(links.Count > 0, "The README should offer the Microsoft Store.");
+        Assert.All(links, link => Assert.Equal(id, link.Groups[1].Value));
+    }
+
+    [Fact]
     public void Says_how_many_cases_are_still_a_persons_job()
     {
         string matrix = File.ReadAllText(Repository.File("tests", "by-hand", "test-matrix.html"));
