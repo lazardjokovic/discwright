@@ -445,6 +445,24 @@ public class SeeingTheMenuFirst
     }
 
     [Fact]
+    public void A_folder_added_from_the_list_counts_every_file_inside_it()
+    {
+        // The list's "in N files" counted an added folder as one file.
+        MakeADisc screen = TheScreen(disk: new ADiskWithAFolderOf(@"D:\goodies\Artbook", 6));
+        screen.Add(AGame("Hollow Knight"));
+        screen.WhatIsSelected = screen.WhatGoesOnIt[0].Inside[0];
+
+        screen.AddTheGamesOwn([@"D:\goodies\Artbook", @"D:\goodies\manual.pdf"], GameExtraKind.Extra);
+
+        Assert.Equal(
+            [
+                new GameExtra(@"D:\goodies\Artbook", GameExtraKind.Extra, 1000, 6),
+                new GameExtra(@"D:\goodies\manual.pdf", GameExtraKind.Extra, 1000, 1)
+            ],
+            Assert.Single(screen.AsAProject().Games).OwnOrNone);
+    }
+
+    [Fact]
     public void A_games_own_unticked_or_crossed_off_stays_off_the_disc()
     {
         MakeADisc screen = TheScreen();
@@ -1035,6 +1053,14 @@ public class SeeingTheMenuFirst
             Written++;
             return new List<string> { @"X:\one\menu.hta" };
         }
+    }
+
+    private sealed class ADiskWithAFolderOf(string folder, int files) : IFileSystem
+    {
+        public bool FolderExists(string path) => string.Equals(path, folder, StringComparison.OrdinalIgnoreCase);
+
+        public FolderListing List(string path) =>
+            new(path, [.. Enumerable.Range(1, FolderExists(path) ? files : 0).Select(n => new ListedFile($"page {n}.png", 10))]);
     }
 
     private sealed class ADiskWithNothingOnIt : IFileSystem

@@ -174,7 +174,8 @@ public static class WhatWasLeftBehind
                     own.Add(new GameExtra(
                         System.IO.Path.Combine(game.Path, what.File.RelativePath),
                         really == WhatBecomesOfIt.Manual ? GameExtraKind.Manual : GameExtraKind.Extra,
-                        what.Bytes));
+                        what.Bytes,
+                        what.Inside?.Count ?? 1));
                     break;
             }
         }

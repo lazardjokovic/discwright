@@ -70,15 +70,17 @@ public sealed class WhatEachAnswerDoes
     public void The_games_manual_and_its_extras_become_its_own_where_they_are_in_the_folder()
     {
         IReadOnlyList<LeftBehind> rows = WhatWasLeftBehind.Gathered(
-            [Kept("The Witcher - manual.pdf", 40), Kept(@"Artbook\page.png", 10)]);
+            [Kept("The Witcher - manual.pdf", 40), Kept(@"Artbook\page.png", 10), Kept(@"Artbook\Sketches\one.png", 5)]);
 
         (GameFolder game, IReadOnlyList<LeftBehind> addOns) = WhatWasLeftBehind.Answered(
             TheWitcher, [(rows[0], WhatBecomesOfIt.Manual), (rows[1], WhatBecomesOfIt.Extra)]);
 
+        // The artbook is one of the game's own and two files, its sketches
+        // counted with it, so the list's total counts both.
         Assert.Equal(
             [
                 new GameExtra(@"D:\GOG\The Witcher\The Witcher - manual.pdf", GameExtraKind.Manual, 40),
-                new GameExtra(@"D:\GOG\The Witcher\Artbook", GameExtraKind.Extra, 10)
+                new GameExtra(@"D:\GOG\The Witcher\Artbook", GameExtraKind.Extra, 15, 2)
             ],
             game.OwnOrNone);
 

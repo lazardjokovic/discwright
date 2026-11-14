@@ -31,7 +31,12 @@ namespace DiscWright.Core;
 /// measures it again for itself, so a wrong figure here can mislead the eye
 /// and never the disc.
 /// </param>
-public sealed record GameExtra(string Path, GameExtraKind Kind, long Bytes = 0)
+/// <param name="Files">
+/// How many files it is: one for a file, and every file inside for a folder,
+/// for the list's "in N files". Found on 2026-11-14, when an artbook of nine
+/// pictures counted as one file there.
+/// </param>
+public sealed record GameExtra(string Path, GameExtraKind Kind, long Bytes = 0, int Files = 1)
 {
     /// <summary>Where a game's manuals sit, inside the game's own folder.</summary>
     public const string ManualFolder = "Manual";
