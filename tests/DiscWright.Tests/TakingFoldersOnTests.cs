@@ -81,7 +81,7 @@ public class TakingFoldersOnTests
         {
             AnswerAboutWhatElse = (game, left) => WhatWasLeftBehind.Answered(
                 game, left.Select(each => (each, WhatBecomesOfIt.Manual))),
-            TheSameForTheRest = left => TheSameAnswers.From(left.Select(each => (each, true, WhatBecomesOfIt.Manual)))
+            TheSameForTheRest = left => TheSameAnswers.From(left.Select(each => (each, true, WhatBecomesOfIt.Manual)), null)
         };
 
         Step.PutItOn[] put =
