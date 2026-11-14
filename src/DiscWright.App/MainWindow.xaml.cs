@@ -401,20 +401,27 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Extras of the picked game's own: folders, each going on whole, the
-    /// way an artbook or a folder of maps is kept.
+    /// Extras of the picked game's own: a folder, going on whole, the way an
+    /// artbook or a folder of maps is kept.
     /// </summary>
+    /// <remarks>
+    /// One folder at a time, and the link pressed again for the next. It
+    /// offered several at once until the by-hand pass on 2026-11-14 found
+    /// Windows' folder picker refusing exactly that: two folders picked and
+    /// Select Folder answered "The folder name is not valid" and added
+    /// nothing, whatever the names were and however Select Folder was
+    /// pressed. Somebody would have met that with their own artbook.
+    /// </remarks>
     private void AddExtrasToThePickedGame(object sender, RoutedEventArgs e)
     {
         Microsoft.Win32.OpenFolderDialog asking = new()
         {
-            Title = "Extras of " + _screen.ThePickedGame,
-            Multiselect = true
+            Title = "An extra of " + _screen.ThePickedGame + ", one folder at a time"
         };
 
         if (asking.ShowDialog(this) == true)
         {
-            _screen.AddTheGamesOwn(asking.FolderNames, GameExtraKind.Extra);
+            _screen.AddTheGamesOwn([asking.FolderName], GameExtraKind.Extra);
         }
     }
 
