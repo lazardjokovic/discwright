@@ -636,6 +636,46 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     }
 
     [Fact]
+    public void An_add_on_s_button_leaves_off_its_game_s_name_and_its_hover_keeps_it()
+    {
+        // Recording the scrolling add-ons, 2026-11-14: seven GOG DLC, each
+        // named after the game, read "HARBOUR TALES - TH..." seven times.
+        string disc = Path.Combine(_folder, "named-after-the-game");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "AUTORUN", "menu.hta"), "<hta/>");
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Harbour Tales", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games:
+                [
+                    new MenuGame("Harbour Tales", "setup_harbour_tales.exe", string.Empty,
+                    [
+                        new MenuAddOn("harbour tales - the north isles 1.0 (80001)", "Add-ons/setup_harbour_tales_-_the_north_isles.exe"),
+                        new MenuAddOn("Original Soundtrack", "Add-ons/soundtrack.exe"),
+                    ])
+                ])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "function el(id) { return document.getElementById(id); }\n"
+                + "showGame(0);\n"
+                + "out.push(el('addOn0').innerText + ' | ' + el('addOn0').parentNode.title);\n"
+                + "out.push(el('addOn1').innerText + ' | ' + el('addOn1').parentNode.title);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(
+            [
+                // Twenty-seven characters, one over what a button holds, so
+                // it is cut at the version rather than at the game's name.
+                "the north isles 1.0... | harbour tales - the north isles 1.0 (80001)",
+                "Original Soundtrack | Original Soundtrack",
+            ],
+            lines);
+    }
+
+    [Fact]
     public void A_drive_without_the_room_leaves_the_page_s_button_dead()
     {
         // The words are installPageSays's; what is pinned here is that the

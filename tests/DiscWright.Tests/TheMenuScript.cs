@@ -685,6 +685,29 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal(expected, Ask("shortEnoughForAButton('" + name + "')"));
     }
 
+    [Theory]
+    [InlineData("Harbour Tales - The North Isles 1.0 (80001)", "Harbour Tales", "The North Isles 1.0 (80001)")]
+    [InlineData("harbour tales - the north isles 1.0 (80001)", "Harbour Tales", "the north isles 1.0 (80001)")]
+    [InlineData("The Witcher 3: Wild Hunt - Hearts of Stone", "The Witcher 3: Wild Hunt", "Hearts of Stone")]
+    [InlineData("Harbour Tales: Storm Season", "Harbour Tales", "Storm Season")]
+    [InlineData("Harbour Tales \\u2013 Winter Harbour", "Harbour Tales", "Winter Harbour")]
+    [InlineData("Grim Fandango Remastered Soundtrack", "Grim Fandango Remastered", "Grim Fandango Remastered Soundtrack")]
+    [InlineData("Harbour Talesman - Extra", "Harbour Tales", "Harbour Talesman - Extra")]
+    [InlineData("Soundtrack", "Harbour Tales", "Soundtrack")]
+    [InlineData("Harbour Tales -", "Harbour Tales", "Harbour Tales -")]
+    [InlineData("Harbour Tales", "Harbour Tales", "Harbour Tales")]
+    [InlineData("Harbour Tales - The North Isles", "", "Harbour Tales - The North Isles")]
+    [InlineData("- Bonus Pack", "", "- Bonus Pack")]
+    public void Leaves_the_game_s_own_name_off_its_add_on_s_button(string name, string game, string expected)
+    {
+        // GOG names a DLC after its game, so seven of them under the game's
+        // own name were seven buttons reading "Harbour Tales - Th...". Only
+        // the game's name followed by a dash or a colon goes, so a name that
+        // merely begins the same keeps every word, and a name that would be
+        // left empty stays whole.
+        Assert.Equal(expected, Ask("withoutTheGamesName('" + name + "', '" + game + "')"));
+    }
+
     [Fact]
     public void Cuts_at_a_word_rather_than_mid_word()
     {

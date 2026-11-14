@@ -1106,6 +1106,37 @@ function shortEnoughForAButton(name, room) {
     return cut + "...";
 }
 
+// What an add-on's button says on its own game's screen: its name, without
+// the game's name in front of it.
+//
+// GOG names a DLC after its game, "Harbour Tales - The North Isles", so seven
+// DLC under the game's own name were seven buttons reading "Harbour Tales -
+// Th..." and nothing to tell them apart, which is where the cut fell. Found
+// recording the scrolling add-ons for the Reddit reader with seven, 2026-11-14.
+//
+// Only where the game's name is followed by a dash or a colon, the way GOG
+// writes it, so a name that merely begins the same ("Grim Fandango Remastered
+// Soundtrack") keeps every word. The hover keeps the whole name either way.
+function withoutTheGamesName(name, game) {
+    var text = String(name || "");
+    var own = String(game || "");
+    var rest;
+
+    if (own === "" || text.substring(0, own.length).toLowerCase() !== own.toLowerCase()) {
+        return text;
+    }
+
+    rest = text.substring(own.length);
+
+    if (!/^\s*[-:\u2013\u2014]/.test(rest)) {
+        return text;
+    }
+
+    rest = rest.replace(/^\s*[-:\u2013\u2014]+\s*/, "");
+
+    return rest === "" ? text : rest;
+}
+
 // Whether this game is on the machine the disc is in.
 //
 // Asked about the name it was REGISTERED under, which is not always the name on
