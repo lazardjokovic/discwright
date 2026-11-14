@@ -1778,7 +1778,15 @@ public class TheWindowsMarkup
 
         string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
         Assert.Contains("_screen.AddTheGamesOwn(asking.FileNames, GameExtraKind.Manual);", code, StringComparison.Ordinal);
-        Assert.Contains("_screen.AddTheGamesOwn(asking.FolderNames, GameExtraKind.Extra);", code, StringComparison.Ordinal);
+        Assert.Contains("_screen.AddTheGamesOwn([asking.FolderName], GameExtraKind.Extra);", code, StringComparison.Ordinal);
+
+        // One folder at a time: Windows' folder picker refuses several with
+        // "The folder name is not valid" and adds nothing, found on the VM on
+        // 2026-11-14. A file picker takes several, so Add a manual keeps that.
+        string extrasPicker = code[code.IndexOf("private void AddExtrasToThePickedGame", StringComparison.Ordinal)..];
+        extrasPicker = extrasPicker[..extrasPicker.IndexOf("\n    }", StringComparison.Ordinal)];
+        Assert.DoesNotContain("Multiselect", extrasPicker, StringComparison.Ordinal);
+        Assert.Contains("one folder at a time", extrasPicker, StringComparison.Ordinal);
         Assert.Contains("_screen.SwapWhatItIs(row);", code, StringComparison.Ordinal);
     }
 
