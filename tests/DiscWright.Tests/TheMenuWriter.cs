@@ -248,10 +248,8 @@ public class TheMenuWriter
             && chooser.IndexOf("id=\"chooserExtras\"", StringComparison.Ordinal) < exit,
             "Manual and Extras are not with Exit under the list.");
 
-        string fitted = page[page.IndexOf("function fitTheGameList()", StringComparison.Ordinal)..];
-        fitted = fitted[..fitted.IndexOf("\nfunction ", 10, StringComparison.Ordinal)];
-        Assert.Contains("getElementById(\"chooserBelow\")", fitted, StringComparison.Ordinal);
-        Assert.Contains("below.offsetHeight + 9", fitted, StringComparison.Ordinal);
+        Assert.Contains("fitAboveWhatIsBelow(\"gameList\", \"chooserBelow\");", Body(page, "function fitTheGameList()"), StringComparison.Ordinal);
+        Assert.Contains("below.offsetHeight + 9", Body(page, "function fitAboveWhatIsBelow("), StringComparison.Ordinal);
 
         // The list scrolls rather than running off the panel, and is fitted
         // every time the screen is drawn, the way back from a game included.
@@ -261,6 +259,51 @@ public class TheMenuWriter
         drawn = drawn[..drawn.IndexOf("\nfunction ", 10, StringComparison.Ordinal)];
         Assert.Contains("fitTheGameList();", drawn, StringComparison.Ordinal);
         Assert.Contains("chooserListRoom(", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_game_s_screen_scrolls_its_add_ons_and_keeps_Exit_under_them()
+    {
+        // A reader on Reddit, 2026-11-14: seven DLC beside a base game ran
+        // Exit off the bottom of the panel.
+        string page = MenuWriter.MenuPage(Facts());
+
+        string screen = page[page.IndexOf("<div id=\"gameScreen\"", StringComparison.Ordinal)..];
+        screen = screen[..screen.IndexOf("<div id=\"whereScreen\"", StringComparison.Ordinal)];
+
+        // Manual, Extras, Back and Exit after the add-ons and outside them,
+        // inside the part the fitting measures.
+        int list = screen.IndexOf("<div id=\"addOns\"></div>", StringComparison.Ordinal);
+        int below = screen.IndexOf("<div id=\"gameBelow\">", StringComparison.Ordinal);
+        Assert.True(list >= 0 && below > list, "Nothing is kept under the add-ons.");
+
+        // Inside gameBelow, not merely after it: one left outside is not
+        // measured, and the add-ons take its room and push it off the panel.
+        string kept = screen[below..screen.IndexOf("\n            </div>", below, StringComparison.Ordinal)];
+
+        foreach (string under in new[] { "id=\"addOnNote\"", "id=\"manual\"", "id=\"extras\"", "id=\"back\"", ">Exit</a>" })
+        {
+            Assert.Contains(under, kept, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("#addOns { width: 100%; overflow-x: hidden; overflow-y: auto;", page, StringComparison.Ordinal);
+
+        Assert.Contains("fitAboveWhatIsBelow(\"addOns\", \"gameBelow\");", Body(page, "function fitTheAddOns()"), StringComparison.Ordinal);
+
+        // Fitted whenever something above or below them comes or goes: the
+        // screen drawn, and Remove the copy offered or taken away.
+        foreach (string where in new[] { "function showGame(", "function offerToRemoveTheCopy(", "function removeTheCopyNow(" })
+        {
+            Assert.Contains("fitTheAddOns();", Body(page, where), StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>One function of the page, from its first line to the next.</summary>
+    private static string Body(string page, string starting)
+    {
+        string body = page[page.IndexOf(starting, StringComparison.Ordinal)..];
+
+        return body[..body.IndexOf("\nfunction ", 10, StringComparison.Ordinal)];
     }
 
     [Fact]
