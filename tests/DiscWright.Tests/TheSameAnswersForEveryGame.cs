@@ -17,7 +17,7 @@ public sealed class TheSameAnswersForEveryGame
             (Kept("The Witcher - manual.pdf"), true, WhatBecomesOfIt.Manual),
             (Folder("Artbook"), true, WhatBecomesOfIt.BesideTheInstaller),
             (Kept("README.txt"), false, WhatBecomesOfIt.Extra)
-        ]);
+        ], "setup_the_witcher.exe");
 
         LeftBehind manual = Kept("Gothic_Guide.pdf");
         LeftBehind maps = Folder("Maps");
@@ -37,7 +37,53 @@ public sealed class TheSameAnswersForEveryGame
         // That says nothing about the next game's, which is judged again;
         // only what an add-on becomes carries over.
         TheSameAnswers same = TheSameAnswers.From(
-            [(Patch("patch_a_game_1.0_to_1.1.exe"), false, WhatBecomesOfIt.AddOn)]);
+            [(Patch("patch_a_game_1.0_to_1.1.exe"), false, WhatBecomesOfIt.AddOn)], "setup_a_game_1.1.exe");
+
+        LeftBehind needed = Patch("patch_another_1.2_to_1.3.exe");
+        LeftBehind covered = Patch("patch_another_1.1_to_1.2.exe");
+
+        Assert.Equal([(needed, WhatBecomesOfIt.AddOn)], same.For([needed, covered], "setup_another_1.2.exe"));
+    }
+
+    [Fact]
+    public void None_of_them_keeps_every_later_games_patches_off_as_well()
+    {
+        // Found on the VM on 2026-11-14 with own-three-games: None of them,
+        // with the tick, left North Gate and Salt Marsh bare and still put
+        // Ember Fall's update on, because a patch was always judged again.
+        // North Gate's patch went past its installer and was turned off
+        // anyway, which is an answer about add-ons, not about that installer.
+        TheSameAnswers same = TheSameAnswers.From(
+            [(Patch("patch_north_gate_1.0_(72000)_to_1.1_(72100).exe"), false, WhatBecomesOfIt.AddOn)],
+            "setup_north_gate_1.0_(72000).exe");
+
+        LeftBehind past = Patch("patch_ember_fall_1.0_(73000)_to_1.1_(73100).exe");
+
+        Assert.Empty(same.For([past], "setup_ember_fall_1.0_(73000).exe"));
+    }
+
+    [Fact]
+    public void A_patch_turned_on_against_its_judgement_turns_the_later_ones_on()
+    {
+        // The other way to overrule the judgement: a patch the installer
+        // already covers, ticked anyway, for the archive disc that wants
+        // everything. The later covered ones come too.
+        TheSameAnswers same = TheSameAnswers.From(
+            [(Patch("patch_a_game_1.0_to_1.1.exe"), true, WhatBecomesOfIt.AddOn)], "setup_a_game_1.1.exe");
+
+        LeftBehind covered = Patch("patch_another_1.1_to_1.2.exe");
+
+        Assert.Equal([(covered, WhatBecomesOfIt.AddOn)], same.For([covered], "setup_another_1.2.exe"));
+    }
+
+    [Fact]
+    public void A_patch_left_as_judged_leaves_the_later_ones_to_their_own_installers()
+    {
+        // Ticked because it went past its installer, and left ticked: the
+        // later games' patches are judged against theirs, so a covered one
+        // stays off and one past its installer goes on.
+        TheSameAnswers same = TheSameAnswers.From(
+            [(Patch("patch_a_game_1.1_to_1.2.exe"), true, WhatBecomesOfIt.AddOn)], "setup_a_game_1.1.exe");
 
         LeftBehind needed = Patch("patch_another_1.2_to_1.3.exe");
         LeftBehind covered = Patch("patch_another_1.1_to_1.2.exe");
@@ -48,7 +94,7 @@ public sealed class TheSameAnswersForEveryGame
     [Fact]
     public void A_kind_the_first_game_did_not_have_gets_its_own_suggestion()
     {
-        TheSameAnswers same = TheSameAnswers.From([(Kept("manual.pdf"), true, WhatBecomesOfIt.Manual)]);
+        TheSameAnswers same = TheSameAnswers.From([(Kept("manual.pdf"), true, WhatBecomesOfIt.Manual)], "setup_a_game.exe");
 
         LeftBehind soundtrack = Kept("soundtrack.zip");
 
@@ -58,7 +104,7 @@ public sealed class TheSameAnswersForEveryGame
     [Fact]
     public void A_folder_and_a_file_of_the_same_look_are_answered_apart()
     {
-        TheSameAnswers same = TheSameAnswers.From([(Folder("Artbook"), true, WhatBecomesOfIt.BesideTheInstaller)]);
+        TheSameAnswers same = TheSameAnswers.From([(Folder("Artbook"), true, WhatBecomesOfIt.BesideTheInstaller)], "setup_a_game.exe");
 
         LeftBehind maps = Folder("Maps");
         LeftBehind cover = Kept("cover.png");
@@ -75,7 +121,7 @@ public sealed class TheSameAnswersForEveryGame
         [
             (Kept("cover.png"), true, WhatBecomesOfIt.Extra),
             (Kept("wallpaper.png"), false, WhatBecomesOfIt.BesideTheInstaller)
-        ]);
+        ], "setup_a_game.exe");
 
         LeftBehind art = Kept("box art.png");
 
@@ -100,7 +146,7 @@ public sealed class TheSameAnswersForEveryGame
         string markup = File.ReadAllText(Repository.File("src", "DiscWright.App", "WhatElseIsInThere.xaml"));
 
         Assert.Contains("TheSameForTheRestSays = WhatWasLeftBehind.TheSameForTheRest(after);", code, StringComparison.Ordinal);
-        Assert.Contains("TheSameAnswers.From(asking.Files.Select(one => (one.What, one.Wanted && said == true, (WhatBecomesOfIt)one.Treatment)))", code, StringComparison.Ordinal);
+        Assert.Contains("TheSameAnswers.From(asking.Files.Select(one => (one.What, one.Wanted && said == true, (WhatBecomesOfIt)one.Treatment)), game.Installer?.Name)", code, StringComparison.Ordinal);
         Assert.Contains("Visibility=\"{Binding TheSameForTheRestSays, Converter={StaticResource WhenAnything}}\"", markup, StringComparison.Ordinal);
         Assert.Contains("IsChecked=\"{Binding TheSameForTheRest}\"", markup, StringComparison.Ordinal);
     }

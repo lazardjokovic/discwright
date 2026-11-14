@@ -137,7 +137,7 @@ public partial class WhatElseIsInThere : Window, INotifyPropertyChanged
         // The same answers for the games after this one: None of them
         // included, which is an answer too.
         TheSameAnswers? forTheRest = asking.TheSameForTheRest && asking.TheSameForTheRestSays is not null
-            ? TheSameAnswers.From(asking.Files.Select(one => (one.What, one.Wanted && said == true, (WhatBecomesOfIt)one.Treatment)))
+            ? TheSameAnswers.From(asking.Files.Select(one => (one.What, one.Wanted && said == true, (WhatBecomesOfIt)one.Treatment)), game.Installer?.Name)
             : null;
 
         if (said != true)
