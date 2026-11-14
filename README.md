@@ -8,7 +8,7 @@ The way PC games came in a box.
 
 ## Download
 
-[![Get it from Microsoft](https://get.microsoft.com/images/en-us%20dark.svg)](https://apps.microsoft.com/detail/9NS2FK1N3KKC)
+[![Download from the Microsoft Store](https://get.microsoft.com/images/en-us%20dark.svg)](https://apps.microsoft.com/detail/9NS2FK1N3KKC)
 
 **From the [Microsoft Store](https://apps.microsoft.com/detail/9NS2FK1N3KKC).** Microsoft signs the Store copy, so Windows opens it without a warning, and the Store keeps it up to date.
 
