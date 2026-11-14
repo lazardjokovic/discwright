@@ -282,7 +282,7 @@ function showAddOnsOf(game) {
     }
 
     for (i = 0; i < others.length; i++) {
-        document.getElementById("addOn" + i).innerText = shortEnoughForAButton(others[i].name);
+        document.getElementById("addOn" + i).innerText = shortEnoughForAButton(withoutTheGamesName(others[i].name, game.name));
         document.getElementById("addOn" + i).parentNode.title = others[i].name;
     }
 
