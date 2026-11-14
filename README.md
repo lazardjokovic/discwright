@@ -8,26 +8,34 @@ The way PC games came in a box.
 
 ## Download
 
-**[DiscWright 2.0.3 for Windows](../../releases/latest)**
+[![Get it from Microsoft](https://get.microsoft.com/images/en-us%20dark.svg)](https://apps.microsoft.com/detail/9NS2FK1N3KKC)
+
+**From the [Microsoft Store](https://apps.microsoft.com/detail/9NS2FK1N3KKC).** Microsoft signs the Store copy, so Windows opens it without a warning, and the Store keeps it up to date.
+
+**Or from GitHub, [DiscWright 2.0.3 for Windows](../../releases/latest):**
 
 - **`DiscWright-2.0.3-setup.exe`** installs it for your user only, with no administrator prompt, and adds it to the Start menu.
 - **`DiscWright-2.0.3-portable.exe`** is the same app as one file. Put it anywhere and double-click it. Nothing is installed; like the installed app, it keeps its log in `%LOCALAPPDATA%\DiscWright`.
 
 Windows 10 or 11, 64-bit. Everything the app needs is inside it; there is nothing else to install.
 
-**Updating.** Press **Check for new version** under the app's name. When there is a newer one, the installed app offers **Update to** it: it downloads the release's installer, checks it against the checksum the release publishes, then closes, updates and opens again by itself. It only ever does that when you press it, and never while a disc is being built, burned or erased. The portable exe offers the release page instead, where you download the new one in place of the old. With winget, `winget upgrade DiscWright.DiscWright`.
+The Store copy and the setup are separate installs. Both can be on one PC, each with its own Start menu entry, so pick one.
 
-**Already using the PowerShell DiscWright?** Installing 2.0 upgrades it in place, in the same Start menu entry and the same folder. Discs made with it work exactly as they did.
+**Updating.** The Store copy updates through the Store like any other app, and its **Check for new version** opens its Store page. Elsewhere, press **Check for new version** under the app's name. When there is a newer one, the installed app offers **Update to** it: it downloads the release's installer, checks it against the checksum the release publishes, then closes, updates and opens again by itself. It only ever does that when you press it, and never while a disc is being built, burned or erased. The portable exe offers the release page instead, where you download the new one in place of the old. With winget, `winget upgrade DiscWright.DiscWright`.
+
+**Already using the PowerShell DiscWright?** The 2.0 setup upgrades it in place, in the same Start menu entry and the same folder. Discs made with it work exactly as they did.
 
 **Looking for the PowerShell version?** It is still maintained, on the [`powershell` branch](../../tree/powershell), and its releases are the [`v0.11.x` tags](../../releases). It installs beside this one and neither touches the other.
 
 ### What Windows is going to say
 
+Nothing, about the Store copy. The setup and the portable exe are not signed yet, so Windows treats them like any new program from the internet.
+
 **"Windows protected your PC."** That is SmartScreen, on the first run of a program from the internet that is not code signed. DiscWright is not signed yet. **More info, then Run anyway.**
 
 ![Windows' SmartScreen warning in two steps: first press the More info link, then press Run anyway](docs/smartscreen-steps.png)
 
-**On some new Windows 11 machines it will not start at all.** Smart App Control, on by default after a clean install of Windows 11 22H2 or later, refuses unsigned programs outright: "An Application Control policy has blocked this file". Signing is what fixes that properly, and it is planned. Until then the setting lives under **Windows Security, App and browser control, Smart App Control**, and [Microsoft's page](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview) explains what turning it off means.
+**On some new Windows 11 machines it will not start at all.** Smart App Control, on by default after a clean install of Windows 11 22H2 or later, refuses unsigned programs outright: "An Application Control policy has blocked this file". The Store copy runs there, because Microsoft signs it. For the setup and the portable exe, signing is what fixes that properly, and it is planned. Until then the setting lives under **Windows Security, App and browser control, Smart App Control**, and [Microsoft's page](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview) explains what turning it off means.
 
 ## Why
 
