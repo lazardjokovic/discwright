@@ -179,8 +179,15 @@ function showChooser() {
 // The list gets the room above Exit and scrolls past it: see chooserListRoom.
 // Measured after the rows are in, because the heading above can wrap.
 function fitTheGameList() {
-    var list = document.getElementById("gameList");
-    var below = document.getElementById("chooserBelow");
+    fitAboveWhatIsBelow("gameList", "chooserBelow");
+}
+
+// A list given the room the panel has left above what sits under it, and
+// scrolling past that. Its full height first, so a screen drawn after one with
+// a longer list is not left with that list's height.
+function fitAboveWhatIsBelow(listId, belowId) {
+    var list = document.getElementById(listId);
+    var below = document.getElementById(belowId);
     var room;
 
     list.style.height = "auto";
@@ -224,6 +231,19 @@ function showGame(index) {
 
     // Only offered when there is somewhere to go back to.
     document.getElementById("back").style.display = DISC.games.length > 1 ? "block" : "none";
+
+    fitTheAddOns();
+}
+
+// A game's add-ons get the room above Manual, Extras, Back and Exit, and
+// scroll past it, the way the list of games does: see chooserListRoom. A base
+// game with seven DLC installers ran Exit off the bottom of the panel, and the
+// page itself never scrolls, so nothing under the add-ons could be reached
+// (a reader on Reddit, 2026-11-14). Measured after everything around them is
+// shown or hidden, so it is called again whenever Remove the copy comes or
+// goes above them.
+function fitTheAddOns() {
+    fitAboveWhatIsBelow("addOns", "gameBelow");
 }
 
 // The add-ons of one game, under it, and DEAD until the game is installed.
@@ -1138,6 +1158,7 @@ function offerToRemoveTheCopy(installed) {
 
     button.innerText = bytes > 0 ? removeTheCopyButtonSays(bytes) : "";
     button.style.display = bytes > 0 ? "block" : "none";
+    fitTheAddOns();
 }
 
 function removeTheCopyNow() {
@@ -1151,6 +1172,7 @@ function removeTheCopyNow() {
     }
 
     document.getElementById("removeTheCopy").style.display = "none";
+    fitTheAddOns();
     document.getElementById("stillWanted").innerText = "The copy is gone. " + whatTheInstallerLeft(true, game.name);
 }
 
@@ -1339,7 +1361,13 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
        border: 1px solid #27353B; text-decoration: none; overflow: hidden;
        white-space: nowrap; text-overflow: ellipsis;
        width: 100%; box-sizing: border-box; }
-#addOns { width: 100%; }
+/* A game's add-ons scroll the same way, a base game with seven DLC beside it
+   being more buttons than the panel holds. */
+#addOns { width: 100%; overflow-x: hidden; overflow-y: auto;
+          scrollbar-face-color: #1B2A30; scrollbar-track-color: #060E11;
+          scrollbar-arrow-color: #8FA3AA; scrollbar-shadow-color: #060E11;
+          scrollbar-highlight-color: #060E11; scrollbar-3dlight-color: #060E11;
+          scrollbar-darkshadow-color: #060E11; }
 /* One accent, on one button: whichever is the thing to do next. Everything else
    is two greys, so the game's own picture is the only colour in the window. */
 .btn.next { background: #0C2B2E; background: rgba(16, 58, 62, 0.55);
@@ -1416,11 +1444,15 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
             <a class="btn next" href="#" onclick="doTheThing(); return false;"><span id="doIt"></span></a>
             <a class="btn" id="removeTheCopy" href="#" onclick="removeTheCopyNow(); return false;" style="display: none"></a>
             <div id="addOns"></div>
-            <div id="addOnNote"></div>
-            <a class="btn" id="manual" href="#" onclick="openTheManual(); return false;">Manual</a>
-            <a class="btn" id="extras" href="#" onclick="openTheExtras(); return false;">Extras</a>
-            <a class="btn" id="back" href="#" onclick="showChooser(); return false;">Back</a>
-            <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
+            <!-- Under the add-ons and outside them, so however far they scroll,
+                 Manual, Extras, Back and Exit stay on the panel. -->
+            <div id="gameBelow">
+                <div id="addOnNote"></div>
+                <a class="btn" id="manual" href="#" onclick="openTheManual(); return false;">Manual</a>
+                <a class="btn" id="extras" href="#" onclick="openTheExtras(); return false;">Extras</a>
+                <a class="btn" id="back" href="#" onclick="showChooser(); return false;">Back</a>
+                <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
+            </div>
         </div>
 
         <!-- The install page, for a set: where the installer is joined, asked

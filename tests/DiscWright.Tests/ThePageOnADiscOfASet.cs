@@ -585,6 +585,57 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     }
 
     [Fact]
+    public void A_game_with_more_add_ons_than_the_panel_holds_scrolls_them_above_its_Exit()
+    {
+        // A reader on Reddit, 2026-11-14: a base game with seven DLC
+        // installers beside it ran Exit off the bottom of the panel, and the
+        // page never scrolls. The add-ons get the room above Manual, Extras
+        // and Exit and scroll past it, and a game with few gets its height
+        // back, even straight after one with many.
+        string disc = Path.Combine(_folder, "many-add-ons");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "AUTORUN", "menu.hta"), "<hta/>");
+
+        MenuAddOn[] seven =
+        [
+            .. Enumerable.Range(1, 7).Select(n => new MenuAddOn($"DLC {n}", $"01 - Big Game/Add-ons/setup_big_game_dlc_{n}.exe")),
+        ];
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Two Games", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games:
+                [
+                    new MenuGame("Big Game", "01 - Big Game/setup_big_game.exe", "01 - Big Game", seven,
+                        Manual: "01 - Big Game/Manual/big game manual.pdf"),
+                    new MenuGame("Small Game", "02 - Small Game/setup_small_game.exe", "02 - Small Game",
+                        [new MenuAddOn("Soundtrack", "02 - Small Game/Add-ons/soundtrack.exe")])
+                ])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "function el(id) { return document.getElementById(id); }\n"
+
+                // What the browser would measure: a 480 panel, the add-ons
+                // starting 100 down under the name and the big button, and
+                // Manual, Back and Exit under them taking three buttons.
+                + "el('panel').clientHeight = 480;\n"
+                + "el('addOns').offsetTop = 100;\n"
+                + "el('gameBelow').offsetHeight = 3 * 47;\n"
+                + "el('addOns').scrollHeight = 7 * 47;\n"
+                + "showGame(0);\n"
+                + "out.push('many=' + el('addOns').style.height + ' buttons=' + el('addOns').innerHTML.split('runTheAddOn(').length);\n"
+                + "el('addOns').scrollHeight = 47;\n"
+                + "showGame(1);\n"
+                + "out.push('few=' + el('addOns').style.height);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        // 480, less 28 of padding, the 100 above and the 141 and 9 below.
+        Assert.Equal(["many=202px buttons=8", "few=auto"], lines);
+    }
+
+    [Fact]
     public void A_drive_without_the_room_leaves_the_page_s_button_dead()
     {
         // The words are installPageSays's; what is pinned here is that the
