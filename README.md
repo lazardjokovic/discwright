@@ -12,10 +12,10 @@ The way PC games came in a box.
 
 **From the [Microsoft Store](https://apps.microsoft.com/detail/9NS2FK1N3KKC).** Microsoft signs the Store copy, so Windows opens it without a warning, and the Store keeps it up to date.
 
-**Or from GitHub, [DiscWright 2.0.3 for Windows](../../releases/latest):**
+**Or from GitHub, [DiscWright 2.0.4 for Windows](../../releases/latest):**
 
-- **`DiscWright-2.0.3-setup.exe`** installs it for your user only, with no administrator prompt, and adds it to the Start menu.
-- **`DiscWright-2.0.3-portable.exe`** is the same app as one file. Put it anywhere and double-click it. Nothing is installed; like the installed app, it keeps its log in `%LOCALAPPDATA%\DiscWright`.
+- **`DiscWright-2.0.4-setup.exe`** installs it for your user only, with no administrator prompt, and adds it to the Start menu.
+- **`DiscWright-2.0.4-portable.exe`** is the same app as one file. Put it anywhere and double-click it. Nothing is installed; like the installed app, it keeps its log in `%LOCALAPPDATA%\DiscWright`.
 
 Windows 10 or 11, 64-bit. Everything the app needs is inside it; there is nothing else to install.
 
@@ -88,6 +88,10 @@ The menu copies the disc, opens the tray, asks for the next one, carries on by i
 ## More than one game, and not only GOG
 
 Add several and they go on one disc when they fit, with a chooser in the menu leading to each game's own screen. DLC, expansions, patches and mods go on the game they belong to, and stay greyed until that game is installed, because GOG's installer refuses a patch for a game that is not there several clicks into it. A game's patches fold into one **Update to 1.5.12620** button that runs them in order.
+
+**Each game keeps its own manual and extras.** Adding a game asks about everything beside its installer: the game's manual, one of its extras, an add-on, or a file copied beside the installer with no button. It suggests the likely answer, and games added together can be answered once for all of them. On the disc, each game's screen opens its own Manual and Extras, and the list of games keeps any the disc carries for all of them.
+
+![Two games on one disc: each game's Manual and Extras open that game's own](docs/each-game-its-own-menu.gif)
 
 **A game does not have to come from GOG.** Point DiscWright at any folder of game files and it goes on the disc as it stands, subfolders and all. Say which executable installs it, or which one starts it, and the menu gets that button; with neither, the menu copies the folder to your machine and opens it.
 

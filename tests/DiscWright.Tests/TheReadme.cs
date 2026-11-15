@@ -161,6 +161,36 @@ public class TheReadme
     }
 
     [Fact]
+    public void Shows_only_pictures_that_are_there()
+    {
+        // A picture the README names but the repository lacks is a broken box
+        // on the first page anybody reads. The release notes link theirs at
+        // the tag, because GitHub shows a release's notes from outside the
+        // repository: those are held to the version the build stamps, so last
+        // version's notes cannot be copied forward still pointing at its tag,
+        // and to a picture that is really in docs.
+        string readme = File.ReadAllText(Repository.File("README.md"));
+        string? stamped = XDocument.Load(Repository.File("Directory.Build.props")).Descendants("Version").FirstOrDefault()?.Value;
+        string notes = File.ReadAllText(Repository.File(Path.Combine("packaging", "release-notes", stamped + ".md")));
+        string docs = Repository.File("docs");
+
+        string[] shown = [.. Regex.Matches(readme, @"\]\((docs/[^)\s]+)\)").Select(m => m.Groups[1].Value)];
+        Assert.NotEmpty(shown);
+        Assert.All(shown, path => Assert.True(
+            File.Exists(Path.Combine(docs, path["docs/".Length..])),
+            $"The README shows {path}, and there is no such file."));
+
+        MatchCollection linked = Regex.Matches(notes, @"github\.com/lazardjokovic/discwright/raw/([^/]+)/docs/([^)\s]+)");
+        Assert.All(linked, link =>
+        {
+            Assert.Equal("v" + stamped, link.Groups[1].Value);
+            Assert.True(
+                File.Exists(Path.Combine(docs, link.Groups[2].Value)),
+                $"The {stamped} notes show docs/{link.Groups[2].Value}, and there is no such file.");
+        });
+    }
+
+    [Fact]
     public void Says_how_many_cases_are_still_a_persons_job()
     {
         string matrix = File.ReadAllText(Repository.File("tests", "by-hand", "test-matrix.html"));
