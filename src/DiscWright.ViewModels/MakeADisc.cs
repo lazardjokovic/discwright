@@ -188,6 +188,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
         set => Change(ref _label, value);
     }
 
+    /// <summary>
+    /// Whether the disc has no name, spaces being none. xniwo, discwright#98,
+    /// 15 November: a name of one space was warned about as a name Windows
+    /// would mangle, and then built, because only an empty box counted as no
+    /// name at all.
+    /// </summary>
+    private bool HasNoName => string.IsNullOrWhiteSpace(Label);
+
     /// <summary>Where the discs get written.</summary>
     public string OutputFolder
     {
@@ -3010,7 +3018,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // The first game names the disc, because that is nearly always what
         // somebody would have typed. Only the first: renaming it afterwards is
         // their decision, and a second game must not overwrite it.
-        if (_games.Count == 1 && Label.Length == 0)
+        if (_games.Count == 1 && HasNoName)
         {
             _label = game.Name.ToUpperInvariant();
             Tell(nameof(Label));
@@ -3596,7 +3604,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // under the list that names its game goes with it.
         Tell(nameof(ThePickedGame));
 
-        Worry = Label.Length == 0 ? null : DiscLabel.WhatWindowsWillMakeOfIt(Label, _machine.Encoding);
+        Worry = HasNoName ? null : DiscLabel.WhatWindowsWillMakeOfIt(Label, _machine.Encoding);
 
         // Settled below with the plan, and nothing until then.
         _theLargerDisc = null;
@@ -3614,7 +3622,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             return;
         }
 
-        if (Label.Length == 0)
+        if (HasNoName)
         {
             WhyNot = Refusals.ADiscNeedsAName();
             WhatItWillMake = string.Empty;
