@@ -137,6 +137,22 @@ def mutate(mutants):
 
         return 1
 
+    # The suite once as it stands, before any fault goes in. A suite that is
+    # already red objects to every mutant, and each one is reported caught by
+    # a test that has nothing to do with it. That happened on 2026-11-15:
+    # two new tests went in before DEVELOPING.md's count was raised, the
+    # README check failed on its own, and four faults and then twelve were
+    # all "caught" by it. Without a green start there is no verdict at all.
+    print("  the suite as it stands, first")
+    start = run_the_suite()
+
+    if start != "survived":
+        said = {"caught": "a test failed", "hung": "it hung"}.get(start, "it never ran")
+        print("The suite is not green before any fault is planted: %s." % said)
+        print("Make it pass first: until it does, every fault looks caught.")
+
+        return 1
+
     survived = []
     unknown = []
 
