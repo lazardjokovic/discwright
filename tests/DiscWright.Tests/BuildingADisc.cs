@@ -388,6 +388,7 @@ public sealed class BuildingADisc : IDisposable
 
         // Let go of, it builds over the last one as it always did, and leaves
         // nothing of the move aside behind.
+        Assert.True(FreeWithin(first.Folder, TimeSpan.FromSeconds(10)), "The stand-in never let go of the folder.");
         BuiltDisc again = Assert.Single((await Build(Project(game))).Discs);
         Assert.True(File.Exists(On(again, "setup_hollow_knight.exe")));
         Assert.Equal([again.Folder], Directory.EnumerateDirectories(_out));
@@ -845,6 +846,35 @@ public sealed class BuildingADisc : IDisposable
             }
 
             Thread.Sleep(100);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether Windows lets go of this folder within the time given. A killed
+    /// process has not let go when the wait for it returns: its child can
+    /// still be on its way out, which is how this test first failed on the
+    /// runner, building again into a folder that was still held.
+    /// </summary>
+    private static bool FreeWithin(string folder, TimeSpan time)
+    {
+        string probe = folder + ".probe";
+        DateTime until = DateTime.UtcNow + time;
+
+        while (DateTime.UtcNow < until)
+        {
+            try
+            {
+                Directory.Move(folder, probe);
+                Directory.Move(probe, folder);
+
+                return true;
+            }
+            catch (IOException)
+            {
+                Thread.Sleep(100);
+            }
         }
 
         return false;
