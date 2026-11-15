@@ -1972,6 +1972,36 @@ function setJoinCommand(dir, join) {
     return "copy /b " + names.join("+") + " " + setQuote(onTheDisc(dir, join.path));
 }
 
+// ------------------------------------------------- reading a list off the disc
+//
+// checksums.sha256 and Disc set.txt are written in UTF-8, as sha256sum and
+// every other tool expects, and FileSystemObject reads a text file in the
+// machine's ANSI codepage. Every name past ASCII came back as mojibake and
+// was looked for under that name: xniwo's extras with a fullwidth bar, colon
+// and plus were "wrong or missing" on a disc that was perfect, and the check
+// printed each of those characters as three letters of junk (discwright#98,
+// 15 November). A set copied
+// off its discs read its own list the same way. ADODB.Stream reads UTF-8 on
+// every Windows this disc can reach.
+// Throws when the file cannot be read, as OpenTextFile did, so every caller
+// keeps the answer it already gave to an unreadable list.
+function readUtf8(path) {
+    var stream = new ActiveXObject("ADODB.Stream");
+    var text;
+
+    try {
+        stream.Type = 2;
+        stream.Charset = "utf-8";
+        stream.Open();
+        stream.LoadFromFile(path);
+        text = String(stream.ReadText());
+    } finally {
+        try { stream.Close(); } catch (alreadyShut) { }
+    }
+
+    return text;
+}
+
 // ------------------------------------------------- running a command and waiting
 
 var setJobNumber = 0;
@@ -2138,9 +2168,7 @@ function whatTheLookFound(look) {
 
     try {
         if (files.FileExists(look.copy)) {
-            var reading = files.OpenTextFile(look.copy, 1);
-            text = reading.AtEndOfStream ? "" : reading.ReadAll();
-            reading.Close();
+            text = readUtf8(look.copy);
         }
     } catch (unreadable) {
         text = "";
