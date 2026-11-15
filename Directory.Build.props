@@ -19,8 +19,11 @@
 
       2.0.3 on 2026-11-13: the version the Microsoft Store is sent, knowing
       when it is the Store's copy, and drawn sharp on every screen scale.
+
+      2.0.4 on 2026-11-15: each game's own manual and extras, and a game's
+      add-ons scrolling in its menu.
     -->
-    <Version>2.0.3</Version>
+    <Version>2.0.4</Version>
 
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
