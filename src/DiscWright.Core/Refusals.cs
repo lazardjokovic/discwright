@@ -361,6 +361,21 @@ public static class Refusals
     /// in a box, which reads as a crash and tells somebody nothing they can
     /// act on.
     /// </remarks>
+    /// <summary>
+    /// The folder a build would replace is held open, most often by the menu
+    /// of the disc last built there.
+    /// </summary>
+    /// <remarks>
+    /// xniwo, discwright#98: Start Here opened from the disc folder, then
+    /// another build into the same place. Nothing is touched when this is
+    /// said, so the sentence can promise that, and the way out is in words
+    /// because it reaches somebody in a box with nothing to press but OK.
+    /// </remarks>
+    public static Refusal TheLastBuildIsStillOpen(string folder) =>
+        new("The disc built there last time is still open",
+            $"Something has {folder} open, most likely its menu, started from Start Here. Nothing has been "
+                + "changed. Close the menu and build again, or choose another folder to build into.");
+
     public static Refusal SomethingNobodyExpected(string doing, string said) =>
         new($"Something went wrong while {doing}",
             "This one is not accounted for, which means it is worth reporting. Nothing has been lost that "

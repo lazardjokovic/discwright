@@ -189,7 +189,14 @@ public sealed class DiscBuilder(
             // Emptied, not just made. Built twice, a file left from the first
             // run is hashed into the second run's checksum list and burned,
             // where it is now correct and permanent.
-            writer.EmptyTheFolder(folder);
+            try
+            {
+                writer.EmptyTheFolder(folder);
+            }
+            catch (TheFolderIsInUse held)
+            {
+                return Refusals.TheLastBuildIsStillOpen(held.Folder);
+            }
 
             await pipeline.Run(new BuildContext(forThisDisc, layout, disc, folder, writer), progress, ct);
 
