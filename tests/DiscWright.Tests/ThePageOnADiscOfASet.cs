@@ -364,6 +364,129 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.DoesNotContain("block", went, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Checks_files_whose_names_go_past_ASCII_and_names_a_bad_one_as_it_is()
+    {
+        // discwright#98, 15 November: xniwo's extras carried a fullwidth bar,
+        // colon and plus, and the check called a perfect disc "2 of 13 wrong
+        // or missing", naming each with three letters of junk per character.
+        // The list is UTF-8 and was read as ANSI. His names, an accent, and
+        // one file that really is wrong, whose name must come out whole.
+        char bar = (char)0xFF5C, colon = (char)0xFF1A, plus = (char)0xFF0B, acute = (char)0xE9;
+        string disc = Path.Combine(_folder, "named");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        Directory.CreateDirectory(Path.Combine(disc, "Extras"));
+
+        string[] good =
+        [
+            $"Extras/Document Files {bar} GetSampleData (15_11_2026 13{colon}24{colon}18).html",
+            $"Extras/Windows NT 3.51 {plus} Shell Technology Preview.html",
+            $"Caf{acute} manual.txt"
+        ];
+        string wrong = $"Extras/Wr{acute}ng {plus} one.txt";
+
+        foreach (string name in good)
+        {
+            File.WriteAllText(Path.Combine(disc, name), "12345");
+        }
+
+        File.WriteAllText(Path.Combine(disc, wrong), "not what the list says");
+
+        File.WriteAllText(Path.Combine(disc, ChecksumList.FileName), ChecksumList.For("NAMED",
+        [
+            .. good.Select(name => new ChecksumEntry(name, HashOf("12345"), 5)),
+            new ChecksumEntry(wrong, HashOf("12345"), 22)
+        ]));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Named", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Named", "x.exe", string.Empty)])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                // The console cscript writes to cannot carry these names, so
+                // every character past ASCII goes out as its code.
+                "function asAscii(s) { var o = ''; for (var i = 0; i < s.length; i++) { var c = s.charCodeAt(i); o += c < 128 ? s.charAt(i) : '<' + c.toString(16) + '>'; } return o; }\n"
+                + "checkThisDisc();\n"
+                + "drain();\n"
+                + "out.push('line=' + asAscii(document.getElementById('stillWanted').innerText.split('\\n').join('~')));\n"
+                + "out.push('alerts=' + alerts.length);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string coded = string.Concat(wrong.Select(c => c < 128 ? c.ToString() : "<" + ((int)c).ToString("x", System.Globalization.CultureInfo.InvariantCulture) + ">"));
+
+        Assert.Equal(
+            [
+                "line=1 of 4 files on this disc are wrong or missing:~~" + coded + "~~A disc that reads badly is usually scratched or was burned badly.",
+                "alerts=0"
+            ],
+            went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void Installs_a_set_whose_files_have_names_past_ASCII()
+    {
+        // The same reading loaded the set's own list, so a set carrying such
+        // a name looked for files that were not on the disc under the name it
+        // read. A cut installer with an accent, a readme with a fullwidth bar
+        // on disc 1, and a file with a fullwidth colon in a folder on disc 2.
+        char bar = (char)0xFF5C, colon = (char)0xFF1A, acute = (char)0xE9;
+        string installer = $"setup_caf{acute}.exe";
+        string readme = $"Caf{acute} {bar} notes.txt";
+        string more = $"m{acute}re {colon} data.dat";
+        string disc1 = Path.Combine(_folder, "disc1");
+        string disc2 = Path.Combine(_folder, "disc2");
+        string dest = Path.Combine(_folder, "put back");
+
+        Directory.CreateDirectory(Path.Combine(disc1, "AUTORUN"));
+        Directory.CreateDirectory(Path.Combine(disc2, "AUTORUN"));
+        Directory.CreateDirectory(Path.Combine(disc2, "data"));
+        File.WriteAllText(Path.Combine(disc1, installer + ".dwpart01"), "ABC");
+        File.WriteAllText(Path.Combine(disc1, readme), "12345");
+        File.WriteAllText(Path.Combine(disc2, installer + ".dwpart02"), "DEFG");
+        File.WriteAllText(Path.Combine(disc2, "data", more), "12");
+
+        SetEntry[] entries =
+        [
+            new(1, installer + ".dwpart01", "a1", 3),
+            new(1, readme, "b2", 5),
+            new(2, installer + ".dwpart02", "c3", 4),
+            new(2, "data/" + more, "d4", 2)
+        ];
+        SetJoin[] joins = [new(installer, "e5", 7, [installer + ".dwpart01", installer + ".dwpart02"])];
+
+        foreach ((string disc, int number) in new[] { (disc1, 1), (disc2, 2) })
+        {
+            File.WriteAllText(
+                Path.Combine(disc, SetManifest.FileName),
+                SetManifest.For("CAFE", entries, number, 2, "CD-R 700 MB", DateTimeOffset.UtcNow, joins));
+        }
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Cafe", "DiscWright.Test", 1, 2, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Cafe", installer, string.Empty)])),
+            menuUrl: new Uri(Path.Combine(disc1, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "SET = loadTheSet();\n"
+                + "SET.dir = " + AsJScript(dest) + ";\n"
+                + "showTheSet(gameAt(DISC.games, 0));\n"
+                + "var started = 0; startIt = function () { started++; return null; };\n"
+                + "doTheThing();\n"
+                + "whereGo();\n"
+                + "pump(function () { return restoring.wanting > 0; });\n"
+                + "document.URL = " + AsJScript(new Uri(Path.Combine(disc2, "AUTORUN", "menu.hta")).AbsoluteUri) + ";\n"
+                + "WHERE = null;\n"
+                + "drain();\n"
+                + "out.push('started=' + started + ' alerts=' + alerts.length);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        Assert.Contains("started=1 alerts=0", went, StringComparison.Ordinal);
+        Assert.Equal("ABCDEFG", File.ReadAllText(Path.Combine(dest, installer)));
+        Assert.Equal("12345", File.ReadAllText(Path.Combine(dest, readme)));
+        Assert.Equal("12", File.ReadAllText(Path.Combine(dest, "data", more)));
+    }
+
     private static string HashOf(string text) =>
         Convert.ToHexString(
             System.Security.Cryptography.SHA256.HashData(Encoding.ASCII.GetBytes(text)))

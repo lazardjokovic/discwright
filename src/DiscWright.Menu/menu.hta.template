@@ -639,11 +639,7 @@ function readTheSetFile() {
             return "";
         }
 
-        var reading = files.OpenTextFile(path, 1);
-        var text = reading.ReadAll();
-        reading.Close();
-
-        return text;
+        return readUtf8(path);
     } catch (cannotRead) {
         return "";
     }
@@ -1291,10 +1287,7 @@ function checkThisDisc() {
     var text = "";
 
     try {
-        var files = new ActiveXObject("Scripting.FileSystemObject");
-        var reading = files.OpenTextFile(onTheDisc(theDisc(), "checksums.sha256"), 1);
-        text = reading.ReadAll();
-        reading.Close();
+        text = readUtf8(onTheDisc(theDisc(), "checksums.sha256"));
     } catch (unreadable) {
         sayTheCheck("The checksum list on this disc could not be read.");
         return;
