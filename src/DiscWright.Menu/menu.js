@@ -2160,6 +2160,12 @@ function lookAtTheDisc(discRoot) {
 // What a look found: the set file's text, or nothing when there was no disc,
 // no set file on it or no copy. Only asked once the job is done, and it
 // tidies up after itself, the copy and the job's flag both.
+//
+// Read as UTF-8 like every other reading of the set file, although nothing
+// here can tell: all that is asked of this text is its "disc N of M" line,
+// which is ASCII however the rest is read. Putting the old reader back is a
+// fault no test can see, and it is left that way on purpose rather than read
+// one way here and another everywhere else.
 function whatTheLookFound(look) {
     var files = new ActiveXObject("Scripting.FileSystemObject");
     var text = "";

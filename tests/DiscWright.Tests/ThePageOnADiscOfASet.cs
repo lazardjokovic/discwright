@@ -771,6 +771,112 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     }
 
     [Fact]
+    public void The_check_s_result_takes_its_room_from_the_list_and_scrolls_in_what_is_left()
+    {
+        // xniwo, discwright#98, 15 November: under a full list of add-ons the
+        // disc check's result ran off the bottom of the panel and could not be
+        // read. The line under the screen was never counted when the list was
+        // fitted. Now it is, the list gives up room down to one button, and
+        // whatever is left is the line's, scrolling inside it. The same on
+        // the list of games, where the check can be pressed too.
+        string disc = Path.Combine(_folder, "full-panel");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "AUTORUN", "menu.hta"), "<hta/>");
+
+        MenuAddOn[] seven =
+        [
+            .. Enumerable.Range(1, 7).Select(n => new MenuAddOn($"DLC {n}", $"01 - Big Game/Add-ons/setup_big_game_dlc_{n}.exe")),
+        ];
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Two Games", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games:
+                [
+                    new MenuGame("Big Game", "01 - Big Game/setup_big_game.exe", "01 - Big Game", seven),
+                    new MenuGame("Small Game", "02 - Small Game/setup_small_game.exe", "02 - Small Game")
+                ])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "function el(id) { return document.getElementById(id); }\n"
+                + "function sizes(list) { return list + '=' + el(list).style.height + ' under=' + el('underAll').style.height; }\n"
+
+                // The seven DLC screen as the browser would measure it, with
+                // nothing under it yet: the list gets what it always got.
+                + "el('panel').clientHeight = 480;\n"
+                + "el('addOns').offsetTop = 100;\n"
+                + "el('gameBelow').offsetHeight = 3 * 47;\n"
+                + "el('addOns').scrollHeight = 7 * 47;\n"
+                + "el('underAll').offsetHeight = 0; el('underAll').scrollHeight = 0;\n"
+                + "showGame(0);\n"
+                + "out.push(sizes('addOns'));\n"
+
+                // A long verdict, eleven lines and its gap: the list is cut to
+                // one button, and the line gets the 155 left under Exit.
+                + "el('underAll').offsetHeight = 194; el('underAll').scrollHeight = 194; el('underAll').offsetTop = 297;\n"
+                + "sayTheCheck('2 of 13 files on this disc are wrong or missing');\n"
+                + "out.push(sizes('addOns'));\n"
+
+                // A short one: the list takes back all but the line's room,
+                // and the line is whole.
+                + "el('underAll').offsetHeight = 50; el('underAll').scrollHeight = 50; el('underAll').offsetTop = 402;\n"
+                + "sayTheCheck('13 files checked.');\n"
+                + "out.push(sizes('addOns'));\n"
+
+                // The list of games, with the same long verdict under it.
+                + "showChooser();\n"
+                + "el('gameList').offsetTop = 80; el('chooserBelow').offsetHeight = 47; el('gameList').scrollHeight = 20 * 47;\n"
+                + "el('underAll').offsetHeight = 194; el('underAll').scrollHeight = 194; el('underAll').offsetTop = 300;\n"
+                + "sayTheCheck('2 of 13 files on this disc are wrong or missing');\n"
+                + "out.push(sizes('gameList'));\n"
+
+                // Next to no room at all, and the line still keeps two lines.
+                + "el('underAll').offsetTop = 440;\n"
+                + "sayTheCheck('2 of 13 files on this disc are wrong or missing');\n"
+                + "out.push(sizes('gameList'));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        Assert.Equal(
+            [
+                "addOns=202px under=auto",
+                "addOns=47px under=155px",
+                "addOns=152px under=auto",
+                "gameList=122px under=152px",
+                "gameList=122px under=32px"
+            ],
+            went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
+    public void The_line_under_the_screen_shows_what_it_is_told_and_goes_when_told_nothing()
+    {
+        // Every sentence under the screen comes through sayUnderneath now, so
+        // its two halves are held here: words shown, and null taking the line
+        // away, as the end of a copy does. Shown again afterwards, because a
+        // line hidden once must not stay hidden under the next sentence.
+        string disc = Path.Combine(_folder, "said");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "AUTORUN", "menu.hta"), "<hta/>");
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Said", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Said", "setup_said.exe", string.Empty)])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "function line() { var l = document.getElementById('stillWanted'); return l.style.display + ' ' + l.innerText; }\n"
+                + "showGame(0);\n"
+                + "sayUnderneath('40% copied'); out.push(line());\n"
+                + "sayUnderneath(null); out.push(line());\n"
+                + "sayUnderneath('Starting the installer'); out.push(line());\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        Assert.Equal(
+            ["block 40% copied", "none 40% copied", "block Starting the installer"],
+            went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
+    }
+
+    [Fact]
     public void An_add_on_s_button_leaves_off_its_game_s_name_and_its_hover_keeps_it()
     {
         // Recording the scrolling add-ons, 2026-11-14: seven GOG DLC, each
