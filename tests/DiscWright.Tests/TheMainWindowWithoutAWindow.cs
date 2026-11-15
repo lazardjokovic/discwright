@@ -3274,6 +3274,37 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal("Name the disc", window.WhatTheWayOutIsCalled);
     }
 
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("    ")]
+    public void A_name_of_only_spaces_is_no_name(string blank)
+    {
+        // xniwo, discwright#98, 15 November: one space as the name was warned
+        // about and then built, because only an empty box counted as no name.
+        // It is refused the same way now, and the worry about how Windows
+        // shows a name does not stand in for that refusal.
+        MakeADisc window = New();
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("Hollow Knight", 1000));
+        window.Label = blank;
+
+        Assert.Equal("The disc needs a name", window.WhyNot?.Headline);
+        Assert.Null(window.Worry);
+        Assert.False(window.CanMakeIt);
+    }
+
+    [Fact]
+    public void A_first_game_names_a_disc_whose_name_is_only_spaces()
+    {
+        // The first game names the disc when there is no name yet, and a box
+        // holding a space has none.
+        MakeADisc window = New();
+        window.Label = " ";
+        window.Add(AGame("Hollow Knight", 1000));
+
+        Assert.Equal("HOLLOW KNIGHT", window.Label);
+    }
+
     [Fact]
     public void The_worry_about_the_name_offers_a_rename()
     {
