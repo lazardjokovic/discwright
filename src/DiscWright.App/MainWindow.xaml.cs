@@ -38,6 +38,7 @@ public partial class MainWindow : Window
     private readonly IFileSystem _disk;
     private readonly IWorkTheTray _tray;
     private readonly ChoosingTheLook _look;
+    private readonly OnePreviewAtATime _previews = OnePreviewAtATime.WithMshta();
 
     public MainWindow(
         MakeADisc screen, GameFolderReader reader, IFileSystem disk, IWorkTheTray tray, ChoosingTheLook look)
@@ -775,6 +776,10 @@ public partial class MainWindow : Window
             WhereAPreviewGoes.TheFolderTheyAllGoIn,
             _screen.WhereAPreviewWouldGo);
 
+        // The last preview's windows go first: they show the disc as it was,
+        // and one still playing its tune holds a file in the folder this
+        // preview is about to empty (discwright#98, 15 November).
+        _previews.CloseTheLast();
         _screen.PreviewTheMenu(into);
 
         if (_screen.ItWentWrong is Refusal refusal)
@@ -805,7 +810,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                Process.Start(new ProcessStartInfo("mshta.exe", $"\"{where}\"") { UseShellExecute = false });
+                _previews.Open([where]);
             }
             catch (Exception wrong) when (wrong is System.ComponentModel.Win32Exception or InvalidOperationException)
             {
