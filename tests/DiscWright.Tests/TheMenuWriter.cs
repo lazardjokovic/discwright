@@ -291,11 +291,19 @@ public class TheMenuWriter
         Assert.Contains("fitAboveWhatIsBelow(\"addOns\", \"gameBelow\");", Body(page, "function fitTheAddOns()"), StringComparison.Ordinal);
 
         // Fitted whenever something above or below them comes or goes: the
-        // screen drawn, and Remove the copy offered or taken away.
-        foreach (string where in new[] { "function showGame(", "function offerToRemoveTheCopy(", "function removeTheCopyNow(" })
+        // screen drawn, and Remove the copy offered or taken away. Taken
+        // away, the line under the screen changes in the same breath, and
+        // sayUnderneath fits the screen once the button has gone.
+        foreach (string where in new[] { "function showGame(", "function offerToRemoveTheCopy(" })
         {
             Assert.Contains("fitTheAddOns();", Body(page, where), StringComparison.Ordinal);
         }
+
+        string removing = Body(page, "function removeTheCopyNow(");
+        int gone = removing.IndexOf("getElementById(\"removeTheCopy\").style.display = \"none\";", StringComparison.Ordinal);
+        Assert.True(gone >= 0 && removing.IndexOf("sayUnderneath(", gone, StringComparison.Ordinal) > gone, "Removing the copy does not fit the screen after the button goes.");
+        Assert.Contains("fitThePanel();", Body(page, "function sayUnderneath("), StringComparison.Ordinal);
+        Assert.Contains("fitTheAddOns();", Body(page, "function fitThePanel("), StringComparison.Ordinal);
     }
 
     /// <summary>One function of the page, from its first line to the next.</summary>

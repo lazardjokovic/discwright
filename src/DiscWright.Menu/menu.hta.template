@@ -190,9 +190,18 @@ function fitAboveWhatIsBelow(listId, belowId) {
     var below = document.getElementById(belowId);
     var room;
 
+    var under = document.getElementById("underAll");
+    var panel = document.getElementById("panel").clientHeight;
+
     list.style.height = "auto";
     list.style.marginBottom = "";
-    room = chooserListRoom(document.getElementById("panel").clientHeight, 28, list.offsetTop, below.offsetHeight + 9);
+    under.style.height = "auto";
+
+    // What sits under the screen counts too: the bar and the line, which
+    // can run to many lines. Left out, a full list pushed them off the
+    // bottom of the panel with the result of the disc check in them
+    // (discwright#98, 15 November).
+    room = chooserListRoom(panel, 28, list.offsetTop, below.offsetHeight + 9 + (under.offsetHeight || 0));
 
     // Cut short, a list ends in the middle of a button, whose own 9 pixels
     // underneath are scrolled away with it. The 9 the room was worked out
@@ -201,6 +210,39 @@ function fitAboveWhatIsBelow(listId, belowId) {
     if (list.scrollHeight > room) {
         list.style.height = room + "px";
         list.style.marginBottom = "9px";
+    }
+
+    // And whatever the screen leaves goes to them, scrolling past it, so a
+    // long line never runs off the panel either. Two lines at least.
+    room = panel - 28 - under.offsetTop;
+
+    if (under.scrollHeight > room) {
+        under.style.height = (room < 32 ? 32 : room) + "px";
+    }
+}
+
+// The line under the screen, said, or taken away with null, and the screen
+// fitted again around it. Every sentence that lands there comes through here,
+// so none of them can change its height without the list making room.
+function sayUnderneath(words) {
+    var line = document.getElementById("stillWanted");
+
+    if (words === null) {
+        line.style.display = "none";
+    } else {
+        line.innerText = words;
+        line.style.display = "block";
+    }
+
+    fitThePanel();
+}
+
+// The screen showing fitted again, after the line under it changed.
+function fitThePanel() {
+    if (document.getElementById("gameScreen").style.display === "block") {
+        fitTheAddOns();
+    } else if (document.getElementById("chooserScreen").style.display === "block") {
+        fitTheGameList();
     }
 }
 
@@ -482,21 +524,18 @@ function keepTheGameBarMoving() {
 }
 
 function sayHowFarAlong() {
-    var line = document.getElementById("stillWanted");
-
     if (!copying) {
         return;
     }
 
-    line.innerText = restoreBarPercent(copying, (new Date()).getTime()) + "% copied";
-    line.style.display = "block";
+    sayUnderneath(restoreBarPercent(copying, (new Date()).getTime()) + "% copied");
 }
 
 function finishTheCopy(files, items, where, game, bad, stuck) {
     var next = whatToDoAfterACopy(game, where, bad, stuck, everythingArrived(files, items, where));
 
     copying = null;
-    document.getElementById("stillWanted").style.display = "none";
+    sayUnderneath(null);
 
     if (next.act === "stop") {
         alert(next.say);
@@ -713,6 +752,8 @@ function sayTheSet(scan) {
     } else {
         bar.style.display = "none";
     }
+
+    fitThePanel();
 }
 
 // Redraws the bar twice a second while a file copies, because nothing else
@@ -1078,7 +1119,7 @@ function installFromTheFolder() {
     document.getElementById("doIt").innerText = "Starting\u2026";
     document.getElementById("doIt").parentNode.className = "btn next dead";
     document.getElementById("restoreBar").style.display = "none";
-    document.getElementById("stillWanted").innerText = startingTheInstallerSays(dir);
+    sayUnderneath(startingTheInstallerSays(dir));
 
     window.setTimeout(function () {
         wrong = startIt(run, dir);
@@ -1109,8 +1150,7 @@ function watchTheInstaller(game, run) {
     document.getElementById("doIt").innerText = "Installing\u2026";
     document.getElementById("doIt").parentNode.className = "btn next dead";
     document.getElementById("restoreBar").style.display = "none";
-    document.getElementById("stillWanted").innerText = whatInstallingSays(game.name);
-    document.getElementById("stillWanted").style.display = "block";
+    sayUnderneath(whatInstallingSays(game.name));
 
     function look() {
         var running = installerIsRunning(exeName);
@@ -1156,8 +1196,7 @@ function offerToRemoveTheCopy(installed) {
     var bytes = SET && installed && mayRemoveTheCopy(dir) ? bytesIn(files, dir) : 0;
     var button = document.getElementById("removeTheCopy");
 
-    document.getElementById("stillWanted").innerText = whatTheInstallerLeft(installed, game.name, bytes, dir);
-    document.getElementById("stillWanted").style.display = "block";
+    sayUnderneath(whatTheInstallerLeft(installed, game.name, bytes, dir));
 
     button.innerText = bytes > 0 ? removeTheCopyButtonSays(bytes) : "";
     button.style.display = bytes > 0 ? "block" : "none";
@@ -1175,8 +1214,7 @@ function removeTheCopyNow() {
     }
 
     document.getElementById("removeTheCopy").style.display = "none";
-    fitTheAddOns();
-    document.getElementById("stillWanted").innerText = "The copy is gone. " + whatTheInstallerLeft(true, game.name);
+    sayUnderneath("The copy is gone. " + whatTheInstallerLeft(true, game.name));
 }
 
 // The music, behind everything, and a way to turn it off.
@@ -1318,7 +1356,7 @@ function checkThisDisc() {
 }
 
 function sayTheCheck(words) {
-    document.getElementById("stillWanted").innerText = words;
+    sayUnderneath(words);
 }
 
 function doExit() {
@@ -1376,6 +1414,9 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 /* How far a set has copied. Only on screen while a file is copying, because a
    bar that sits at nought under an idle menu reads as something stuck. */
 #restoreBar { margin-top: 18px; height: 4px; background: #1A2429; }
+/* Scrolling also keeps the margins above the bar and the line inside the
+   box, so its height is everything they take, gap included. */
+#underAll { overflow-x: hidden; overflow-y: auto; }
 #restoreBarIn { height: 4px; width: 0; background: #00BEC8; }
 .hint { margin: 0 0 14px 0; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #5E727A; }
 /* The games, scrolling when there are more than the panel holds. The
@@ -1468,8 +1509,12 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
             <a class="btn" id="whereCancel" href="#" onclick="whereCancel(); return false;">Cancel</a>
             <div id="whereNote"></div>
         </div>
-        <div id="restoreBar" style="display: none"><div id="restoreBarIn"></div></div>
-        <div id="stillWanted"></div>
+        <!-- The bar and the line under everything, in a box that takes the
+             room the screen leaves and scrolls inside it, discwright#98. -->
+        <div id="underAll">
+            <div id="restoreBar" style="display: none"><div id="restoreBarIn"></div></div>
+            <div id="stillWanted"></div>
+        </div>
     </div>
 
     <div id="mute" style="display: none" title="Music on or off"
