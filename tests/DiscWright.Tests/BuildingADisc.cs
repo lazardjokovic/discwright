@@ -1,4 +1,6 @@
-﻿using DiscWright.Core;
+﻿using System.Diagnostics;
+
+using DiscWright.Core;
 using DiscWright.Core.Staging;
 using DiscWright.Platform;
 using DiscWright.Staging;
@@ -340,6 +342,55 @@ public sealed class BuildingADisc : IDisposable
         Assert.True(built.Discs.Count > 1);
         Assert.True(File.Exists(On(built.Discs[0], "setup_huge.exe.dwpart01")));
         Assert.True(File.Exists(On(built.Discs[1], "setup_huge.exe.dwpart02")));
+    }
+
+    [Fact]
+    public async Task Says_so_and_touches_nothing_when_the_last_build_is_still_open()
+    {
+        // xniwo, discwright#98, 15 November: Start Here opened from the disc
+        // folder, then a second build into the same place. The menu had the
+        // folder as its working folder, the delete took every file it could
+        // and failed on the folder, and the window said "Something went
+        // wrong". Held here the same way, by a process whose working folder
+        // is the disc folder.
+        GameFolder game = AGogDownload("Hollow Knight", 4000);
+        BuiltDisc first = Assert.Single((await Build(Project(game))).Discs);
+        string[] before = [.. Directory.EnumerateFiles(first.Folder, "*", SearchOption.AllDirectories).Order()];
+
+        using (Process holding = Process.Start(new ProcessStartInfo("cmd.exe", "/c ping -n 60 127.0.0.1 >nul")
+        {
+            WorkingDirectory = first.Folder,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        })!)
+        {
+            try
+            {
+                Assert.True(HeldWithin(first.Folder, TimeSpan.FromSeconds(10)), "The stand-in never took hold of the folder.");
+
+                Refusal refused = await Refuse(Project(game));
+
+                Assert.Equal("The disc built there last time is still open", refused.Headline);
+                Assert.Contains(first.Folder, refused.Because, StringComparison.Ordinal);
+                Assert.Contains("Nothing has been changed.", refused.Because, StringComparison.Ordinal);
+
+                // And it is true: every file of the last build is still there,
+                // and nothing was left beside it.
+                Assert.Equal(before, Directory.EnumerateFiles(first.Folder, "*", SearchOption.AllDirectories).Order());
+                Assert.Equal([first.Folder], Directory.EnumerateDirectories(_out));
+            }
+            finally
+            {
+                holding.Kill(entireProcessTree: true);
+                holding.WaitForExit();
+            }
+        }
+
+        // Let go of, it builds over the last one as it always did, and leaves
+        // nothing of the move aside behind.
+        BuiltDisc again = Assert.Single((await Build(Project(game))).Discs);
+        Assert.True(File.Exists(On(again, "setup_hollow_knight.exe")));
+        Assert.Equal([again.Folder], Directory.EnumerateDirectories(_out));
     }
 
     [Fact]
@@ -769,6 +820,34 @@ public sealed class BuildingADisc : IDisposable
             project, new Medium("TEST", "a test disc", capacity), _out, null, CancellationToken.None);
 
         return Assert.IsType<Outcome<BuiltDiscs>.No>(built).Refusal;
+    }
+
+    /// <summary>
+    /// Whether Windows refuses to move this folder within the time given,
+    /// which is what "held open" means to the writer. A process is in its
+    /// working folder a moment after it starts, not when Start returns.
+    /// </summary>
+    private static bool HeldWithin(string folder, TimeSpan time)
+    {
+        string probe = folder + ".probe";
+        DateTime until = DateTime.UtcNow + time;
+
+        while (DateTime.UtcNow < until)
+        {
+            try
+            {
+                Directory.Move(folder, probe);
+                Directory.Move(probe, folder);
+            }
+            catch (IOException)
+            {
+                return true;
+            }
+
+            Thread.Sleep(100);
+        }
+
+        return false;
     }
 
     private static DiscBuilder Builder() =>

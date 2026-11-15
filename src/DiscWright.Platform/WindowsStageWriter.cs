@@ -50,7 +50,24 @@ public sealed class WindowsStageWriter : IStageWriter
 
         if (Directory.Exists(path))
         {
-            Directory.Delete(path, recursive: true);
+            // Moved aside first, and only then deleted. Windows refuses to
+            // move a folder that anything holds open, the working folder of a
+            // menu started from it included, and a refused move has changed
+            // nothing. A recursive delete took every file it could and then
+            // failed on the folder, leaving the last build half gone behind a
+            // "Something went wrong" (xniwo, discwright#98, 15 November).
+            string aside = path.TrimEnd('\\', '/') + ".going-" + Guid.NewGuid().ToString("N")[..8];
+
+            try
+            {
+                Directory.Move(path, aside);
+            }
+            catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+            {
+                throw new TheFolderIsInUse(path, held.Message, held);
+            }
+
+            Directory.Delete(aside, recursive: true);
         }
 
         Directory.CreateDirectory(path);
