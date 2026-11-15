@@ -1415,8 +1415,13 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
    bar that sits at nought under an idle menu reads as something stuck. */
 #restoreBar { margin-top: 18px; height: 4px; background: #1A2429; }
 /* Scrolling also keeps the margins above the bar and the line inside the
-   box, so its height is everything they take, gap included. */
-#underAll { overflow-x: hidden; overflow-y: auto; }
+   box, so its height is everything they take, gap included. Its bar is dark
+   like the lists' own: left to Windows it was white on the dark panel. */
+#underAll { overflow-x: hidden; overflow-y: auto;
+            scrollbar-face-color: #1B2A30; scrollbar-track-color: #060E11;
+            scrollbar-arrow-color: #8FA3AA; scrollbar-shadow-color: #060E11;
+            scrollbar-highlight-color: #060E11; scrollbar-3dlight-color: #060E11;
+            scrollbar-darkshadow-color: #060E11; }
 #restoreBarIn { height: 4px; width: 0; background: #00BEC8; }
 .hint { margin: 0 0 14px 0; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #5E727A; }
 /* The games, scrolling when there are more than the panel holds. The

@@ -304,6 +304,16 @@ public class TheMenuWriter
         Assert.True(gone >= 0 && removing.IndexOf("sayUnderneath(", gone, StringComparison.Ordinal) > gone, "Removing the copy does not fit the screen after the button goes.");
         Assert.Contains("fitThePanel();", Body(page, "function sayUnderneath("), StringComparison.Ordinal);
         Assert.Contains("fitTheAddOns();", Body(page, "function fitThePanel("), StringComparison.Ordinal);
+
+        // Every box that scrolls on the panel wears the dark bar. The one
+        // under the screen came out white the first time it scrolled.
+        foreach (string box in new[] { "#gameList {", "#addOns {", "#underAll {" })
+        {
+            string rule = page[page.IndexOf(box, StringComparison.Ordinal)..];
+            rule = rule[..rule.IndexOf('}', StringComparison.Ordinal)];
+            Assert.Contains("scrollbar-face-color: #1B2A30;", rule, StringComparison.Ordinal);
+            Assert.Contains("scrollbar-track-color: #060E11;", rule, StringComparison.Ordinal);
+        }
     }
 
     /// <summary>One function of the page, from its first line to the next.</summary>
