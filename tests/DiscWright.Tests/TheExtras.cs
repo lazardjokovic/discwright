@@ -195,6 +195,30 @@ public sealed class TheExtras : IDisposable
     }
 
     [Fact]
+    public async Task A_disc_with_only_loose_files_has_no_extras_folder_and_a_menu_that_names_none()
+    {
+        // The whole of xniwo's disc rather than the menu step on its own:
+        // what the build wrote and what the menu was told are asked about the
+        // same folder, so one cannot be right while the other is wrong.
+        string stray = AFile("test.pdf", 300);
+
+        BuiltDisc disc = Assert.Single((await Build(With(new DiscExtras(LooseItems: [stray])))).Discs);
+
+        string page = File.ReadAllText(Path.Combine(disc.Folder, "AUTORUN", "menu.hta"));
+
+        Assert.True(File.Exists(Path.Combine(disc.Folder, "test.pdf")));
+        Assert.False(Directory.Exists(Path.Combine(disc.Folder, "Extras")));
+        Assert.Contains(@"extras: """"", page, StringComparison.Ordinal);
+
+        // The line of buttons alone, because the page also carries the names
+        // the disc keeps for itself, and Extras is one of them.
+        Assert.DoesNotContain(
+            @"""Extras""",
+            page.Split('\n').Single(line => line.TrimStart().StartsWith("buttons:", StringComparison.Ordinal)),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Hashes_the_extras_like_everything_else()
     {
         string patch = AFile("Community patch 1.3.exe", 300);

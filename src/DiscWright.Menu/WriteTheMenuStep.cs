@@ -134,8 +134,7 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
             buttons.Add("Manual");
         }
 
-        if (((extras?.ExtrasFolderPath is not null || extras?.Loose.Count > 0) && thisDiscCarriesThem)
-            || own.Any(each => each.Kind == GameExtraKind.Extra))
+        if (TheExtrasOn(context) is not null || own.Any(each => each.Kind == GameExtraKind.Extra))
         {
             buttons.Add("Extras");
         }
@@ -176,11 +175,27 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
             : null;
 
     /// <summary>Where the extras are on this disc, or nothing.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Only an extras folder somebody chose makes one.</strong> Loose
+    /// files land at the root of the disc under their own names, so they put
+    /// nothing in <c>Extras</c>, and counting them here gave every menu an
+    /// Extras button pointing at a folder nobody wrote: xniwo, discwright#98,
+    /// 16 November, with a stray PDF beside the folder of games. It hid
+    /// whenever a manual or an extras folder was chosen as well, because then
+    /// the folder was there for another reason. v1 offers the button for the
+    /// extras folder and nothing else.
+    /// </para>
+    /// <para>
+    /// The buttons ask this too rather than deciding again, so a button and
+    /// the place it opens cannot disagree.
+    /// </para>
+    /// </remarks>
     private static string? TheExtrasOn(BuildContext context)
     {
         DiscExtras? extras = context.Project.Extras;
 
-        bool anything = extras?.ExtrasFolderPath is not null || extras?.Loose.Count > 0;
+        bool anything = extras?.ExtrasFolderPath is not null;
 
         return anything && context.Layout.CarriesTheExtras(context.Disc.Number)
             ? ExtrasFolder
