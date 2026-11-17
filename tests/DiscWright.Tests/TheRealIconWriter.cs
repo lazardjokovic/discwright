@@ -143,6 +143,87 @@ public sealed class TheRealIconWriter : IDisposable
         Assert.Equal(480, background.Height);
     }
 
+    [Theory]
+    [InlineData(96f)]
+    [InlineData(300f)]
+    public void Stretches_a_small_picture_so_all_of_it_shows(float dotsPerInch)
+    {
+        // xniwo, discwright#98, 15 November: a small banner behind the menu
+        // looked the same with Stretch to fit on and off. Nothing here had
+        // ever drawn a real picture stretched, or one smaller than the menu,
+        // or looked at a single pixel of what came out. At two resolutions,
+        // because a picture saved for print says so in its file and GDI+
+        // listens when it is not told a size.
+        string made = Path.Combine(_folder, "stretched.png");
+
+        new WindowsImages().WriteBackground(ABanner(dotsPerInch), made, 760, 480, asIs: true);
+
+        using Bitmap background = new(made);
+
+        Assert.Equal(760, background.Width);
+        Assert.Equal(480, background.Height);
+
+        // Both ends of the banner are on the menu, and so is its middle.
+        Assert.Equal(Color.Red.ToArgb(), background.GetPixel(10, 240).ToArgb());
+        Assert.Equal(Color.White.ToArgb(), background.GetPixel(380, 240).ToArgb());
+        Assert.Equal(Color.Blue.ToArgb(), background.GetPixel(750, 240).ToArgb());
+
+        // And top to bottom, so it reached the edges rather than sitting
+        // small in a corner.
+        Assert.Equal(Color.Red.ToArgb(), background.GetPixel(10, 5).ToArgb());
+        Assert.Equal(Color.Blue.ToArgb(), background.GetPixel(750, 475).ToArgb());
+    }
+
+    [Theory]
+    [InlineData(96f)]
+    [InlineData(300f)]
+    public void Fills_the_menu_with_a_small_picture_and_crops_both_ends_evenly(float dotsPerInch)
+    {
+        string made = Path.Combine(_folder, "filled.png");
+
+        new WindowsImages().WriteBackground(ABanner(dotsPerInch), made, 760, 480, asIs: false);
+
+        using Bitmap background = new(made);
+
+        // A banner four times as wide as it is tall, grown until it is as
+        // tall as the menu, is far wider than the menu. Its two ends go, the
+        // same amount from each, and what is left is its middle.
+        Assert.Equal(Color.White.ToArgb(), background.GetPixel(10, 240).ToArgb());
+        Assert.Equal(Color.White.ToArgb(), background.GetPixel(750, 240).ToArgb());
+        Assert.Equal(Color.White.ToArgb(), background.GetPixel(380, 5).ToArgb());
+        Assert.Equal(Color.White.ToArgb(), background.GetPixel(380, 475).ToArgb());
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public void Leaves_no_part_of_the_background_see_through(bool asIs, bool larger)
+    {
+        // Found by the two tests above the first time they ran: the rim of a
+        // picture grown to fit came out part see-through, and the menu's dark
+        // page showed through it as a fringe. Every pixel is asked, for a
+        // picture smaller than the menu and for one larger.
+        string made = Path.Combine(_folder, "opaque.png");
+
+        new WindowsImages().WriteBackground(
+            larger ? APicture(1920, 1080) : ABanner(96f), made, 760, 480, asIs);
+
+        using Bitmap background = new(made);
+
+        for (int across = 0; across < background.Width; across++)
+        {
+            for (int down = 0; down < background.Height; down++)
+            {
+                if (background.GetPixel(across, down).A != 255)
+                {
+                    Assert.Fail($"The pixel at {across}, {down} is {background.GetPixel(across, down).A} opaque out of 255.");
+                }
+            }
+        }
+    }
+
     [Fact]
     public void Says_what_is_wrong_with_a_file_it_cannot_read()
     {
@@ -172,6 +253,32 @@ public sealed class TheRealIconWriter : IDisposable
         // cannot decode, which sends people hunting a problem they do not have.
         Assert.DoesNotContain("memory", facts.Why, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("PNG", facts.Why, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A banner smaller than the menu in both directions, 200 by 50, white
+    /// with a red tenth at its left end and a blue tenth at its right, so
+    /// where each end landed can be read off one pixel.
+    /// </summary>
+    private string ABanner(float dotsPerInch)
+    {
+        string path = Path.Combine(_folder, $"banner at {dotsPerInch}.png");
+
+        using (Bitmap bitmap = new(200, 50))
+        {
+            bitmap.SetResolution(dotsPerInch, dotsPerInch);
+
+            using (Graphics drawing = Graphics.FromImage(bitmap))
+            {
+                drawing.Clear(Color.White);
+                drawing.FillRectangle(Brushes.Red, 0, 0, 20, 50);
+                drawing.FillRectangle(Brushes.Blue, 180, 0, 20, 50);
+            }
+
+            bitmap.Save(path, ImageFormat.Png);
+        }
+
+        return path;
     }
 
     private string APicture(int width, int height)
