@@ -296,6 +296,73 @@ public class PuttingTheMenuOnTheDisc
     }
 
     [Fact]
+    public async Task Promises_no_extras_for_files_that_sit_loose_at_the_root()
+    {
+        // xniwo, discwright#98, 16 November: a stray PDF beside the folder of
+        // games gave every menu an Extras button that did nothing. A loose
+        // file lands at the root under its own name, so no Extras folder is
+        // written for it and there is nothing for a button to open.
+        RecordingWriter wrote = new();
+
+        await Write(wrote, extras: new DiscExtras(LooseItems: [@"C:\DWTEST\test.pdf"]));
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        Assert.Contains(@"extras: """"", page, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"""Extras""", ButtonsOf(page), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Offers_the_extras_button_for_an_extras_folder_with_loose_files_beside_it()
+    {
+        // The other half, so the cure is not "never with loose files".
+        RecordingWriter wrote = new();
+
+        await Write(wrote, extras: new DiscExtras(
+            ExtrasFolderPath: @"C:\things\extras", LooseItems: [@"C:\DWTEST\test.pdf"]));
+
+        string page = wrote.Texts.Single(
+            text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        Assert.Contains(@"extras: ""Extras""", page, StringComparison.Ordinal);
+        Assert.Contains(@"""Extras""", ButtonsOf(page), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Offers_no_extras_button_without_a_place_for_it_to_open()
+    {
+        // Held together rather than one at a time: whatever the disc carries,
+        // the button is there exactly when the page names somewhere to go.
+        DiscExtras[] every =
+        [
+            new DiscExtras(),
+            new DiscExtras(ManualPath: @"C:\things\the manual.pdf"),
+            new DiscExtras(LooseItems: [@"C:\DWTEST\test.pdf"]),
+            new DiscExtras(ManualPath: @"C:\things\the manual.pdf", LooseItems: [@"C:\DWTEST\test.pdf"]),
+            new DiscExtras(ExtrasFolderPath: @"C:\things\extras"),
+        ];
+
+        foreach (DiscExtras extras in every)
+        {
+            RecordingWriter wrote = new();
+
+            await Write(wrote, extras: extras);
+
+            string page = wrote.Texts.Single(
+                text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+            Assert.Equal(
+                page.Contains(@"extras: ""Extras""", StringComparison.Ordinal),
+                ButtonsOf(page).Contains(@"""Extras""", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>The line of the page that lists this disc's buttons.</summary>
+    private static string ButtonsOf(string page) =>
+        page.Split('\n').Single(line => line.TrimStart().StartsWith("buttons:", StringComparison.Ordinal));
+
+    [Fact]
     public async Task Writes_a_way_in_at_the_top_of_the_disc()
     {
         RecordingWriter wrote = new();
