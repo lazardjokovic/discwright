@@ -69,6 +69,63 @@ public class TheRecogniser
     }
 
     [Fact]
+    public void Weighs_an_installer_together_with_its_parts()
+    {
+        // Reported against 2.0.4: with the add-on installers in the game's
+        // folder, one of them was sometimes taken as the game. A big game
+        // keeps its data in the parts and its .exe is small, and a DLC with
+        // no parts is all .exe, so the .exe alone names the wrong one.
+        GameFolder game = Read(Folder(@"C:\kit\I",
+            ("setup_a_big_game_1.0.exe", 1_000),
+            ("setup_a_big_game_1.0-1.bin", 4_000_000),
+            ("setup_a_big_game_1.0-2.bin", 3_000_000),
+            ("setup_a_big_game_the_expansion_1.0.exe", 900_000)));
+
+        Assert.Equal("setup_a_big_game_1.0.exe", game.Installer?.Name);
+        Assert.Equal(3, game.Files.Count);
+    }
+
+    [Fact]
+    public void Weighs_each_installer_with_its_own_parts_and_nobody_elses()
+    {
+        // The other way about, so the sum cannot be every .bin in the folder:
+        // the small .exe has the small part and the game is the other one.
+        GameFolder game = Read(Folder(@"C:\kit\I",
+            ("setup_a_small_dlc_1.0.exe", 2_000),
+            ("setup_a_small_dlc_1.0-1.bin", 5_000),
+            ("setup_the_game_1.0.exe", 1_000),
+            ("setup_the_game_1.0-1.bin", 4_000_000)));
+
+        Assert.Equal("setup_the_game_1.0.exe", game.Installer?.Name);
+    }
+
+    [Theory]
+    [InlineData("setup_a_game_soundtrack_1.0.exe")]
+    [InlineData("setup_a_game_artbook_1.0.exe")]
+    [InlineData("setup_a_game_bonus_content_1.0.exe")]
+    public void Never_takes_what_GOG_names_as_not_the_game_while_a_game_is_there(string extra)
+    {
+        // A lossless soundtrack can outweigh an old game several times over.
+        GameFolder game = Read(Folder(@"C:\kit\I",
+            (extra, 900_000_000),
+            ("setup_a_game_1.0.exe", 40_000_000)));
+
+        Assert.Equal("setup_a_game_1.0.exe", game.Installer?.Name);
+    }
+
+    [Fact]
+    public void Still_takes_the_heaviest_when_nothing_in_the_folder_is_a_game()
+    {
+        // A folder of nothing but extras is still a download somebody pointed
+        // at, and the window asks about it. It must not be turned away here.
+        GameFolder game = Read(Folder(@"C:\kit\I",
+            ("setup_a_game_artbook_1.0.exe", 100),
+            ("setup_a_game_soundtrack_1.0.exe", 900)));
+
+        Assert.Equal("setup_a_game_soundtrack_1.0.exe", game.Installer?.Name);
+    }
+
+    [Fact]
     public void Warns_that_a_download_stopped_early()
     {
         GameFolder game = Read(Folder(@"C:\kit\A",
