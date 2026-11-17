@@ -100,10 +100,28 @@ public sealed class WindowsImages : IImages
 
         Nicely(drawing);
 
+        // A picture has nothing past its own edge, and smoothing asks what is
+        // there anyway. Left to itself GDI+ answers "nothing at all", so the
+        // rim of a picture grown to fit comes out part see-through, and the
+        // menu's own dark page shows through it as a fringe: a small banner
+        // stretched came out 248 opaque out of 255 ten pixels in. Told to
+        // answer with the picture folded back on itself, the rim is the
+        // picture's own colour.
+        using ImageAttributes atTheEdges = new();
+        atTheEdges.SetWrapMode(WrapMode.TileFlipXY);
+
         if (asIs)
         {
             // Stretched to the shape of the menu, proportions and all.
-            drawing.DrawImage(original, 0, 0, width, height);
+            drawing.DrawImage(
+                original,
+                new Rectangle(0, 0, width, height),
+                0,
+                0,
+                original.Width,
+                original.Height,
+                GraphicsUnit.Pixel,
+                atTheEdges);
         }
         else
         {
@@ -116,10 +134,13 @@ public sealed class WindowsImages : IImages
 
             drawing.DrawImage(
                 original,
-                (width - drawnWidth) / 2,
-                (height - drawnHeight) / 2,
-                drawnWidth,
-                drawnHeight);
+                new Rectangle((width - drawnWidth) / 2, (height - drawnHeight) / 2, drawnWidth, drawnHeight),
+                0,
+                0,
+                original.Width,
+                original.Height,
+                GraphicsUnit.Pixel,
+                atTheEdges);
         }
 
         canvas.Save(destination, ImageFormat.Png);
