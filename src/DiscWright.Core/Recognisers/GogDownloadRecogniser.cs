@@ -17,7 +17,18 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
             .. folder.AtTheTop
                 .Where(file => file.Extension == ".exe"
                                && file.Name.StartsWith("setup_", StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(file => file.Bytes)
+
+                // The game is the installer with the most behind it, and an
+                // installer's own size says nearly nothing about that. A big
+                // game keeps its data in the numbered parts and its .exe is
+                // small, while a DLC with no parts is all .exe, so going by
+                // the .exe alone put the DLC on the disc as the game and the
+                // game under it as something left behind. Reported against
+                // 2.0.4. Anything GOG names as not being the game, a
+                // soundtrack or an artbook, goes after everything else
+                // however big it is.
+                .OrderBy(file => AddOn.LooksLikeOne(file.Name))
+                .ThenByDescending(file => file.Bytes + PartsOf(folder, file).Sum(part => part.Bytes))
         ];
 
         if (installers.Count == 0)
@@ -41,20 +52,7 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
 
         ListedFile installer = installers[0];
 
-        // Parts belong to ONE installer and are named "<installer>-1.bin".
-        // Taking every .bin in the folder swept in the parts of a DLC or of a
-        // second game stored alongside. Matched as plain strings and never as
-        // wildcards, because GOG names are full of brackets and dots that a
-        // pattern would read as syntax.
-        string stem = installer.NameWithoutExtension + "-";
-
-        List<ListedFile> parts =
-        [
-            .. folder.AtTheTop
-                .Where(file => file.Extension == ".bin"
-                               && file.Name.StartsWith(stem, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
-        ];
+        List<ListedFile> parts = PartsOf(folder, installer);
 
         string name = NameOf(folder, installer);
 
@@ -67,6 +65,29 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
             [installer, .. parts],
             [],
             WarningAbout(installers, installer, parts));
+    }
+
+    /// <summary>
+    /// The numbered parts that belong to one installer, in name order.
+    /// </summary>
+    /// <remarks>
+    /// Parts belong to ONE installer and are named "&lt;installer&gt;-1.bin".
+    /// Taking every .bin in the folder swept in the parts of a DLC or of a
+    /// second game stored alongside. Matched as plain strings and never as
+    /// wildcards, because GOG names are full of brackets and dots that a
+    /// pattern would read as syntax.
+    /// </remarks>
+    private static List<ListedFile> PartsOf(FolderListing folder, ListedFile installer)
+    {
+        string stem = installer.NameWithoutExtension + "-";
+
+        return
+        [
+            .. folder.AtTheTop
+                .Where(file => file.Extension == ".bin"
+                               && file.Name.StartsWith(stem, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+        ];
     }
 
     /// <summary>
