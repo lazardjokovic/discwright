@@ -477,6 +477,33 @@ public sealed class BuildingADisc : IDisposable
     }
 
     [Fact]
+    public async Task Puts_an_add_on_s_parts_beside_it_byte_for_byte()
+    {
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+        string dlc = APatch("setup_hollow_knight_dlc.exe", 200);
+        string first = APatch("setup_hollow_knight_dlc-1.bin", 300);
+        string second = APatch("setup_hollow_knight_dlc-2.bin", 150);
+
+        DiscProject project = Project(game) with
+        {
+            AddOns =
+            [
+                new AddOn(0, dlc, AddOn.NameFor(dlc), 200, [new AddOnPart(first, 300), new AddOnPart(second, 150)])
+            ]
+        };
+
+        BuiltDisc disc = Assert.Single((await Build(project)).Discs);
+
+        // A real build onto a real folder. The installer looks for its
+        // parts by name in the folder it runs from, so that is where they
+        // have to be and what they have to be called.
+        Assert.Equal(File.ReadAllBytes(dlc), File.ReadAllBytes(On(disc, @"Add-ons\setup_hollow_knight_dlc.exe")));
+        Assert.Equal(File.ReadAllBytes(first), File.ReadAllBytes(On(disc, @"Add-ons\setup_hollow_knight_dlc-1.bin")));
+        Assert.Equal(File.ReadAllBytes(second), File.ReadAllBytes(On(disc, @"Add-ons\setup_hollow_knight_dlc-2.bin")));
+        Assert.Equal(3, Directory.GetFiles(On(disc, "Add-ons")).Length);
+    }
+
+    [Fact]
     public async Task Keeps_each_game_s_add_ons_with_that_game()
     {
         GameFolder one = AGogDownload("One", 400);

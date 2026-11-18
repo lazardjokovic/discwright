@@ -26,11 +26,60 @@ namespace DiscWright.Core;
 /// </param>
 /// <param name="Path">Where the installer is now.</param>
 /// <param name="Name">What its button says.</param>
-/// <param name="Bytes">How big it is.</param>
-public sealed partial record AddOn(int BelongsTo, string Path, string Name, long Bytes)
+/// <param name="Bytes">How big the installer is, on its own.</param>
+/// <param name="Parts">
+/// The numbered parts that belong to the installer, each where it is now.
+/// None for most add-ons, which are one file.
+/// </param>
+public sealed partial record AddOn(
+    int BelongsTo, string Path, string Name, long Bytes, IReadOnlyList<AddOnPart>? Parts = null)
 {
     /// <summary>Where add-ons sit, beside the game they belong to.</summary>
     public const string Folder = "Add-ons";
+
+    /// <summary>Its parts, or none.</summary>
+    public IReadOnlyList<AddOnPart> PartsOrNone => Parts ?? [];
+
+    /// <summary>How big it is with everything it needs beside it.</summary>
+    public long BytesWithItsParts => Bytes + PartsOrNone.Sum(part => part.Bytes);
+
+    /// <summary>
+    /// The numbered parts that belong to one installer, in name order, out of
+    /// the files it was listed with.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Parts belong to ONE installer, sit in the same folder as it and are
+    /// named "&lt;installer&gt;-1.bin". Taking every .bin in the folder swept
+    /// in the parts of a DLC or of a second game stored alongside. Matched as
+    /// plain strings and never as wildcards, because GOG names are full of
+    /// brackets and dots that a pattern would read as syntax.
+    /// </para>
+    /// <para>
+    /// <strong>One rule, asked by the game and by its add-ons.</strong> A big
+    /// DLC arrives the way a big game does, an .exe and its .bin files, and
+    /// an add-on used to be the .exe alone: it went into Add-ons without its
+    /// parts, where it could not install, and its parts were offered
+    /// separately as extras. Reported against 2.0.4.
+    /// </para>
+    /// </remarks>
+    public static List<ListedFile> PartsOf(ListedFile installer, IEnumerable<ListedFile> listedWith)
+    {
+        string within = installer.RelativePath[..^installer.Name.Length];
+        string stem = installer.NameWithoutExtension + "-";
+
+        return
+        [
+            .. listedWith
+                .Where(file => file.Extension == ".bin"
+                               && file.Name.StartsWith(stem, StringComparison.OrdinalIgnoreCase)
+                               && string.Equals(
+                                   file.RelativePath[..^file.Name.Length],
+                                   within,
+                                   StringComparison.OrdinalIgnoreCase))
+                .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
+        ];
+    }
 
     /// <summary>
     /// The same add-ons after the game at that position has been taken off
@@ -152,3 +201,8 @@ public sealed partial record AddOn(int BelongsTo, string Path, string Name, long
     [GeneratedRegex(@"\s+")]
     private static partial Regex RunsOfSpace();
 }
+
+/// <summary>One numbered part of an add-on's installer.</summary>
+/// <param name="Path">Where it is now.</param>
+/// <param name="Bytes">How big it is.</param>
+public sealed record AddOnPart(string Path, long Bytes);

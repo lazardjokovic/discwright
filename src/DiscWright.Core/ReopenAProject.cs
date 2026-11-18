@@ -120,7 +120,42 @@ public static class ReopenAProject
                 belongsTo,
                 installer,
                 entry.Name is string named && named.Length > 0 ? named : AddOn.NameFor(installer),
-                howBigIs(installer)));
+                howBigIs(installer),
+                PartsBeside(installer, files)));
+        }
+
+        // A project saved by 2.0.4 or older could hold an installer's parts
+        // as add-ons of their own, or as the game's extras, because that is
+        // what its dialog offered. The installer carries them now, and a part
+        // written twice is two files wanting one name in Add-ons.
+        addOns = [.. addOns.Where(addOn => !addOns.Any(other =>
+            other.BelongsTo == addOn.BelongsTo && Carries(other, addOn.Path)))];
+
+        // And one that is a file of its own game is the game. 2.0.4 could
+        // take a DLC for the game and save the real installer as its add-on;
+        // the folder read again finds the real one, and attaching it to
+        // itself would put the game on its own disc twice.
+        addOns = [.. addOns.Where(addOn => !games[addOn.BelongsTo].Files.Any(file => string.Equals(
+            System.IO.Path.Combine(games[addOn.BelongsTo].Path, file.RelativePath),
+            addOn.Path,
+            StringComparison.OrdinalIgnoreCase)))];
+
+        for (int at = 0; at < games.Count; at++)
+        {
+            if (games[at].Own is not { } own)
+            {
+                continue;
+            }
+
+            GameExtra[] kept =
+            [
+                .. own.Where(each => !addOns.Any(addOn => addOn.BelongsTo == at && Carries(addOn, each.Path)))
+            ];
+
+            if (kept.Length != own.Count)
+            {
+                games[at] = games[at] with { Own = kept.Length > 0 ? kept : null };
+            }
         }
 
         DiscProject project = new(
@@ -143,6 +178,36 @@ public static class ReopenAProject
 
         return new Reopened(project, opened.Medium, opened.OutputFolder, gone, trouble);
     }
+
+    /// <summary>
+    /// The numbered parts sitting beside an add-on's installer now.
+    /// </summary>
+    /// <remarks>
+    /// Read off the disk rather than out of the file, the way a game's own
+    /// parts are. So the file says nothing new, a project saved by an older
+    /// version comes back with the parts it never knew about, and one saved
+    /// now opens in an older version exactly as its own did.
+    /// </remarks>
+    private static IReadOnlyList<AddOnPart>? PartsBeside(string installer, IFileSystem files)
+    {
+        string? folder = System.IO.Path.GetDirectoryName(installer);
+
+        if (string.IsNullOrEmpty(folder) || !files.FolderExists(folder))
+        {
+            return null;
+        }
+
+        List<ListedFile> parts = AddOn.PartsOf(
+            new ListedFile(System.IO.Path.GetFileName(installer), 0),
+            files.ListHere(folder).Files);
+
+        return parts.Count > 0
+            ? [.. parts.Select(part => new AddOnPart(System.IO.Path.Combine(folder, part.RelativePath), part.Bytes))]
+            : null;
+    }
+
+    private static bool Carries(AddOn addOn, string path) =>
+        addOn.PartsOrNone.Any(part => string.Equals(part.Path, path, StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>A project file, read and looked up again.</summary>

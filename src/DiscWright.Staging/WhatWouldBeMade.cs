@@ -133,6 +133,17 @@ public static class WhatWouldBeMade
                     System.IO.Path.Combine(folder, AddOn.Folder, System.IO.Path.GetFileName(addOn.Path)),
                     addOn.Path,
                     addOn.Bytes);
+
+                // Its parts beside it, under their own names, because the
+                // installer looks for them by name in the folder it runs
+                // from and nowhere else.
+                foreach (AddOnPart part in addOn.PartsOrNone)
+                {
+                    yield return (
+                        System.IO.Path.Combine(folder, AddOn.Folder, System.IO.Path.GetFileName(part.Path)),
+                        part.Path,
+                        part.Bytes);
+                }
             }
         }
     }

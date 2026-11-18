@@ -135,6 +135,115 @@ public class ReopeningAProject : IDisposable
     }
 
     [Fact]
+    public void Finds_the_parts_beside_an_add_on_s_installer_on_the_real_disk()
+    {
+        string game = AGameFolder("A Game", "setup_a_game.exe");
+        string dlc = Path.Combine(game, "setup_a_game_dlc.exe");
+        File.WriteAllText(dlc, "a dlc");
+        File.WriteAllText(Path.Combine(game, "setup_a_game_dlc-1.bin"), "part one");
+        File.WriteAllText(Path.Combine(game, "setup_a_game_dlc-2.bin"), "the second");
+        File.WriteAllText(Path.Combine(game, "setup_a_game_dlc_two-1.bin"), "somebody else's");
+
+        // The game is the installer with the most behind it, so the game
+        // has to be the heavier of the two here as it is in life.
+        File.WriteAllText(Path.Combine(game, "setup_a_game-1.bin"), new string('x', 100));
+
+        Reopened back = Reopen(AProjectWithAddOns(game, dlc));
+
+        // The file says nothing about parts and never has. They are read
+        // off the disk, the way the game's own are.
+        Assert.Equal(
+            [
+                new AddOnPart(Path.Combine(game, "setup_a_game_dlc-1.bin"), 8),
+                new AddOnPart(Path.Combine(game, "setup_a_game_dlc-2.bin"), 10)
+            ],
+            Assert.Single(back.Project.AddOnsOrNone).PartsOrNone);
+        Assert.True(back.WholeAgain);
+    }
+
+    [Fact]
+    public void Folds_a_part_saved_as_an_add_on_of_its_own_into_its_installer()
+    {
+        string game = AGameFolder("A Game", "setup_a_game.exe");
+        string dlc = Path.Combine(game, "setup_a_game_dlc.exe");
+        string part = Path.Combine(game, "setup_a_game_dlc-1.bin");
+        File.WriteAllText(dlc, "a dlc");
+        File.WriteAllText(part, "part one");
+
+        Reopened back = Reopen(AProjectWithAddOns(game, part, dlc));
+
+        // 2.0.4 let a part be attached by hand, which was the only way to
+        // get it into Add-ons at all. Twice now would be two files wanting
+        // one name.
+        AddOn only = Assert.Single(back.Project.AddOnsOrNone);
+        Assert.Equal(dlc, only.Path);
+        Assert.Equal([part], only.PartsOrNone.Select(each => each.Path));
+    }
+
+    [Fact]
+    public void Leaves_another_game_s_add_on_alone_even_when_it_is_somebody_s_part()
+    {
+        string one = AGameFolder("One", "setup_one.exe");
+        string two = AGameFolder("Two", "setup_two.exe");
+        string dlc = Path.Combine(one, "setup_one_dlc.exe");
+        string part = Path.Combine(one, "setup_one_dlc-1.bin");
+        File.WriteAllText(dlc, "a dlc");
+        File.WriteAllText(part, "part one");
+
+        string another = Path.Combine(one, "setup_one_dlc-2.bin");
+        File.WriteAllText(another, "two");
+
+        OpenedProject opened = Open($$"""
+            {
+              "Games": [
+                { "Folder": {{Json(one)}}, "GameName": "One" },
+                { "Folder": {{Json(two)}}, "GameName": "Two", "OwnExtras": [{{Json(another)}}] },
+                { "Folder": {{Json(one)}}, "Kind": "AddOn", "Parent": 0, "Setup": {{Json(dlc)}} },
+                { "Folder": {{Json(one)}}, "Kind": "AddOn", "Parent": 1, "Setup": {{Json(part)}} }
+              ]
+            }
+            """);
+
+        Reopened back = Reopen(opened);
+
+        // Carried by game one's DLC, and that says nothing about game two,
+        // whose Add-ons folder is another folder.
+        Assert.Equal([(0, dlc), (1, part)], back.Project.AddOnsOrNone.Select(each => (each.BelongsTo, each.Path)));
+
+        // The same for an extra: game two keeps what it was given, and
+        // game one's DLC still has both of its parts.
+        Assert.Equal([another], back.Project.Games[1].OwnOrNone.Select(each => each.Path));
+        Assert.Equal([part, another], back.Project.AddOnsOrNone[0].PartsOrNone.Select(each => each.Path));
+    }
+
+    [Fact]
+    public void An_add_on_that_is_its_own_game_s_installer_is_the_game_and_not_an_add_on()
+    {
+        string game = AGameFolder("A Game", "setup_a_game.exe");
+        string itself = Path.Combine(game, "setup_a_game.exe");
+        string patch = Path.Combine(game, "patch_a_game_1_to_2.exe");
+        File.WriteAllText(patch, "a patch");
+
+        Reopened back = Reopen(AProjectWithAddOns(game, itself, patch));
+
+        // 2.0.4 could take a DLC for the game and save the real installer
+        // as its add-on. Read again, the folder gives the real game, and
+        // attaching it to itself would put it on its own disc twice.
+        Assert.Equal([patch], back.Project.AddOnsOrNone.Select(each => each.Path));
+    }
+
+    [Fact]
+    public void An_add_on_whose_folder_has_gone_comes_back_without_parts_rather_than_failing()
+    {
+        string game = AGameFolder("A Game", "setup_a_game.exe");
+        string elsewhere = Path.Combine(_root, "moved away", "setup_a_game_dlc.exe");
+
+        Reopened back = Reopen(AProjectWithAddOns(game, elsewhere));
+
+        Assert.Null(Assert.Single(back.Project.AddOnsOrNone).Parts);
+    }
+
+    [Fact]
     public void Brings_back_the_options_and_the_artwork_and_where_it_was_built()
     {
         string game = AGameFolder("A Game", "setup_a_game.exe");
@@ -173,6 +282,17 @@ public class ReopeningAProject : IDisposable
     private static OpenedProject AProjectNaming(params string[] folders) =>
         Open($$"""
             { "Label": "A DISC", "Games": [{{string.Join(", ", folders.Select(f => $$"""{ "Folder": {{Json(f)}} }"""))}}] }
+            """);
+
+    private static OpenedProject AProjectWithAddOns(string game, params string[] addOns) =>
+        Open($$"""
+            {
+              "Label": "A DISC",
+              "Games": [
+                { "Folder": {{Json(game)}} }{{string.Concat(addOns.Select(each =>
+                    $$""", { "Folder": {{Json(game)}}, "Kind": "AddOn", "Parent": 0, "Setup": {{Json(each)}} }"""))}}
+              ]
+            }
             """);
 
     private static OpenedProject AProjectWhoseGameIsCalled(string folder, string called) =>

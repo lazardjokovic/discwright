@@ -2999,11 +2999,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         foreach (LeftBehind each in asAddOns ?? [])
         {
-            AddOn addOn = new(
-                _games.Count - 1,
-                System.IO.Path.Combine(game.Path, each.File.RelativePath),
-                each.AsAnAddOn,
-                each.Bytes);
+            AddOn addOn = each.AttachedTo(_games.Count - 1, game.Path);
 
             _addOns.Add(addOn);
             _addOnsAsFound.Add(addOn);
@@ -3120,11 +3116,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         foreach (LeftBehind each in missing.Left.Where(each => each.Kind == LeftBehindKind.LooksLikeAnAddOn))
         {
-            _addOnsAsFound.Add(new AddOn(
-                at,
-                System.IO.Path.Combine(known.Path, each.File.RelativePath),
-                each.AsAnAddOn,
-                each.Bytes));
+            _addOnsAsFound.Add(each.AttachedTo(at, known.Path));
         }
 
         // Remembering what the old rows held, so putting two patches back
