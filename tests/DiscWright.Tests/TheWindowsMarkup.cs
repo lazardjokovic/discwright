@@ -1791,6 +1791,45 @@ public class TheWindowsMarkup
     }
 
     [Fact]
+    public void The_picked_game_gets_a_third_link_that_attaches_an_add_on_and_the_question_names_it()
+    {
+        // Reported against 2.0.4: an add-on kept apart from its game had no
+        // way under the game's Install button, and the question about an
+        // add-on with no game said to attach it when nothing attached.
+        XElement window = Window();
+        XElement attach = Assert.Single(window.Descendants(Xaml + "Button"), each => IdOf(each) == "AttachAnAddOn");
+        XElement manual = Assert.Single(window.Descendants(Xaml + "Button"), each => IdOf(each) == "AddAManual");
+
+        // On the picked game's own line, so it is plain which game it goes
+        // to, and dead while something is being built like its neighbours.
+        Assert.Same(manual.Parent, attach.Parent);
+        Assert.Equal("{Binding NothingIsRunning}", (string?)attach.Attribute("IsEnabled"));
+        Assert.Equal((string?)manual.Attribute("Style"), (string?)attach.Attribute("Style"));
+        Assert.Equal("AttachAnAddOnToThePickedGame", (string?)attach.Attribute("Click"));
+        Assert.False(string.IsNullOrWhiteSpace((string?)attach.Attribute("ToolTip")));
+
+        string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        string picker = code[code.IndexOf("private void AttachAnAddOnToThePickedGame", StringComparison.Ordinal)..];
+        picker = picker[..picker.IndexOf("\n    }", StringComparison.Ordinal)];
+
+        // Several at once, because a game's DLC is seldom one file, and
+        // only what was picked is handed on.
+        Assert.Contains("Multiselect = true", picker, StringComparison.Ordinal);
+        Assert.Contains("_screen.AttachToThePickedGame(asking.FileNames);", picker, StringComparison.Ordinal);
+        Assert.Contains("asking.ShowDialog(this) == true", picker, StringComparison.Ordinal);
+
+        // The question that turns an add-on away sends somebody to this
+        // link by the words that are on it.
+        string question = code[code.IndexOf("private bool LeavingItForItsGame", StringComparison.Ordinal)..];
+        question = question[..question.IndexOf(");", StringComparison.Ordinal)];
+        string says = string.Concat(question.Split('"').Where((_, at) => at % 2 == 1));
+
+        Assert.Contains((string?)attach.Attribute("Content") ?? "no words on the link", says, StringComparison.Ordinal);
+        Assert.DoesNotContain("attach this to it", says, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Every_option_under_More_options_says_what_it_does()
     {
         // Two had nothing to say on hover, and xniwo asked on 2.0.1 what the

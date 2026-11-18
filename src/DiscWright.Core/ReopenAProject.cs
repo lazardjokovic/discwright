@@ -121,7 +121,7 @@ public static class ReopenAProject
                 installer,
                 entry.Name is string named && named.Length > 0 ? named : AddOn.NameFor(installer),
                 howBigIs(installer),
-                PartsBeside(installer, files)));
+                AddOn.PartsBeside(installer, files)));
         }
 
         // A project saved by 2.0.4 or older could hold an installer's parts
@@ -177,33 +177,6 @@ public static class ReopenAProject
             AddOns: addOns);
 
         return new Reopened(project, opened.Medium, opened.OutputFolder, gone, trouble);
-    }
-
-    /// <summary>
-    /// The numbered parts sitting beside an add-on's installer now.
-    /// </summary>
-    /// <remarks>
-    /// Read off the disk rather than out of the file, the way a game's own
-    /// parts are. So the file says nothing new, a project saved by an older
-    /// version comes back with the parts it never knew about, and one saved
-    /// now opens in an older version exactly as its own did.
-    /// </remarks>
-    private static IReadOnlyList<AddOnPart>? PartsBeside(string installer, IFileSystem files)
-    {
-        string? folder = System.IO.Path.GetDirectoryName(installer);
-
-        if (string.IsNullOrEmpty(folder) || !files.FolderExists(folder))
-        {
-            return null;
-        }
-
-        List<ListedFile> parts = AddOn.PartsOf(
-            new ListedFile(System.IO.Path.GetFileName(installer), 0),
-            files.ListHere(folder).Files);
-
-        return parts.Count > 0
-            ? [.. parts.Select(part => new AddOnPart(System.IO.Path.Combine(folder, part.RelativePath), part.Bytes))]
-            : null;
     }
 
     private static bool Carries(AddOn addOn, string path) =>

@@ -701,6 +701,18 @@
                                         IsEnabled="{Binding NothingIsRunning}"
                                         Click="AddExtrasToThePickedGame"
                                         AutomationProperties.AutomationId="AddExtras" />
+                                <TextBlock Style="{StaticResource Aside}" Text="·" Margin="6,0" />
+                                <!-- For a DLC or a patch kept somewhere other
+                                     than the game's own folder, which until
+                                     this had no way under the game's Install
+                                     button. Reported against 2.0.4. -->
+                                <Button Content="Attach an add-on"
+                                        Style="{StaticResource AsALink}"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding NothingIsRunning}"
+                                        ToolTip="A DLC, a patch or a mod that installs onto this game. It goes in the game's Add-ons folder with its parts, and gets a button under the game in the menu."
+                                        Click="AttachAnAddOnToThePickedGame"
+                                        AutomationProperties.AutomationId="AttachAnAddOn" />
                             </WrapPanel>
                             </StackPanel>
                         </Border>
