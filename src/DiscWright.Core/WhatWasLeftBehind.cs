@@ -32,11 +32,32 @@ public static class WhatWasLeftBehind
             game.Files.Select(file => file.RelativePath),
             StringComparer.OrdinalIgnoreCase);
 
+        List<ListedFile> left = [.. folder.Files.Where(file => !taken.Contains(file.RelativePath))];
+
+        // An installer that was left behind keeps its numbered parts, and
+        // they are not rows of their own. Asked about separately, a DLC's
+        // .exe was suggested as an add-on and its .bin files as extras, and
+        // a disc made by pressing OK carried a DLC that could not install.
+        Dictionary<string, List<ListedFile>> partsOf = new(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> carried = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (ListedFile installer in left.Where(file => file.Extension == ".exe"))
+        {
+            List<ListedFile> parts = AddOn.PartsOf(installer, left);
+
+            if (parts.Count > 0)
+            {
+                partsOf[installer.RelativePath] = parts;
+                carried.UnionWith(parts.Select(part => part.RelativePath));
+            }
+        }
+
         return
         [
-            .. folder.Files
-                .Where(file => !taken.Contains(file.RelativePath))
-                .Select(file => new LeftBehind(file, KindOf(file)))
+            .. left
+                .Where(file => !carried.Contains(file.RelativePath))
+                .Select(file => new LeftBehind(
+                    file, KindOf(file), Parts: partsOf.GetValueOrDefault(file.RelativePath)))
         ];
     }
 
@@ -50,7 +71,7 @@ public static class WhatWasLeftBehind
     /// came from beside the installer belongs beside the installer.
     /// </remarks>
     public static GameFolder Taking(GameFolder game, IEnumerable<LeftBehind> chosen) =>
-        game with { Files = [.. game.Files, .. chosen.SelectMany(each => each.Inside ?? [each.File])] };
+        game with { Files = [.. game.Files, .. chosen.SelectMany(each => each.Inside ?? each.WithItsParts)] };
 
     /// <summary>
     /// The same files, with everything inside a folder gathered into one row
@@ -89,7 +110,8 @@ public static class WhatWasLeftBehind
                 order.Add(folder);
             }
 
-            inside.Add(each.File);
+            // With its parts, which are files in that folder like any other.
+            inside.AddRange(each.WithItsParts);
         }
 
         for (int at = 0; at < rows.Count; at++)
@@ -174,8 +196,17 @@ public static class WhatWasLeftBehind
                     own.Add(new GameExtra(
                         System.IO.Path.Combine(game.Path, what.File.RelativePath),
                         really == WhatBecomesOfIt.Manual ? GameExtraKind.Manual : GameExtraKind.Extra,
-                        what.Bytes,
+                        what.File.Bytes,
                         what.Inside?.Count ?? 1));
+
+                    // An installer kept as something to look at still has
+                    // its parts, and they go where it goes rather than
+                    // nowhere.
+                    own.AddRange((what.Parts ?? []).Select(part => new GameExtra(
+                        System.IO.Path.Combine(game.Path, part.RelativePath),
+                        GameExtraKind.Extra,
+                        part.Bytes,
+                        1)));
                     break;
             }
         }
@@ -234,8 +265,34 @@ public static class WhatWasLeftBehind
 /// The files in it, when it is a folder, each by its path in the game's
 /// folder. None for a file.
 /// </param>
-public sealed record LeftBehind(ListedFile File, LeftBehindKind Kind, IReadOnlyList<ListedFile>? Inside = null)
+/// <param name="Parts">
+/// The numbered parts of an installer, which go wherever it goes and are
+/// never asked about on their own. None for anything else.
+/// </param>
+public sealed record LeftBehind(
+    ListedFile File,
+    LeftBehindKind Kind,
+    IReadOnlyList<ListedFile>? Inside = null,
+    IReadOnlyList<ListedFile>? Parts = null)
 {
+    /// <summary>The file, and after it the parts that go with it.</summary>
+    public IReadOnlyList<ListedFile> WithItsParts => [File, .. Parts ?? []];
+
+    /// <summary>
+    /// The add-on this becomes when it is attached to a game, with its
+    /// parts pointing at where they are in the game's folder.
+    /// </summary>
+    /// <param name="game">Which game on the list it belongs to, from nought.</param>
+    /// <param name="folder">The folder it was found in.</param>
+    public AddOn AttachedTo(int game, string folder) => new(
+        game,
+        System.IO.Path.Combine(folder, File.RelativePath),
+        AsAnAddOn,
+        File.Bytes,
+        Parts is { Count: > 0 } parts
+            ? [.. parts.Select(part => new AddOnPart(System.IO.Path.Combine(folder, part.RelativePath), part.Bytes))]
+            : null);
+
     /// <summary>Whether this row is a whole folder.</summary>
     public bool IsAFolder => Inside is not null;
 
@@ -272,8 +329,8 @@ public sealed record LeftBehind(ListedFile File, LeftBehindKind Kind, IReadOnlyL
     /// <summary>What to call it on the window.</summary>
     public string Name => File.Name;
 
-    /// <summary>How big it is.</summary>
-    public long Bytes => File.Bytes;
+    /// <summary>How big it is, with its parts when it has them.</summary>
+    public long Bytes => File.Bytes + (Parts?.Sum(part => part.Bytes) ?? 0);
 
     /// <summary>
     /// What it would be called as an add-on, which is not its file name.
@@ -298,6 +355,16 @@ public sealed record LeftBehind(ListedFile File, LeftBehindKind Kind, IReadOnlyL
                 : "Looks like something to read or look at";
         }
 
+        return WhatItIs(installerFileName) + Parts switch
+        {
+            null or { Count: 0 } => string.Empty,
+            { Count: 1 } => " Its 1 part goes with it.",
+            _ => $" Its {Parts.Count} parts go with it.",
+        };
+    }
+
+    private string WhatItIs(string? installerFileName)
+    {
         return APatchAgainstTheInstaller.For(installerFileName, File.Name) switch
         {
             WhatAPatchAdds.NothingTheInstallerLacks =>

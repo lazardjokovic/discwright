@@ -94,7 +94,19 @@ public static class TheTreeOfWhatGoesOn
                     _ => null,
                 };
 
-                under.Holding(new AThingOnTheDisc(addOn.Name, addOn.Bytes, AnAddOn, addOn.Path, aside: aside));
+                // One row for the installer and its parts, at the size of
+                // all of them: they go on together or not at all, and a
+                // part with a tick of its own is a way to make a disc whose
+                // add-on cannot install.
+                aside ??= addOn.PartsOrNone.Count switch
+                {
+                    0 => null,
+                    1 => "With its 1 part.",
+                    _ => $"With its {addOn.PartsOrNone.Count} parts.",
+                };
+
+                under.Holding(new AThingOnTheDisc(
+                    addOn.Name, addOn.BytesWithItsParts, AnAddOn, addOn.Path, aside: aside));
             }
         }
 

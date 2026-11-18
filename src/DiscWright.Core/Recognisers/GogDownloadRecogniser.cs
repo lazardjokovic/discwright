@@ -77,18 +77,8 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
     /// wildcards, because GOG names are full of brackets and dots that a
     /// pattern would read as syntax.
     /// </remarks>
-    private static List<ListedFile> PartsOf(FolderListing folder, ListedFile installer)
-    {
-        string stem = installer.NameWithoutExtension + "-";
-
-        return
-        [
-            .. folder.AtTheTop
-                .Where(file => file.Extension == ".bin"
-                               && file.Name.StartsWith(stem, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
-        ];
-    }
+    private static List<ListedFile> PartsOf(FolderListing folder, ListedFile installer) =>
+        AddOn.PartsOf(installer, folder.AtTheTop);
 
     /// <summary>
     /// Whether an installer sits one level down in a folder this program

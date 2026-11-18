@@ -1,0 +1,85 @@
+﻿{
+  "Version": 14,
+  "AppVersion": "2.0.4",
+  "SavedUtc": "2026-11-18T09:00:00",
+  "SourceFolder": "C:\\Games\\The Witcher 2",
+  "GameName": "The Witcher",
+  "Games": [
+    {
+      "Folder": "C:\\Games\\The Witcher 2",
+      "GameName": "The Witcher",
+      "MatchName": "The Witcher",
+      "Setup": "C:\\Games\\The Witcher 2\\setup_the_witcher_2_3.3_(21034).exe",
+      "Kind": "Game",
+      "Source": "GOG",
+      "Parent": -1,
+      "Manual": null,
+      "Extras": null,
+      "OwnManuals": [
+        "C:\\Games\\The Witcher 2\\manual.pdf"
+      ],
+      "OwnExtras": [
+        "C:\\Games\\The Witcher 2\\setup_the_witcher_2_dlc_pack_(21034)-1.bin",
+        "C:\\Games\\The Witcher 2\\setup_the_witcher_2_dlc_pack_(21034)-2.bin",
+        "C:\\Games\\The Witcher 2\\Artbook"
+      ]
+    },
+    {
+      "Folder": "C:\\Games\\Hollow Knight",
+      "GameName": "Hollow Knight",
+      "MatchName": "Hollow Knight",
+      "Setup": "C:\\Games\\Hollow Knight\\setup_hollow_knight_1.5.78_(64bit)_(1).exe",
+      "Kind": "Game",
+      "Source": "GOG",
+      "Parent": -1,
+      "Manual": null,
+      "Extras": null,
+      "OwnManuals": [],
+      "OwnExtras": []
+    },
+    {
+      "Folder": "C:\\Games\\The Witcher 2",
+      "GameName": "the witcher 2 dlc pack (21034)",
+      "MatchName": "the witcher 2 dlc pack (21034)",
+      "Setup": "C:\\Games\\The Witcher 2\\setup_the_witcher_2_dlc_pack_(21034).exe",
+      "Kind": "AddOn",
+      "Source": "GOG",
+      "Parent": 0,
+      "Manual": null,
+      "Extras": null
+    },
+    {
+      "Folder": "C:\\Games\\The Witcher 2",
+      "GameName": "Update 3.4 (21034)",
+      "MatchName": "Update 3.4 (21034)",
+      "Setup": "C:\\Games\\The Witcher 2\\patch_the_witcher_2_3.3_to_3.4_(21034).exe",
+      "Kind": "AddOn",
+      "Source": "GOG",
+      "Parent": 0,
+      "Manual": null,
+      "Extras": null
+    }
+  ],
+  "Label": "WITCHER AND KNIGHT",
+  "IconPath": null,
+  "IconIsIco": false,
+  "Menu": true,
+  "BgPath": null,
+  "BgAsIs": false,
+  "BgColour": null,
+  "CoverPath": null,
+  "DiscArtPath": null,
+  "MusicFile": null,
+  "ManualPath": null,
+  "ExtrasPath": null,
+  "ExtraItems": [],
+  "MediaKey": "DVD5",
+  "LinuxInfo": false,
+  "LegacyFs": false,
+  "Checksums": true,
+  "ArtworkOnDisc": true,
+  "DiscSet": false,
+  "CutFiles": false,
+  "StartHere": true,
+  "OutDir": "C:\\Discs\\witcher and knight"
+}
