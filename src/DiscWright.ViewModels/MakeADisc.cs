@@ -1993,6 +1993,63 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Attaches installers to the picked game as its add-ons, from anywhere
+    /// on the machine: a DLC, a patch, a mod.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Reported against 2.0.4 on Reddit: add-ons kept in a folder apart from
+    /// the game could not be put under the game's Install button. Adding the
+    /// folder made a game of it, and the question that stops that said to
+    /// "add the game first and attach this to it" when nothing in the window
+    /// attached anything. This is that.
+    /// </para>
+    /// <para>
+    /// Each brings the numbered parts sitting beside it. One already on the
+    /// game is not attached twice, nor is one of the game's own files, which
+    /// is the game, nor a part some add-on of the game already carries.
+    /// </para>
+    /// </remarks>
+    public void AttachToThePickedGame(IEnumerable<string> installers)
+    {
+        int at = GameOf(_selected);
+
+        if (at < 0 || IsWorking)
+        {
+            return;
+        }
+
+        GameFolder game = _asFound[at];
+
+        foreach (string path in installers)
+        {
+            bool onAlready = _addOnsAsFound.Any(addOn =>
+                addOn.BelongsTo == at
+                && (TheSameFile(addOn.Path, path) || addOn.PartsOrNone.Any(part => TheSameFile(part.Path, path))));
+
+            bool theGameItself = game.Files.Any(file =>
+                TheSameFile(System.IO.Path.Combine(game.Path, file.RelativePath), path));
+
+            if (onAlready || theGameItself)
+            {
+                continue;
+            }
+
+            _addOnsAsFound.Add(new AddOn(
+                at,
+                path,
+                AddOn.NameFor(path),
+                _machine.HowBigIs(path),
+                AddOn.PartsBeside(path, _machine.Disk)));
+        }
+
+        BuildTheBranchAgain(at);
+    }
+
+    private static bool TheSameFile(string one, string other) =>
+        string.Equals(one, other, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Turns one of a game's own from its manual into one of its extras, or
     /// back, which is a click on what the row says it is.
     /// </summary>

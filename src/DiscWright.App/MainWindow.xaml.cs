@@ -402,6 +402,25 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Add-ons of the picked game, from anywhere on the machine: the
+    /// installers, each of which brings the parts beside it.
+    /// </summary>
+    private void AttachAnAddOnToThePickedGame(object sender, RoutedEventArgs e)
+    {
+        Microsoft.Win32.OpenFileDialog asking = new()
+        {
+            Title = "An add-on of " + _screen.ThePickedGame + ": a DLC, a patch, a mod",
+            Filter = "Something that installs|*.exe|Anything|*.*",
+            Multiselect = true
+        };
+
+        if (asking.ShowDialog(this) == true)
+        {
+            _screen.AttachToThePickedGame(asking.FileNames);
+        }
+    }
+
+    /// <summary>
     /// Extras of the picked game's own: a folder, going on whole, the way an
     /// artbook or a folder of maps is kept.
     /// </summary>
@@ -1188,7 +1207,8 @@ public partial class MainWindow : Window
             "That looks like an add-on, not a game",
             $"{game.Installer?.Name} installs onto a game rather than being one. On a disc of its own it appears "
                 + "in the menu as a game, and running it does nothing, because the game it belongs to is not "
-                + "there. To put it with its game, add the game first and attach this to it.",
+                + "there. To put it with its game, add the game first, pick it in the list, and press "
+                + "Attach an add-on under the list.",
             "Leave it for now",
             "Put it on anyway");
 

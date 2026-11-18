@@ -168,6 +168,35 @@ public sealed partial record AddOn(
     }
 
     /// <summary>
+    /// The numbered parts sitting beside an installer on the disk now, or
+    /// nothing when it has none.
+    /// </summary>
+    /// <remarks>
+    /// Read off the disk rather than out of a project file, the way a game's
+    /// own parts are. So the file says nothing new, a project saved by an
+    /// older version comes back with the parts it never knew about, and one
+    /// saved now opens in an older version exactly as its own did. Asked the
+    /// same way when an installer is attached to a game by hand.
+    /// </remarks>
+    public static IReadOnlyList<AddOnPart>? PartsBeside(string installer, IFileSystem files)
+    {
+        string? folder = System.IO.Path.GetDirectoryName(installer);
+
+        if (string.IsNullOrEmpty(folder) || !files.FolderExists(folder))
+        {
+            return null;
+        }
+
+        List<ListedFile> parts = PartsOf(
+            new ListedFile(System.IO.Path.GetFileName(installer), 0),
+            files.ListHere(folder).Files);
+
+        return parts.Count > 0
+            ? [.. parts.Select(part => new AddOnPart(System.IO.Path.Combine(folder, part.RelativePath), part.Bytes))]
+            : null;
+    }
+
+    /// <summary>
     /// Whether a file is named the way GOG names something that installs:
     /// <c>setup_</c> or <c>patch_</c>, and an executable.
     /// </summary>

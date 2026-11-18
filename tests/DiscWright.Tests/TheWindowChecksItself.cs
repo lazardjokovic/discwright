@@ -369,9 +369,12 @@ public class TheWindowChecksItself
     private static readonly string[] Folders =
         [@"C:\out", @"D:\somewhere else", @"C:\out"];
 
+    /// <summary>Where this walk keeps the add-ons it attaches by hand.</summary>
+    private const string KeptApart = @"D:\add-ons\";
+
     private static ADoing Something(Random dice)
     {
-        int which = dice.Next(44);
+        int which = dice.Next(45);
         string name = Names[dice.Next(Names.Length)];
         int bytes = new[] { 1000, 400_000_000, 1_000_000_000 }[dice.Next(3)];
         int row = dice.Next(4);
@@ -521,6 +524,11 @@ public class TheWindowChecksItself
                 desk => desk.Screen.AddTheGamesOwn([$@"D:\goodies\extras {row}"], GameExtraKind.Extra)),
 
             43 => new($"swap what row {row} of a game's own is", desk => desk.SwapOne(row)),
+
+            // An add-on attached to the picked game by hand. It rebuilds
+            // the game's branch the way a manual of its own does, and
+            // changes the size and what the bottom line says.
+            44 => new($"attach add-on {row} to the picked game", desk => desk.AttachOne(row)),
 
             _ => new("start a new disc", desk => desk.Screen.StartAgain()),
         };
@@ -800,7 +808,9 @@ public class TheWindowChecksItself
         // Every add-on belongs to the game it came out of, which is the game
         // whose folder it sits in. Taking a game off the middle of the list
         // shuffles the rest down, and an add-on left pointing at the old
-        // number is an update attached to somebody else's game.
+        // number is an update attached to somebody else's game. One attached
+        // by hand sits elsewhere, and this walk keeps those in a folder
+        // named after the game's own, so the same question can be asked.
         DiscProject project = screen.AsAProject();
 
         foreach (AddOn addOn in project.AddOnsOrNone)
@@ -811,7 +821,10 @@ public class TheWindowChecksItself
                     + $"and there are {project.Games.Count} games.";
             }
 
-            if (!addOn.Path.StartsWith(project.Games[addOn.BelongsTo].Path, StringComparison.Ordinal))
+            string itsGame = project.Games[addOn.BelongsTo].Path;
+
+            if (!addOn.Path.StartsWith(itsGame, StringComparison.Ordinal)
+                && !addOn.Path.StartsWith(KeptApart + Path.GetFileName(itsGame) + (char)92, StringComparison.Ordinal))
             {
                 return $"The add-on at {addOn.Path} is attached to "
                     + $"{project.Games[addOn.BelongsTo].Name} at {project.Games[addOn.BelongsTo].Path}.";
@@ -1044,6 +1057,21 @@ public class TheWindowChecksItself
             AThingOnTheDisc[] rows = [.. Screen.WhatGoesOnIt.SelectMany(game => game.EveryThing())];
 
             Screen.WhatIsSelected = rows.Length == 0 ? null : rows[which % rows.Length];
+        }
+
+        /// <summary>
+        /// Attaches an installer kept away from the picked game's folder, in
+        /// a folder named after it, so whose it is can still be read off
+        /// its path once the list has been shuffled.
+        /// </summary>
+        internal void AttachOne(int which)
+        {
+            AThingOnTheDisc? game = Screen.WhatGoesOnIt.FirstOrDefault(each =>
+                ReferenceEquals(each, Screen.WhatIsSelected) || each.EveryRow().Contains(Screen.WhatIsSelected));
+
+            string kept = game is null ? "nobody's" : Path.GetFileName(game.ItsPath);
+
+            Screen.AttachToThePickedGame([$@"{KeptApart}{kept}\setup_dlc_{which}.exe"]);
         }
 
         internal void SwapOne(int which)
