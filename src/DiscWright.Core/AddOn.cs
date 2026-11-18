@@ -167,6 +167,15 @@ public sealed partial record AddOn(
             || NotTheGame.Any(word => bare.Contains(word, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Whether a file is named the way GOG names something that installs:
+    /// <c>setup_</c> or <c>patch_</c>, and an executable.
+    /// </summary>
+    public static bool IsNamedLikeAnInstaller(string fileName) =>
+        fileName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+        && (fileName.StartsWith("setup_", StringComparison.OrdinalIgnoreCase)
+            || fileName.StartsWith("patch_", StringComparison.OrdinalIgnoreCase));
+
     public static string NameFor(string fileName)
     {
         string raw = System.IO.Path.GetFileNameWithoutExtension(fileName);

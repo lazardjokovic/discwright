@@ -103,15 +103,17 @@ public class AnAddOnCarriesItsParts
     [Fact]
     public void Gathered_into_its_folder_the_parts_are_still_in_it()
     {
+        // Something that is not named like an installer, a mod's own
+        // setup, is gathered with its folder, and its parts with it.
         IReadOnlyList<LeftBehind> rows = WhatWasLeftBehind.Gathered(LeftIn(
             ("setup_game.exe", 40),
-            (@"DLC\setup_other.exe", 3),
-            (@"DLC\setup_other-1.bin", 600)));
+            (@"Mods\overhaul.exe", 3),
+            (@"Mods\overhaul-1.bin", 600)));
 
         LeftBehind folder = Assert.Single(rows);
 
         Assert.Equal(
-            [@"DLC\setup_other.exe", @"DLC\setup_other-1.bin"],
+            [@"Mods\overhaul.exe", @"Mods\overhaul-1.bin"],
             folder.Inside!.Select(file => file.RelativePath));
         Assert.Equal(603, folder.Bytes);
     }

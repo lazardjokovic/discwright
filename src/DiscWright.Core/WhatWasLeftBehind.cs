@@ -78,10 +78,21 @@ public static class WhatWasLeftBehind
     /// for the folder.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// An artbook is a folder of forty pictures, and asking about it picture
     /// by picture is forty questions with one answer. A file at the top of
     /// the folder stays a row of its own, in the order the folder listed it;
     /// a folder takes the place of its first file.
+    /// </para>
+    /// <para>
+    /// <strong>An installer inside a folder is not gathered with it.</strong>
+    /// Somebody who keeps a game's DLC in a folder beside its installer got
+    /// one row for the folder, which could only become an extra, so nothing
+    /// in it could go under the game's Install button. Reported against
+    /// 2.0.4. An installer named the way GOG names one stays a row of its
+    /// own, called by where it is, and the rest of the folder is gathered
+    /// as before. A folder holding nothing else gets no row at all.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<LeftBehind> Gathered(IReadOnlyList<LeftBehind> left)
     {
@@ -94,7 +105,7 @@ public static class WhatWasLeftBehind
             string path = each.File.RelativePath;
             int slash = path.IndexOfAny(['/', (char)92]);
 
-            if (slash < 0)
+            if (slash < 0 || IsAnInstallerOfItsOwn(each))
             {
                 rows.Add(each);
                 order.Add(path);
@@ -129,6 +140,18 @@ public static class WhatWasLeftBehind
 
         return rows;
     }
+
+    /// <summary>
+    /// Whether a file inside a folder is asked about on its own rather than
+    /// as part of that folder.
+    /// </summary>
+    /// <remarks>
+    /// Only what is named the way GOG names an installer or a patch. Any
+    /// executable would take a folder of tools apart into a row a tool,
+    /// which is the forty questions the gathering exists to spare.
+    /// </remarks>
+    private static bool IsAnInstallerOfItsOwn(LeftBehind each) =>
+        AddOn.IsNamedLikeAnInstaller(each.File.Name);
 
     /// <summary>
     /// What the tick offering the same answers for the games after this one
@@ -326,8 +349,12 @@ public sealed record LeftBehind(
         }
     }
 
-    /// <summary>What to call it on the window.</summary>
-    public string Name => File.Name;
+    /// <summary>
+    /// What to call it on the window: its name, and for a file inside a
+    /// folder, the folder in front of it, which is the only thing that
+    /// tells two installers in two folders apart.
+    /// </summary>
+    public string Name => File.RelativePath;
 
     /// <summary>How big it is, with its parts when it has them.</summary>
     public long Bytes => File.Bytes + (Parts?.Sum(part => part.Bytes) ?? 0);
