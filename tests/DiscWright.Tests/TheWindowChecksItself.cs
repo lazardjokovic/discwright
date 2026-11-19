@@ -155,6 +155,8 @@ public class TheWindowChecksItself
     [InlineData("the menu background")]
     [InlineData("the menu colour")]
     [InlineData("stretch the background to fit")]
+    [InlineData("the background fitted inside")]
+    [InlineData("the background tiled")]
     [InlineData("the disc icon")]
     [InlineData("the cover")]
     [InlineData("the disc face")]
@@ -295,6 +297,7 @@ public class TheWindowChecksItself
         nameof(MakeADisc.ListOnTheLeft), nameof(MakeADisc.CornerAtTheBottom),
         nameof(MakeADisc.DiscsOwnAsSmallButtons), nameof(MakeADisc.OpenTheDiscButton),
         nameof(MakeADisc.MenuHeading), nameof(MakeADisc.MenuHeadingHidden),
+        nameof(MakeADisc.HowTheBackgroundFits),
     ];
 
     /// <summary>The row of the dropdown that stands for this size.</summary>
@@ -307,6 +310,8 @@ public class TheWindowChecksItself
             case "the menu background": screen.Background = @"C:\art\back.png"; break;
             case "the menu colour": screen.BackgroundColourText = "#1B3A4B"; break;
             case "stretch the background to fit": screen.BackgroundAsIs = true; break;
+            case "the background fitted inside": screen.HowTheBackgroundFits = WaysToFit.For(BackgroundFit.Fit); break;
+            case "the background tiled": screen.HowTheBackgroundFits = WaysToFit.For(BackgroundFit.Tile); break;
             case "the disc icon": screen.DiscIcon = @"C:\art\icon.png"; break;
             case "the cover": screen.Cover = @"C:\art\cover.png"; break;
             case "the disc face": screen.DiscFace = @"C:\art\face.png"; break;
@@ -338,6 +343,8 @@ public class TheWindowChecksItself
             case "the menu background": screen.Background = null; break;
             case "the menu colour": screen.BackgroundColourText = string.Empty; break;
             case "stretch the background to fit": screen.BackgroundAsIs = false; break;
+            case "the background fitted inside":
+            case "the background tiled": screen.HowTheBackgroundFits = WaysToFit.For(BackgroundFit.Fill); break;
             case "the disc icon": screen.DiscIcon = null; break;
             case "the cover": screen.Cover = null; break;
             case "the disc face": screen.DiscFace = null; break;
@@ -1510,7 +1517,7 @@ public class TheWindowChecksItself
         {
         }
 
-        public void WriteBackground(string source, string destination, int width, int height, bool asIs)
+        public void WriteBackground(string source, string destination, int width, int height, BackgroundFit how)
         {
         }
     }

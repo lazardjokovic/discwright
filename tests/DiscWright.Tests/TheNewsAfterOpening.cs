@@ -256,7 +256,7 @@ public class TheNewsAfterOpening
         {
         }
 
-        public void WriteBackground(string source, string destination, int width, int height, bool asIs)
+        public void WriteBackground(string source, string destination, int width, int height, BackgroundFit how)
         {
         }
     }

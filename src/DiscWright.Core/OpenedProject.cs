@@ -84,4 +84,14 @@ public sealed record ProjectArtwork(
     bool BackgroundAsItIs,
     string? CoverPath,
     string? DiscFacePath,
-    string? BackgroundColour = null);
+    string? BackgroundColour = null,
+    BackgroundFit? BackgroundShape = null)
+{
+    /// <summary>
+    /// How the background covers the menu: the word when the file has one
+    /// that names a way, and otherwise its yes or no, which is all a file
+    /// written before 2.0.5 has.
+    /// </summary>
+    public BackgroundFit HowItFits =>
+        BackgroundShape ?? (BackgroundAsItIs ? BackgroundFit.Stretch : BackgroundFit.Fill);
+}

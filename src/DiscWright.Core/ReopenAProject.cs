@@ -168,7 +168,8 @@ public static class ReopenAProject
                 opened.Artwork.BackgroundAsItIs,
                 opened.Artwork.CoverPath,
                 opened.Artwork.DiscFacePath,
-                opened.Artwork.BackgroundColour),
+                opened.Artwork.BackgroundColour)
+                .Fitting(opened.Artwork.HowItFits),
             Extras: new DiscExtras(
                 opened.ManualPath,
                 opened.ExtrasFolderPath,

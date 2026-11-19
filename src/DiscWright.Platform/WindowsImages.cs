@@ -92,7 +92,13 @@ public sealed class WindowsImages : IImages
         }
     }
 
-    public void WriteBackground(string source, string destination, int width, int height, bool asIs)
+    /// <summary>
+    /// The menu's own dark, which is what its page is painted before any
+    /// picture goes on: what a picture fitted inside the menu leaves showing.
+    /// </summary>
+    private static readonly Color TheMenusOwnDark = Color.FromArgb(255, 0x0C, 0x13, 0x16);
+
+    public void WriteBackground(string source, string destination, int width, int height, BackgroundFit how)
     {
         using Image original = Image.FromFile(source);
         using Bitmap canvas = new(width, height, PixelFormat.Format32bppArgb);
@@ -110,41 +116,84 @@ public sealed class WindowsImages : IImages
         using ImageAttributes atTheEdges = new();
         atTheEdges.SetWrapMode(WrapMode.TileFlipXY);
 
-        if (asIs)
+        switch (how)
         {
-            // Stretched to the shape of the menu, proportions and all.
-            drawing.DrawImage(
-                original,
-                new Rectangle(0, 0, width, height),
-                0,
-                0,
-                original.Width,
-                original.Height,
-                GraphicsUnit.Pixel,
-                atTheEdges);
-        }
-        else
-        {
-            // Filled and cropped evenly. Keeping the proportions is almost
-            // always what somebody wants from a screenshot or cover art, and
-            // the overflow is taken off both sides rather than one.
-            double scale = Math.Max((double)width / original.Width, (double)height / original.Height);
-            int drawnWidth = (int)Math.Ceiling(original.Width * scale);
-            int drawnHeight = (int)Math.Ceiling(original.Height * scale);
+            case BackgroundFit.Stretch:
+                // Stretched to the shape of the menu, proportions and all.
+                Draw(drawing, original, new Rectangle(0, 0, width, height), atTheEdges);
+                break;
 
-            drawing.DrawImage(
-                original,
-                new Rectangle((width - drawnWidth) / 2, (height - drawnHeight) / 2, drawnWidth, drawnHeight),
-                0,
-                0,
-                original.Width,
-                original.Height,
-                GraphicsUnit.Pixel,
-                atTheEdges);
+            case BackgroundFit.Fit:
+                // All of it, as large as the menu allows, in the middle, and
+                // the rest solid in the menu's own dark rather than clear.
+                drawing.Clear(TheMenusOwnDark);
+                Draw(drawing, original, Scaled(original, width, height, covering: false), atTheEdges);
+                break;
+
+            case BackgroundFit.Tile:
+                // Its own pixels and no others, so a pattern that meets
+                // itself at its edges still does: each copy is drawn at the
+                // picture's own size, a whole number of pixels from the
+                // last, and at that size nothing is smoothed. A test reads
+                // every pixel of the result against the picture's own.
+                for (int down = 0; down < height; down += original.Height)
+                {
+                    for (int across = 0; across < width; across += original.Width)
+                    {
+                        Draw(drawing, original, new Rectangle(across, down, original.Width, original.Height), null);
+                    }
+                }
+
+                break;
+
+            default:
+                // Filled and cropped evenly. Keeping the proportions is almost
+                // always what somebody wants from a screenshot or cover art, and
+                // the overflow is taken off both sides rather than one.
+                Draw(drawing, original, Scaled(original, width, height, covering: true), atTheEdges);
+                break;
         }
 
         canvas.Save(destination, ImageFormat.Png);
     }
+
+    /// <summary>
+    /// Where a picture goes when it keeps its proportions: in the middle,
+    /// grown or shrunk until it covers the frame, or until all of it is in.
+    /// </summary>
+    private static Rectangle Scaled(Image original, int width, int height, bool covering)
+    {
+        double across = (double)width / original.Width;
+        double down = (double)height / original.Height;
+        double scale = covering ? Math.Max(across, down) : Math.Min(across, down);
+
+        // Rounded up when covering, so a picture a hair short of the frame
+        // never leaves a line of nothing down one side.
+        int drawnWidth = covering
+            ? (int)Math.Ceiling(original.Width * scale)
+            : Math.Max(1, (int)Math.Round(original.Width * scale));
+        int drawnHeight = covering
+            ? (int)Math.Ceiling(original.Height * scale)
+            : Math.Max(1, (int)Math.Round(original.Height * scale));
+
+        return new Rectangle((width - drawnWidth) / 2, (height - drawnHeight) / 2, drawnWidth, drawnHeight);
+    }
+
+    /// <summary>
+    /// All of a picture into one rectangle, by its pixels. Never by its own
+    /// idea of its size: a picture saved for print says 300 dots to the inch
+    /// in its file, and GDI+ listens when it is not told.
+    /// </summary>
+    private static void Draw(Graphics drawing, Image original, Rectangle where, ImageAttributes? atTheEdges) =>
+        drawing.DrawImage(
+            original,
+            where,
+            0,
+            0,
+            original.Width,
+            original.Height,
+            GraphicsUnit.Pixel,
+            atTheEdges);
 
     /// <summary>One square frame of an icon, cropped from the middle if it has to be.</summary>
     private static Bitmap SquareOf(Image original, int size)

@@ -156,7 +156,13 @@ public static class TheProjectAsJson
             writing.WriteBoolean("IconIsIco", IsAlreadyAnIcon(art?.IconPath));
             writing.WriteBoolean("Menu", project.Options.Menu);
             WriteOrNull(writing, "BgPath", art?.BackgroundPath);
-            writing.WriteBoolean("BgAsIs", art?.BackgroundAsIs ?? false);
+            // The yes or no, as it always was, for the PowerShell app and
+            // every 2.0 before this: true for stretched and false for
+            // everything else, which opens there filled. The word that says
+            // which of the four it really is comes at the end of the file,
+            // after everything they wrote.
+            BackgroundFit fit = art?.HowItFits ?? BackgroundFit.Fill;
+            writing.WriteBoolean("BgAsIs", fit == BackgroundFit.Stretch);
             WriteOrNull(writing, "BgColour", art?.BackgroundColour);
             WriteOrNull(writing, "CoverPath", art?.CoverPath);
             WriteOrNull(writing, "DiscArtPath", art?.DiscFacePath);
@@ -200,6 +206,8 @@ public static class TheProjectAsJson
             WriteOrNull(writing, "Heading", MenuLook.TidiedHeading(look.Heading));
             writing.WriteBoolean("HeadingHidden", look.HeadingHidden);
             writing.WriteEndObject();
+
+            writing.WriteString("BgFit", fit.ToString());
 
             writing.WriteEndObject();
         }

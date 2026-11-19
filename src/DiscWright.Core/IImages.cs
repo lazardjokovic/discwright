@@ -34,12 +34,11 @@ public interface IImages
     /// <summary>
     /// Writes the picture the menu shows behind itself, at the menu's size.
     /// </summary>
-    /// <param name="asIs">
-    /// True to stretch it to fit exactly, false to fill the frame and crop the
-    /// overflow evenly. Cropping keeps the proportions, which is almost always
-    /// what somebody wants from a screenshot or a piece of cover art.
+    /// <param name="how">
+    /// How it is made to cover a frame that is almost never its own shape:
+    /// see <see cref="BackgroundFit"/>.
     /// </param>
-    void WriteBackground(string source, string destination, int width, int height, bool asIs);
+    void WriteBackground(string source, string destination, int width, int height, BackgroundFit how);
 }
 
 /// <summary>What could be learned about a picture without opening the window.</summary>

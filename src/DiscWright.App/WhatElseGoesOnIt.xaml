@@ -130,15 +130,31 @@
                                    Text="{Binding Background, TargetNullValue=Nothing chosen}"
                                    AutomationProperties.AutomationId="TheBackground" />
 
-                        <CheckBox Margin="0,8,0,0"
-                                  Content="Stretch to fit"
-                                  IsChecked="{Binding BackgroundAsIs}"
-                                  AutomationProperties.AutomationId="BackgroundAsIs" />
+                        <!-- Four ways and not a tick box, discwright#98,
+                             15 November: fill, fit, stretch and tile. The
+                             line under it says what the one chosen does. -->
+                        <ComboBox Margin="0,8,0,0"
+                                  HorizontalAlignment="Left"
+                                  MinWidth="150"
+                                  ItemsSource="{Binding TheWaysABackgroundFits}"
+                                  SelectedItem="{Binding HowTheBackgroundFits}"
+                                  DisplayMemberPath="InWords"
+                                  AutomationProperties.AutomationId="BackgroundFit">
+                            <ComboBox.ItemContainerStyle>
+                                <!-- BasedOn, so the rows keep the themed
+                                     look, and named, so a reader says the
+                                     words and not what the row prints as. -->
+                                <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding InWords}" />
+                                </Style>
+                            </ComboBox.ItemContainerStyle>
+                        </ComboBox>
 
                         <TextBlock Style="{StaticResource Aside}"
                                    Margin="0,4,0,0"
                                    TextWrapping="Wrap"
-                                   Text="Cropping keeps the proportions, which is almost always what somebody wants from cover art or a screenshot." />
+                                   Text="{Binding WhatThatFitDoes}"
+                                   AutomationProperties.AutomationId="WhatThatFitDoes" />
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
