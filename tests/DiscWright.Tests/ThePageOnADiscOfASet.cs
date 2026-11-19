@@ -506,6 +506,31 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     }
 
     [Fact]
+    public void The_music_button_is_a_small_button_still_when_the_tune_is_turned_off_and_on()
+    {
+        string disc = Path.Combine(_folder, "muted");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Muted", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Muted", "good.txt", string.Empty)])),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                // A player that plays, standing in for the one a disc gets.
+                "player = { controls: { pause: function () {}, play: function () {}, stop: function () {} } }; playing = true;\n"
+                + "toggleMusic();\n"
+                + "out.push('off=' + document.getElementById('mute').className);\n"
+                + "toggleMusic();\n"
+                + "out.push('on=' + document.getElementById('mute').className);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(["off=corner off", "on=corner"], lines);
+    }
+
+    [Fact]
     public void Checks_the_disc_from_the_button_beside_the_mute()
     {
         // The one click check from discwright#98, pressed the way the page
@@ -557,11 +582,13 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         // The percentage is an estimate against the clock, and files this
         // small are most of the way through in a millisecond, so only its
         // shape is pinned here. The arithmetic is TheMenuScript's.
-        Assert.Matches(@"^busy=busy saying=Checking the disc, \d{1,2}%: file 1 of 2 against what was burned\.$", lines[1]);
+        Assert.Matches(@"^busy=corner busy saying=Checking the disc, \d{1,2}%: file 1 of 2 against what was burned\.$", lines[1]);
         Assert.Equal("press again=0", lines[2]);
         Assert.Equal("install=btn next dead", lines[3]);
         Assert.Equal("install pressed=0", lines[4]);
-        Assert.Equal("after= install=btn next", lines[5]);
+        // Finished, it is a small button still: the rule it wears is what
+        // gives it its box and its place, and it lost both on a real disc.
+        Assert.Equal("after=corner install=btn next", lines[5]);
         Assert.StartsWith("line=2 of 3 files on this disc are wrong or missing:", lines[6], StringComparison.Ordinal);
         Assert.Contains("bad.txt", lines[6], StringComparison.Ordinal);
         Assert.Contains("gone.txt", lines[6], StringComparison.Ordinal);
@@ -1312,7 +1339,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
-        Assert.Equal(["check=dead", "pressed=0 check=dead"], lines);
+        Assert.Equal(["check=corner dead", "pressed=0 check=corner dead"], lines);
     }
 
     /// <summary>

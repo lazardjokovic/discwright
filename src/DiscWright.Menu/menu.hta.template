@@ -873,7 +873,8 @@ function showTheSet(game) {
 
     // The check is dead while the set is being worked on, the owner's catch
     // on 2026-11-10: it stayed live under a copy reading the same disc.
-    document.getElementById("sums").className = restoring.busy ? "dead" : (checking ? "busy" : "");
+    document.getElementById("sums").className =
+        whatASmallButtonWears(restoring.busy ? "dead" : (checking ? "busy" : ""));
 
     // And Manual and Extras, while the disc is being copied: pressing Extras
     // under the copy froze the menu for a minute the same afternoon, the
@@ -1360,7 +1361,7 @@ function toggleMusic() {
         }
 
         playing = !playing;
-        document.getElementById("mute").className = playing ? "" : "off";
+        document.getElementById("mute").className = whatASmallButtonWears(playing ? "" : "off");
     } catch (wentWrong) {
         // Pausing a tune is not worth a message.
     }
@@ -1445,7 +1446,7 @@ function checkThisDisc() {
     }
 
     checking = true;
-    document.getElementById("sums").className = "busy";
+    document.getElementById("sums").className = whatASmallButtonWears("busy");
 
     // The big button is dead while the check reads the disc, the mirror of
     // the check being dead under a copy, and drawn so rather than ignoring
@@ -1454,7 +1455,7 @@ function checkThisDisc() {
 
     checkTheDisc(theDisc(), sums, sayTheCheck, function (verdict) {
         checking = false;
-        document.getElementById("sums").className = "";
+        document.getElementById("sums").className = whatASmallButtonWears("");
         document.getElementById("doIt").parentNode.className = "btn next";
         sayTheCheck(verdict);
     });
