@@ -117,9 +117,18 @@ public sealed record DiscProject(
 /// off for years and without it the menu sits in a folder nobody opens. Asked
 /// for as an option on 2026-11-10 by somebody testing v1 (discwright#181).
 /// </param>
+/// <param name="Look">
+/// How the menu is laid out, or nothing for the menu as it comes. Never the
+/// plain look spelled out: see <see cref="MenuLook.OrNothingWhenPlain()"/>.
+/// </param>
 public sealed record DiscOptions(
     bool Menu = true,
     bool Checksums = true,
     bool LegacyFileSystems = false,
     bool CutFiles = false,
-    bool StartHere = true);
+    bool StartHere = true,
+    MenuLook? Look = null)
+{
+    /// <summary>The look chosen, or the plain one.</summary>
+    public MenuLook LookOrPlain => Look ?? MenuLook.Plain;
+}

@@ -279,6 +279,53 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.True(Directory.Exists(games), "and only the copy");
     }
 
+    [Theory]
+    // As it comes: the panel is left where its own rule draws it, and the
+    // check takes the first place, top left, there being no music.
+    [InlineData(MenuSide.Right, false, false, "panel=/", "sums=16px,16px", "mute=/")]
+    [InlineData(MenuSide.Right, true, false, "panel=/", "sums=16px,434px", "mute=/")]
+    // The list on the left: the panel moves, and the corner is the right one.
+    [InlineData(MenuSide.Left, false, false, "panel=0px/auto", "sums=714px,16px", "mute=/")]
+    [InlineData(MenuSide.Left, true, false, "panel=0px/auto", "sums=714px,434px", "mute=/")]
+    // With music showing as well, the two are a row in the same order.
+    [InlineData(MenuSide.Right, false, true, "panel=/", "sums=52px,16px", "mute=16px,16px")]
+    [InlineData(MenuSide.Left, true, true, "panel=0px/auto", "sums=714px,434px", "mute=678px,434px")]
+    public void The_page_puts_the_list_and_the_corner_where_the_disc_says(
+        MenuSide side, bool bottom, bool music, string panel, string sums, string mute)
+    {
+        // The page's own two functions, run as the page runs them, on a
+        // stand-in disc that has a checksum list and so a check to show.
+        string disc = Path.Combine(_folder, "laid out " + side + bottom + music);
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+        File.WriteAllText(Path.Combine(disc, "checksums.sha256"), ChecksumList.For("LAID OUT", []));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Laid out", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Laid out", "good.txt", string.Empty)],
+                Look: new MenuLook(side, bottom))),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "function at(id) { var s = document.getElementById(id).style; return (s.left || '') + ',' + (s.top || ''); }\n"
+                + "putTheListOnItsSide();\n"
+
+                // The music button as startTheMusic leaves it when a tune plays.
+                + (music ? "document.getElementById('mute').style.display = 'block';\n" : string.Empty)
+                + "showTheCheck();\n"
+                + "placeTheCornerButtons();\n"
+                + "var p = document.getElementById('panel').style;\n"
+                + "out.push('panel=' + (p.left || '') + '/' + (p.right || ''));\n"
+                + "out.push('sums=' + at('sums'));\n"
+                + "out.push('mute=' + (document.getElementById('mute').style.display === 'block' ? at('mute') : '/'));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(panel, lines[0]);
+        Assert.Equal(sums, lines[1]);
+        Assert.Equal(mute, lines[2]);
+    }
+
     [Fact]
     public void Checks_the_disc_from_the_button_beside_the_mute()
     {
@@ -305,6 +352,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
             test:
                 "showTheCheck();\n"
+                + "placeTheCornerButtons();\n"
                 + "out.push('shown=' + document.getElementById('sums').style.display + ' at=' + document.getElementById('sums').style.left);\n"
                 + "checkThisDisc();\n"
 

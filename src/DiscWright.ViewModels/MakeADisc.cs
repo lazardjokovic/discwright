@@ -1478,6 +1478,42 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Whether the menu's list of buttons sits against the left edge rather
+    /// than the right, discwright#98.
+    /// </summary>
+    public bool ListOnTheLeft
+    {
+        get => Options.LookOrPlain.ListOn == MenuSide.Left;
+        set => SwitchTheLook(Options.LookOrPlain with { ListOn = value ? MenuSide.Left : MenuSide.Right });
+    }
+
+    /// <summary>
+    /// Whether the menu's small buttons sit in the bottom corner rather than
+    /// the top one.
+    /// </summary>
+    public bool CornerAtTheBottom
+    {
+        get => Options.LookOrPlain.CornerAtTheBottom;
+        set => SwitchTheLook(Options.LookOrPlain with { CornerAtTheBottom = value });
+    }
+
+    /// <summary>
+    /// Where the small buttons will be, in words, because the side they take
+    /// is decided by the list and nobody should have to work that out.
+    /// </summary>
+    public string WhereTheCornerButtonsSit =>
+        "The music and disc check buttons sit "
+        + (CornerAtTheBottom ? "bottom " : "top ")
+        + (ListOnTheLeft ? "right" : "left")
+        + ", away from the list.";
+
+    private void SwitchTheLook(MenuLook now, [CallerMemberName] string? name = null)
+    {
+        Switch(Options with { Look = now.OrNothingWhenPlain() }, name);
+        Tell(nameof(WhereTheCornerButtonsSit));
+    }
+
+    /// <summary>
     /// Everything worth knowing about the drives, for the picker to hover
     /// with: what it does when nobody chooses, and any tray that needs a push.
     /// </summary>
@@ -3595,6 +3631,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(LegacyFileSystems));
         Tell(nameof(CutFiles));
         Tell(nameof(StartHere));
+        Tell(nameof(ListOnTheLeft));
+        Tell(nameof(CornerAtTheBottom));
+        Tell(nameof(WhereTheCornerButtonsSit));
 
         // The artwork, the manual, the tune and the folder of extras, which a
         // project file carries and which nothing here announced.
