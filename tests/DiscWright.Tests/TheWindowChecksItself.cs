@@ -278,6 +278,10 @@ public class TheWindowChecksItself
         // warnings that follow it are different, not absent.
         nameof(MakeADisc.TheDrive),
 
+        // Having the size chosen, which is a choice with no "put it back":
+        // unticked, the size stays where it arrived and counts as chosen.
+        nameof(MakeADisc.ChooseTheSizeForMe),
+
         // The five options as one record. Nothing binds to it; the window
         // binds to each tick, and each tick is a case above.
         nameof(MakeADisc.Options),

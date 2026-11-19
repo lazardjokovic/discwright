@@ -89,6 +89,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </summary>
     private Medium? _theLargerDisc;
     private bool _theSizeWasChosen;
+
+    /// <summary>
+    /// Whether the size follows what is on the window, smallest that holds
+    /// it, rather than being picked. See <see cref="ChooseTheSizeForMe"/>.
+    /// </summary>
+    private bool _theSizeFollowsWhatIsOnIt;
+
+    /// <summary>Whether, the last time it was worked out, some size held it all on one disc.</summary>
+    private bool _someSizeHoldsItAll = true;
     private bool _lookingAtTheDrives;
 
     /// <summary>Whether the last look worked out a set of discs at all.</summary>
@@ -832,7 +841,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
             _lookingAtTheDrives = false;
         }
 
-        if (WhatTheDrivesMean.TheSizeToStartFrom(drives, _medium, _theSizeWasChosen, IsWorking)
+        // What is on the window decides the size when that was asked for,
+        // and then a blank going into the tray is not a reason to move it.
+        if (WhatTheDrivesMean.TheSizeToStartFrom(
+                drives, _medium, _theSizeWasChosen || _theSizeFollowsWhatIsOnIt, IsWorking)
             is Medium found)
         {
             // Not through the setter, which would count as a person choosing
@@ -1111,6 +1123,90 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     public IReadOnlyList<ASizeToAimAt> DiscSizes { get; } =
         [.. Media.All.Select(each => new ASizeToAimAt(each, each.Name))];
+
+    /// <summary>
+    /// Whether the size of disc is chosen for whoever is using this: the
+    /// smallest that holds everything on the window on one disc, moving as
+    /// games are added and taken off, discwright#98.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A tick box under the list rather than a row in it. A row called
+    /// "choose for me" would be the one row of a list of sizes that is not a
+    /// size, and the list would stop saying which size the disc is.
+    /// </para>
+    /// <para>
+    /// Unticking it keeps the size it had arrived at and counts as somebody
+    /// choosing that size, so the drives do not move it afterwards.
+    /// </para>
+    /// </remarks>
+    public bool ChooseTheSizeForMe
+    {
+        get => _theSizeFollowsWhatIsOnIt;
+        set
+        {
+            if (_theSizeFollowsWhatIsOnIt == value)
+            {
+                return;
+            }
+
+            _theSizeFollowsWhatIsOnIt = value;
+
+            if (!value)
+            {
+                _theSizeWasChosen = true;
+            }
+
+            Tell(nameof(ChooseTheSizeForMe));
+            Tell(nameof(TheSizeCanBePicked));
+            Reconsider();
+        }
+    }
+
+    /// <summary>
+    /// Whether the list of sizes is live: not during a run, and not while
+    /// the size is being chosen for whoever is using this.
+    /// </summary>
+    public bool TheSizeCanBePicked => NothingIsRunning && !_theSizeFollowsWhatIsOnIt;
+
+    /// <summary>
+    /// Why the size is what it is, while it is being chosen, or nothing.
+    /// </summary>
+    public string WhyThatSize =>
+        !_theSizeFollowsWhatIsOnIt || _games.Count == 0
+            ? string.Empty
+            : _someSizeHoldsItAll
+                ? "The smallest that holds all of it on one disc."
+                : "No size holds all of it on one disc, so the largest, which takes the fewest.";
+
+    /// <summary>
+    /// Moves the size to the one that suits what is on the window, when that
+    /// was asked for. Never during a run: a set being burned is a set of one
+    /// size, whatever is ticked.
+    /// </summary>
+    private void FollowWhatIsOnIt()
+    {
+        // Nor with nothing on the window, when there is nothing to choose a
+        // size for: every size refuses an empty disc, and the answer to that
+        // was the largest there is.
+        if (!_theSizeFollowsWhatIsOnIt || IsWorking || _games.Count == 0)
+        {
+            return;
+        }
+
+        Medium? holdsItAll = ChoosingASize.TheSmallestThatHoldsItOnOneDisc(AsAProject(), _machine.HowBigIs);
+        Medium suits = holdsItAll ?? Media.All[^1];
+
+        _someSizeHoldsItAll = holdsItAll is not null;
+
+        if (suits != _medium)
+        {
+            // Not through the setter, which would count as a person choosing.
+            _medium = suits;
+            Tell(nameof(Medium));
+            Tell(nameof(TheSizeChosen));
+        }
+    }
 
     /// <summary>
     /// The row of that list which is chosen, for the window to bind to.
@@ -1643,6 +1739,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             IsWorking = true;
             Tell(nameof(IsWorking));
             Tell(nameof(NothingIsRunning));
+            Tell(nameof(TheSizeCanBePicked));
             Tell(nameof(CanStartAgain));
             Tell(nameof(CanSaveItForLater));
             Tell(nameof(CanTakeSomethingOff));
@@ -1694,6 +1791,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             IsWorking = false;
             Tell(nameof(IsWorking));
             Tell(nameof(NothingIsRunning));
+            Tell(nameof(TheSizeCanBePicked));
             Tell(nameof(CanStartAgain));
             Tell(nameof(CanSaveItForLater));
             Tell(nameof(CanTakeSomethingOff));
@@ -3702,6 +3800,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
             _theSizeWasChosen = true;
         }
 
+        // And nothing chooses it for anybody now: the file's size is the
+        // answer, and a tick left on from the last disc would move it the
+        // moment the project had opened.
+        _theSizeFollowsWhatIsOnIt = false;
+        Tell(nameof(ChooseTheSizeForMe));
+        Tell(nameof(TheSizeCanBePicked));
+
         Tell(nameof(Label));
         Tell(nameof(OutputFolder));
         Tell(nameof(Medium));
@@ -3786,6 +3891,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         // Settled below with the plan, and nothing until then.
         _theLargerDisc = null;
+
+        // Before the plan, so the plan is of the size it moved to. And the
+        // line about it is said again either way: it goes when the last
+        // game does.
+        FollowWhatIsOnIt();
+        Tell(nameof(WhyThatSize));
 
         if (_games.Count == 0)
         {
@@ -3994,6 +4105,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         Tell(nameof(IsWorking));
         Tell(nameof(NothingIsRunning));
+        Tell(nameof(TheSizeCanBePicked));
         Tell(nameof(CanStartAgain));
         Tell(nameof(CanSaveItForLater));
         Tell(nameof(HowTheSaveWent));
