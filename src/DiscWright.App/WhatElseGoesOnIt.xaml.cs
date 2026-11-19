@@ -1,4 +1,5 @@
-﻿using System.Windows;
+﻿using DiscWright.Core;
+using System.Windows;
 using DiscWright.ViewModels;
 using Microsoft.Win32;
 
@@ -65,7 +66,7 @@ public partial class WhatElseGoesOnIt : Window
     private void ChooseTheMusic(object sender, RoutedEventArgs e) =>
         TakeAFile(
             "What plays behind the menu",
-            "Music|*.mp3;*.wav;*.wma;*.m4a|Anything|*.*",
+            MusicForTheMenu.ForThePicker,
             path => _screen.Music = path);
 
     private void ClearTheMusic(object sender, RoutedEventArgs e) => _screen.Music = null;
