@@ -357,6 +357,38 @@ public class WhereTheMenusListSits
         Assert.DoesNotContain("#" + button + " {", page, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(true, "    checksums: true,")]
+    [InlineData(false, "    checksums: false,")]
+    public async Task The_page_is_told_whether_the_disc_is_made_with_a_list_to_check_against(
+        bool checksums, string carried)
+    {
+        // So a preview, which has no disc to look at, can show the check
+        // button in the corner that was chosen for it.
+        RecordingWriter wrote = new();
+        GameFolder found = new(@"C:\games\x", GameKind.GogInstaller, "Hollow Knight", "Hollow Knight", null, [], [], null);
+        PlannedDisc disc = new(1, [], 0);
+
+        await new WriteTheMenuStep().Run(
+            new BuildContext(
+                new DiscProject("HOLLOW KNIGHT", [found], new DiscOptions(Checksums: checksums)),
+                new DiscLayout([disc], 1_000_000, true),
+                disc,
+                @"C:\stage",
+                wrote),
+            CancellationToken.None);
+
+        string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        Assert.Contains(carried, page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_page_nobody_told_says_no_list()
+    {
+        Assert.Contains("    checksums: false,", MenuWriter.MenuPage(AMenu()), StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task A_built_disc_carries_the_look_of_its_project()
     {

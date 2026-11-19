@@ -2081,6 +2081,31 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal(says, Ask($"'[' + theMainMenusHeading({look}, {otherwise}) + ']'"));
     }
 
+    // ------------------------------------------------ the check, in a preview
+
+    [Fact]
+    public void A_disc_checks_and_a_preview_says_why_it_does_not()
+    {
+        Assert.Equal("null", Ask("String(whyNothingIsChecked())"));
+        Assert.Equal(
+            "This is a preview of the menu. There is nothing to check, because the disc has not been made yet.",
+            Ask("(thisIsAPreview(), String(whyNothingIsChecked()))"));
+    }
+
+    [Theory]
+    [InlineData("{ checksums: true }", "true")]
+    [InlineData("{ checksums: false }", "false")]
+    [InlineData("{ checksums: 'true' }", "false")]
+    [InlineData("{ checksums: 1 }", "false")]
+    [InlineData("{}", "false")]
+    [InlineData("null", "false")]
+    public void A_preview_shows_the_check_only_for_a_disc_made_with_a_list(string disc, string answer)
+    {
+        // Every preview written before the page was told has no word about
+        // it, and shows none, as it always did.
+        Assert.Equal(answer, Ask($"String(aPreviewShowsTheCheck({disc}))"));
+    }
+
     private string Ask(string expression, bool withoutGetObject = false)
     {
         (string output, int exitCode) = Run(expression, withoutGetObject);

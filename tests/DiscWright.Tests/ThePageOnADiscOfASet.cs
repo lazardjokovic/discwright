@@ -458,6 +458,53 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.Equal(onAGame, lines[^1]);
     }
 
+    [Theory]
+    // Made with a list: the button is there, in the corner that was chosen.
+    [InlineData(true, MenuSide.Right, false, "shown=block at=16px,16px")]
+    [InlineData(true, MenuSide.Left, true, "shown=block at=714px,434px")]
+    // Made without one: no button, as on the disc itself.
+    [InlineData(false, MenuSide.Right, false, "shown= at=,")]
+    public void A_preview_shows_the_check_where_it_will_sit_and_pressing_it_says_why_nothing_is_checked(
+        bool checksums, MenuSide side, bool bottom, string shown)
+    {
+        // A preview folder holds the menu and nothing else: no list, no files.
+        string preview = Path.Combine(_folder, "preview " + checksums + side + bottom);
+        Directory.CreateDirectory(Path.Combine(preview, "AUTORUN"));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Previewed", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: false,
+                Games: [new MenuGame("Previewed", "good.txt", string.Empty)],
+                Look: new MenuLook(side, bottom),
+                CarriesAChecksumList: checksums)),
+            menuUrl: new Uri(Path.Combine(preview, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "thisIsAPreview();\n"
+                + "showTheCheck();\n"
+                + "placeTheCornerButtons();\n"
+                + "var s = document.getElementById('sums').style;\n"
+                + "out.push('shown=' + (s.display || '') + ' at=' + (s.left || '') + ',' + (s.top || ''));\n"
+                + "var before = window.timers.length; checkThisDisc();\n"
+                + "out.push('line=' + document.getElementById('stillWanted').innerText);\n"
+                + "out.push('started=' + (window.timers.length - before) + ' busy=' + (document.getElementById('sums').className || ''));\n"
+                + "out.push('alerts=' + alerts.length);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(shown, lines[0]);
+
+        // Said under the list, where the check's own result goes, and not
+        // that a list could not be read: nothing went wrong.
+        Assert.Equal(
+            "line=This is a preview of the menu. There is nothing to check, because the disc has not been made yet.",
+            lines[1]);
+
+        // And nothing was started: no certutil, no timer, no button gone grey.
+        Assert.Equal("started=0 busy=", lines[2]);
+        Assert.Equal("alerts=0", lines[3]);
+    }
+
     [Fact]
     public void Checks_the_disc_from_the_button_beside_the_mute()
     {
