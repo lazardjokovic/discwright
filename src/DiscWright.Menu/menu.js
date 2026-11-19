@@ -716,6 +716,24 @@ function whyNothingRuns() {
         : "This is a preview of the menu. Nothing starts from here, because the disc has not been made yet.";
 }
 
+// Why nothing is checked, or null when a check can run.
+//
+// A preview shows the check button where it will sit on the disc, since the
+// corner it sits in can be chosen and nobody should have to build a disc to
+// see it. Pressed there it says this, rather than failing to read a list
+// that has not been written yet.
+function whyNothingIsChecked() {
+    return thisIsADisc
+        ? null
+        : "This is a preview of the menu. There is nothing to check, because the disc has not been made yet.";
+}
+
+// Whether a preview shows the check button: only for a disc being made with
+// a list to check against, which only a real true says.
+function aPreviewShowsTheCheck(disc) {
+    return !!disc && disc.checksums === true;
+}
+
 // Starts something, and says what went wrong rather than nothing.
 //
 // Here rather than in the page because the page cannot be tested: an HTA is

@@ -1376,10 +1376,20 @@ var checking = false;
 
 // Shown only when the disc carries a list to check against: a button that
 // answers "there is nothing to check" would be a button that lies about
-// what the disc can do. Only on a real disc, because the preview folder
-// holds the menu alone and the disc does not exist yet.
+// what the disc can do.
+//
+// IN A PREVIEW TOO, when the disc is being made with a list. The preview
+// folder holds the menu alone, so there is no file to look for and the
+// page is told instead. It was hidden there until the corner it sits in
+// could be chosen, and then a preview that left it out was a preview that
+// did not show what had been chosen. Pressed, it says why nothing is
+// checked.
 function showTheCheck() {
     if (!DISC.onADisc) {
+        if (aPreviewShowsTheCheck(DISC)) {
+            document.getElementById("sums").style.display = "block";
+        }
+
         return;
     }
 
@@ -1407,6 +1417,13 @@ function checkThisDisc() {
     // Never under a copy off the same disc. The button is drawn dead then,
     // and a press on it does nothing.
     if (SET && restoring.busy) {
+        return;
+    }
+
+    var preview = whyNothingIsChecked();
+
+    if (preview) {
+        sayTheCheck(preview);
         return;
     }
 

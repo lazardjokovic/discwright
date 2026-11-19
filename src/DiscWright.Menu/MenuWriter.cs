@@ -85,6 +85,12 @@ public static class MenuWriter
         // preview stages the menu and the artwork and nothing else.
         data.Append("    onADisc: ").Append(facts.OnlyOneAtATime ? "true" : "false").Append(",\n");
 
+        // Whether the disc will carry a list to be checked against. A real
+        // disc looks for the file itself; this is for a preview, which has
+        // no disc to look at and still has to show the button where it
+        // will sit.
+        data.Append("    checksums: ").Append(facts.CarriesAChecksumList ? "true" : "false").Append(",\n");
+
         // The disc's own files, so that copying a game off the root does not
         // carry the menu and the autorun with it. Written from the one list
         // that decides what belongs to a disc rather than from a second copy
@@ -328,6 +334,10 @@ public static class MenuWriter
 /// <param name="Manual">Where the manual is on the disc, or nothing.</param>
 /// <param name="Extras">Where the extras folder is, or nothing.</param>
 /// <param name="Look">How the menu is laid out, or nothing for the menu as it comes.</param>
+/// <param name="CarriesAChecksumList">
+/// Whether the disc is being made with a checksum list, which is what the
+/// check button checks against.
+/// </param>
 public sealed record MenuFacts(
     string GameName,
     string ApplicationName,
@@ -345,7 +355,8 @@ public sealed record MenuFacts(
     string? Music = null,
     string? BackdropColour = null,
     IReadOnlyList<string>? IconsOfTheSet = null,
-    MenuLook? Look = null)
+    MenuLook? Look = null,
+    bool CarriesAChecksumList = false)
 {
     /// <summary>The games, or one standing for the disc when none were given.</summary>
     public IReadOnlyList<MenuGame> GamesOrTheOne => Games ?? [new MenuGame(GameName, string.Empty, string.Empty)];

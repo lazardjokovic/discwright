@@ -359,6 +359,8 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
                     DiscIconName.For(context.Project.Label, number, context.Layout.Discs.Count))]
                 : null,
 
-            Look: context.Project.Options.Look);
+            Look: context.Project.Options.Look,
+
+            CarriesAChecksumList: context.Project.Options.Checksums);
     }
 }
