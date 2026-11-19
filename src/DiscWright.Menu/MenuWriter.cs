@@ -108,7 +108,12 @@ public static class MenuWriter
             ("listOn", JScript.Literal(look.ListOn == MenuSide.Left ? "left" : "right")),
             ("corner", JScript.Literal(look.CornerAtTheBottom ? "bottom" : "top")),
             ("discsOwn", JScript.Literal(look.DiscsOwnAsSmallButtons ? "small" : "list")),
-            ("openTheDisc", look.OpenTheDiscButton ? "true" : "false"))).Append(",\n");
+            ("openTheDisc", look.OpenTheDiscButton ? "true" : "false"),
+
+            // Tidied here as well as where it is typed and read, because
+            // this is the last place before the disc and costs nothing.
+            ("heading", JScript.Literal(MenuLook.TidiedHeading(look.Heading) ?? string.Empty)),
+            ("headingHidden", look.HeadingHidden ? "true" : "false"))).Append(",\n");
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),

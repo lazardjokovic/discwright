@@ -262,13 +262,13 @@ public class WhereTheMenusListSits
     {
         string page = MenuWriter.MenuPage(AMenu());
 
-        Assert.Contains("look: {listOn: \"right\", corner: \"top\", discsOwn: \"list\", openTheDisc: false},", page, StringComparison.Ordinal);
+        Assert.Contains("look: {listOn: \"right\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},", page, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData(MenuSide.Left, false, "look: {listOn: \"left\", corner: \"top\", discsOwn: \"list\", openTheDisc: false},")]
-    [InlineData(MenuSide.Right, true, "look: {listOn: \"right\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false},")]
-    [InlineData(MenuSide.Left, true, "look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false},")]
+    [InlineData(MenuSide.Left, false, "look: {listOn: \"left\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},")]
+    [InlineData(MenuSide.Right, true, "look: {listOn: \"right\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},")]
+    [InlineData(MenuSide.Left, true, "look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},")]
     public void A_page_carries_the_look_that_was_chosen(MenuSide side, bool bottom, string carried)
     {
         string page = MenuWriter.MenuPage(AMenu() with { Look = new MenuLook(side, bottom) });
@@ -378,7 +378,7 @@ public class WhereTheMenusListSits
 
         string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
-        Assert.Contains("look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false},", page, StringComparison.Ordinal);
+        Assert.Contains("look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},", page, StringComparison.Ordinal);
     }
 
     /// <summary>

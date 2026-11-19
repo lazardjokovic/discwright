@@ -219,7 +219,12 @@ public static class AProjectFile
                 : MenuSide.Right,
             string.Equals(Text(look, "Corner"), "Bottom", StringComparison.OrdinalIgnoreCase),
             string.Equals(Text(look, "DiscsOwn"), "SmallButtons", StringComparison.OrdinalIgnoreCase),
-            Yes(look, "OpenTheDisc"))
+            Yes(look, "OpenTheDisc"),
+
+            // Tidied on the way in, so a file somebody edited yields a
+            // heading the box could have held, or none.
+            MenuLook.TidiedHeading(Text(look, "Heading")),
+            Yes(look, "HeadingHidden"))
             .OrNothingWhenPlain();
     }
 

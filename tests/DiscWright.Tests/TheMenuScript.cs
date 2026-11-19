@@ -2056,6 +2056,31 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal("[]", Ask("'[' + theTopOfTheDisc(null) + theTopOfTheDisc(undefined) + ']'"));
     }
 
+    // ------------------------------------------------- the main menu's heading
+
+    [Theory]
+    // Nothing asked for: what it has always been headed with.
+    [InlineData("null", "'GOG GAMES'", "[GOG GAMES]")]
+    [InlineData("{}", "'GOG GAMES'", "[GOG GAMES]")]
+    [InlineData("{ heading: '', headingHidden: false }", "'GOG GAMES'", "[GOG GAMES]")]
+    // Words of its own.
+    [InlineData("{ heading: 'GOG Collection', headingHidden: false }", "'GOG GAMES'", "[GOG Collection]")]
+    [InlineData("{ heading: 'GOG Collection' }", "''", "[GOG Collection]")]
+    // Hidden, whatever else there is.
+    [InlineData("{ heading: 'GOG Collection', headingHidden: true }", "'GOG GAMES'", "[]")]
+    [InlineData("{ heading: '', headingHidden: true }", "'GOG GAMES'", "[]")]
+    // Only a real yes hides it.
+    [InlineData("{ heading: '', headingHidden: 'true' }", "'GOG GAMES'", "[GOG GAMES]")]
+    [InlineData("{ headingHidden: 1 }", "'GOG GAMES'", "[GOG GAMES]")]
+    // And nothing to fall back on is nothing, not the word undefined.
+    [InlineData("null", "undefined", "[]")]
+    [InlineData("{}", "null", "[]")]
+    public void The_main_menu_is_headed_with_what_was_asked_or_what_it_always_was(
+        string look, string otherwise, string says)
+    {
+        Assert.Equal(says, Ask($"'[' + theMainMenusHeading({look}, {otherwise}) + ']'"));
+    }
+
     private string Ask(string expression, bool withoutGetObject = false)
     {
         (string output, int exitCode) = Run(expression, withoutGetObject);

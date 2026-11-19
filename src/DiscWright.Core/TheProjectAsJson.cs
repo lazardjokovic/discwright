@@ -197,6 +197,8 @@ public static class TheProjectAsJson
             writing.WriteString("Corner", look.CornerAtTheBottom ? "Bottom" : "Top");
             writing.WriteString("DiscsOwn", look.DiscsOwnAsSmallButtons ? "SmallButtons" : "InTheList");
             writing.WriteBoolean("OpenTheDisc", look.OpenTheDiscButton);
+            WriteOrNull(writing, "Heading", MenuLook.TidiedHeading(look.Heading));
+            writing.WriteBoolean("HeadingHidden", look.HeadingHidden);
             writing.WriteEndObject();
 
             writing.WriteEndObject();

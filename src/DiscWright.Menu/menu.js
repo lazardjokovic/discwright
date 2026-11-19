@@ -853,6 +853,29 @@ function aSmallButtonForTheDiscsOwnShows(look, where, howManyGames, onTheListOfG
     return onTheListOfGames || howManyGames < 2;
 }
 
+// What the main menu is headed with, or nothing when it is to have no
+// heading at all.
+//
+// The words somebody typed for it when there are any, and otherwise what it
+// has always been headed with: the disc's name over a list of games, the
+// game's over a disc of one. discwright#98, 12 November, "a separate option
+// for Disc Label and Menu Label", and 3 October, "can the text directly
+// above the menu buttons be hidden?".
+//
+// Only for the main menu. A game's own screen on a disc of several is headed
+// with the game, always, which the page sees to by not asking here.
+function theMainMenusHeading(look, otherwise) {
+    if (look && look.headingHidden === true) {
+        return "";
+    }
+
+    if (look && look.heading && String(look.heading).length > 0) {
+        return String(look.heading);
+    }
+
+    return otherwise ? String(otherwise) : "";
+}
+
 // Whether the corner has a button that opens the disc in Explorer. Only a
 // real true says so, so a disc with no look, or a word in its place, has none.
 function thereIsAButtonThatOpensTheDisc(look) {

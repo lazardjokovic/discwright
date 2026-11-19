@@ -213,11 +213,21 @@ function start() {
     }
 }
 
+// The heading of the main menu: what was typed for it, what it has always
+// said, or gone altogether so nothing is left holding its place.
+function headTheMainMenu(id, otherwise) {
+    var heading = document.getElementById(id);
+    var says = theMainMenusHeading(DISC.look, otherwise);
+
+    heading.innerText = says;
+    heading.style.display = says === "" ? "none" : "block";
+}
+
 // The list of games, when there is more than one on the disc.
 function showChooser() {
     document.getElementById("gameScreen").style.display = "none";
     document.getElementById("chooserScreen").style.display = "block";
-    document.getElementById("discName").innerText = DISC.game;
+    headTheMainMenu("discName", DISC.game);
 
     var rows = "";
 
@@ -332,7 +342,13 @@ function showGame(index) {
 
     document.getElementById("chooserScreen").style.display = "none";
     document.getElementById("gameScreen").style.display = "block";
-    document.getElementById("gameName").innerText = game.name;
+    // Headed with the game, unless this screen is the whole of the menu,
+    // which it is on a disc of one, and then with what was asked for.
+    if (DISC.games.length < 2) {
+        headTheMainMenu("gameName", game.name);
+    } else {
+        document.getElementById("gameName").innerText = game.name;
+    }
 
     if (SET) {
         showTheSet(game);
