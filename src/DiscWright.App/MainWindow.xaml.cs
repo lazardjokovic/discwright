@@ -516,7 +516,7 @@ public partial class MainWindow : Window
     private void ChooseTheMusic(object sender, RoutedEventArgs e) =>
         TakeAFile(
             "What plays behind the menu",
-            "Music|*.mp3;*.wav;*.wma;*.m4a|Anything|*.*",
+            MusicForTheMenu.ForThePicker,
             path => _screen.Music = path);
 
     private void ChooseTheManual(object sender, RoutedEventArgs e) =>
