@@ -20,14 +20,46 @@ namespace DiscWright.Core;
 /// is chosen, and the menu writer lets the picture win if a file somebody
 /// edited carries both.
 /// </param>
+/// <param name="Shape">
+/// <para>
+/// Fit or tile, the two ways to cover the menu that
+/// <paramref name="BackgroundAsIs"/> cannot say, or nothing. Read
+/// <see cref="HowItFits"/>, which settles the two.
+/// </para>
+/// <para>
+/// Beside the yes or no rather than in its place, because the PowerShell app
+/// and every 2.0 before this read the yes or no out of a project file and
+/// know nothing else: a file that only said "Fit" would open there stretched
+/// or not by accident.
+/// </para>
+/// </param>
 public sealed record DiscArtwork(
     string? IconPath = null,
     string? BackgroundPath = null,
     bool BackgroundAsIs = false,
     string? CoverPath = null,
     string? DiscFacePath = null,
-    string? BackgroundColour = null)
+    string? BackgroundColour = null,
+    BackgroundFit? Shape = null)
 {
+    /// <summary>
+    /// How the background covers the menu: the shape when one was chosen,
+    /// and otherwise stretched or filled as the yes or no says.
+    /// </summary>
+    public BackgroundFit HowItFits => Shape ?? (BackgroundAsIs ? BackgroundFit.Stretch : BackgroundFit.Fill);
+
+    /// <summary>
+    /// This artwork made to fit one way, with the yes or no and the shape
+    /// agreeing: the yes for Stretch alone, and the shape only for the two
+    /// the yes or no cannot say.
+    /// </summary>
+    public DiscArtwork Fitting(BackgroundFit how) =>
+        this with
+        {
+            BackgroundAsIs = how == BackgroundFit.Stretch,
+            Shape = how is BackgroundFit.Fit or BackgroundFit.Tile ? how : null,
+        };
+
     /// <summary>Whether there is anything to put on the disc at all.</summary>
     public bool IsAnything =>
         IconPath is not null || BackgroundPath is not null || CoverPath is not null || DiscFacePath is not null

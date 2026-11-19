@@ -56,11 +56,25 @@ public class PuttingTheArtworkOn
     {
         RecordingImages cropped = new();
         await Run(cropped, new RecordingWriter(), new DiscArtwork(BackgroundPath: @"C:\art\bg.jpg"));
-        Assert.False(Assert.Single(cropped.Backgrounds).AsIs);
+        Assert.Equal(BackgroundFit.Fill, Assert.Single(cropped.Backgrounds).How);
 
         RecordingImages stretched = new();
         await Run(stretched, new RecordingWriter(), new DiscArtwork(BackgroundPath: @"C:\art\bg.jpg", BackgroundAsIs: true));
-        Assert.True(Assert.Single(stretched.Backgrounds).AsIs);
+        Assert.Equal(BackgroundFit.Stretch, Assert.Single(stretched.Backgrounds).How);
+    }
+
+    [Theory]
+    [InlineData(BackgroundFit.Fill)]
+    [InlineData(BackgroundFit.Stretch)]
+    [InlineData(BackgroundFit.Fit)]
+    [InlineData(BackgroundFit.Tile)]
+    public async Task Draws_the_background_the_way_the_project_says(BackgroundFit how)
+    {
+        RecordingImages drew = new();
+
+        await Run(drew, new RecordingWriter(), new DiscArtwork(BackgroundPath: @"C:\art\bg.jpg").Fitting(how));
+
+        Assert.Equal(how, Assert.Single(drew.Backgrounds).How);
     }
 
     [Fact]
@@ -168,9 +182,9 @@ public class PuttingTheArtworkOn
 
         public void WriteIcon(string source, string destination) => Icons.Add((source, destination));
 
-        public void WriteBackground(string source, string destination, int width, int height, bool asIs) =>
-            Backgrounds.Add(new Background(source, destination, width, height, asIs));
+        public void WriteBackground(string source, string destination, int width, int height, BackgroundFit how) =>
+            Backgrounds.Add(new Background(source, destination, width, height, how));
 
-        public sealed record Background(string Source, string Destination, int Width, int Height, bool AsIs);
+        public sealed record Background(string Source, string Destination, int Width, int Height, BackgroundFit How);
     }
 }

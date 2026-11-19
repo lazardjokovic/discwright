@@ -119,7 +119,12 @@ public static class AProjectFile
 
                     // Tidied on the way in, so a file somebody edited by
                     // hand still only ever yields a colour or nothing.
-                    BackgroundColour: SolidColour.Tidied(Text(root, "BgColour"))));
+                    BackgroundColour: SolidColour.Tidied(Text(root, "BgColour")),
+
+                    // Absent in every file written before 2.0.5, and then
+                    // BgAsIs is the whole of it. A word that names no way
+                    // to fit is the same as none.
+                    BackgroundShape: WaysToFit.Named(Text(root, "BgFit"))));
         }
     }
 

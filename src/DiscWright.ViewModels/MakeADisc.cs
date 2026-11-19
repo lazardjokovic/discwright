@@ -2438,8 +2438,34 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public bool BackgroundAsIs
     {
         get => _artwork?.BackgroundAsIs == true;
-        set => ChangeTheArtwork(Art() with { BackgroundAsIs = value });
+        set => ChangeTheArtwork(Art().Fitting(value ? BackgroundFit.Stretch : BackgroundFit.Fill));
     }
+
+    /// <summary>
+    /// Every way a background can be made to cover the menu, for the list.
+    /// </summary>
+    public IReadOnlyList<AWayToFit> TheWaysABackgroundFits { get; } = WaysToFit.All;
+
+    /// <summary>
+    /// How the background covers the menu, as the row of the list that
+    /// stands for it: fill, fit, stretch or tile, discwright#98.
+    /// </summary>
+    public AWayToFit? HowTheBackgroundFits
+    {
+        get => WaysToFit.For(Art().HowItFits);
+        set
+        {
+            // A list empties its choice for a moment whenever its rows are
+            // read again, and that is not somebody choosing nothing.
+            if (value is not null)
+            {
+                ChangeTheArtwork(Art().Fitting(value.How));
+            }
+        }
+    }
+
+    /// <summary>What the way chosen does, in a sentence for under the list.</summary>
+    public string WhatThatFitDoes => WaysToFit.For(Art().HowItFits).WhatItDoes;
 
     /// <summary>The picture for the printed cover.</summary>
     public string? Cover
@@ -2573,11 +2599,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     private static readonly string[] ThePicturesOnIt =
         [nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace),
-         nameof(BackgroundColour), nameof(BackgroundColourText), nameof(WhatTheColourSays)];
+         nameof(BackgroundColour), nameof(BackgroundColourText), nameof(WhatTheColourSays),
+         nameof(HowTheBackgroundFits), nameof(WhatThatFitDoes)];
 
     private void ChangeTheArtwork(DiscArtwork now)
     {
-        _artwork = now.IsAnything || now.BackgroundAsIs ? now : null;
+        _artwork = now.IsAnything || now.HowItFits != BackgroundFit.Fill ? now : null;
 
         foreach (string named in ThePicturesOnIt)
         {

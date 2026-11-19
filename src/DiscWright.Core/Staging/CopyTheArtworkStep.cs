@@ -72,7 +72,7 @@ public sealed class CopyTheArtworkStep(IImages images) : IBuildStep
                 context.On(MenuFolder + Separator + "background.png"),
                 MenuWidth,
                 MenuHeight,
-                artwork.BackgroundAsIs);
+                artwork.HowItFits);
         }
 
         ct.ThrowIfCancellationRequested();

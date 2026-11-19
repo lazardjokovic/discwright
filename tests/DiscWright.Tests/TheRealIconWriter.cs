@@ -3,6 +3,8 @@ using System.Drawing.Imaging;
 
 using DiscWright.Platform;
 
+using DiscWright.Core;
+
 namespace DiscWright.Tests;
 
 /// <summary>
@@ -121,7 +123,7 @@ public sealed class TheRealIconWriter : IDisposable
     {
         string made = Path.Combine(_folder, "background.png");
 
-        new WindowsImages().WriteBackground(APicture(1920, 1080), made, 760, 480, asIs: false);
+        new WindowsImages().WriteBackground(APicture(1920, 1080), made, 760, 480, BackgroundFit.Fill);
 
         using Image background = Image.FromFile(made);
 
@@ -135,7 +137,7 @@ public sealed class TheRealIconWriter : IDisposable
         string made = Path.Combine(_folder, "tall.png");
 
         // The deliberately wrong shape in the testing kit: 1920x500.
-        new WindowsImages().WriteBackground(APicture(1920, 500), made, 760, 480, asIs: false);
+        new WindowsImages().WriteBackground(APicture(1920, 500), made, 760, 480, BackgroundFit.Fill);
 
         using Image background = Image.FromFile(made);
 
@@ -156,7 +158,7 @@ public sealed class TheRealIconWriter : IDisposable
         // listens when it is not told a size.
         string made = Path.Combine(_folder, "stretched.png");
 
-        new WindowsImages().WriteBackground(ABanner(dotsPerInch), made, 760, 480, asIs: true);
+        new WindowsImages().WriteBackground(ABanner(dotsPerInch), made, 760, 480, BackgroundFit.Stretch);
 
         using Bitmap background = new(made);
 
@@ -181,7 +183,7 @@ public sealed class TheRealIconWriter : IDisposable
     {
         string made = Path.Combine(_folder, "filled.png");
 
-        new WindowsImages().WriteBackground(ABanner(dotsPerInch), made, 760, 480, asIs: false);
+        new WindowsImages().WriteBackground(ABanner(dotsPerInch), made, 760, 480, BackgroundFit.Fill);
 
         using Bitmap background = new(made);
 
@@ -195,11 +197,123 @@ public sealed class TheRealIconWriter : IDisposable
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    [InlineData(false, true)]
-    public void Leaves_no_part_of_the_background_see_through(bool asIs, bool larger)
+    [InlineData(96f)]
+    [InlineData(300f)]
+    public void Fits_a_small_picture_inside_the_menu_whole_with_the_menus_dark_round_it(float dotsPerInch)
+    {
+        // discwright#98, 15 November: "fit (keeps ratio and doesn't lose
+        // image, may show black border)". A banner of 200 by 50 grows 3.8
+        // times to the menu's width, 760 by 190, and sits in the middle:
+        // rows 145 to 334.
+        string made = Path.Combine(_folder, "fitted.png");
+
+        new WindowsImages().WriteBackground(ABanner(dotsPerInch), made, 760, 480, BackgroundFit.Fit);
+
+        using Bitmap background = new(made);
+
+        Assert.Equal(760, background.Width);
+        Assert.Equal(480, background.Height);
+
+        // All of it, end to end, across the middle.
+        Assert.Equal(Color.Red.ToArgb(), background.GetPixel(10, 240).ToArgb());
+        Assert.Equal(Color.White.ToArgb(), background.GetPixel(380, 240).ToArgb());
+        Assert.Equal(Color.Blue.ToArgb(), background.GetPixel(750, 240).ToArgb());
+
+        // In proportion: it stops well short of the top and the bottom,
+        // and is there just inside where it should begin and end.
+        Assert.Equal(Color.White.ToArgb(), background.GetPixel(380, 150).ToArgb());
+        Assert.Equal(Color.White.ToArgb(), background.GetPixel(380, 330).ToArgb());
+
+        // And what it does not reach is the menu's own dark, solid.
+        int dark = Color.FromArgb(255, 0x0C, 0x13, 0x16).ToArgb();
+
+        Assert.Equal(dark, background.GetPixel(380, 5).ToArgb());
+        Assert.Equal(dark, background.GetPixel(380, 140).ToArgb());
+        Assert.Equal(dark, background.GetPixel(380, 340).ToArgb());
+        Assert.Equal(dark, background.GetPixel(10, 475).ToArgb());
+    }
+
+    [Fact]
+    public void Fits_a_tall_picture_inside_the_menu_with_the_dark_at_its_sides()
+    {
+        // The other way about: 300 by 600 shrinks to 240 by 480 and sits
+        // in the middle, columns 260 to 499.
+        string made = Path.Combine(_folder, "fitted tall.png");
+
+        new WindowsImages().WriteBackground(APicture(300, 600), made, 760, 480, BackgroundFit.Fit);
+
+        using Bitmap background = new(made);
+
+        int dark = Color.FromArgb(255, 0x0C, 0x13, 0x16).ToArgb();
+
+        Assert.Equal(dark, background.GetPixel(250, 240).ToArgb());
+        Assert.Equal(dark, background.GetPixel(510, 240).ToArgb());
+        Assert.Equal(Color.CornflowerBlue.ToArgb(), background.GetPixel(266, 4).ToArgb());
+        Assert.Equal(Color.CornflowerBlue.ToArgb(), background.GetPixel(494, 476).ToArgb());
+        Assert.Equal(Color.White.ToArgb(), background.GetPixel(380, 240).ToArgb());
+    }
+
+    [Theory]
+    [InlineData(96f)]
+    [InlineData(300f)]
+    public void Tiles_a_small_picture_at_its_own_size_pixel_for_pixel(float dotsPerInch)
+    {
+        // "tile (to repeat the image to fill the window without changing
+        // its size)". Every pixel of the menu is the banner's own pixel at
+        // the same place within a copy, so nothing was smoothed, nothing
+        // was resized and no copy starts a pixel late.
+        string made = Path.Combine(_folder, "tiled.png");
+        string banner = ABanner(dotsPerInch);
+
+        new WindowsImages().WriteBackground(banner, made, 760, 480, BackgroundFit.Tile);
+
+        using Bitmap background = new(made);
+        using Bitmap original = new(banner);
+
+        Assert.Equal(760, background.Width);
+        Assert.Equal(480, background.Height);
+
+        for (int across = 0; across < background.Width; across++)
+        {
+            for (int down = 0; down < background.Height; down++)
+            {
+                int wanted = original.GetPixel(across % 200, down % 50).ToArgb();
+
+                if (background.GetPixel(across, down).ToArgb() != wanted)
+                {
+                    Assert.Fail($"The pixel at {across}, {down} is not the banner's own at {across % 200}, {down % 50}.");
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void Tiles_a_picture_larger_than_the_menu_as_its_own_top_left_corner()
+    {
+        string made = Path.Combine(_folder, "tiled large.png");
+        string picture = APicture(1920, 1080);
+
+        new WindowsImages().WriteBackground(picture, made, 760, 480, BackgroundFit.Tile);
+
+        using Bitmap background = new(made);
+        using Bitmap original = new(picture);
+
+        foreach ((int across, int down) in new[] { (0, 0), (759, 0), (0, 479), (759, 479), (500, 300) })
+        {
+            Assert.Equal(original.GetPixel(across, down).ToArgb(), background.GetPixel(across, down).ToArgb());
+        }
+    }
+
+    [Theory]
+    [InlineData(BackgroundFit.Stretch, false)]
+    [InlineData(BackgroundFit.Fill, false)]
+    [InlineData(BackgroundFit.Fit, false)]
+    [InlineData(BackgroundFit.Tile, false)]
+    [InlineData(BackgroundFit.Stretch, true)]
+    [InlineData(BackgroundFit.Fill, true)]
+    [InlineData(BackgroundFit.Fit, true)]
+    [InlineData(BackgroundFit.Tile, true)]
+    public void Leaves_no_part_of_the_background_see_through(BackgroundFit how, bool larger)
     {
         // Found by the two tests above the first time they ran: the rim of a
         // picture grown to fit came out part see-through, and the menu's dark
@@ -208,7 +322,7 @@ public sealed class TheRealIconWriter : IDisposable
         string made = Path.Combine(_folder, "opaque.png");
 
         new WindowsImages().WriteBackground(
-            larger ? APicture(1920, 1080) : ABanner(96f), made, 760, 480, asIs);
+            larger ? APicture(1920, 1080) : ABanner(96f), made, 760, 480, how);
 
         using Bitmap background = new(made);
 

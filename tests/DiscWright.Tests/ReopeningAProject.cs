@@ -243,6 +243,33 @@ public class ReopeningAProject : IDisposable
         Assert.Null(Assert.Single(back.Project.AddOnsOrNone).Parts);
     }
 
+    [Theory]
+    [InlineData("\"BgAsIs\": false, \"BgFit\": \"Tile\"", BackgroundFit.Tile, false)]
+    [InlineData("\"BgAsIs\": false, \"BgFit\": \"Fit\"", BackgroundFit.Fit, false)]
+    [InlineData("\"BgAsIs\": true, \"BgFit\": \"Stretch\"", BackgroundFit.Stretch, true)]
+    [InlineData("\"BgAsIs\": false, \"BgFit\": \"Fill\"", BackgroundFit.Fill, false)]
+    // A file somebody edited into saying two things: the word wins, and
+    // the yes or no that comes back agrees with it.
+    [InlineData("\"BgAsIs\": true, \"BgFit\": \"Tile\"", BackgroundFit.Tile, false)]
+    // And one from before there was a word.
+    [InlineData("\"BgAsIs\": true", BackgroundFit.Stretch, true)]
+    public void Brings_back_the_way_the_background_fits(string saved, BackgroundFit how, bool asIs)
+    {
+        string game = AGameFolder("A Game", "setup_a_game.exe");
+
+        Reopened back = Reopen(Open($$"""
+            {
+              "Label": "A GAME",
+              "Games": [{ "Folder": {{Json(game)}} }],
+              "Menu": true, "BgPath": "D:\\art\\bg.png", {{saved}}
+            }
+            """));
+
+        Assert.Equal(how, back.Project.Artwork?.HowItFits);
+        Assert.Equal(asIs, back.Project.Artwork?.BackgroundAsIs);
+        Assert.Equal(how is BackgroundFit.Fit or BackgroundFit.Tile ? how : null, back.Project.Artwork?.Shape);
+    }
+
     [Fact]
     public void Brings_back_the_options_and_the_artwork_and_where_it_was_built()
     {
@@ -266,6 +293,7 @@ public class ReopeningAProject : IDisposable
         Assert.True(back.Project.Options.CutFiles);
         Assert.Equal(@"D:\art\icon.png", back.Project.Artwork?.IconPath);
         Assert.True(back.Project.Artwork?.BackgroundAsIs);
+        Assert.Equal(BackgroundFit.Stretch, back.Project.Artwork?.HowItFits);
         Assert.Equal(@"D:\manual.pdf", back.Project.Extras?.ManualPath);
         Assert.Equal([@"D:\read me.txt"], back.Project.Extras?.Loose);
         Assert.Equal(Media.Dvd9, back.Medium);
