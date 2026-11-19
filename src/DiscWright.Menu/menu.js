@@ -894,6 +894,20 @@ function theMainMenusHeading(look, otherwise) {
     return otherwise ? String(otherwise) : "";
 }
 
+// What a small corner button wears: the rule that makes it a small button,
+// and after it how it is just now, "busy", "dead", "off", or nothing.
+//
+// ALWAYS THE RULE. The buttons were given one shared rule in 2.0.5 where
+// each had had its own by name, and the lines that grey the check and the
+// music went on setting the whole of what the button wore to "busy" or to
+// nothing. So the first time a check finished on a real disc its button
+// lost its box and its place together and landed bare in the top left
+// corner of the page. Found on a mounted disc on 2026-11-19, by pressing
+// it: the page cannot be seen by a test, and every test of it passed.
+function whatASmallButtonWears(how) {
+    return how && String(how).length > 0 ? "corner " + how : "corner";
+}
+
 // Whether the corner has a button that opens the disc in Explorer. Only a
 // real true says so, so a disc with no look, or a word in its place, has none.
 function thereIsAButtonThatOpensTheDisc(look) {

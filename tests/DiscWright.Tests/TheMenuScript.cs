@@ -2106,6 +2106,23 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal(answer, Ask($"String(aPreviewShowsTheCheck({disc}))"));
     }
 
+    // ------------------------------------------ what a small button wears
+
+    [Theory]
+    [InlineData("''", "corner")]
+    [InlineData("null", "corner")]
+    [InlineData("undefined", "corner")]
+    [InlineData("'busy'", "corner busy")]
+    [InlineData("'dead'", "corner dead")]
+    [InlineData("'off'", "corner off")]
+    public void A_small_button_always_wears_the_rule_that_makes_it_one(string how, string wears)
+    {
+        // Without it the button has no box and no place: on a real disc the
+        // check landed bare in the top left corner the first time it
+        // finished.
+        Assert.Equal(wears, Ask($"whatASmallButtonWears({how})"));
+    }
+
     private string Ask(string expression, bool withoutGetObject = false)
     {
         (string output, int exitCode) = Run(expression, withoutGetObject);

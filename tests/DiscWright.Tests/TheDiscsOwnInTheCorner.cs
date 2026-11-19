@@ -207,6 +207,29 @@ public class TheDiscsOwnInTheCorner
     }
 
     [Fact]
+    public void Nothing_on_the_page_sets_what_a_small_button_wears_except_through_the_one_door()
+    {
+        // The page is invisible to a test, so this reads it: every line that
+        // changes what the music or the check button wears has to keep the
+        // rule that gives a small button its box and its place. Four lines
+        // set it to "busy", "off" or nothing at all, and on a mounted disc
+        // the check lost both the first time it finished.
+        string page = MenuWriter.MenuPage(AMenu());
+
+        MatchCollection sets = Regex.Matches(
+            page,
+            "getElementById\\(\"(mute|sums|discManual|discExtras|openDisc)\"\\)\\.className\\s*=\\s*([^;]*);",
+            RegexOptions.CultureInvariant);
+
+        Assert.True(sets.Count >= 4, $"Only {sets.Count} places set what a small button wears.");
+
+        foreach (Match set in sets)
+        {
+            Assert.StartsWith("whatASmallButtonWears(", set.Groups[2].Value.Trim(), StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
     public void Their_pictures_come_from_a_font_every_Windows_has()
     {
         // No picture file on the disc and no font newer than the machine:
