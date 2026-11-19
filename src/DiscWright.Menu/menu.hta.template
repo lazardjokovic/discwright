@@ -113,6 +113,43 @@ function fitTheWindow() {
     }
 }
 
+// The list against the edge somebody chose. The panel is drawn on the right
+// by its own rule, so there is only the other case to do anything about.
+function putTheListOnItsSide() {
+    if (!listIsOnTheLeft(DISC.look)) {
+        return;
+    }
+
+    var panel = document.getElementById("panel");
+
+    panel.style.right = "auto";
+    panel.style.left = "0px";
+}
+
+// The small buttons that are showing, in a row in their corner. Only the
+// ones showing are counted, so the corner never has a gap where a control
+// would be: a disc with a check and no music has the check where the music
+// goes. Where each lands is menu.js's to say, where cscript can hold it.
+var CORNER_BUTTONS = ["mute", "sums"];
+
+function placeTheCornerButtons() {
+    var showing = [], i, button, at;
+
+    for (i = 0; i < CORNER_BUTTONS.length; i++) {
+        button = document.getElementById(CORNER_BUTTONS[i]);
+
+        if (button && button.style.display === "block") {
+            showing.push(button);
+        }
+    }
+
+    for (i = 0; i < showing.length; i++) {
+        at = whereACornerButtonGoes(DISC.look, i, showing.length);
+        showing[i].style.left = at.left + "px";
+        showing[i].style.top = at.top + "px";
+    }
+}
+
 function wearTheRightIcon() {
     try {
         discwright.icon = onTheDisc(theDisc(), DISC.icon);
@@ -130,8 +167,10 @@ function start() {
 
     fitTheWindow();
     wearTheRightIcon();
+    putTheListOnItsSide();
     startTheMusic();
     showTheCheck();
+    placeTheCornerButtons();
 
     document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);
 
@@ -1299,12 +1338,9 @@ function showTheCheck() {
             return;
         }
 
-        var button = document.getElementById("sums");
-
-        // Beside the mute when there is music, in its place when there is
-        // none, so the corner never shows a gap where a control would be.
-        button.style.left = document.getElementById("mute").style.display === "block" ? "52px" : "16px";
-        button.style.display = "block";
+        // Where it goes is settled afterwards, with whatever else is
+        // showing in the corner: see placeTheCornerButtons.
+        document.getElementById("sums").style.display = "block";
     } catch (cannotLook) {
         // A disc whose list cannot even be looked for still has a working
         // menu, which is worth more than this button.
@@ -1437,19 +1473,27 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 .btn.dead { color: #5E727A; border-color: #1A2429;
             background: #070D10; background: rgba(10, 17, 20, 0.18); cursor: default; }
 #addOnNote { margin: -4px 0 12px 0; font-size: 10px; line-height: 14px; color: #8FA3AA; }
-/* Top left, away from the panel, because it is about the window rather than
-   about the game. Hidden until there is a tune to turn off.
+/* In a corner away from the panel, because it is about the window rather
+   than about the game. Hidden until there is a tune to turn off. Top left
+   here, and placeTheCornerButtons moves it when the list is on the left or
+   the bottom corner was asked for.
 
-   TOP, NOT BOTTOM. Anchored to the bottom this sat under the window's frame
-   and was invisible: the page reported it displayed and nothing was on
-   screen, which is how it passed a reading of the DOM and failed a
-   photograph. fitTheWindow puts the whole stage on screen now, and this
-   stays at the top because the top is where a control about the window
-   belongs. */
+   THE BOTTOM USED TO BE UNDER THE WINDOW'S FRAME. Anchored there this was
+   invisible: the page reported it displayed and nothing was on screen,
+   which is how it passed a reading of the DOM and failed a photograph.
+   fitTheWindow puts the whole stage on screen now, which is what makes the
+   bottom corner a place a button can be.
+
+   NEARLY SOLID BEHIND, so it can be read on any picture. It was nearly
+   clear, 0.22, and on a pale wallpaper pale ink on a pale box was a faint
+   square with nothing in it: discwright#98, 15 November, the banner
+   screenshot. Darker than the panel's 0.58 too, because on plain white that
+   still comes out a mid grey, and this is a box a tenth of an inch across
+   with one thin character in it. */
 #mute { position: absolute; left: 16px; top: 16px; width: 28px; height: 28px;
         line-height: 28px; text-align: center; font-size: 15px; cursor: default;
         color: #CBD6DB; border: 1px solid #27353B;
-        background: #080F12; background: rgba(18, 32, 38, 0.22); }
+        background: #060E11; background: rgba(6, 14, 17, 0.85); }
 #mute.off { color: #5E727A; border-color: #1A2429; }
 /* The check, beside the mute, dressed the same because both are about the
    window's own business rather than about the game. Grey while it works, so
@@ -1457,7 +1501,7 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 #sums { position: absolute; left: 52px; top: 16px; width: 28px; height: 28px;
         line-height: 28px; text-align: center; font-size: 15px; cursor: default;
         color: #CBD6DB; border: 1px solid #27353B;
-        background: #080F12; background: rgba(18, 32, 38, 0.22); }
+        background: #060E11; background: rgba(6, 14, 17, 0.85); }
 #sums.busy, #sums.dead { color: #5E727A; border-color: #1A2429; }
 /* The install page's words: the folder wraps, because a path is long and the
    panel is narrow. */

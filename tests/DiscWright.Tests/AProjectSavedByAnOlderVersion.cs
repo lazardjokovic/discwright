@@ -152,8 +152,10 @@ public class AProjectSavedByAnOlderVersion
                 now[at].EnumerateObject().Select(each => each.Name));
         }
 
+        // Every key 2.0.4 wrote, in its order, and after them the one it
+        // never knew, which it skips: how the menu is laid out.
         Assert.Equal(
-            before.RootElement.EnumerateObject().Select(each => each.Name),
+            [.. before.RootElement.EnumerateObject().Select(each => each.Name), "MenuLook"],
             written.RootElement.EnumerateObject().Select(each => each.Name));
 
         // The add-ons are word for word what they were.

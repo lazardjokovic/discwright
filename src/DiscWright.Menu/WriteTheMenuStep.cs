@@ -352,6 +352,8 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
             IconsOfTheSet: context.Project.Artwork?.IconPath is not null
                 ? [.. Enumerable.Range(1, context.Layout.Discs.Count).Select(number =>
                     DiscIconName.For(context.Project.Label, number, context.Layout.Discs.Count))]
-                : null);
+                : null,
+
+            Look: context.Project.Options.Look);
     }
 }

@@ -99,6 +99,14 @@ public static class MenuWriter
         // disc on 2026-11-05, in the same case that found the root copy.
         data.Append("    oursNotTheGame: ")
             .Append(JScript.ListOf(TheDiscsOwnNames(facts))).Append(",\n");
+
+        // Where the list sits and which corner the small buttons take. Two
+        // words each, written by this program alone, so nothing a project
+        // file says can reach the page as anything else.
+        MenuLook look = facts.Look ?? MenuLook.Plain;
+        data.Append("    look: ").Append(JScript.Fields(
+            ("listOn", JScript.Literal(look.ListOn == MenuSide.Left ? "left" : "right")),
+            ("corner", JScript.Literal(look.CornerAtTheBottom ? "bottom" : "top")))).Append(",\n");
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),
@@ -312,6 +320,7 @@ public static class MenuWriter
 /// </param>
 /// <param name="Manual">Where the manual is on the disc, or nothing.</param>
 /// <param name="Extras">Where the extras folder is, or nothing.</param>
+/// <param name="Look">How the menu is laid out, or nothing for the menu as it comes.</param>
 public sealed record MenuFacts(
     string GameName,
     string ApplicationName,
@@ -328,7 +337,8 @@ public sealed record MenuFacts(
     string? Extras = null,
     string? Music = null,
     string? BackdropColour = null,
-    IReadOnlyList<string>? IconsOfTheSet = null)
+    IReadOnlyList<string>? IconsOfTheSet = null,
+    MenuLook? Look = null)
 {
     /// <summary>The games, or one standing for the disc when none were given.</summary>
     public IReadOnlyList<MenuGame> GamesOrTheOne => Games ?? [new MenuGame(GameName, string.Empty, string.Empty)];

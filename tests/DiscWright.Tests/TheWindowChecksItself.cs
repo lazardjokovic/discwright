@@ -169,6 +169,8 @@ public class TheWindowChecksItself
     [InlineData("a list of what every file should be")]
     [InlineData("readable by Windows 98")]
     [InlineData("a Start Here file")]
+    [InlineData("the menu's list on the left")]
+    [InlineData("the small buttons in the bottom corner")]
     public void Choosing_it_and_putting_it_back_leaves_the_window_exactly_as_it_was(string what)
     {
         ADeskWithAScreenOnIt desk = new();
@@ -286,6 +288,7 @@ public class TheWindowChecksItself
         nameof(MakeADisc.CutFiles),
         nameof(MakeADisc.Menu), nameof(MakeADisc.Checksums), nameof(MakeADisc.LegacyFileSystems),
         nameof(MakeADisc.StartHere),
+        nameof(MakeADisc.ListOnTheLeft), nameof(MakeADisc.CornerAtTheBottom),
     ];
 
     /// <summary>The row of the dropdown that stands for this size.</summary>
@@ -312,6 +315,8 @@ public class TheWindowChecksItself
             case "a list of what every file should be": screen.Checksums = false; break;
             case "readable by Windows 98": screen.LegacyFileSystems = true; break;
             case "a Start Here file": screen.StartHere = false; break;
+            case "the menu's list on the left": screen.ListOnTheLeft = true; break;
+            case "the small buttons in the bottom corner": screen.CornerAtTheBottom = true; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to choose.");
         }
     }
@@ -337,6 +342,8 @@ public class TheWindowChecksItself
             case "a list of what every file should be": screen.Checksums = true; break;
             case "readable by Windows 98": screen.LegacyFileSystems = false; break;
             case "a Start Here file": screen.StartHere = true; break;
+            case "the menu's list on the left": screen.ListOnTheLeft = false; break;
+            case "the small buttons in the bottom corner": screen.CornerAtTheBottom = false; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to put back.");
         }
     }

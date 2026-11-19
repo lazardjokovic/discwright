@@ -1870,6 +1870,106 @@ public sealed class TheMenuScript : IDisposable
         Assert.DoesNotContain("nothing on this disc", said, StringComparison.Ordinal);
     }
 
+    // ---------------------------------------- where the list and the corner are
+
+    [Theory]
+    [InlineData("{ listOn: 'left' }", "true")]
+    [InlineData("{ listOn: 'Left' }", "true")]
+    [InlineData("{ listOn: 'right' }", "false")]
+    [InlineData("{ listOn: 'middle' }", "false")]
+    [InlineData("{ listOn: '' }", "false")]
+    [InlineData("{}", "false")]
+    [InlineData("null", "false")]
+    [InlineData("undefined", "false")]
+    public void The_list_is_on_the_left_only_when_the_disc_says_that_word(string look, string answer)
+    {
+        // Every disc built before there was a choice has no look at all, and
+        // has to be drawn as it always was.
+        Assert.Equal(answer, Ask($"String(listIsOnTheLeft({look}))"));
+    }
+
+    [Theory]
+    [InlineData("{ corner: 'bottom' }", "true")]
+    [InlineData("{ corner: 'BOTTOM' }", "true")]
+    [InlineData("{ corner: 'top' }", "false")]
+    [InlineData("{ corner: 'sideways' }", "false")]
+    [InlineData("{}", "false")]
+    [InlineData("null", "false")]
+    public void The_corner_is_the_bottom_one_only_when_the_disc_says_that_word(string look, string answer)
+    {
+        Assert.Equal(answer, Ask($"String(cornerIsAtTheBottom({look}))"));
+    }
+
+    [Theory]
+    // The list on the right, as it comes: the two where they have always been.
+    [InlineData("null", 0, 2, "16,16")]
+    [InlineData("null", 1, 2, "52,16")]
+    [InlineData("{ listOn: 'right', corner: 'top' }", 0, 1, "16,16")]
+    // The list on the left: the row against the right edge, in the same order.
+    [InlineData("{ listOn: 'left', corner: 'top' }", 0, 2, "678,16")]
+    [InlineData("{ listOn: 'left', corner: 'top' }", 1, 2, "714,16")]
+    [InlineData("{ listOn: 'left', corner: 'top' }", 0, 1, "714,16")]
+    // The bottom corner, either side.
+    [InlineData("{ listOn: 'right', corner: 'bottom' }", 0, 2, "16,434")]
+    [InlineData("{ listOn: 'right', corner: 'bottom' }", 1, 2, "52,434")]
+    [InlineData("{ listOn: 'left', corner: 'bottom' }", 0, 2, "678,434")]
+    [InlineData("{ listOn: 'left', corner: 'bottom' }", 1, 2, "714,434")]
+    public void A_corner_button_goes_where_the_look_puts_it(string look, int place, int howMany, string at)
+    {
+        Assert.Equal(
+            at,
+            Ask($"(function () {{ var at = whereACornerButtonGoes({look}, {place}, {howMany}); return at.left + ',' + at.top; }})()"));
+    }
+
+    [Theory]
+    [InlineData("right", "top")]
+    [InlineData("right", "bottom")]
+    [InlineData("left", "top")]
+    [InlineData("left", "bottom")]
+    public void A_row_of_five_is_inside_the_page_and_never_under_the_list(string side, string corner)
+    {
+        // Two today, and five once the disc's own manual, its extras and its
+        // folder join them. The page is 760 by 480, the list is 240 of the
+        // 760, and a box is 30 with its border.
+        const string ask =
+            "(function () {{ var all = [], i, at; for (i = 0; i < 5; i++) {{ "
+            + "at = whereACornerButtonGoes({{ listOn: '{0}', corner: '{1}' }}, i, 5); "
+            + "all.push(at.left + ',' + at.top); }} return all.join(';'); }})()";
+
+        (int Left, int Top)[] row =
+        [
+            .. Ask(string.Format(System.Globalization.CultureInfo.InvariantCulture, ask, side, corner))
+                .Split(';')
+                .Select(each => each.Split(','))
+                .Select(each => (
+                    int.Parse(each[0], System.Globalization.CultureInfo.InvariantCulture),
+                    int.Parse(each[1], System.Globalization.CultureInfo.InvariantCulture)))
+        ];
+
+        Assert.Equal(5, row.Length);
+
+        foreach ((int left, int top) in row)
+        {
+            Assert.InRange(left, 16, 760 - 16 - 30);
+            Assert.InRange(top, 16, 480 - 16 - 30);
+
+            if (side == "right")
+            {
+                Assert.True(left + 30 <= 760 - 240, $"{left} is under a list on the right.");
+            }
+            else
+            {
+                Assert.True(left >= 240, $"{left} is under a list on the left.");
+            }
+        }
+
+        // Left to right in the order they were given, and never touching.
+        for (int next = 1; next < row.Length; next++)
+        {
+            Assert.Equal(36, row[next].Left - row[next - 1].Left);
+        }
+    }
+
     private string Ask(string expression, bool withoutGetObject = false)
     {
         (string output, int exitCode) = Run(expression, withoutGetObject);

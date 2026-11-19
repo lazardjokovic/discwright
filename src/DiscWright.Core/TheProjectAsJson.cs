@@ -187,6 +187,16 @@ public static class TheProjectAsJson
             writing.WriteBoolean("StartHere", project.Options.StartHere);
             writing.WriteString("OutDir", outputFolder);
 
+            // Under a name of its own and never as PanelSide, which is one of
+            // the keys the PowerShell app writes and this program tells its
+            // files by. Always written, plain or not, so the file says what
+            // the disc will look like rather than leaving it to a default.
+            MenuLook look = project.Options.LookOrPlain;
+            writing.WriteStartObject("MenuLook");
+            writing.WriteString("ListOn", look.ListOn == MenuSide.Left ? "Left" : "Right");
+            writing.WriteString("Corner", look.CornerAtTheBottom ? "Bottom" : "Top");
+            writing.WriteEndObject();
+
             writing.WriteEndObject();
         }
 

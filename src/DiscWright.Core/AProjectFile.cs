@@ -95,7 +95,11 @@ public static class AProjectFile
 
                     // Absent in every file written before the option, and on
                     // in all of them, so absent means on.
-                    StartHere: Yes(root, "StartHere", whenMissing: true)),
+                    StartHere: Yes(root, "StartHere", whenMissing: true),
+
+                    // Absent in every file written before 2.0.5, which is
+                    // the menu as it comes.
+                    Look: TheLookIn(root)),
 
                 // Version 5. Absent is the automatic setting, which is what
                 // those projects always described.
@@ -196,6 +200,25 @@ public static class AProjectFile
         {
             yield return new ProjectEntry(only, Text(root, "GameName"), null, null, false, -1, true);
         }
+    }
+
+    /// <summary>
+    /// How the menu is laid out, read so that anything a file says other than
+    /// the two words this program writes is the menu as it comes.
+    /// </summary>
+    private static MenuLook? TheLookIn(JsonElement root)
+    {
+        if (!root.TryGetProperty("MenuLook", out JsonElement look) || look.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return new MenuLook(
+            string.Equals(Text(look, "ListOn"), "Left", StringComparison.OrdinalIgnoreCase)
+                ? MenuSide.Left
+                : MenuSide.Right,
+            string.Equals(Text(look, "Corner"), "Bottom", StringComparison.OrdinalIgnoreCase))
+            .OrNothingWhenPlain();
     }
 
     private static string? Text(JsonElement holder, string name) =>

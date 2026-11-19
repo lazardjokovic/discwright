@@ -211,6 +211,31 @@
                            Visibility="{Binding WhatTheColourSays, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhatTheColourSays" />
 
+                <!-- ============================================== the layout -->
+                <!-- discwright#98, 16 November: the list on the left or the
+                     right, so a logo in one side of the picture is not under
+                     it. The small buttons take the other side, and the line
+                     underneath says where that leaves them. -->
+                <TextBlock Style="{StaticResource Step}" Margin="0,22,0,0" Text="THE MENU'S LAYOUT" />
+
+                <CheckBox Margin="0,8,0,0"
+                          Content="List of buttons on the left"
+                          IsChecked="{Binding ListOnTheLeft}"
+                          ToolTip="The list covers a third of the picture. Put it on the side the picture can spare."
+                          AutomationProperties.AutomationId="ListOnTheLeft" />
+
+                <CheckBox Margin="0,8,0,0"
+                          Content="Small buttons in the bottom corner"
+                          IsChecked="{Binding CornerAtTheBottom}"
+                          ToolTip="The music and disc check buttons. They sit on the side away from the list, top or bottom."
+                          AutomationProperties.AutomationId="CornerAtTheBottom" />
+
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding WhereTheCornerButtonsSit}"
+                           AutomationProperties.AutomationId="WhereTheCornerButtonsSit" />
+
                 <!-- ============================================ music, manual -->
                 <TextBlock Style="{StaticResource Step}" Margin="0,22,0,0" Text="AND THE REST OF IT" />
 

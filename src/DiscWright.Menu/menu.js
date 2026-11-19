@@ -922,6 +922,42 @@ function sizeToShowAllOf(wantedWidth, wantedHeight, clientWidth, clientHeight) {
     return { width: wantedWidth + dw, height: wantedHeight + dh };
 }
 
+// Which edge the list of buttons sits against, discwright#98, 16 November:
+// "positioning the main menu on the left or right", so a logo painted into
+// one side of a wallpaper is not under it. Anything but the one word is the
+// right, where it has always been, so a disc with no look at all, which is
+// every disc built before this, is drawn as it was.
+function listIsOnTheLeft(look) {
+    return !!look && String(look.listOn).toLowerCase() === "left";
+}
+
+function cornerIsAtTheBottom(look) {
+    return !!look && String(look.corner).toLowerCase() === "bottom";
+}
+
+// Where one of the small corner buttons goes on the 760 by 480 page.
+//
+// They sit in a row in a corner AWAY from the list, because they are about
+// the window rather than about a game, and the list's own side holds its
+// heading at the top and its last button at the bottom. The first is always
+// nearest the outside edge when the list is on the right, and the row is
+// pushed against the right edge when the list is on the left, so the order
+// reads the same either way. A box is 28 with a border of one all round,
+// sixteen from the edges and six from its neighbour, which is where the two
+// of them have always been on a menu with its list on the right.
+function whereACornerButtonGoes(look, place, howMany) {
+    var box = 30;
+    var edge = 16;
+    var step = box + 6;
+
+    return {
+        left: listIsOnTheLeft(look)
+            ? 760 - edge - box - step * (howMany - 1 - place)
+            : edge + step * place,
+        top: cornerIsAtTheBottom(look) ? 480 - edge - box : edge
+    };
+}
+
 // What to run once a game has been copied, or nothing.
 //
 // Only when the disc knows exactly one thing to run. Several candidates is a
