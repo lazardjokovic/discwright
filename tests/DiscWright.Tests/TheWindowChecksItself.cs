@@ -171,6 +171,8 @@ public class TheWindowChecksItself
     [InlineData("a Start Here file")]
     [InlineData("the menu's list on the left")]
     [InlineData("the small buttons in the bottom corner")]
+    [InlineData("the disc's own as small buttons")]
+    [InlineData("a button that opens the disc")]
     public void Choosing_it_and_putting_it_back_leaves_the_window_exactly_as_it_was(string what)
     {
         ADeskWithAScreenOnIt desk = new();
@@ -289,6 +291,7 @@ public class TheWindowChecksItself
         nameof(MakeADisc.Menu), nameof(MakeADisc.Checksums), nameof(MakeADisc.LegacyFileSystems),
         nameof(MakeADisc.StartHere),
         nameof(MakeADisc.ListOnTheLeft), nameof(MakeADisc.CornerAtTheBottom),
+        nameof(MakeADisc.DiscsOwnAsSmallButtons), nameof(MakeADisc.OpenTheDiscButton),
     ];
 
     /// <summary>The row of the dropdown that stands for this size.</summary>
@@ -317,6 +320,8 @@ public class TheWindowChecksItself
             case "a Start Here file": screen.StartHere = false; break;
             case "the menu's list on the left": screen.ListOnTheLeft = true; break;
             case "the small buttons in the bottom corner": screen.CornerAtTheBottom = true; break;
+            case "the disc's own as small buttons": screen.DiscsOwnAsSmallButtons = true; break;
+            case "a button that opens the disc": screen.OpenTheDiscButton = true; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to choose.");
         }
     }
@@ -344,6 +349,8 @@ public class TheWindowChecksItself
             case "a Start Here file": screen.StartHere = true; break;
             case "the menu's list on the left": screen.ListOnTheLeft = false; break;
             case "the small buttons in the bottom corner": screen.CornerAtTheBottom = false; break;
+            case "the disc's own as small buttons": screen.DiscsOwnAsSmallButtons = false; break;
+            case "a button that opens the disc": screen.OpenTheDiscButton = false; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to put back.");
         }
     }

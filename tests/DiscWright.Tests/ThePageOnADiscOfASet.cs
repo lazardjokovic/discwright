@@ -326,6 +326,97 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.Equal(mute, lines[2]);
     }
 
+    [Theory]
+    // Two games, small buttons: the corner has them on the list of games,
+    // the list has no rows for them, and a game's screen has neither.
+    [InlineData(2, true, false,
+        "list: rows=none/none corner=block/block open=none at=16px,52px",
+        "game: rows=none/none corner=none/none")]
+    // One game: its own screen is the main menu.
+    [InlineData(1, true, false,
+        "",
+        "game: rows=none/none corner=block/block")]
+    // As it comes: rows, and nothing in the corner.
+    [InlineData(2, false, false,
+        "list: rows=block/block corner=none/none open=none at=,",
+        "game: rows=block/block corner=none/none")]
+    // With the way into the disc as well, which is last in the row and stays.
+    [InlineData(2, true, true,
+        "list: rows=none/none corner=block/block open=block at=16px,52px",
+        "game: rows=none/none corner=none/none")]
+    public void The_discs_own_are_in_the_corner_of_the_main_menu_and_nowhere_else(
+        int games, bool small, bool open, string onTheList, string onAGame)
+    {
+        string disc = Path.Combine(_folder, "own " + games + small + open);
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Own", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [.. Enumerable.Range(1, games).Select(number => new MenuGame("Game " + number, "good.txt", string.Empty))],
+                Manual: "Extras/disc.pdf",
+                Extras: "Extras",
+                Look: new MenuLook(DiscsOwnAsSmallButtons: small, OpenTheDiscButton: open))),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "function d(id) { return document.getElementById(id).style.display || ''; }\n"
+                + "function l(id) { return document.getElementById(id).style.left || ''; }\n"
+                + "showTheWayIntoTheDisc();\n"
+                + (games > 1
+                    ? "showChooser();\n"
+                      + "out.push('list: rows=' + d('chooserManual') + '/' + d('chooserExtras') + ' corner=' + d('discManual') + '/' + d('discExtras')"
+                      + " + ' open=' + (d('openDisc') || 'none') + ' at=' + l('discManual') + ',' + l('discExtras'));\n"
+                    : string.Empty)
+                + "showGame(0);\n"
+                + "out.push('game: rows=' + d('manual') + '/' + d('extras') + ' corner=' + d('discManual') + '/' + d('discExtras'));\n"
+                + "out.push('open still=' + (d('openDisc') || 'none') + ' at=' + l('openDisc'));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        if (games > 1)
+        {
+            Assert.Equal(onTheList, lines[0]);
+        }
+
+        Assert.Equal(onAGame, lines[^2]);
+
+        // The way into the disc is on every screen, and moves up the row
+        // when the two beside it go.
+        Assert.Equal(
+            open ? (games > 1 ? "open still=block at=16px" : "open still=block at=88px") : "open still=none at=",
+            lines[^1]);
+    }
+
+    [Fact]
+    public void The_button_that_opens_the_disc_opens_the_top_of_it()
+    {
+        string disc = Path.Combine(_folder, "opened");
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Opened", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Opened", "good.txt", string.Empty)],
+                Look: new MenuLook(OpenTheDiscButton: true))),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "var opened = []; openTheFolder = function (where) { opened.push(where); return null; };\n"
+                + "openTheDiscItself();\n"
+                + "out.push('opened=' + opened.join('|'));\n"
+                + "openTheFolder = function (where) { return 'That folder is not there.'; };\n"
+                + "openTheDiscItself();\n"
+                + "out.push('alerts=' + alerts.join(' / '));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal("opened=" + disc + Path.DirectorySeparatorChar, lines[0]);
+
+        // And what goes wrong is said, not swallowed.
+        Assert.Equal("alerts=That folder is not there.", lines[1]);
+    }
+
     [Fact]
     public void Checks_the_disc_from_the_button_beside_the_mute()
     {

@@ -562,7 +562,7 @@ public class PuttingTheMenuOnTheDisc
         // to the bottom this control sat below the edge: the page reported it
         // displayed and a photograph of the window showed nothing there.
         string style = page
-            .Split("#mute {", StringSplitOptions.None)[1]
+            .Split(".corner {", StringSplitOptions.None)[1]
             .Split('}', StringSplitOptions.None)[0];
 
         Assert.Contains("top:", style, StringComparison.Ordinal);
