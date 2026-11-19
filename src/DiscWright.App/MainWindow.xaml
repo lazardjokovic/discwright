@@ -750,7 +750,7 @@
                 <ComboBox ItemsSource="{Binding DiscSizes}"
                           SelectedItem="{Binding TheSizeChosen}"
                           DisplayMemberPath="InWords"
-                          IsEnabled="{Binding NothingIsRunning}"
+                          IsEnabled="{Binding TheSizeCanBePicked}"
                           AutomationProperties.AutomationId="DiscSize">
                     <!-- DisplayMemberPath sets what is SHOWN, and nothing
                          else. Without this a row still answers to whatever
@@ -812,6 +812,23 @@
                      discs" six times over and no plain sizes in the one list
                      whose job is to offer sizes. The fact belongs here, where
                      the box is. -->
+                <!-- discwright#98, 12 November: "missing an 'Automatically
+                     Choose' option". A tick under the list and not a row in
+                     it, so the list goes on saying which size the disc is. -->
+                <CheckBox Margin="0,8,0,0"
+                          Content="Choose the smallest that fits"
+                          IsChecked="{Binding ChooseTheSizeForMe}"
+                          IsEnabled="{Binding NothingIsRunning}"
+                          ToolTip="The size follows what is on the list: the smallest disc that holds all of it. The list above shows which that is."
+                          AutomationProperties.AutomationId="ChooseTheSizeForMe" />
+
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding WhyThatSize}"
+                           Visibility="{Binding WhyThatSize, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhyThatSize" />
+
                 <CheckBox Margin="0,8,0,0"
                           Content="Split a file too big for one disc"
                           IsChecked="{Binding CutFiles}"

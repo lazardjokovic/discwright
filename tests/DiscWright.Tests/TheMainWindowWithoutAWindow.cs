@@ -539,6 +539,39 @@ public class TheMainWindowWithoutAWindow
     }
 
     [Fact]
+    public async Task The_size_cannot_be_picked_or_chosen_for_anybody_while_a_disc_is_being_made()
+    {
+        BuilderThatWaits builder = new();
+        MakeADisc window = Ready(builder);
+        Medium was = window.Medium;
+        List<string> told = [];
+        window.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        Assert.True(window.TheSizeCanBePicked);
+
+        Task making = window.MakeIt();
+        await builder.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // The list is held, and the window was told so.
+        Assert.False(window.TheSizeCanBePicked);
+        Assert.Contains(nameof(MakeADisc.TheSizeCanBePicked), told, StringComparer.Ordinal);
+
+        // And a tick that arrives anyway moves nothing: what is being made
+        // is being made at the size it was planned for.
+        window.ChooseTheSizeForMe = true;
+        Assert.Equal(was, window.Medium);
+
+        told.Clear();
+        builder.LetItFinish();
+        await making;
+
+        Assert.Contains(nameof(MakeADisc.TheSizeCanBePicked), told, StringComparer.Ordinal);
+
+        window.ChooseTheSizeForMe = false;
+        Assert.True(window.TheSizeCanBePicked);
+    }
+
+    [Fact]
     public async Task Will_not_start_a_second_build_on_top_of_the_first()
     {
         BuilderThatWaits builder = new();

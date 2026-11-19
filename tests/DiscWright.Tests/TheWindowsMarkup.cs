@@ -705,7 +705,7 @@ public class TheWindowsMarkup
     [Theory]
     [InlineData("Games")]
     [InlineData("Label")]
-    [InlineData("DiscSize")]
+    [InlineData("ChooseTheSizeForMe")]
     [InlineData("CutFiles")]
     [InlineData("WhichDrive")]
     [InlineData("OutputFolder")]
@@ -723,6 +723,17 @@ public class TheWindowsMarkup
         XElement control = Window().Descendants().Single(each => IdOf(each) == which);
 
         Assert.Equal("{Binding NothingIsRunning}", (string?)control.Attribute("IsEnabled"));
+    }
+
+    [Fact]
+    public void The_list_of_sizes_is_held_during_a_run_and_while_the_size_is_chosen_for_somebody()
+    {
+        // One of the things that changes the disc, like the ones above, with
+        // a second reason to be held. What that property answers during a
+        // run is TheMainWindowWithoutAWindow's to hold.
+        XElement list = Window().Descendants().Single(each => IdOf(each) == "DiscSize");
+
+        Assert.Equal("{Binding TheSizeCanBePicked}", (string?)list.Attribute("IsEnabled"));
     }
 
     [Theory]
