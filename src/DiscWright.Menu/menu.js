@@ -803,9 +803,18 @@ function thereIsNo(path, folder) {
 // The game's own since 2.0.4, asked for by xniwo on discwright#98 and on
 // Reddit: on a disc of nine games every game's screen used to offer the one
 // manual of the disc, which belonged to none of them.
+//
+// AND NOT THE DISC'S when those are small buttons in the corner. They are
+// offered there, once, on the main menu, and a game's screen is then about
+// the game alone: discwright#98, "completely separate from any game menus,
+// since game menus show their own manuals and extras".
 function theManualFor(game, disc) {
     if (game && game.manual && String(game.manual).length > 0) {
         return String(game.manual);
+    }
+
+    if (disc && discsOwnAreSmallButtons(disc.look)) {
+        return "";
     }
 
     return disc && disc.manual ? String(disc.manual) : "";
@@ -817,7 +826,51 @@ function theExtrasFor(game, disc) {
         return String(game.extras);
     }
 
+    if (disc && discsOwnAreSmallButtons(disc.look)) {
+        return "";
+    }
+
     return disc && disc.extras ? String(disc.extras) : "";
+}
+
+// Whether the disc's own manual and extras are small buttons in the corner
+// rather than rows in the main menu's list. Only the one word says so.
+function discsOwnAreSmallButtons(look) {
+    return !!look && String(look.discsOwn).toLowerCase() === "small";
+}
+
+// Whether one of the disc's own, as a small button, is on the screen showing.
+//
+// On the main menu only, which is the list of games on a disc of several and
+// the one game's own screen on a disc of one. Never on a game's screen of a
+// disc of several: that is the game's, and the disc's manual on it is the
+// manual of none of them.
+function aSmallButtonForTheDiscsOwnShows(look, where, howManyGames, onTheListOfGames) {
+    if (!discsOwnAreSmallButtons(look) || !where || String(where).length === 0) {
+        return false;
+    }
+
+    return onTheListOfGames || howManyGames < 2;
+}
+
+// Whether the corner has a button that opens the disc in Explorer. Only a
+// real true says so, so a disc with no look, or a word in its place, has none.
+function thereIsAButtonThatOpensTheDisc(look) {
+    return !!look && look.openTheDisc === true;
+}
+
+// The top of the disc as Explorer wants it: with its backslash. A drive
+// letter and a colon alone means wherever that drive was last left, which
+// for a disc is the top anyway and for the folder a preview or a test sits
+// in is not.
+function theTopOfTheDisc(root) {
+    var top = String(root || "");
+
+    if (top.length === 0) {
+        return "";
+    }
+
+    return top.charAt(top.length - 1) === BACKSLASH ? top : top + BACKSLASH;
 }
 
 // Whether a path is certainly a folder. False when it cannot be told.

@@ -130,7 +130,7 @@ function putTheListOnItsSide() {
 // ones showing are counted, so the corner never has a gap where a control
 // would be: a disc with a check and no music has the check where the music
 // goes. Where each lands is menu.js's to say, where cscript can hold it.
-var CORNER_BUTTONS = ["mute", "sums"];
+var CORNER_BUTTONS = ["mute", "sums", "discManual", "discExtras", "openDisc"];
 
 function placeTheCornerButtons() {
     var showing = [], i, button, at;
@@ -147,6 +147,33 @@ function placeTheCornerButtons() {
         at = whereACornerButtonGoes(DISC.look, i, showing.length);
         showing[i].style.left = at.left + "px";
         showing[i].style.top = at.top + "px";
+    }
+}
+
+// The button that opens the disc in Explorer, when the disc was made with
+// one. In a preview too, where pressing it says why nothing opens.
+function showTheWayIntoTheDisc() {
+    if (thereIsAButtonThatOpensTheDisc(DISC.look)) {
+        document.getElementById("openDisc").style.display = "block";
+    }
+}
+
+// The disc's own manual and extras as small buttons, on the main menu and
+// nowhere else, and the corner laid out again around them.
+function showTheDiscsOwn(onTheListOfGames) {
+    document.getElementById("discManual").style.display =
+        aSmallButtonForTheDiscsOwnShows(DISC.look, DISC.manual, DISC.games.length, onTheListOfGames) ? "block" : "none";
+    document.getElementById("discExtras").style.display =
+        aSmallButtonForTheDiscsOwnShows(DISC.look, DISC.extras, DISC.games.length, onTheListOfGames) ? "block" : "none";
+
+    placeTheCornerButtons();
+}
+
+function openTheDiscItself() {
+    var wrong = openTheFolder(theTopOfTheDisc(theDisc()));
+
+    if (wrong) {
+        alert(wrong);
     }
 }
 
@@ -170,6 +197,7 @@ function start() {
     putTheListOnItsSide();
     startTheMusic();
     showTheCheck();
+    showTheWayIntoTheDisc();
     placeTheCornerButtons();
 
     document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);
@@ -201,9 +229,13 @@ function showChooser() {
 
     document.getElementById("gameList").innerHTML = rows;
 
-    // The disc's own, on the screen that belongs to the whole disc.
-    document.getElementById("chooserManual").style.display = DISC.manual ? "block" : "none";
-    document.getElementById("chooserExtras").style.display = DISC.extras ? "block" : "none";
+    // The disc's own, on the screen that belongs to the whole disc: rows
+    // under the list, or small buttons in the corner, never both.
+    var small = discsOwnAreSmallButtons(DISC.look);
+
+    document.getElementById("chooserManual").style.display = DISC.manual && !small ? "block" : "none";
+    document.getElementById("chooserExtras").style.display = DISC.extras && !small ? "block" : "none";
+    showTheDiscsOwn(true);
 
     // Set as TEXT afterwards, never built into the markup above. A game called
     // "Command & Conquer" would otherwise arrive as "Command  Conquer", and one
@@ -318,6 +350,10 @@ function showGame(index) {
 
     // Only offered when there is somewhere to go back to.
     document.getElementById("back").style.display = DISC.games.length > 1 ? "block" : "none";
+
+    // The disc's own small buttons belong to the main menu, which this is
+    // only on a disc of one game.
+    showTheDiscsOwn(false);
 
     fitTheAddOns();
 }
@@ -1490,19 +1526,19 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
    screenshot. Darker than the panel's 0.58 too, because on plain white that
    still comes out a mid grey, and this is a box a tenth of an inch across
    with one thin character in it. */
-#mute { position: absolute; left: 16px; top: 16px; width: 28px; height: 28px;
-        line-height: 28px; text-align: center; font-size: 15px; cursor: default;
-        color: #CBD6DB; border: 1px solid #27353B;
-        background: #060E11; background: rgba(6, 14, 17, 0.85); }
+.corner { position: absolute; left: 16px; top: 16px; width: 28px; height: 28px;
+          line-height: 28px; text-align: center; font-size: 15px; cursor: default;
+          color: #CBD6DB; border: 1px solid #27353B;
+          background: #060E11; background: rgba(6, 14, 17, 0.85); }
 #mute.off { color: #5E727A; border-color: #1A2429; }
-/* The check, beside the mute, dressed the same because both are about the
-   window's own business rather than about the game. Grey while it works, so
-   a press that is already being answered looks taken rather than ignored. */
-#sums { position: absolute; left: 52px; top: 16px; width: 28px; height: 28px;
-        line-height: 28px; text-align: center; font-size: 15px; cursor: default;
-        color: #CBD6DB; border: 1px solid #27353B;
-        background: #060E11; background: rgba(6, 14, 17, 0.85); }
+/* Grey while the check works, so a press that is already being answered
+   looks taken rather than ignored. */
 #sums.busy, #sums.dead { color: #5E727A; border-color: #1A2429; }
+/* The book, the pages and the open folder are Wingdings, which has been on
+   every Windows since 3.1: a picture that needs no file on the disc and no
+   font newer than the machine. Each says what it is when hovered, which is
+   also what is left if the font is not there. */
+.corner.wing { font-family: Wingdings; font-size: 17px; }
 /* The install page's words: the folder wraps, because a path is long and the
    panel is narrow. */
 #whereSays { margin: 0 0 12px 0; font-size: 11px; line-height: 15px; color: #CBD6DB; word-wrap: break-word; }
@@ -1566,11 +1602,23 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
         </div>
     </div>
 
-    <div id="mute" style="display: none" title="Music on or off"
+    <!-- The small buttons, in the order they sit. Each is hidden until the
+         disc has what it is for, and placeTheCornerButtons lays out the ones
+         showing. -->
+    <div id="mute" class="corner" style="display: none" title="Music on or off"
          onclick="toggleMusic(); return false;">&#9835;</div>
 
-    <div id="sums" style="display: none" title="Check every file against what was burned"
+    <div id="sums" class="corner" style="display: none" title="Check every file against what was burned"
          onclick="checkThisDisc(); return false;">&#10003;</div>
+
+    <div id="discManual" class="corner wing" style="display: none" title="The disc's manual"
+         onclick="openTheDiscsManual(); return false;">&amp;</div>
+
+    <div id="discExtras" class="corner wing" style="display: none" title="The disc's extras"
+         onclick="openTheDiscsExtras(); return false;">3</div>
+
+    <div id="openDisc" class="corner wing" style="display: none" title="Open the disc in Explorer"
+         onclick="openTheDiscItself(); return false;">1</div>
 </div>
 </body>
 </html>

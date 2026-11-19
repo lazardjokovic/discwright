@@ -1502,10 +1502,27 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// is decided by the list and nobody should have to work that out.
     /// </summary>
     public string WhereTheCornerButtonsSit =>
-        "The music and disc check buttons sit "
+        "The small buttons, music and the disc check among them, sit "
         + (CornerAtTheBottom ? "bottom " : "top ")
         + (ListOnTheLeft ? "right" : "left")
         + ", away from the list.";
+
+    /// <summary>
+    /// Whether the disc's own manual and extras are small buttons in the
+    /// corner of the main menu rather than rows in its list.
+    /// </summary>
+    public bool DiscsOwnAsSmallButtons
+    {
+        get => Options.LookOrPlain.DiscsOwnAsSmallButtons;
+        set => SwitchTheLook(Options.LookOrPlain with { DiscsOwnAsSmallButtons = value });
+    }
+
+    /// <summary>Whether the corner has a button that opens the disc in Explorer.</summary>
+    public bool OpenTheDiscButton
+    {
+        get => Options.LookOrPlain.OpenTheDiscButton;
+        set => SwitchTheLook(Options.LookOrPlain with { OpenTheDiscButton = value });
+    }
 
     private void SwitchTheLook(MenuLook now, [CallerMemberName] string? name = null)
     {
@@ -3633,6 +3650,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(StartHere));
         Tell(nameof(ListOnTheLeft));
         Tell(nameof(CornerAtTheBottom));
+        Tell(nameof(DiscsOwnAsSmallButtons));
+        Tell(nameof(OpenTheDiscButton));
         Tell(nameof(WhereTheCornerButtonsSit));
 
         // The artwork, the manual, the tune and the folder of extras, which a

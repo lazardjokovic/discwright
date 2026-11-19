@@ -106,7 +106,9 @@ public static class MenuWriter
         MenuLook look = facts.Look ?? MenuLook.Plain;
         data.Append("    look: ").Append(JScript.Fields(
             ("listOn", JScript.Literal(look.ListOn == MenuSide.Left ? "left" : "right")),
-            ("corner", JScript.Literal(look.CornerAtTheBottom ? "bottom" : "top")))).Append(",\n");
+            ("corner", JScript.Literal(look.CornerAtTheBottom ? "bottom" : "top")),
+            ("discsOwn", JScript.Literal(look.DiscsOwnAsSmallButtons ? "small" : "list")),
+            ("openTheDisc", look.OpenTheDiscButton ? "true" : "false"))).Append(",\n");
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),

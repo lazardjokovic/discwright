@@ -217,7 +217,9 @@ public static class AProjectFile
             string.Equals(Text(look, "ListOn"), "Left", StringComparison.OrdinalIgnoreCase)
                 ? MenuSide.Left
                 : MenuSide.Right,
-            string.Equals(Text(look, "Corner"), "Bottom", StringComparison.OrdinalIgnoreCase))
+            string.Equals(Text(look, "Corner"), "Bottom", StringComparison.OrdinalIgnoreCase),
+            string.Equals(Text(look, "DiscsOwn"), "SmallButtons", StringComparison.OrdinalIgnoreCase),
+            Yes(look, "OpenTheDisc"))
             .OrNothingWhenPlain();
     }
 

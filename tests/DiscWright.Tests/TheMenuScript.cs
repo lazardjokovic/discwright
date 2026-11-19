@@ -1970,6 +1970,92 @@ public sealed class TheMenuScript : IDisposable
         }
     }
 
+    // --------------------------------------- the disc's own, as small buttons
+
+    [Theory]
+    [InlineData("{ discsOwn: 'small' }", "true")]
+    [InlineData("{ discsOwn: 'SMALL' }", "true")]
+    [InlineData("{ discsOwn: 'list' }", "false")]
+    [InlineData("{ discsOwn: true }", "false")]
+    [InlineData("{}", "false")]
+    [InlineData("null", "false")]
+    public void The_discs_own_are_small_buttons_only_when_the_disc_says_that_word(string look, string answer)
+    {
+        Assert.Equal(answer, Ask($"String(discsOwnAreSmallButtons({look}))"));
+    }
+
+    [Fact]
+    public void A_games_screen_does_not_fall_back_to_the_discs_own_once_they_are_small_buttons()
+    {
+        const string small = "{ manual: 'Extras/disc.pdf', extras: 'Extras', look: { discsOwn: 'small' } }";
+        const string inTheList = "{ manual: 'Extras/disc.pdf', extras: 'Extras', look: { discsOwn: 'list' } }";
+
+        // The game's own is the game's own either way.
+        Assert.Equal("[01 - A/Manual/a.pdf]", Ask($"'[' + theManualFor({{ manual: '01 - A/Manual/a.pdf' }}, {small}) + ']'"));
+        Assert.Equal("[01 - A/Extras]", Ask($"'[' + theExtrasFor({{ extras: '01 - A/Extras' }}, {small}) + ']'"));
+
+        // With none of its own it offers nothing, where it used to offer the disc's.
+        Assert.Equal("[]", Ask($"'[' + theManualFor({{ manual: '' }}, {small}) + ']'"));
+        Assert.Equal("[]", Ask($"'[' + theExtrasFor({{}}, {small}) + ']'"));
+        Assert.Equal("[]", Ask($"'[' + theManualFor(null, {small}) + ']'"));
+
+        // And in the list, as it comes, it still does.
+        Assert.Equal("[Extras/disc.pdf]", Ask($"'[' + theManualFor({{ manual: '' }}, {inTheList}) + ']'"));
+        Assert.Equal("[Extras]", Ask($"'[' + theExtrasFor({{}}, {inTheList}) + ']'"));
+    }
+
+    [Theory]
+    // On the list of games, whenever the disc has the thing.
+    [InlineData("{ discsOwn: 'small' }", "'Extras/disc.pdf'", 3, true, "true")]
+    // On the one game's own screen of a disc of one, which is its main menu.
+    [InlineData("{ discsOwn: 'small' }", "'Extras/disc.pdf'", 1, false, "true")]
+    // Never on a game's screen of a disc of several.
+    [InlineData("{ discsOwn: 'small' }", "'Extras/disc.pdf'", 2, false, "false")]
+    [InlineData("{ discsOwn: 'small' }", "'Extras/disc.pdf'", 9, false, "false")]
+    // Never for a thing the disc does not have.
+    [InlineData("{ discsOwn: 'small' }", "''", 3, true, "false")]
+    [InlineData("{ discsOwn: 'small' }", "null", 1, false, "false")]
+    // And never when they are rows in the list.
+    [InlineData("{ discsOwn: 'list' }", "'Extras/disc.pdf'", 3, true, "false")]
+    [InlineData("null", "'Extras/disc.pdf'", 1, false, "false")]
+    public void A_small_button_for_the_discs_own_is_on_the_main_menu_and_nowhere_else(
+        string look, string where, int games, bool onTheList, string answer)
+    {
+        Assert.Equal(
+            answer,
+            Ask($"String(aSmallButtonForTheDiscsOwnShows({look}, {where}, {games}, {(onTheList ? "true" : "false")}))"));
+    }
+
+    [Theory]
+    [InlineData("{ openTheDisc: true }", "true")]
+    [InlineData("{ openTheDisc: false }", "false")]
+    [InlineData("{ openTheDisc: 'true' }", "false")]
+    [InlineData("{ openTheDisc: 1 }", "false")]
+    [InlineData("{}", "false")]
+    [InlineData("null", "false")]
+    public void There_is_a_button_that_opens_the_disc_only_for_a_real_yes(string look, string answer)
+    {
+        Assert.Equal(answer, Ask($"String(thereIsAButtonThatOpensTheDisc({look}))"));
+    }
+
+    [Theory]
+    [InlineData(@"E:", @"E:\")]
+    [InlineData(@"E:\", @"E:\")]
+    [InlineData(@"C:\out\disc", @"C:\out\disc\")]
+    [InlineData(@"\\server\share\disc", @"\\server\share\disc\")]
+    [InlineData("", "")]
+    public void The_top_of_the_disc_always_has_its_backslash(string root, string top)
+    {
+        // A letter and a colon alone is wherever that drive was last left.
+        Assert.Equal("[" + top + "]", Ask("'[' + theTopOfTheDisc(" + AsJScript(root) + ") + ']'"));
+    }
+
+    [Fact]
+    public void Nothing_at_all_is_no_top_of_any_disc()
+    {
+        Assert.Equal("[]", Ask("'[' + theTopOfTheDisc(null) + theTopOfTheDisc(undefined) + ']'"));
+    }
+
     private string Ask(string expression, bool withoutGetObject = false)
     {
         (string output, int exitCode) = Run(expression, withoutGetObject);

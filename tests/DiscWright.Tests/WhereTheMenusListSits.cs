@@ -72,10 +72,10 @@ public class WhereTheMenusListSits
     }
 
     [Theory]
-    [InlineData(false, false, "The music and disc check buttons sit top left, away from the list.")]
-    [InlineData(true, false, "The music and disc check buttons sit top right, away from the list.")]
-    [InlineData(false, true, "The music and disc check buttons sit bottom left, away from the list.")]
-    [InlineData(true, true, "The music and disc check buttons sit bottom right, away from the list.")]
+    [InlineData(false, false, "The small buttons, music and the disc check among them, sit top left, away from the list.")]
+    [InlineData(true, false, "The small buttons, music and the disc check among them, sit top right, away from the list.")]
+    [InlineData(false, true, "The small buttons, music and the disc check among them, sit bottom left, away from the list.")]
+    [InlineData(true, true, "The small buttons, music and the disc check among them, sit bottom right, away from the list.")]
     public void The_line_underneath_says_which_corner_that_leaves(bool left, bool bottom, string says)
     {
         MakeADisc screen = TheScreen();
@@ -137,6 +137,8 @@ public class WhereTheMenusListSits
     [Theory]
     [InlineData("CheckBox", "ListOnTheLeft", "IsChecked")]
     [InlineData("CheckBox", "CornerAtTheBottom", "IsChecked")]
+    [InlineData("CheckBox", "DiscsOwnAsSmallButtons", "IsChecked")]
+    [InlineData("CheckBox", "OpenTheDiscButton", "IsChecked")]
     [InlineData("TextBlock", "WhereTheCornerButtonsSit", "Text")]
     public void The_dialog_has_each_of_them_bound_to_what_it_is_named_after(
         string kind, string named, string through)
@@ -260,13 +262,13 @@ public class WhereTheMenusListSits
     {
         string page = MenuWriter.MenuPage(AMenu());
 
-        Assert.Contains("look: {listOn: \"right\", corner: \"top\"},", page, StringComparison.Ordinal);
+        Assert.Contains("look: {listOn: \"right\", corner: \"top\", discsOwn: \"list\", openTheDisc: false},", page, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData(MenuSide.Left, false, "look: {listOn: \"left\", corner: \"top\"},")]
-    [InlineData(MenuSide.Right, true, "look: {listOn: \"right\", corner: \"bottom\"},")]
-    [InlineData(MenuSide.Left, true, "look: {listOn: \"left\", corner: \"bottom\"},")]
+    [InlineData(MenuSide.Left, false, "look: {listOn: \"left\", corner: \"top\", discsOwn: \"list\", openTheDisc: false},")]
+    [InlineData(MenuSide.Right, true, "look: {listOn: \"right\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false},")]
+    [InlineData(MenuSide.Left, true, "look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false},")]
     public void A_page_carries_the_look_that_was_chosen(MenuSide side, bool bottom, string carried)
     {
         string page = MenuWriter.MenuPage(AMenu() with { Look = new MenuLook(side, bottom) });
@@ -277,7 +279,10 @@ public class WhereTheMenusListSits
     [Fact]
     public void The_page_moves_the_list_before_it_draws_and_places_the_buttons_after_they_show()
     {
+        // What the page does when it opens, and nothing above it: the
+        // functions it calls are written out before it.
         string page = MenuWriter.MenuPage(AMenu());
+        page = page[page.IndexOf("function start() {", StringComparison.Ordinal)..];
 
         int side = page.IndexOf("    putTheListOnItsSide();", StringComparison.Ordinal);
         int music = page.IndexOf("    startTheMusic();", StringComparison.Ordinal);
@@ -304,31 +309,52 @@ public class WhereTheMenusListSits
             "at = whereACornerButtonGoes(DISC.look, i, showing.length);", page, StringComparison.Ordinal);
         Assert.Contains("showing[i].style.left = at.left + \"px\";", page, StringComparison.Ordinal);
         Assert.Contains("showing[i].style.top = at.top + \"px\";", page, StringComparison.Ordinal);
-        Assert.Contains("var CORNER_BUTTONS = [\"mute\", \"sums\"];", page, StringComparison.Ordinal);
+        Assert.Contains(
+            "var CORNER_BUTTONS = [\"mute\", \"sums\", \"discManual\", \"discExtras\", \"openDisc\"];",
+            page,
+            StringComparison.Ordinal);
 
         // The check used to settle its own place from whether the music was
         // showing, which is a second opinion about where the corner is.
         Assert.DoesNotContain("\"52px\"", page, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData("mute")]
-    [InlineData("sums")]
-    public void A_small_button_is_nearly_solid_behind_so_it_reads_on_a_white_picture(string button)
+    [Fact]
+    public void A_small_button_is_nearly_solid_behind_so_it_reads_on_a_white_picture()
     {
         // discwright#98, 15 November, the banner screenshot: on a white
         // picture the button was a faint square with nothing in it.
         string page = MenuWriter.MenuPage(AMenu());
 
-        double panel = HowSolid(page, "panel");
-        double behind = HowSolid(page, button);
+        double panel = HowSolid(page, "#panel");
+        double behind = HowSolid(page, ".corner");
 
         // On plain white, ink of #CBD6DB wants a box at least this solid
         // behind it to be read at a glance: 0.58, the panel's own, comes
         // out a mid grey there.
         Assert.True(
             behind >= 0.8 && behind > panel,
-            $"#{button} is {behind} solid behind its ink and the panel is {panel}.");
+            $"A small button is {behind} solid behind its ink and the panel is {panel}.");
+    }
+
+    [Theory]
+    [InlineData("mute")]
+    [InlineData("sums")]
+    [InlineData("discManual")]
+    [InlineData("discExtras")]
+    [InlineData("openDisc")]
+    public void Every_small_button_wears_that_one_rule_and_starts_hidden(string button)
+    {
+        string page = MenuWriter.MenuPage(AMenu());
+
+        Match tag = Regex.Match(
+            page, "<div id=\"" + button + "\" class=\"corner( wing)?\" style=\"display: none\" title=\"[^\"]+\"",
+            RegexOptions.CultureInvariant);
+
+        Assert.True(tag.Success, $"#{button} is not a hidden small button that says what it is.");
+
+        // And none has a rule of its own that could put it somewhere else.
+        Assert.DoesNotContain("#" + button + " {", page, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -352,7 +378,7 @@ public class WhereTheMenusListSits
 
         string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
-        Assert.Contains("look: {listOn: \"left\", corner: \"bottom\"},", page, StringComparison.Ordinal);
+        Assert.Contains("look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false},", page, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -363,17 +389,17 @@ public class WhereTheMenusListSits
     {
         Match rule = Regex.Match(
             page,
-            "^#" + id + @" \{[^}]*\}",
+            "^" + Regex.Escape(id) + @" \{[^}]*\}",
             RegexOptions.Multiline | RegexOptions.CultureInvariant);
 
-        Assert.True(rule.Success, $"The page has no rule for #{id}.");
+        Assert.True(rule.Success, $"The page has no rule for {id}.");
 
         Match alpha = Regex.Match(
             rule.Value,
             @"background: rgba\(\s*\d+,\s*\d+,\s*\d+,\s*([0-9.]+)\)",
             RegexOptions.RightToLeft | RegexOptions.CultureInvariant);
 
-        Assert.True(alpha.Success, $"#{id} names no see-through background.");
+        Assert.True(alpha.Success, $"{id} names no see-through background.");
 
         return double.Parse(alpha.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
     }

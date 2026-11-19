@@ -227,8 +227,20 @@
                 <CheckBox Margin="0,8,0,0"
                           Content="Small buttons in the bottom corner"
                           IsChecked="{Binding CornerAtTheBottom}"
-                          ToolTip="The music and disc check buttons. They sit on the side away from the list, top or bottom."
+                          ToolTip="The music and disc check buttons, and the two below. They sit on the side away from the list, top or bottom."
                           AutomationProperties.AutomationId="CornerAtTheBottom" />
+
+                <CheckBox Margin="0,8,0,0"
+                          Content="Disc manual and extras as small buttons"
+                          IsChecked="{Binding DiscsOwnAsSmallButtons}"
+                          ToolTip="The manual and the extras folder chosen below, as two small buttons on the main menu and not rows in its list. A game's own manual and extras stay on that game's screen."
+                          AutomationProperties.AutomationId="DiscsOwnAsSmallButtons" />
+
+                <CheckBox Margin="0,8,0,0"
+                          Content="A small button that opens the disc"
+                          IsChecked="{Binding OpenTheDiscButton}"
+                          ToolTip="Opens the disc in Explorer, for looking at what is on it without leaving the menu."
+                          AutomationProperties.AutomationId="OpenTheDiscButton" />
 
                 <TextBlock Style="{StaticResource Aside}"
                            Margin="0,4,0,0"
