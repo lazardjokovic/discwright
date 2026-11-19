@@ -218,6 +218,31 @@
                      underneath says where that leaves them. -->
                 <TextBlock Style="{StaticResource Step}" Margin="0,22,0,0" Text="THE MENU'S LAYOUT" />
 
+                <!-- The heading, discwright#98, 12 November: the disc's name
+                     is what This PC shows, and what is written across the
+                     top of the menu need not be the same words, or there at
+                     all when the picture already carries the title. -->
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Heading" />
+                    <TextBox Grid.Column="1"
+                             VerticalAlignment="Center"
+                             MaxLength="60"
+                             Text="{Binding MenuHeading, UpdateSourceTrigger=PropertyChanged}"
+                             IsEnabled="{Binding MenuHeadingCanBeTyped}"
+                             ToolTip="What the main menu is headed with. Left empty, it is the disc's name, or the game's on a disc of one."
+                             AutomationProperties.AutomationId="MenuHeading" />
+                </Grid>
+
+                <CheckBox Margin="0,8,0,0"
+                          Content="No heading on the main menu"
+                          IsChecked="{Binding MenuHeadingHidden}"
+                          ToolTip="For a picture that already has the title in it. A game's own screen on a disc of several keeps the game's name."
+                          AutomationProperties.AutomationId="MenuHeadingHidden" />
+
                 <CheckBox Margin="0,8,0,0"
                           Content="List of buttons on the left"
                           IsChecked="{Binding ListOnTheLeft}"

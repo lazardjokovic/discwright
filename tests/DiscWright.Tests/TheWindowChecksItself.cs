@@ -173,6 +173,8 @@ public class TheWindowChecksItself
     [InlineData("the small buttons in the bottom corner")]
     [InlineData("the disc's own as small buttons")]
     [InlineData("a button that opens the disc")]
+    [InlineData("the menu's heading")]
+    [InlineData("no heading on the menu")]
     public void Choosing_it_and_putting_it_back_leaves_the_window_exactly_as_it_was(string what)
     {
         ADeskWithAScreenOnIt desk = new();
@@ -292,6 +294,7 @@ public class TheWindowChecksItself
         nameof(MakeADisc.StartHere),
         nameof(MakeADisc.ListOnTheLeft), nameof(MakeADisc.CornerAtTheBottom),
         nameof(MakeADisc.DiscsOwnAsSmallButtons), nameof(MakeADisc.OpenTheDiscButton),
+        nameof(MakeADisc.MenuHeading), nameof(MakeADisc.MenuHeadingHidden),
     ];
 
     /// <summary>The row of the dropdown that stands for this size.</summary>
@@ -322,6 +325,8 @@ public class TheWindowChecksItself
             case "the small buttons in the bottom corner": screen.CornerAtTheBottom = true; break;
             case "the disc's own as small buttons": screen.DiscsOwnAsSmallButtons = true; break;
             case "a button that opens the disc": screen.OpenTheDiscButton = true; break;
+            case "the menu's heading": screen.MenuHeading = "GOG COLLECTION"; break;
+            case "no heading on the menu": screen.MenuHeadingHidden = true; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to choose.");
         }
     }
@@ -351,6 +356,8 @@ public class TheWindowChecksItself
             case "the small buttons in the bottom corner": screen.CornerAtTheBottom = false; break;
             case "the disc's own as small buttons": screen.DiscsOwnAsSmallButtons = false; break;
             case "a button that opens the disc": screen.OpenTheDiscButton = false; break;
+            case "the menu's heading": screen.MenuHeading = string.Empty; break;
+            case "no heading on the menu": screen.MenuHeadingHidden = false; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to put back.");
         }
     }

@@ -53,12 +53,64 @@ public enum MenuSide
 /// related explorer directory (optional)". On every screen, because it is
 /// about the disc.
 /// </param>
+/// <param name="Heading">
+/// <para>
+/// What the main menu is headed with, or nothing for the disc's own name.
+/// Always as <see cref="TidiedHeading"/> leaves it.
+/// </para>
+/// <para>
+/// discwright#98, 12 November: "I'd like to see a separate option for Disc
+/// Label ('what is it called') and 'Menu Label' (final disc main menu)". The
+/// disc's name is what This PC shows and is cut to what a disc can carry;
+/// what is written across the top of the menu need not be the same words.
+/// </para>
+/// </param>
+/// <param name="HeadingHidden">
+/// Whether the main menu has no heading at all, discwright#98, 3 October and
+/// again on 12 November: "can the text directly above the menu buttons be
+/// hidden?", for a picture that already has the title painted into it. A
+/// game's own screen on a disc of several keeps its name, which is how
+/// anybody knows which game they are about to install.
+/// </param>
 public sealed record MenuLook(
     MenuSide ListOn = MenuSide.Right,
     bool CornerAtTheBottom = false,
     bool DiscsOwnAsSmallButtons = false,
-    bool OpenTheDiscButton = false)
+    bool OpenTheDiscButton = false,
+    string? Heading = null,
+    bool HeadingHidden = false)
 {
+    /// <summary>
+    /// The longest heading the menu is given. Three lines of the panel in
+    /// the menu's own capitals, past which it pushes the buttons down for
+    /// nothing anybody reads.
+    /// </summary>
+    public const int LongestHeading = 60;
+
+    /// <summary>
+    /// A heading as the menu will have it: without the spaces around it, no
+    /// longer than <see cref="LongestHeading"/>, on one line, and nothing at
+    /// all when there is nothing left.
+    /// </summary>
+    public static string? TidiedHeading(string? typed)
+    {
+        if (typed is null)
+        {
+            return null;
+        }
+
+        // A line break in a project file somebody edited would be a heading
+        // of two lines the box it was typed in can never show.
+        string oneLine = string.Join(' ', typed.Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries)).Trim();
+
+        if (oneLine.Length == 0)
+        {
+            return null;
+        }
+
+        return oneLine.Length <= LongestHeading ? oneLine : oneLine[..LongestHeading].TrimEnd();
+    }
+
     /// <summary>The menu as it comes, with nothing chosen.</summary>
     public static MenuLook Plain { get; } = new();
 

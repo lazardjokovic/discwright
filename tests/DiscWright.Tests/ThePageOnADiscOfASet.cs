@@ -417,6 +417,47 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.Equal("alerts=That folder is not there.", lines[1]);
     }
 
+    [Theory]
+    // As it comes: the disc over the list, the game over its own screen.
+    [InlineData(2, null, false, "list=[Headed]block", "game=[Game 1]")]
+    // Words of its own over the list, and the game still over its screen.
+    [InlineData(2, "GOG Collection", false, "list=[GOG Collection]block", "game=[Game 1]")]
+    // No heading over the list, and the game still over its screen.
+    [InlineData(2, "GOG Collection", true, "list=[]none", "game=[Game 1]")]
+    [InlineData(2, null, true, "list=[]none", "game=[Game 1]")]
+    // A disc of one: its own screen is the main menu.
+    [InlineData(1, null, false, "", "game=[Game 1]block")]
+    [InlineData(1, "Hallownest", false, "", "game=[Hallownest]block")]
+    [InlineData(1, "Hallownest", true, "", "game=[]none")]
+    public void The_main_menu_is_headed_as_asked_and_a_games_screen_with_the_game(
+        int games, string? heading, bool hidden, string onTheList, string onAGame)
+    {
+        string disc = Path.Combine(_folder, "headed " + games + heading + hidden);
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Headed", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [.. Enumerable.Range(1, games).Select(number => new MenuGame("Game " + number, "good.txt", string.Empty))],
+                Look: new MenuLook(Heading: heading, HeadingHidden: hidden))),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "function h(id) { var e = document.getElementById(id); return '[' + (e.innerText || '') + ']' + (e.style.display || ''); }\n"
+                + (games > 1 ? "showChooser();\nout.push('list=' + h('discName'));\n" : string.Empty)
+                + "showGame(0);\n"
+                + "out.push('game=' + h('gameName'));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        if (games > 1)
+        {
+            Assert.Equal(onTheList, lines[0]);
+        }
+
+        Assert.Equal(onAGame, lines[^1]);
+    }
+
     [Fact]
     public void Checks_the_disc_from_the_button_beside_the_mute()
     {

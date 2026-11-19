@@ -59,6 +59,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </summary>
     private string _backgroundColourText = string.Empty;
 
+    /// <summary>
+    /// The menu's heading as it sits in its box, spaces and all, so a space
+    /// typed between two words is still there when the second word arrives.
+    /// </summary>
+    private string _menuHeadingText = string.Empty;
+
     private string _label = string.Empty;
     private string _outputFolder = string.Empty;
 
@@ -1523,6 +1529,37 @@ public sealed class MakeADisc : INotifyPropertyChanged
         get => Options.LookOrPlain.OpenTheDiscButton;
         set => SwitchTheLook(Options.LookOrPlain with { OpenTheDiscButton = value });
     }
+
+    /// <summary>
+    /// What the main menu is headed with, as typed. Empty for the disc's own
+    /// name, discwright#98.
+    /// </summary>
+    public string MenuHeading
+    {
+        get => _menuHeadingText;
+        set
+        {
+            _menuHeadingText = value ?? string.Empty;
+            SwitchTheLook(Options.LookOrPlain with { Heading = MenuLook.TidiedHeading(_menuHeadingText) });
+        }
+    }
+
+    /// <summary>Whether the main menu has no heading at all.</summary>
+    public bool MenuHeadingHidden
+    {
+        get => Options.LookOrPlain.HeadingHidden;
+        set
+        {
+            SwitchTheLook(Options.LookOrPlain with { HeadingHidden = value });
+            Tell(nameof(MenuHeadingCanBeTyped));
+        }
+    }
+
+    /// <summary>
+    /// Whether the heading's box is live: not while the menu is to have no
+    /// heading, when whatever is typed in it goes nowhere.
+    /// </summary>
+    public bool MenuHeadingCanBeTyped => !MenuHeadingHidden;
 
     private void SwitchTheLook(MenuLook now, [CallerMemberName] string? name = null)
     {
@@ -3652,6 +3689,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(CornerAtTheBottom));
         Tell(nameof(DiscsOwnAsSmallButtons));
         Tell(nameof(OpenTheDiscButton));
+
+        // The box shows the heading the project carries, so a project
+        // opened and saved again keeps it without anybody retyping it.
+        _menuHeadingText = _options.LookOrPlain.Heading ?? string.Empty;
+        Tell(nameof(MenuHeading));
+        Tell(nameof(MenuHeadingHidden));
+        Tell(nameof(MenuHeadingCanBeTyped));
         Tell(nameof(WhereTheCornerButtonsSit));
 
         // The artwork, the manual, the tune and the folder of extras, which a
