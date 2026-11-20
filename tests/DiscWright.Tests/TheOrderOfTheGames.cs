@@ -419,8 +419,9 @@ public class TheOrderOfTheGames
         AThingOnTheDisc[] theRest =
             [.. game.EveryRow().Where(each => !each.IsAWholeGame && each.What != TheTreeOfWhatGoesOn.AnAddOn)];
 
-        // The installer, its part, and the folder the add-ons are in.
-        Assert.Equal(3, theRest.Length);
+        // The installer, which is one row with its part, and the folder
+        // the add-ons are in.
+        Assert.Equal(2, theRest.Length);
         Assert.All(theRest, row => Assert.Null(MakeADisc.WhatADragCarries(row)));
         Assert.All(theRest, row => Assert.False(MakeADisc.HasAnOrder(row)));
         Assert.True(MakeADisc.HasAnOrder(game));

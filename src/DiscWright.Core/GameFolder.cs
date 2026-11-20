@@ -77,16 +77,35 @@ public sealed record GameFolder(
             .. OwnOrNone.Where(each => !string.Equals(each.Path, relativePath, StringComparison.OrdinalIgnoreCase))
         ];
 
+        // The installer takes its numbered parts with it. They are one
+        // thing in the list, and parts left on a disc with no installer to
+        // read them are gigabytes of nothing.
+        HashSet<string> going = new(StringComparer.OrdinalIgnoreCase) { relativePath };
+
+        if (Installer is not null && string.Equals(Installer.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase))
+        {
+            going.UnionWith(ThePartsOfItsInstaller.Select(part => part.RelativePath));
+        }
+
         return this with
         {
-            Files =
-            [
-                .. Files.Where(file =>
-                    !string.Equals(file.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase))
-            ],
+            Files = [.. Files.Where(file => !going.Contains(file.RelativePath))],
             Own = own.Length > 0 ? own : null
         };
     }
+
+    /// <summary>
+    /// The numbered parts that belong to this game's installer: the
+    /// <c>-1.bin</c>, <c>-2.bin</c> beside it. Nothing when there is no
+    /// installer or it came in one piece.
+    /// </summary>
+    /// <remarks>
+    /// GOG's installer is a small program and, for anything of size, a row
+    /// of parts that hold the game itself. Without every one of them the
+    /// program installs nothing. Found the same way an add-on's are.
+    /// </remarks>
+    public IReadOnlyList<ListedFile> ThePartsOfItsInstaller =>
+        Installer is null ? [] : AddOn.PartsOf(Installer, Files);
 
     /// <summary>
     /// Whether a file is among the game's files, by the path it has inside

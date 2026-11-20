@@ -877,7 +877,7 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = New();
         Assert.Null(window.WhatTakingTheLeftOffOnesSays);
 
-        window.Add(AGame("The Witcher", 500, parts: 3));
+        window.Add(AGameOfSeveralFiles("The Witcher", 500, 3));
         Assert.Null(window.WhatTakingTheLeftOffOnesSays);
 
         AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
@@ -2420,7 +2420,7 @@ public class TheMainWindowWithoutAWindow
     public void Takes_off_every_turned_off_row_of_one_game_and_not_just_the_first()
     {
         MakeADisc window = New();
-        window.Add(AGame("Hollow Knight", 1000, parts: 2));
+        window.Add(AGameOfSeveralFiles("Hollow Knight", 1000, 2));
 
         AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
         Assert.Equal(3, rows.Length);
@@ -2442,7 +2442,7 @@ public class TheMainWindowWithoutAWindow
     public void Takes_off_only_the_rows_that_are_turned_off()
     {
         MakeADisc window = New();
-        window.Add(AGame("Hollow Knight", 1000, parts: 2));
+        window.Add(AGameOfSeveralFiles("Hollow Knight", 1000, 2));
 
         AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
         Assert.Equal(3, rows.Length);
@@ -3928,6 +3928,24 @@ public class TheMainWindowWithoutAWindow
     }
 
     /// <summary>
+    /// A game whose installer has other files beside it that are not its
+    /// numbered parts: each a row of its own with a tick of its own, which
+    /// an installer's parts have not been since they became one row with it.
+    /// For the tests that are about rows and ticks and not about parts.
+    /// </summary>
+    internal static GameFolder AGameOfSeveralFiles(string name, int bytes, int others)
+    {
+        List<ListedFile> files = [new($"setup_{name}.exe", bytes)];
+
+        for (int other = 1; other <= others; other++)
+        {
+            files.Add(new ListedFile($"{name} bonus {other}.zip", bytes));
+        }
+
+        return new GameFolder(@"C:\games\" + name, GameKind.GogInstaller, name, name, files[0], files, [], null);
+    }
+
+    /// <summary>
     /// A folder of game files, with however many executables worth running.
     /// </summary>
     private static GameFolder AFolderOfFiles(string name, int candidates)
@@ -4535,7 +4553,7 @@ public class TheMainWindowWithoutAWindow
     public void The_total_follows_the_ticks()
     {
         MakeADisc screen = New();
-        screen.Add(AGame("Hollow Knight", 1_000_000, parts: 1));
+        screen.Add(AGameOfSeveralFiles("Hollow Knight", 1_000_000, 1));
 
         Assert.Equal("1.9 MB in 2 files", screen.WhatIsOnIt);
 
@@ -4858,7 +4876,7 @@ public class TheMainWindowWithoutAWindow
     public void Remove_takes_the_one_file_that_was_chosen_and_leaves_the_game()
     {
         MakeADisc window = New();
-        window.Add(AGame("One", 900, parts: 2));
+        window.Add(AGameOfSeveralFiles("One", 900, 2));
         window.Add(AGame("Two", 500));
 
         AThingOnTheDisc aFile = window.WhatGoesOnIt[0].EveryThing().First();
@@ -4933,7 +4951,7 @@ public class TheMainWindowWithoutAWindow
     public void Taking_a_row_off_leaves_the_other_ticks_alone()
     {
         MakeADisc window = New();
-        window.Add(AGame("One", 900, parts: 2));
+        window.Add(AGameOfSeveralFiles("One", 900, 2));
 
         AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
         rows[1].IsOn = false;
@@ -4990,7 +5008,7 @@ public class TheMainWindowWithoutAWindow
     public void The_other_button_clears_out_everything_left_off()
     {
         MakeADisc window = New();
-        window.Add(AGame("One", 900, parts: 2));
+        window.Add(AGameOfSeveralFiles("One", 900, 2));
 
         AThingOnTheDisc[] rows = [.. window.WhatGoesOnIt[0].EveryThing()];
         rows[0].IsOn = false;
