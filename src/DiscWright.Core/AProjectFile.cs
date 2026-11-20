@@ -124,7 +124,11 @@ public static class AProjectFile
                     // Absent in every file written before 2.0.5, and then
                     // BgAsIs is the whole of it. A word that names no way
                     // to fit is the same as none.
-                    BackgroundShape: WaysToFit.Named(Text(root, "BgFit"))));
+                    BackgroundShape: WaysToFit.Named(Text(root, "BgFit")),
+
+                    // Absent unless somebody framed the picture, and tidied
+                    // so a number typed into the file cannot blank a menu.
+                    BackgroundKept: TheKeptPartIn(root)));
         }
     }
 
@@ -232,6 +236,29 @@ public static class AProjectFile
             Yes(look, "HeadingHidden"))
             .OrNothingWhenPlain();
     }
+
+    /// <summary>
+    /// The part of the background a file says is kept, or nothing when it
+    /// says none or says it in a way that is not three numbers.
+    /// </summary>
+    private static KeptPart? TheKeptPartIn(JsonElement root)
+    {
+        if (!root.TryGetProperty("BgKept", out JsonElement kept) || kept.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return new KeptPart(
+            Fraction(kept, "Across") ?? 0.5,
+            Fraction(kept, "Down") ?? 0.5,
+            Fraction(kept, "Zoom") ?? 1.0).Tidied();
+    }
+
+    private static double? Fraction(JsonElement holder, string name) =>
+        holder.TryGetProperty(name, out JsonElement found) && found.ValueKind == JsonValueKind.Number
+            && found.TryGetDouble(out double number)
+            ? number
+            : null;
 
     private static string? Text(JsonElement holder, string name) =>
         holder.TryGetProperty(name, out JsonElement found) && found.ValueKind == JsonValueKind.String

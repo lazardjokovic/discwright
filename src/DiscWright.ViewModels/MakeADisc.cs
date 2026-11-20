@@ -2469,10 +2469,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 _backgroundColourText = string.Empty;
             }
 
+            // Which part is kept belongs to the picture it was framed on.
+            // Another picture starts in the middle, as every picture does.
+            bool theSamePicture = string.Equals(path, Art().BackgroundPath, StringComparison.OrdinalIgnoreCase);
+
             ChangeTheArtwork(Art() with
             {
                 BackgroundPath = path,
                 BackgroundColour = path is null ? Art().BackgroundColour : null,
+                Kept = theSamePicture ? Art().Kept : null,
             });
 
             Tell(nameof(BackgroundColourText));
@@ -2503,6 +2508,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
             {
                 BackgroundColour = colour,
                 BackgroundPath = colour is null ? Art().BackgroundPath : null,
+
+                // The part kept goes with the picture it was framed on.
+                Kept = colour is null ? Art().Kept : null,
             });
 
             Tell(nameof(BackgroundColourText));
@@ -2564,6 +2572,121 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
     /// <summary>What the way chosen does, in a sentence for under the list.</summary>
     public string WhatThatFitDoes => WaysToFit.For(Art().HowItFits).WhatItDoes;
+
+    /// <summary>
+    /// Whether there is a part to choose: a picture, filled and cropped.
+    /// Every other way to fit shows all of the picture or none of the
+    /// choice, and a colour has no parts.
+    /// </summary>
+    public bool TheBackgroundCanBeFramed =>
+        Art().BackgroundPath is not null && Art().HowItFits == BackgroundFit.Fill;
+
+    /// <summary>
+    /// How far into the background the menu is zoomed, from 1, which is the
+    /// least that covers it, to <see cref="KeptPart.MostZoom"/>. Reddit, 20
+    /// November 2026: "the option to select the area that gets cropped".
+    /// </summary>
+    public double BackgroundZoom
+    {
+        get => Art().WhatIsKept.Zoom;
+        set => Keep(Art().WhatIsKept with { Zoom = value });
+    }
+
+    /// <summary>
+    /// Where the menu's frame sits across the background, 0 for its left
+    /// edge to 1 for its right.
+    /// </summary>
+    public double BackgroundAcross
+    {
+        get => Art().WhatIsKept.Across;
+        set => Keep(Art().WhatIsKept with { Across = value });
+    }
+
+    /// <summary>The same from the top, 0, to the bottom, 1.</summary>
+    public double BackgroundDown
+    {
+        get => Art().WhatIsKept.Down;
+        set => Keep(Art().WhatIsKept with { Down = value });
+    }
+
+    /// <summary>
+    /// The part of the background the menu will show, as four fractions of
+    /// the picture, for the small frame to show the same part.
+    /// </summary>
+    /// <remarks>
+    /// Worked out from the picture's real size by the same sum the disc is
+    /// drawn with, so what the frame shows is what the menu gets. All of it
+    /// when the picture cannot be read: the picker has already said why.
+    /// </remarks>
+    public Kept WhatTheMenuKeeps
+    {
+        get
+        {
+            (int width, int height) = TheSizeOfTheBackground();
+
+            return Art().WhatIsKept
+                .In(width, height, CopyTheArtworkStep.MenuWidth, CopyTheArtworkStep.MenuHeight)
+                .AsFractionsOf(width, height);
+        }
+    }
+
+    /// <summary>Whether the part kept is anything but the middle, which is when there is something to put back.</summary>
+    public bool TheBackgroundIsFramed => Art().Kept is not null;
+
+    /// <summary>
+    /// The picture dragged under the frame, by a fraction of the frame each
+    /// way. A drag in a direction with nothing more to show changes nothing.
+    /// </summary>
+    public void DragTheBackground(double across, double down)
+    {
+        if (!TheBackgroundCanBeFramed)
+        {
+            return;
+        }
+
+        (int width, int height) = TheSizeOfTheBackground();
+
+        Keep(Art().WhatIsKept.Dragged(
+            across, down, width, height, CopyTheArtworkStep.MenuWidth, CopyTheArtworkStep.MenuHeight));
+    }
+
+    /// <summary>The middle of the picture at no zoom again.</summary>
+    public void KeepTheMiddleOfTheBackground() => Keep(null);
+
+    private void Keep(KeptPart? part)
+    {
+        // Nothing to frame, nothing kept: a slider moved over a colour or a
+        // tiled picture must not leave a crop waiting for the next picture.
+        ChangeTheArtwork(Art().Keeping(TheBackgroundCanBeFramed ? part : null));
+    }
+
+    private (string Path, int Width, int Height)? _theBackgroundMeasured;
+
+    /// <summary>
+    /// How big the background really is, asked once for each picture. A
+    /// drag asks for it on every move of the pointer, and reading a file
+    /// each time would make the picture trail the hand.
+    /// </summary>
+    private (int Width, int Height) TheSizeOfTheBackground()
+    {
+        string? path = Art().BackgroundPath;
+
+        if (path is null)
+        {
+            return (0, 0);
+        }
+
+        if (_theBackgroundMeasured is not { } measured
+            || !string.Equals(measured.Path, path, StringComparison.OrdinalIgnoreCase))
+        {
+            ImageFacts facts = _machine.Pictures.Read(path);
+
+            measured = facts.Readable ? (path, facts.Width, facts.Height) : (path, 0, 0);
+            _theBackgroundMeasured = measured;
+        }
+
+        return (measured.Width, measured.Height);
+    }
 
     /// <summary>The picture for the printed cover.</summary>
     public string? Cover
@@ -2698,7 +2821,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private static readonly string[] ThePicturesOnIt =
         [nameof(DiscIcon), nameof(Background), nameof(BackgroundAsIs), nameof(Cover), nameof(DiscFace),
          nameof(BackgroundColour), nameof(BackgroundColourText), nameof(WhatTheColourSays),
-         nameof(HowTheBackgroundFits), nameof(WhatThatFitDoes)];
+         nameof(HowTheBackgroundFits), nameof(WhatThatFitDoes),
+         nameof(TheBackgroundCanBeFramed), nameof(BackgroundZoom), nameof(BackgroundAcross),
+         nameof(BackgroundDown), nameof(WhatTheMenuKeeps), nameof(TheBackgroundIsFramed)];
 
     private void ChangeTheArtwork(DiscArtwork now)
     {

@@ -34,9 +34,10 @@ public sealed class CopyTheArtworkStep(IImages images) : IBuildStep
     private const char Separator = (char)92;
 
     /// <summary>The menu's own size, which is what the background is made to fit.</summary>
-    private const int MenuWidth = 760;
+    public const int MenuWidth = 760;
 
-    private const int MenuHeight = 480;
+    /// <summary>And how tall. The window frames a picture to this shape too.</summary>
+    public const int MenuHeight = 480;
 
     public string Says => "putting the artwork on";
 
@@ -72,7 +73,8 @@ public sealed class CopyTheArtworkStep(IImages images) : IBuildStep
                 context.On(MenuFolder + Separator + "background.png"),
                 MenuWidth,
                 MenuHeight,
-                artwork.HowItFits);
+                artwork.HowItFits,
+                artwork.Kept);
         }
 
         ct.ThrowIfCancellationRequested();

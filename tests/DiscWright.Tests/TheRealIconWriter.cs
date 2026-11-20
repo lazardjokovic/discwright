@@ -338,6 +338,136 @@ public sealed class TheRealIconWriter : IDisposable
         }
     }
 
+    // ------------------------------------------- the part somebody framed
+
+    [Theory]
+    [InlineData(0.0, "red")]
+    [InlineData(1.0, "blue")]
+    public void Filled_it_keeps_the_side_of_a_wide_picture_that_was_framed(double across, string colour)
+    {
+        // Reddit, 20 November 2026: "the option to select the area that gets
+        // cropped for the menu image". Twice the menu's width, red on the
+        // left half and blue on the right: framed at either end, the menu is
+        // one colour from edge to edge, where the middle would be both.
+        string made = Path.Combine(_folder, $"kept {colour}.png");
+
+        new WindowsImages().WriteBackground(
+            TwoHalves(1520, 480, sideBySide: true), made, 760, 480, BackgroundFit.Fill, new KeptPart(Across: across));
+
+        using Bitmap background = new(made);
+        int wanted = (colour == "red" ? Color.Red : Color.Blue).ToArgb();
+
+        foreach ((int x, int y) in new[] { (0, 0), (759, 0), (0, 479), (759, 479), (380, 240), (5, 240), (754, 240) })
+        {
+            Assert.Equal(wanted, background.GetPixel(x, y).ToArgb());
+        }
+    }
+
+    [Theory]
+    [InlineData(0.0, "red")]
+    [InlineData(1.0, "blue")]
+    public void And_the_top_or_the_bottom_of_a_tall_one(double down, string colour)
+    {
+        string made = Path.Combine(_folder, $"kept tall {colour}.png");
+
+        new WindowsImages().WriteBackground(
+            TwoHalves(760, 960, sideBySide: false), made, 760, 480, BackgroundFit.Fill, new KeptPart(Down: down));
+
+        using Bitmap background = new(made);
+        int wanted = (colour == "red" ? Color.Red : Color.Blue).ToArgb();
+
+        foreach ((int x, int y) in new[] { (0, 0), (759, 0), (0, 479), (759, 479), (380, 240) })
+        {
+            Assert.Equal(wanted, background.GetPixel(x, y).ToArgb());
+        }
+    }
+
+    [Fact]
+    public void Zoomed_in_twice_on_a_corner_the_menu_is_that_quarter_of_the_picture()
+    {
+        // The menu's own shape, so without the zoom there would be nothing
+        // to choose: red on the left and blue on the right, and the left
+        // half zoomed into is red alone.
+        string made = Path.Combine(_folder, "kept zoomed.png");
+
+        new WindowsImages().WriteBackground(
+            TwoHalves(760, 480, sideBySide: true), made, 760, 480, BackgroundFit.Fill, new KeptPart(0, 0, 2));
+
+        using Bitmap background = new(made);
+
+        // Not the last few columns: the part kept ends exactly where the
+        // blue begins, and smoothing two pixels into one there is the
+        // picture's own neighbour showing, which is right.
+        foreach ((int x, int y) in new[] { (0, 0), (740, 0), (0, 479), (740, 479), (380, 240) })
+        {
+            Assert.Equal(Color.Red.ToArgb(), background.GetPixel(x, y).ToArgb());
+        }
+
+        // And it is the left half, not the whole pulled in: unzoomed, the
+        // same place is blue.
+        string unzoomed = Path.Combine(_folder, "kept unzoomed.png");
+
+        new WindowsImages().WriteBackground(
+            TwoHalves(760, 480, sideBySide: true), unzoomed, 760, 480, BackgroundFit.Fill);
+
+        using Bitmap whole = new(unzoomed);
+
+        Assert.Equal(Color.Blue.ToArgb(), whole.GetPixel(740, 240).ToArgb());
+    }
+
+    [Fact]
+    public void The_middle_framed_is_pixel_for_pixel_what_no_framing_gives()
+    {
+        // Every disc made before had the middle. Saying so out loud must
+        // not move a single pixel of it.
+        string picture = APicture(1920, 1080);
+        string plain = Path.Combine(_folder, "plain.png");
+        string said = Path.Combine(_folder, "said.png");
+
+        new WindowsImages().WriteBackground(picture, plain, 760, 480, BackgroundFit.Fill);
+        new WindowsImages().WriteBackground(picture, said, 760, 480, BackgroundFit.Fill, KeptPart.TheMiddle);
+
+        Assert.Equal(File.ReadAllBytes(plain), File.ReadAllBytes(said));
+    }
+
+    [Theory]
+    [InlineData(BackgroundFit.Stretch)]
+    [InlineData(BackgroundFit.Fit)]
+    [InlineData(BackgroundFit.Tile)]
+    public void No_other_way_to_fit_reads_the_part_framed(BackgroundFit how)
+    {
+        string picture = TwoHalves(1520, 480, sideBySide: true);
+        string plain = Path.Combine(_folder, $"plain {how}.png");
+        string framed = Path.Combine(_folder, $"framed {how}.png");
+
+        new WindowsImages().WriteBackground(picture, plain, 760, 480, how);
+        new WindowsImages().WriteBackground(picture, framed, 760, 480, how, new KeptPart(0, 0, 3));
+
+        Assert.Equal(File.ReadAllBytes(plain), File.ReadAllBytes(framed));
+    }
+
+    [Fact]
+    public void A_part_framed_leaves_nothing_see_through_either()
+    {
+        string made = Path.Combine(_folder, "kept opaque.png");
+
+        new WindowsImages().WriteBackground(
+            ABanner(96f), made, 760, 480, BackgroundFit.Fill, new KeptPart(0.9, 0.1, 1.5));
+
+        using Bitmap background = new(made);
+
+        for (int across = 0; across < background.Width; across++)
+        {
+            for (int down = 0; down < background.Height; down++)
+            {
+                if (background.GetPixel(across, down).A != 255)
+                {
+                    Assert.Fail($"The pixel at {across}, {down} is {background.GetPixel(across, down).A} opaque out of 255.");
+                }
+            }
+        }
+    }
+
     [Fact]
     public void Says_what_is_wrong_with_a_file_it_cannot_read()
     {
@@ -389,6 +519,22 @@ public sealed class TheRealIconWriter : IDisposable
                 drawing.FillRectangle(Brushes.Blue, 180, 0, 20, 50);
             }
 
+            bitmap.Save(path, ImageFormat.Png);
+        }
+
+        return path;
+    }
+
+    /// <summary>Red and blue, half each, side by side or one above the other.</summary>
+    private string TwoHalves(int width, int height, bool sideBySide)
+    {
+        string path = Path.Combine(_folder, $"halves {width}x{height} {sideBySide}.png");
+
+        using (Bitmap bitmap = new(width, height))
+        using (Graphics drawing = Graphics.FromImage(bitmap))
+        {
+            drawing.Clear(Color.Blue);
+            drawing.FillRectangle(Brushes.Red, 0, 0, sideBySide ? width / 2 : width, sideBySide ? height : height / 2);
             bitmap.Save(path, ImageFormat.Png);
         }
 

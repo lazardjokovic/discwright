@@ -257,7 +257,12 @@ public sealed class APicture : IValueConverter
             small.BeginInit();
             small.CacheOption = BitmapCacheOption.OnLoad;
             small.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
-            small.DecodePixelHeight = 96;
+            // Larger when asked, for the frame somebody zooms into: four
+            // times in, a picture decoded at 96 is two dozen pixels tall.
+            small.DecodePixelHeight =
+                parameter is string asked && int.TryParse(asked, NumberStyles.None, CultureInfo.InvariantCulture, out int tall)
+                    ? tall
+                    : 96;
             small.UriSource = new Uri(path);
             small.EndInit();
             small.Freeze();
@@ -276,6 +281,25 @@ public sealed class APicture : IValueConverter
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException("Nothing becomes a file by being shown.");
+}
+
+/// <summary>
+/// The part of a picture the screen says is kept, as the rectangle a brush
+/// is told to show.
+/// </summary>
+/// <remarks>
+/// All of it for anything else, so a frame with nothing worked out yet shows
+/// the picture rather than nothing.
+/// </remarks>
+public sealed class AsARect : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is Kept part && part.Width > 0 && part.Height > 0
+            ? new Rect(part.X, part.Y, part.Width, part.Height)
+            : new Rect(0, 0, 1, 1);
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("A frame is moved by the screen, not read back from a brush.");
 }
 
 /// <summary>

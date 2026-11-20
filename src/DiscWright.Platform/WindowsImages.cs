@@ -98,7 +98,8 @@ public sealed class WindowsImages : IImages
     /// </summary>
     private static readonly Color TheMenusOwnDark = Color.FromArgb(255, 0x0C, 0x13, 0x16);
 
-    public void WriteBackground(string source, string destination, int width, int height, BackgroundFit how)
+    public void WriteBackground(
+        string source, string destination, int width, int height, BackgroundFit how, KeptPart? kept = null)
     {
         using Image original = Image.FromFile(source);
         using Bitmap canvas = new(width, height, PixelFormat.Format32bppArgb);
@@ -144,6 +145,23 @@ public sealed class WindowsImages : IImages
                     }
                 }
 
+                break;
+
+            case BackgroundFit.Fill when kept is not null && !kept.Tidied().IsTheMiddle:
+                // Filled, and cropped where somebody said: the part of the
+                // picture they framed, drawn over the whole of the menu. It
+                // is the menu's shape already, so nothing is pulled.
+                Kept part = kept.In(original.Width, original.Height, width, height);
+
+                drawing.DrawImage(
+                    original,
+                    new Rectangle(0, 0, width, height),
+                    (float)part.X,
+                    (float)part.Y,
+                    (float)part.Width,
+                    (float)part.Height,
+                    GraphicsUnit.Pixel,
+                    atTheEdges);
                 break;
 
             default:

@@ -33,6 +33,11 @@ namespace DiscWright.Core;
 /// or not by accident.
 /// </para>
 /// </param>
+/// <param name="Kept">
+/// Which part of the background is kept when it is filled and cropped, or
+/// nothing for the middle. It belongs to the picture: choosing another
+/// picture takes it off, and no other way to fit reads it.
+/// </param>
 public sealed record DiscArtwork(
     string? IconPath = null,
     string? BackgroundPath = null,
@@ -40,8 +45,23 @@ public sealed record DiscArtwork(
     string? CoverPath = null,
     string? DiscFacePath = null,
     string? BackgroundColour = null,
-    BackgroundFit? Shape = null)
+    BackgroundFit? Shape = null,
+    KeptPart? Kept = null)
 {
+    /// <summary>The part of the background that is kept, the middle when none was chosen.</summary>
+    public KeptPart WhatIsKept => Kept ?? KeptPart.TheMiddle;
+
+    /// <summary>
+    /// This artwork keeping one part of its background, with the middle
+    /// written as nothing so two discs that look alike are alike.
+    /// </summary>
+    public DiscArtwork Keeping(KeptPart? part)
+    {
+        KeptPart? tidy = part?.Tidied();
+
+        return this with { Kept = tidy is null || tidy.IsTheMiddle ? null : tidy };
+    }
+
     /// <summary>
     /// How the background covers the menu: the shape when one was chosen,
     /// and otherwise stretched or filled as the yes or no says.
