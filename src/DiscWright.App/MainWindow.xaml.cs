@@ -358,8 +358,52 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MoveTheGameUp(object sender, RoutedEventArgs e) => KeepPicked(_screen.MoveTheGame(-1));
+
+    private void MoveTheGameDown(object sender, RoutedEventArgs e) => KeepPicked(_screen.MoveTheGame(1));
+
+    private void SortTheGames(object sender, RoutedEventArgs e) => KeepPicked(_screen.SortTheGames());
+
+    /// <summary>
+    /// Picks a game's row in the tree again after it has changed places.
+    /// </summary>
+    /// <remarks>
+    /// The tree lets go of a row whose place in the list is given to
+    /// another, so a game moved up once had nothing picked and could not be
+    /// moved up again without clicking it first. The row is the same row;
+    /// only what the tree draws it in is new, and that exists once the tree
+    /// has laid itself out.
+    /// </remarks>
+    private void KeepPicked(AThingOnTheDisc? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        Games.UpdateLayout();
+
+        if (Games.ItemContainerGenerator.ContainerFromItem(row) is System.Windows.Controls.TreeViewItem drawn)
+        {
+            drawn.IsSelected = true;
+            drawn.BringIntoView();
+            drawn.Focus();
+        }
+    }
+
     private void TheListKeys(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        // Alt and an arrow walks the picked game up or down the list. With
+        // Alt held the key arrives as System, and the arrow is in SystemKey.
+        if (e.Key == System.Windows.Input.Key.System
+            && e.SystemKey is System.Windows.Input.Key.Up or System.Windows.Input.Key.Down
+            && e.OriginalSource is not System.Windows.Controls.TextBox)
+        {
+            KeepPicked(_screen.MoveTheGame(e.SystemKey == System.Windows.Input.Key.Up ? -1 : 1));
+            e.Handled = true;
+            return;
+        }
+
         // Delete takes the picked row off, the keyboard's half of the cross
         // on the row. Not from inside the rename box, where Delete is an
         // editing key: the box handles it itself, but a handled key still

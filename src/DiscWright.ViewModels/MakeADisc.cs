@@ -1743,6 +1743,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(CanStartAgain));
             Tell(nameof(CanSaveItForLater));
             Tell(nameof(CanTakeSomethingOff));
+            TellHowTheOrderCanChange();
             Tell(nameof(CanErase));
 
             Outcome<IReadOnlyList<Recorder>> couldBe = await _settling.WhichCouldBeErased(ct);
@@ -1795,6 +1796,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
             Tell(nameof(CanStartAgain));
             Tell(nameof(CanSaveItForLater));
             Tell(nameof(CanTakeSomethingOff));
+            TellHowTheOrderCanChange();
             Tell(nameof(CanErase));
             _aDiscMovedMeanwhile = false;
             await LookAtTheDrives();
@@ -2116,6 +2118,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             _selected = value;
             Tell(nameof(CanTakeSomethingOff));
+            TellHowTheOrderCanChange();
             Tell(nameof(ThePickedGame));
         }
     }
@@ -3810,6 +3813,132 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Reconsider();
     }
 
+    // ------------------------------------------------- the order of the games
+    //
+    // discwright#98: the menu lists the games in the order they were added,
+    // and the only way to change it was to take them all off and add them
+    // again in the order wanted. The list is the order: what moves here
+    // moves in the menu, in the project file and across the discs of a set.
+
+    /// <summary>
+    /// The order names are sorted in: no capitals, and a number read as a
+    /// number, so "Gothic 2" comes before "Gothic 10". The same on every
+    /// machine, whatever language it is set to.
+    /// </summary>
+    private static readonly StringComparer ByName = StringComparer.Create(
+        System.Globalization.CultureInfo.InvariantCulture,
+        System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.NumericOrdering);
+
+    /// <summary>Whether the picked row's game can go one place up.</summary>
+    public bool CanMoveTheGameUp => !IsWorking && GameOf(_selected) > 0;
+
+    /// <summary>Whether the picked row's game can go one place down.</summary>
+    public bool CanMoveTheGameDown =>
+        !IsWorking && GameOf(_selected) is int at && at >= 0 && at < _tree.Count - 1;
+
+    /// <summary>
+    /// Whether sorting would change anything: two games or more, not in
+    /// order by name already.
+    /// </summary>
+    public bool CanSortTheGames => !IsWorking && !InOrder(TheGamesByName());
+
+    /// <summary>
+    /// Moves the game the picked row belongs to one place up or down, with
+    /// everything that is its own. Returns its row, for the window to keep
+    /// picked, or nothing when it could not move.
+    /// </summary>
+    /// <param name="by">Minus one for up, one for down.</param>
+    public AThingOnTheDisc? MoveTheGame(int by)
+    {
+        int from = GameOf(_selected);
+        int to = from + Math.Sign(by);
+
+        if (IsWorking || by == 0 || from < 0 || to < 0 || to >= _tree.Count)
+        {
+            return null;
+        }
+
+        int[] order = [.. Enumerable.Range(0, _tree.Count)];
+        (order[from], order[to]) = (order[to], order[from]);
+
+        return PutInOrder(order, _tree[from]);
+    }
+
+    /// <summary>
+    /// Puts the games in order by name. Two of one name stay as they were.
+    /// Returns the picked row's game, for the window to keep picked.
+    /// </summary>
+    public AThingOnTheDisc? SortTheGames()
+    {
+        int[] order = TheGamesByName();
+
+        if (IsWorking || InOrder(order))
+        {
+            return null;
+        }
+
+        int picked = GameOf(_selected);
+
+        return PutInOrder(order, picked >= 0 ? _tree[picked] : null) ?? (_tree.Count > 0 ? _tree[0] : null);
+    }
+
+    /// <summary>The old place of each game, in the order by name.</summary>
+    private int[] TheGamesByName() =>
+        [.. Enumerable.Range(0, _tree.Count).OrderBy(at => _tree[at].Name, ByName)];
+
+    private static bool InOrder(int[] order) => order.Select((old, now) => old == now).All(same => same);
+
+    /// <summary>
+    /// Every list that is kept by a game's place, put in one new order
+    /// together, and the add-ons told where their games went.
+    /// </summary>
+    /// <param name="order">For each new place, the old place of the game that goes there.</param>
+    /// <param name="picked">The row to leave picked.</param>
+    private AThingOnTheDisc? PutInOrder(int[] order, AThingOnTheDisc? picked)
+    {
+        GameFolder[] games = [.. order.Select(old => _games[old])];
+        GameFolder[] asFound = [.. order.Select(old => _asFound[old])];
+        AThingOnTheDisc[] tree = [.. order.Select(old => _tree[old])];
+
+        int[] whereEachWent = new int[order.Length];
+
+        for (int now = 0; now < order.Length; now++)
+        {
+            whereEachWent[order[now]] = now;
+        }
+
+        for (int at = 0; at < order.Length; at++)
+        {
+            _games[at] = games[at];
+            _asFound[at] = asFound[at];
+
+            // Only the rows that moved, so a list of forty redraws two.
+            if (!ReferenceEquals(_tree[at], tree[at]))
+            {
+                _tree[at] = tree[at];
+            }
+        }
+
+        Replace(_addOnsAsFound, AddOn.AfterTheGamesMoved(_addOnsAsFound, whereEachWent));
+        Replace(_addOns, AddOn.AfterTheGamesMoved(_addOns, whereEachWent));
+
+        // The tree lets go of a row that is replaced, so it is picked again
+        // here and the window picks it again on its side.
+        _selected = picked;
+
+        Reconsider();
+        Tell(nameof(CanTakeSomethingOff));
+
+        return picked;
+    }
+
+    private void TellHowTheOrderCanChange()
+    {
+        Tell(nameof(CanMoveTheGameUp));
+        Tell(nameof(CanMoveTheGameDown));
+        Tell(nameof(CanSortTheGames));
+    }
+
     // --------------------------------------------- renaming a game in place
     //
     // v1 lets a double click rename any row, and discwright#98 leaned on
@@ -4075,6 +4204,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // The picked row may have gone with whatever changed, and the line
         // under the list that names its game goes with it.
         Tell(nameof(ThePickedGame));
+        TellHowTheOrderCanChange();
 
         Worry = HasNoName ? null : DiscLabel.WhatWindowsWillMakeOfIt(Label, _machine.Encoding);
 
@@ -4299,6 +4429,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(CanSaveItForLater));
         Tell(nameof(HowTheSaveWent));
         Tell(nameof(CanTakeSomethingOff));
+        TellHowTheOrderCanChange();
         Tell(nameof(Doing));
         Tell(nameof(HowFar));
         Tell(nameof(Made));
@@ -4367,6 +4498,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // And whether Remove would take anything. It goes by what is picked,
         // and what is picked is gone the moment the list is rebuilt under it.
         Tell(nameof(CanTakeSomethingOff));
+        TellHowTheOrderCanChange();
 
         // Adding a game is what makes previewing possible, and this is the
         // path adding takes. A property nobody is told about keeps whatever

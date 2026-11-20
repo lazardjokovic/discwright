@@ -675,6 +675,22 @@
                                         Visibility="{Binding WhatTakingTheLeftOffOnesSays, Converter={StaticResource WhenAnything}}"
                                         Click="TakeOffWhatIsLeftOff"
                                         AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
+
+                                <!-- Only while it would change something:
+                                     two games or more, not in order by
+                                     name already. Pressed, it has nothing
+                                     left to do and goes. -->
+                                <TextBlock Style="{StaticResource Aside}"
+                                           Text="·"
+                                           Margin="6,0"
+                                           Visibility="{Binding CanSortTheGames, Converter={StaticResource WhenSo}}" />
+                                <Button Content="Sort the games by name"
+                                        Style="{StaticResource AsALink}"
+                                        VerticalAlignment="Center"
+                                        Visibility="{Binding CanSortTheGames, Converter={StaticResource WhenSo}}"
+                                        ToolTip="The menu lists the games in the order they are in here."
+                                        Click="SortTheGames"
+                                        AutomationProperties.AutomationId="SortTheGames" />
                             </WrapPanel>
 
                             <!-- The picked game's own manual and extras, for
@@ -713,6 +729,38 @@
                                         ToolTip="A DLC, a patch or a mod that installs onto this game. It goes in the game's Add-ons folder with its parts, and gets a button under the game in the menu."
                                         Click="AttachAnAddOnToThePickedGame"
                                         AutomationProperties.AutomationId="AttachAnAddOn" />
+                                <TextBlock Style="{StaticResource Aside}" Text="·" Margin="6,0" />
+                                <!-- The list is the order the menu shows
+                                     the games in, discwright#98, and until
+                                     these the only way to change it was to
+                                     take every game off and add them again.
+                                     Alt and an arrow does the same from the
+                                     list. Grey at the end of the list, not
+                                     gone, so the row does not jump about
+                                     as a game is walked up it.
+
+                                     The two in a panel of their own, so the
+                                     line wraps before the pair and never
+                                     between them: at the window's first
+                                     width Move down went to a second line
+                                     alone, seen in the real window. -->
+                                <StackPanel Orientation="Horizontal">
+                                <Button Content="Move up"
+                                        Style="{StaticResource AsALink}"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding CanMoveTheGameUp}"
+                                        ToolTip="Moves this game one place up the list and the menu. Alt and the up arrow does the same."
+                                        Click="MoveTheGameUp"
+                                        AutomationProperties.AutomationId="MoveTheGameUp" />
+                                <TextBlock Style="{StaticResource Aside}" Text="·" Margin="6,0" />
+                                <Button Content="Move down"
+                                        Style="{StaticResource AsALink}"
+                                        VerticalAlignment="Center"
+                                        IsEnabled="{Binding CanMoveTheGameDown}"
+                                        ToolTip="Moves this game one place down the list and the menu. Alt and the down arrow does the same."
+                                        Click="MoveTheGameDown"
+                                        AutomationProperties.AutomationId="MoveTheGameDown" />
+                                </StackPanel>
                             </WrapPanel>
                             </StackPanel>
                         </Border>

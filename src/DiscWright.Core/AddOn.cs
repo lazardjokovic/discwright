@@ -120,6 +120,31 @@ public sealed partial record AddOn(
     ];
 
     /// <summary>
+    /// The add-ons after the games have changed places, each still belonging
+    /// to the game it belonged to.
+    /// </summary>
+    /// <remarks>
+    /// An add-on knows its game by where the game sits, so a list put in
+    /// another order without this hands every patch to whichever game is now
+    /// in the old place: move Hollow Knight above The Witcher and the
+    /// Witcher's DLC installs onto Hollow Knight. Kept in the order of the
+    /// games they now follow, and in their own order under one game, so the
+    /// menu lists them as the list does.
+    /// </remarks>
+    /// <param name="addOns">Every add-on, whichever game it belongs to.</param>
+    /// <param name="whereEachWent">
+    /// For each old place, from nought, the place that game is in now.
+    /// </param>
+    public static IReadOnlyList<AddOn> AfterTheGamesMoved(IReadOnlyList<AddOn> addOns, IReadOnlyList<int> whereEachWent) =>
+    [
+        .. addOns
+            .Select(addOn => addOn.BelongsTo >= 0 && addOn.BelongsTo < whereEachWent.Count
+                ? addOn with { BelongsTo = whereEachWent[addOn.BelongsTo] }
+                : addOn)
+            .OrderBy(addOn => addOn.BelongsTo)
+    ];
+
+    /// <summary>
     /// What to call an add-on, worked out from its file name.
     /// </summary>
     /// <remarks>

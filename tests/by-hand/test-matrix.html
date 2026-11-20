@@ -496,7 +496,7 @@
     except the one place noted in D.</p>
     <div class="panel" data-cases>
 
-      <div class="sub">The main window · 27 controls</div>
+      <div class="sub">The main window · 30 controls</div>
       <label class="case"><input type="checkbox" id="c1" data-controls="CheckForANewVersion"><span class="id">C1</span>
         <span class="what">Check for new version, first of the links under the name</span>
         <span class="look"><span class="live">Never grey.</span> It is the only way to ask, and one that
@@ -576,6 +576,13 @@
         Each goes under the game's <b>Add-ons</b> in the list as "an add-on", ticked, as one row at the size of the installer <b>and</b> the numbered <code>.bin</code> parts beside it, and hovering the row says how many parts.
         One already there is not attached twice, the game's own installer is not attached to itself, and Preview shows a button for it under the game.
         <span class="grey">Grey</span> during a run only.</span></label>
+      <label class="case"><input type="checkbox" id="c56" data-controls="MoveTheGameUp MoveTheGameDown SortTheGames"><span class="id">C56</span>
+        <span class="what">"Move up", "Move down" and "Sort the games by name" under the list</span>
+        <span class="look">Move up and Move down are beside C55 while a game or anything in it is picked. Up is <span class="grey">grey</span> on the first game and Down on the last, and both during a run.
+        With three games, pick the last and press Move up twice without clicking the list between: it goes to the top and <b>stays picked</b>. Alt with the up or down arrow does the same from the list.
+        A game with an add-on under it takes the add-on with it, and after any number of moves each add-on is still under its own game, in the list and in Preview.
+        Sort the games by name is on the line that says what is on the disc, only while there are two games or more that are not in order already. Pressed, the games are in order, "Gothic 2" before "Gothic 10", and the link is gone.
+        Preview after either: the menu lists the games in the order of the list.</span></label>
       <label class="case"><input type="checkbox" id="c53" data-controls="SwapWhatItIs"><span class="id">C53</span>
         <span class="what">"the manual" or "an extra" on a row of the game's own</span>
         <span class="look">In the accent ink, where an ordinary row says nothing and the installer says "the installer". Hovering says what a click would do.
