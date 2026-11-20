@@ -68,6 +68,10 @@ public sealed record TheMachine(
     // its page, which is what it did before there was an Update.
     IUpdateThisCopy? Updater = null,
 
+    // What deletes a disc folder once its image is made, for a build that
+    // keeps the image alone. Null means nothing can, and the folder stays.
+    IRemoveADiscFolder? Remover = null,
+
     // The copy's page in the Microsoft Store, when it came from there, and
     // nothing otherwise. The Store keeps such a copy up to date, so it never
     // asks GitHub and never updates itself: its version link is this page.

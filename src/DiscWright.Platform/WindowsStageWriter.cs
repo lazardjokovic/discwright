@@ -7,7 +7,7 @@ namespace DiscWright.Platform;
 /// <summary>
 /// Puts things into the folder that becomes a disc, on the real disk.
 /// </summary>
-public sealed class WindowsStageWriter : IStageWriter
+public sealed class WindowsStageWriter : IStageWriter, IRemoveADiscFolder
 {
     /// <summary>
     /// The same bite the hasher reads in, for the same reason: larger stopped
@@ -71,6 +71,42 @@ public sealed class WindowsStageWriter : IStageWriter
         }
 
         Directory.CreateDirectory(path);
+    }
+
+    /// <summary>
+    /// Deletes a disc folder outright, for a build that keeps only its image.
+    /// </summary>
+    /// <remarks>
+    /// The same guard as emptying one and the same way of going about it:
+    /// moved aside first, so a folder something has open is refused whole
+    /// and not half deleted.
+    /// </remarks>
+    public void Remove(string discFolder)
+    {
+        if (!WhatMayBeEmptied.Allows(discFolder, Path.GetTempPath()))
+        {
+            throw new ArgumentException(
+                $"Refusing to delete {discFolder}: only a staging folder called \"disc\" or \"disc DN\" may be deleted.",
+                nameof(discFolder));
+        }
+
+        if (!Directory.Exists(discFolder))
+        {
+            return;
+        }
+
+        string aside = discFolder.TrimEnd('\\', '/') + ".going-" + Guid.NewGuid().ToString("N")[..8];
+
+        try
+        {
+            Directory.Move(discFolder, aside);
+        }
+        catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+        {
+            throw new TheFolderIsInUse(discFolder, held.Message, held);
+        }
+
+        Directory.Delete(aside, recursive: true);
     }
 
     public void Copy(string source, string destination) =>

@@ -209,6 +209,10 @@ public static class TheProjectAsJson
 
             writing.WriteString("BgFit", fit.ToString());
 
+            // After everything the older versions wrote. They ignore it and
+            // keep the folder, which is what they always did.
+            writing.WriteBoolean("IsoOnly", project.Options.OnlyTheImage);
+
             // Only when somebody framed the picture. The middle is what a
             // file without it means, here and in every version before.
             if (art?.Kept is { IsTheMiddle: false } kept)

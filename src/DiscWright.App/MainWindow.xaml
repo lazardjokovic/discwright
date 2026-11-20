@@ -1075,6 +1075,24 @@
                                 </TextBlock>
                             </CheckBox.ToolTip>
                         </CheckBox>
+
+                        <!-- discwright#98, 15 November 2026: "ISO only,
+                             without the disc folder, to halve the space
+                             needed". Off unless asked for, and the words
+                             say what it costs. -->
+                        <CheckBox Content="Keep only the ISO, not the disc folder"
+                                  IsChecked="{Binding OnlyTheImage}"
+                                  IsEnabled="{Binding NothingIsRunning}"
+                                  AutomationProperties.AutomationId="OnlyTheImage">
+                            <CheckBox.ToolTip>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="360">
+                                    Deletes the disc folder once the ISO is made, so what is left takes half
+                                    the room. Building still needs room for both, because the ISO is made from
+                                    the folder. Without the folder a burned disc is checked against its own
+                                    list of what every file should be, so leave that list on.
+                                </TextBlock>
+                            </CheckBox.ToolTip>
+                        </CheckBox>
                     </StackPanel>
                 </Expander>
             </StackPanel>

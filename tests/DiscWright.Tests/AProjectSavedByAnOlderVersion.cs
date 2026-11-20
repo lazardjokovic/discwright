@@ -152,11 +152,12 @@ public class AProjectSavedByAnOlderVersion
                 now[at].EnumerateObject().Select(each => each.Name));
         }
 
-        // Every key 2.0.4 wrote, in its order, and after them the two it
-        // never knew, which it skips: how the menu is laid out, and which
-        // of four ways its background fits.
+        // Every key 2.0.4 wrote, in its order, and after them the three it
+        // never knew, which it skips: how the menu is laid out, which of
+        // four ways its background fits, and whether only the image is
+        // kept. A background nobody framed adds nothing more.
         Assert.Equal(
-            [.. before.RootElement.EnumerateObject().Select(each => each.Name), "MenuLook", "BgFit"],
+            [.. before.RootElement.EnumerateObject().Select(each => each.Name), "MenuLook", "BgFit", "IsoOnly"],
             written.RootElement.EnumerateObject().Select(each => each.Name));
 
         // The add-ons are word for word what they were.
