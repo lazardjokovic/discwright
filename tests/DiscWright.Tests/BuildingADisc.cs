@@ -543,7 +543,9 @@ public sealed class BuildingADisc : IDisposable
         // the menu knows it cannot be pressed until the game is installed.
         Assert.Contains("name: \"Update 1.5.12700\"", menu, StringComparison.Ordinal);
         Assert.Contains("Add-ons/patch_hollow_knight", menu, StringComparison.Ordinal);
-        Assert.Contains("canRunAddOnYet", menu, StringComparison.Ordinal);
+        // The gate the page asks: the game installed, and no add-on's
+        // installer already running. It asks canRunAddOnYet inside.
+        Assert.Contains("anAddOnMayStart(installed, addOnRunning !== null)", menu, StringComparison.Ordinal);
     }
 
     [Fact]

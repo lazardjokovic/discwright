@@ -505,6 +505,180 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.Equal("alerts=0", lines[3]);
     }
 
+    // ------------------------------------------- an add-on being installed
+    //
+    // Found on a real disc, Metro Exodus on 2026-11-20. A DLC's installer
+    // took a while to show itself, its button looked as it had before it was
+    // pressed, and it was pressed again: two installers for one DLC.
+
+    private static MenuFacts AGameWithTwoDlc() =>
+        new(
+            "Metro Exodus", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+            Games:
+            [
+                new MenuGame("Metro Exodus", "setup_metro_exodus_3.0.8.39_(64bit)_(62413).exe", string.Empty,
+                [
+                    new MenuAddOn(
+                        "metro exodus - sams story 3.0.8.39 (64bit) (62413)",
+                        "Add-ons/setup_metro_exodus_-_sams_story_3.0.8.39_(64bit)_(62413).exe"),
+                    new MenuAddOn(
+                        "metro exodus - the two colonels 3.0.8.39 (64bit) (62413)",
+                        "Add-ons/setup_metro_exodus_-_the_two_colonels_3.0.8.39_(64bit)_(62413).exe"),
+                ])
+            ]);
+
+    /// <summary>The game installed, nothing really started, and a switch for whether an installer is seen running.</summary>
+    private const string AnInstalledGameAndAStandInInstaller =
+        "function el(id) { return document.getElementById(id); }\n"
+        + "var started = []; var runningNow = false; var asked = [];\n"
+        + "whereTheGameIs = function () { return 'C:' + BACKSLASH + 'Games' + BACKSLASH + 'Metro'; };\n"
+        + "startIt = function (what) { started.push(String(what).split(BACKSLASH).pop()); return ''; };\n"
+        + "installerIsRunning = function (exe) { asked.push(exe); return runningNow; };\n"
+        + "function tick() { var due = window.timers; window.timers = []; for (var i = 0; i < due.length; i++) { due[i](); } }\n"
+        + "function said(i) { var t = el('addOn' + i).innerText; return t === 'Installing\\u2026' ? 'INSTALLING' : t; }\n"
+        + "function row(i) { return said(i) + '/' + (el('addOns').innerHTML.split('<a class=\"')[i + 1] || '').split('\"')[0]; }\n"
+        + "showGame(0);\n";
+
+    [Fact]
+    public void The_real_discs_two_buttons_say_what_they_are_and_nothing_about_versions()
+    {
+        string went = Run(
+            PageScriptFor(AGameWithTwoDlc()),
+            menuUrl: new Uri(Path.Combine(_folder, "named", "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                AnInstalledGameAndAStandInInstaller
+                + "out.push(row(0)); out.push(row(1));\n"
+                + "out.push(el('addOn0').parentNode.title);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(
+            ["sams story/btn", "the two colonels/btn", "metro exodus - sams story 3.0.8.39 (64bit) (62413)"],
+            lines);
+    }
+
+    [Fact]
+    public void An_add_on_says_it_is_installing_holds_every_add_on_and_starts_once_however_often_it_is_pressed()
+    {
+        string went = Run(
+            PageScriptFor(AGameWithTwoDlc()),
+            menuUrl: new Uri(Path.Combine(_folder, "installing", "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                AnInstalledGameAndAStandInInstaller
+                + "runTheAddOn(0);\n"
+                + "out.push('pressed=' + row(0) + ' other=' + row(1) + ' started=' + started.length);\n"
+                + "out.push('says=' + el('stillWanted').innerText);\n"
+
+                // Pressed again before its installer has shown itself, and
+                // the other one pressed too: nothing more starts.
+                + "runTheAddOn(0); runTheAddOn(1);\n"
+                + "out.push('pressed again=' + started.join(','));\n"
+
+                // The installer comes up, and stays up over several looks.
+                + "runningNow = true; tick(); tick(); tick();\n"
+                + "out.push('running=' + row(0) + ' other=' + row(1) + ' looks queued=' + window.timers.length);\n"
+                + "runTheAddOn(1);\n"
+                + "out.push('other pressed while running=' + started.length);\n"
+
+                // It closes.
+                + "runningNow = false; tick();\n"
+                + "out.push('closed=' + row(0) + ' other=' + row(1) + ' looks queued=' + window.timers.length);\n"
+                + "out.push('then says=' + el('stillWanted').innerText);\n"
+                + "out.push('watched=' + asked[0]);\n"
+
+                // And the other can be installed now.
+                + "runTheAddOn(1);\n"
+                + "out.push('the other=' + row(1) + ' started=' + started.join(','));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(
+            [
+                "pressed=INSTALLING/btn dead other=the two colonels/btn dead started=1",
+                "says=Installing sams story. This menu waits for the installer and says when it is done.",
+                "pressed again=setup_metro_exodus_-_sams_story_3.0.8.39_(64bit)_(62413).exe",
+                "running=INSTALLING/btn dead other=the two colonels/btn dead looks queued=1",
+                "other pressed while running=1",
+                "closed=sams story/btn other=the two colonels/btn looks queued=0",
+                "then says=The installer for sams story has closed.",
+                "watched=setup_metro_exodus_-_sams_story_3.0.8.39_(64bit)_(62413).exe",
+                "the other=INSTALLING/btn dead started=setup_metro_exodus_-_sams_story_3.0.8.39_(64bit)_(62413).exe,"
+                    + "setup_metro_exodus_-_the_two_colonels_3.0.8.39_(64bit)_(62413).exe",
+            ],
+            lines);
+    }
+
+    [Fact]
+    public void An_installer_that_is_never_seen_running_does_not_hold_the_buttons_for_ever()
+    {
+        // One that would not start, or started and closed between two
+        // looks. After five looks without seeing it the menu lets go, as it
+        // does for the game's.
+        string went = Run(
+            PageScriptFor(AGameWithTwoDlc()),
+            menuUrl: new Uri(Path.Combine(_folder, "unseen", "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                AnInstalledGameAndAStandInInstaller
+                + "runTheAddOn(0);\n"
+                + "var looks = 0; while (window.timers.length > 0 && looks < 50) { tick(); looks++; }\n"
+                + "out.push('looks=' + looks + ' after=' + row(0) + ' other=' + row(1));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        Assert.Equal("looks=5 after=sams story/btn other=the two colonels/btn", went.Trim());
+    }
+
+    [Fact]
+    public void An_add_on_that_would_not_start_says_why_and_holds_nothing()
+    {
+        string went = Run(
+            PageScriptFor(AGameWithTwoDlc()),
+            menuUrl: new Uri(Path.Combine(_folder, "refused", "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                AnInstalledGameAndAStandInInstaller
+                + "startIt = function () { return 'Windows would not start it.'; };\n"
+                + "runTheAddOn(0);\n"
+                + "out.push(alerts.join('|') + ' after=' + row(0) + ' looks queued=' + window.timers.length);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        Assert.Equal("Windows would not start it. after=sams story/btn looks queued=0", went.Trim());
+    }
+
+    [Fact]
+    public void Going_back_to_the_list_while_an_add_on_installs_leaves_the_other_games_screen_alone()
+    {
+        // A disc of two games. The first game's DLC is installing, somebody
+        // goes to the second game, and the installer closes: the second
+        // game's screen is not redrawn as the first's.
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Two", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games:
+                [
+                    new MenuGame("First", "01/setup_first.exe", "01",
+                        [new MenuAddOn("first - expansion 1.0 (1)", "01/Add-ons/setup_first_-_expansion.exe")]),
+                    new MenuGame("Second", "02/setup_second.exe", "02",
+                        [new MenuAddOn("second - expansion 1.0 (2)", "02/Add-ons/setup_second_-_expansion.exe")]),
+                ])),
+            menuUrl: new Uri(Path.Combine(_folder, "two", "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                AnInstalledGameAndAStandInInstaller
+                + "runTheAddOn(0);\n"
+                + "runningNow = true; tick();\n"
+                + "showGame(1);\n"
+                + "out.push('second while the first installs=' + row(0));\n"
+                + "runningNow = false; tick();\n"
+                + "out.push('second after=' + row(0) + ' says=' + (el('stillWanted').innerText.indexOf('expansion has closed') >= 0 ? 'the first' : 'its own'));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(
+            ["second while the first installs=expansion/btn dead", "second after=expansion/btn says=its own"],
+            lines);
+    }
+
     [Theory]
     [InlineData(true, "shut=block wired=true")]
     [InlineData(false, "shut= wired=false")]
@@ -1273,9 +1447,10 @@ public sealed class ThePageOnADiscOfASet : IDisposable
 
         Assert.Equal(
             [
-                // Twenty-seven characters, one over what a button holds, so
-                // it is cut at the version rather than at the game's name.
-                "the north isles 1.0... | harbour tales - the north isles 1.0 (80001)",
+                // Without the game's name in front and without the version
+                // and the build after, which tell nobody which DLC it is.
+                // The hover keeps all of it.
+                "the north isles | harbour tales - the north isles 1.0 (80001)",
                 "Original Soundtrack | Original Soundtrack",
             ],
             lines);

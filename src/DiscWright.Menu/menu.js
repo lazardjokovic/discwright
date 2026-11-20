@@ -1331,6 +1331,73 @@ function withoutTheGamesName(name, game) {
     return rest === "" ? text : rest;
 }
 
+// An add-on's name without the version, the architecture and the build GOG
+// writes after it.
+//
+// A real disc, Metro Exodus on 2026-11-20: the DLC buttons read "SAMS STORY
+// 3.0.8.39..." and "THE TWO COLONELS 3.0...", because a DLC is named from
+// its file and GOG's file names end "_3.0.8.39_(64bit)_(62413)". None of
+// that tells one DLC from another, and it used up the room the name needed.
+//
+// Only a version with a dot in it, so "Fallout 2" and "Soundtrack 2" keep
+// their number, and never down to nothing.
+function withoutItsVersion(name) {
+    var text = String(name || "");
+    var cut = text.replace(/(\s*\([^()]*\))+\s*$/, "");
+
+    cut = cut.replace(/\s+gog\s+[0-9][0-9a-z.]*\s*$/i, "");
+    cut = cut.replace(/(\s*\([^()]*\))+\s*$/, "");
+    cut = cut.replace(/\s+v?[0-9]+(\.[0-9a-z]+)+\s*$/i, "");
+    cut = cut.replace(/\s+$/, "");
+
+    return cut === "" ? text : cut;
+}
+
+// What the buttons of a game's add-ons say, one for each, in their order:
+// each name without the game's in front and without its version after.
+//
+// Two that come out the same keep their versions, because two buttons that
+// read alike are worse than two long ones: somebody who put both builds of
+// one DLC on a disc has to be able to tell them apart.
+function whatTheAddOnButtonsSay(names, game) {
+    var short = [], said = [], seen = {}, i, key;
+
+    for (i = 0; i < names.length; i++) {
+        short.push(withoutItsVersion(withoutTheGamesName(names[i], game)));
+        key = short[i].toLowerCase();
+        seen[key] = (seen[key] || 0) + 1;
+    }
+
+    for (i = 0; i < names.length; i++) {
+        said.push(seen[short[i].toLowerCase()] > 1 ? withoutTheGamesName(names[i], game) : short[i]);
+    }
+
+    return said;
+}
+
+// Whether a press on an add-on's button starts it: the game is installed,
+// and no add-on's installer is already running.
+//
+// On the real disc a DLC's installer took a while to show itself, the
+// button looked as it had before it was pressed, and it was pressed again:
+// two installers for one DLC. The menu watched the game's installer and
+// said so on its button, and did neither for an add-on.
+function anAddOnMayStart(gameIsInstalled, oneIsRunning) {
+    return canRunAddOnYet(gameIsInstalled) && !oneIsRunning;
+}
+
+// The line under the buttons once an add-on's installer has closed. The
+// menu cannot tell whether it finished or was cancelled, so it says only
+// what it knows.
+function whatAnAddOnLeft(name) {
+    return "The installer for " + name + " has closed.";
+}
+
+// The file an installer runs as, which is how Windows lists it while it runs.
+function theFileOf(path) {
+    return String(path || "").split("/").join(BACKSLASH).split(BACKSLASH).pop();
+}
+
 // Whether this game is on the machine the disc is in.
 //
 // Asked about the name it was REGISTERED under, which is not always the name on

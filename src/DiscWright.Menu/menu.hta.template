@@ -461,8 +461,11 @@ function showAddOnsOf(game) {
     var chain = theUpdateChain(game.addOns || []);
     var others = theOtherAddOns(game.addOns || []);
     var installed = isInstalled(game);
-    var dead = canRunAddOnYet(installed) ? '' : ' dead';
-    var html = "", i;
+
+    // Dead before the game is installed, and all of them while one of them
+    // is installing: one installer at a time.
+    var dead = anAddOnMayStart(installed, addOnRunning !== null) ? '' : ' dead';
+    var names = [], says, html = "", i;
 
     // The patches are one button, since 2026-11-09: four patch buttons
     // asked the person holding the disc to know the order, and the order
@@ -487,7 +490,17 @@ function showAddOnsOf(game) {
     }
 
     for (i = 0; i < others.length; i++) {
-        document.getElementById("addOn" + i).innerText = shortEnoughForAButton(withoutTheGamesName(others[i].name, game.name));
+        names.push(others[i].name);
+    }
+
+    says = whatTheAddOnButtonsSay(names, game.name);
+
+    for (i = 0; i < others.length; i++) {
+        // The one that is installing says so, as the game's own button does.
+        document.getElementById("addOn" + i).innerText =
+            addOnRunning !== null && addOnRunning.game === game && addOnRunning.which === i
+            ? "Installing\u2026"
+            : shortEnoughForAButton(says[i]);
         document.getElementById("addOn" + i).parentNode.title = others[i].name;
     }
 
@@ -767,6 +780,11 @@ function openTheDiscsExtras() {
     }
 }
 
+// The add-on whose installer is running, as { game, which, name }, or null.
+// Which game as well as which button: on a disc of several, the first
+// add-on of another game is not the one installing.
+var addOnRunning = null;
+
 // One add-on that is not a patch. The patches have one button of their own.
 function runTheAddOn(which) {
     var game = gameAt(DISC.games, showing);
@@ -775,8 +793,9 @@ function runTheAddOn(which) {
 
     // Dead in the page as well, but a dead button somebody clicks anyway is
     // still a click, and a patch run before its game half-applies to nothing
-    // and leaves no sign that it did.
-    if (!what) {
+    // and leaves no sign that it did. And one at a time: a second press
+    // while the first installer is still coming up started a second one.
+    if (!what || addOnRunning !== null) {
         return;
     }
 
@@ -784,7 +803,55 @@ function runTheAddOn(which) {
 
     if (wrong) {
         alert(wrong);
+        return;
     }
+
+    watchTheAddOn(game, which, whatTheAddOnButtonsSay([others[which].name], game.name)[0], theFileOf(what));
+}
+
+// The menu says an add-on is installing, on its button and under the list,
+// and holds every add-on's button until its installer has gone. The same
+// watch the game's installer gets, for the same reason.
+function watchTheAddOn(game, which, name, exeName) {
+    var seen = false;
+    var polls = 0;
+
+    addOnRunning = { game: game, which: which, name: name };
+    showAddOnsOf(game);
+    sayUnderneath(whatInstallingSays(name));
+
+    function look() {
+        var running = installerIsRunning(exeName);
+
+        polls++;
+
+        if (running) {
+            seen = true;
+        }
+
+        if (!whenTheInstallerIsDone(seen, running, polls)) {
+            window.setTimeout(look, 2000);
+            return;
+        }
+
+        addOnRunning = null;
+
+        // Whichever game is on screen gets its buttons back, because all of
+        // them were held. The line is said only on the screen of the game
+        // it is about: on a disc of several, somebody may have gone to
+        // another meanwhile.
+        var onScreen = gameAt(DISC.games, showing);
+
+        if (onScreen) {
+            showAddOnsOf(onScreen);
+        }
+
+        if (onScreen === game) {
+            sayUnderneath(whatAnAddOnLeft(name));
+        }
+    }
+
+    window.setTimeout(look, 2000);
 }
 
 // The whole chain of patches, in order, off one press. cmd sequences the
