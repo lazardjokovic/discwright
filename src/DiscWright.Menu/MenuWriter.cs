@@ -113,7 +113,13 @@ public static class MenuWriter
         data.Append("    look: ").Append(JScript.Fields(
             ("listOn", JScript.Literal(look.ListOn == MenuSide.Left ? "left" : "right")),
             ("corner", JScript.Literal(look.CornerAtTheBottom ? "bottom" : "top")),
-            ("discsOwn", JScript.Literal(look.DiscsOwnAsSmallButtons ? "small" : "list")),
+            ("discsOwn", JScript.Literal(look.TheDiscsOwnInAWord switch
+            {
+                "SmallButtons" => "small",
+                "Manual" => "manual",
+                "Extras" => "extras",
+                _ => "list",
+            })),
             ("openTheDisc", look.OpenTheDiscButton ? "true" : "false"),
 
             // Tidied here as well as where it is typed and read, because

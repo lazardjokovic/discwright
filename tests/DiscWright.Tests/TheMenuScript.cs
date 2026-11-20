@@ -2106,6 +2106,53 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal(answer, Ask($"String(aPreviewShowsTheCheck({disc}))"));
     }
 
+    // ------------------------------- the disc's manual and extras, one each
+
+    [Theory]
+    [InlineData("{ discsOwn: 'small' }", "'manual'", "true")]
+    [InlineData("{ discsOwn: 'small' }", "'extras'", "true")]
+    [InlineData("{ discsOwn: 'small' }", "undefined", "true")]
+    [InlineData("{ discsOwn: 'manual' }", "'manual'", "true")]
+    [InlineData("{ discsOwn: 'manual' }", "'extras'", "false")]
+    [InlineData("{ discsOwn: 'MANUAL' }", "'manual'", "true")]
+    [InlineData("{ discsOwn: 'extras' }", "'extras'", "true")]
+    [InlineData("{ discsOwn: 'extras' }", "'manual'", "false")]
+    // Asked with no name it is both or nothing, as every older disc says.
+    [InlineData("{ discsOwn: 'manual' }", "undefined", "false")]
+    [InlineData("{ discsOwn: 'list' }", "'manual'", "false")]
+    [InlineData("{}", "'manual'", "false")]
+    [InlineData("null", "'extras'", "false")]
+    public void Each_of_the_discs_own_is_a_small_button_by_its_own_word(string look, string which, string answer) =>
+        Assert.Equal(answer, Ask($"String(theDiscsOwnIsASmallButton({look}, {which}))"));
+
+    [Theory]
+    // Only the manual is a small button: a game with none of its own still
+    // gets the disc's extras on its screen, and not the disc's manual.
+    [InlineData("'manual'", "", "Extras")]
+    [InlineData("'extras'", "Extras/manual.pdf", "")]
+    [InlineData("'small'", "", "")]
+    [InlineData("'list'", "Extras/manual.pdf", "Extras")]
+    public void A_games_screen_falls_back_to_the_discs_only_for_the_one_still_in_the_list(
+        string said, string manual, string extras)
+    {
+        string disc = "{ manual: 'Extras/manual.pdf', extras: 'Extras', look: { discsOwn: " + said + " } }";
+
+        Assert.Equal(manual, Ask($"theManualFor({{ name: 'A' }}, {disc})"));
+        Assert.Equal(extras, Ask($"theExtrasFor({{ name: 'A' }}, {disc})"));
+    }
+
+    [Theory]
+    [InlineData("'manual'", "'manual'", "true")]
+    [InlineData("'manual'", "'extras'", "false")]
+    [InlineData("'extras'", "'extras'", "true")]
+    [InlineData("'small'", "'manual'", "true")]
+    [InlineData("'list'", "'manual'", "false")]
+    public void A_small_button_shows_on_the_main_menu_only_for_the_one_that_was_ticked(
+        string said, string which, string shows) =>
+        Assert.Equal(
+            shows,
+            Ask($"String(aSmallButtonForTheDiscsOwnShows({{ discsOwn: {said} }}, 'Extras/x', 2, true, {which}))"));
+
     // ------------------------------------------- what an add-on's button says
 
     [Theory]

@@ -33,20 +33,22 @@ public enum MenuSide
 /// <param name="CornerAtTheBottom">
 /// Whether the small buttons sit in the bottom corner rather than the top one.
 /// </param>
-/// <param name="DiscsOwnAsSmallButtons">
+/// <param name="DiscManualAsASmallButton">
 /// <para>
-/// Whether the disc's own manual and extras, the ones chosen in Artwork,
-/// music and extras, are small buttons in the corner of the main menu rather
-/// than rows in its list.
+/// Whether the disc's own manual, the one chosen in Artwork, music and
+/// extras, is a small button in the corner of the main menu rather than a
+/// row in its list.
 /// </para>
 /// <para>
 /// discwright#98, 12 and 16 November: "they would only show on the main menu
 /// as icons, and be completely separate from any game menus, since game
 /// menus show their own manuals and extras", and "that way you can shorten
-/// the main list". So with this on a game's screen offers only what is the
-/// game's own, and no longer falls back to the disc's.
+/// the main list". One tick for the two of them until the owner asked, on
+/// the recording of 2026-11-20, for one each: somebody may want the manual
+/// a click away in the list and the extras out of it.
 /// </para>
 /// </param>
+/// <param name="DiscExtrasAsASmallButton">The same for the disc's own extras folder.</param>
 /// <param name="OpenTheDiscButton">
 /// Whether the corner has a button that opens the disc in Explorer,
 /// discwright#98: "an icon in the corner of any disc menu to show the
@@ -75,7 +77,8 @@ public enum MenuSide
 public sealed record MenuLook(
     MenuSide ListOn = MenuSide.Right,
     bool CornerAtTheBottom = false,
-    bool DiscsOwnAsSmallButtons = false,
+    bool DiscManualAsASmallButton = false,
+    bool DiscExtrasAsASmallButton = false,
     bool OpenTheDiscButton = false,
     string? Heading = null,
     bool HeadingHidden = false,
@@ -87,6 +90,23 @@ public sealed record MenuLook(
     /// the menu's own capitals, past which it pushes the buttons down for
     /// nothing anybody reads.
     /// </summary>
+    /// <summary>Whether both of the disc's own are small buttons.</summary>
+    public bool DiscsOwnAsSmallButtons => DiscManualAsASmallButton && DiscExtrasAsASmallButton;
+
+    /// <summary>
+    /// How it is written down, in a project file and on the menu's page: one
+    /// word for which of the two are small buttons. "SmallButtons" for both
+    /// is what 2.0.5 wrote before there was one tick each.
+    /// </summary>
+    public string TheDiscsOwnInAWord =>
+        (DiscManualAsASmallButton, DiscExtrasAsASmallButton) switch
+        {
+            (true, true) => "SmallButtons",
+            (true, false) => "Manual",
+            (false, true) => "Extras",
+            _ => "InTheList",
+        };
+
     public const int LongestHeading = 60;
 
     /// <summary>

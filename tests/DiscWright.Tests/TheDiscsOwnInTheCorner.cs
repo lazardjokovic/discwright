@@ -39,7 +39,7 @@ public class TheDiscsOwnInTheCorner
 
         screen.DiscsOwnAsSmallButtons = true;
 
-        Assert.Equal(new MenuLook(DiscsOwnAsSmallButtons: true), screen.AsAProject().Options.Look);
+        Assert.Equal(new MenuLook(DiscManualAsASmallButton: true, DiscExtrasAsASmallButton: true), screen.AsAProject().Options.Look);
 
         screen.DiscsOwnAsSmallButtons = false;
         screen.OpenTheDiscButton = true;
@@ -49,6 +49,139 @@ public class TheDiscsOwnInTheCorner
         screen.OpenTheDiscButton = false;
 
         Assert.Null(screen.AsAProject().Options.Look);
+    }
+
+    // --------------------------------------------- one tick each, 2026-11-20
+
+    [Theory]
+    [InlineData(true, false, "Manual", "manual")]
+    [InlineData(false, true, "Extras", "extras")]
+    [InlineData(true, true, "SmallButtons", "small")]
+    [InlineData(false, false, "InTheList", "list")]
+    public void Each_of_the_two_has_a_tick_of_its_own_and_one_word_says_which(
+        bool manual, bool extras, string inTheFile, string onThePage)
+    {
+        // The owner, on the recording: somebody may want the manual a click
+        // away in the list and the extras out of it.
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Hollow Knight"));
+        screen.DiscManualAsASmallButton = manual;
+        screen.DiscExtrasAsASmallButton = extras;
+
+        MenuLook look = screen.AsAProject().Options.LookOrPlain;
+
+        Assert.Equal(manual, look.DiscManualAsASmallButton);
+        Assert.Equal(extras, look.DiscExtrasAsASmallButton);
+        Assert.Equal(manual && extras, look.DiscsOwnAsSmallButtons);
+        Assert.Equal(manual && extras, screen.DiscsOwnAsSmallButtons);
+        Assert.Equal(inTheFile, look.TheDiscsOwnInAWord);
+
+        string saved = Saved(screen);
+
+        Assert.Contains($"\"DiscsOwn\": \"{inTheFile}\"", saved, StringComparison.Ordinal);
+
+        MenuLook back = Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(saved)).Value.Options.LookOrPlain;
+
+        Assert.Equal(manual, back.DiscManualAsASmallButton);
+        Assert.Equal(extras, back.DiscExtrasAsASmallButton);
+
+        Assert.Contains(
+            $"discsOwn: \"{onThePage}\"",
+            MenuWriter.MenuPage(AMenu() with { Look = look }),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_project_saved_when_there_was_one_tick_for_both_opens_with_both()
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Hollow Knight"));
+        screen.DiscsOwnAsSmallButtons = true;
+
+        string saved = Saved(screen);
+
+        Assert.Contains("\"DiscsOwn\": \"SmallButtons\"", saved, StringComparison.Ordinal);
+
+        MenuLook back = Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(saved)).Value.Options.LookOrPlain;
+
+        Assert.True(back.DiscManualAsASmallButton);
+        Assert.True(back.DiscExtrasAsASmallButton);
+    }
+
+    [Theory]
+    [InlineData("\"DiscsOwn\": \"manual\"", true, false)]
+    [InlineData("\"DiscsOwn\": \" EXTRAS \"", false, true)]
+    [InlineData("\"DiscsOwn\": \"Both\"", false, false)]
+    [InlineData("\"DiscsOwn\": true", false, false)]
+    [InlineData("\"DiscsOwn\": null", false, false)]
+    public void The_word_is_read_whatever_its_capitals_and_any_other_word_is_neither(
+        string doctored, bool manual, bool extras)
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Hollow Knight"));
+        screen.ListOnTheLeft = true;
+
+        string saved = Saved(screen).Replace("\"DiscsOwn\": \"InTheList\"", doctored, StringComparison.Ordinal);
+
+        Assert.Contains(doctored, saved, StringComparison.Ordinal);
+
+        MenuLook back = Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(saved)).Value.Options.LookOrPlain;
+
+        Assert.Equal(manual, back.DiscManualAsASmallButton);
+        Assert.Equal(extras, back.DiscExtrasAsASmallButton);
+        Assert.Equal(MenuSide.Left, back.ListOn);
+    }
+
+    [Fact]
+    public void Ticking_one_tells_the_window_about_it_and_leaves_the_other_alone()
+    {
+        MakeADisc screen = TheScreen();
+        screen.DiscExtrasAsASmallButton = true;
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.DiscManualAsASmallButton = true;
+
+        Assert.Contains(nameof(MakeADisc.DiscManualAsASmallButton), told, StringComparer.Ordinal);
+        Assert.True(screen.DiscExtrasAsASmallButton);
+
+        screen.DiscManualAsASmallButton = false;
+
+        Assert.True(screen.DiscExtrasAsASmallButton);
+        Assert.Equal(new MenuLook(DiscExtrasAsASmallButton: true), screen.AsAProject().Options.Look);
+    }
+
+    [Theory]
+    [InlineData(true, false, "Install,Extras,Exit")]
+    [InlineData(false, true, "Install,Manual,Exit")]
+    public async Task A_games_screen_stops_counting_only_the_one_that_is_a_small_button(
+        bool manual, bool extras, string buttons)
+    {
+        RecordingWriter wrote = new();
+        GameFolder found = new(@"C:\games\x", GameKind.GogInstaller, "Hollow Knight", "Hollow Knight", null, [], [], null);
+        PlannedDisc disc = new(1, [], 0);
+
+        await new WriteTheMenuStep().Run(
+            new BuildContext(
+                new DiscProject(
+                    "HOLLOW KNIGHT",
+                    [found],
+                    new DiscOptions(Look: new MenuLook(DiscManualAsASmallButton: manual, DiscExtrasAsASmallButton: extras)))
+                {
+                    Extras = new DiscExtras(ManualPath: @"C:\stuff\manual.pdf", ExtrasFolderPath: @"C:\stuff\goodies")
+                },
+                new DiscLayout([disc], 1_000_000, true),
+                disc,
+                @"C:\stage",
+                wrote),
+            CancellationToken.None);
+
+        string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
+
+        Match list = Regex.Match(page, "^    buttons: \\[([^\\]]*)\\],", RegexOptions.Multiline | RegexOptions.CultureInvariant);
+
+        Assert.True(list.Success);
+        Assert.Equal(buttons, list.Groups[1].Value.Replace("\"", string.Empty, StringComparison.Ordinal).Replace(", ", ",", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -61,7 +194,7 @@ public class TheDiscsOwnInTheCorner
         screen.DiscsOwnAsSmallButtons = true;
         screen.OpenTheDiscButton = true;
 
-        Assert.Equal(new MenuLook(MenuSide.Left, true, true, true), screen.AsAProject().Options.Look);
+        Assert.Equal(new MenuLook(MenuSide.Left, true, true, true, true), screen.AsAProject().Options.Look);
     }
 
     [Fact]
@@ -89,7 +222,7 @@ public class TheDiscsOwnInTheCorner
             new DiscProject(
                 "OPENED",
                 [AGame("Hollow Knight")],
-                new DiscOptions(Look: new MenuLook(DiscsOwnAsSmallButtons: true, OpenTheDiscButton: true)),
+                new DiscOptions(Look: new MenuLook(DiscManualAsASmallButton: true, DiscExtrasAsASmallButton: true, OpenTheDiscButton: true)),
                 Artwork: null,
                 Extras: null,
                 AddOns: []),
@@ -186,7 +319,7 @@ public class TheDiscsOwnInTheCorner
     [InlineData(true, true, "discsOwn: \"small\", openTheDisc: true, heading: \"\", headingHidden: false, frame: \"window\"},")]
     public void The_page_carries_both(bool small, bool open, string carried)
     {
-        string page = MenuWriter.MenuPage(AMenu() with { Look = new MenuLook(DiscsOwnAsSmallButtons: small, OpenTheDiscButton: open) });
+        string page = MenuWriter.MenuPage(AMenu() with { Look = new MenuLook(DiscManualAsASmallButton: small, DiscExtrasAsASmallButton: small, OpenTheDiscButton: open) });
 
         Assert.Contains(carried, page, StringComparison.Ordinal);
     }
@@ -271,7 +404,7 @@ public class TheDiscsOwnInTheCorner
                 new DiscProject(
                     "HOLLOW KNIGHT",
                     [found],
-                    new DiscOptions(Look: new MenuLook(DiscsOwnAsSmallButtons: small).OrNothingWhenPlain()))
+                    new DiscOptions(Look: new MenuLook(DiscManualAsASmallButton: small, DiscExtrasAsASmallButton: small).OrNothingWhenPlain()))
                 {
                     Extras = new DiscExtras(ManualPath: @"C:\stuff\manual.pdf", ExtrasFolderPath: @"C:\stuff\goodies")
                 },

@@ -1721,7 +1721,38 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public bool DiscsOwnAsSmallButtons
     {
         get => Options.LookOrPlain.DiscsOwnAsSmallButtons;
-        set => SwitchTheLook(Options.LookOrPlain with { DiscsOwnAsSmallButtons = value });
+        set
+        {
+            SwitchTheLook(Options.LookOrPlain with { DiscManualAsASmallButton = value, DiscExtrasAsASmallButton = value });
+            Tell(nameof(DiscManualAsASmallButton));
+            Tell(nameof(DiscExtrasAsASmallButton));
+        }
+    }
+
+    /// <summary>
+    /// Whether the disc's own manual is a small button in the corner of the
+    /// main menu rather than a row in its list. A tick of its own since the
+    /// owner asked on 2026-11-20.
+    /// </summary>
+    public bool DiscManualAsASmallButton
+    {
+        get => Options.LookOrPlain.DiscManualAsASmallButton;
+        set
+        {
+            SwitchTheLook(Options.LookOrPlain with { DiscManualAsASmallButton = value });
+            Tell(nameof(DiscsOwnAsSmallButtons));
+        }
+    }
+
+    /// <summary>The same for the disc's own extras folder.</summary>
+    public bool DiscExtrasAsASmallButton
+    {
+        get => Options.LookOrPlain.DiscExtrasAsASmallButton;
+        set
+        {
+            SwitchTheLook(Options.LookOrPlain with { DiscExtrasAsASmallButton = value });
+            Tell(nameof(DiscsOwnAsSmallButtons));
+        }
     }
 
     /// <summary>Whether the corner has a button that opens the disc in Explorer.</summary>
@@ -4423,6 +4454,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(ListOnTheLeft));
         Tell(nameof(CornerAtTheBottom));
         Tell(nameof(DiscsOwnAsSmallButtons));
+        Tell(nameof(DiscManualAsASmallButton));
+        Tell(nameof(DiscExtrasAsASmallButton));
         Tell(nameof(OpenTheDiscButton));
 
         // The box shows the heading the project carries, so a project

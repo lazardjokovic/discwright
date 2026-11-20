@@ -119,7 +119,7 @@ public class TheMenusHeading
         screen.MenuHeadingHidden = true;
 
         Assert.Equal(
-            new MenuLook(MenuSide.Left, true, true, true, "GOG Collection", true),
+            new MenuLook(MenuSide.Left, true, true, true, true, "GOG Collection", true),
             screen.AsAProject().Options.Look);
     }
 

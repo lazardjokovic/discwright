@@ -227,9 +227,9 @@ function showTheWayIntoTheDisc() {
 // nowhere else, and the corner laid out again around them.
 function showTheDiscsOwn(onTheListOfGames) {
     document.getElementById("discManual").style.display =
-        aSmallButtonForTheDiscsOwnShows(DISC.look, DISC.manual, DISC.games.length, onTheListOfGames) ? "block" : "none";
+        aSmallButtonForTheDiscsOwnShows(DISC.look, DISC.manual, DISC.games.length, onTheListOfGames, "manual") ? "block" : "none";
     document.getElementById("discExtras").style.display =
-        aSmallButtonForTheDiscsOwnShows(DISC.look, DISC.extras, DISC.games.length, onTheListOfGames) ? "block" : "none";
+        aSmallButtonForTheDiscsOwnShows(DISC.look, DISC.extras, DISC.games.length, onTheListOfGames, "extras") ? "block" : "none";
 
     placeTheCornerButtons();
 }
@@ -307,10 +307,10 @@ function showChooser() {
 
     // The disc's own, on the screen that belongs to the whole disc: rows
     // under the list, or small buttons in the corner, never both.
-    var small = discsOwnAreSmallButtons(DISC.look);
-
-    document.getElementById("chooserManual").style.display = DISC.manual && !small ? "block" : "none";
-    document.getElementById("chooserExtras").style.display = DISC.extras && !small ? "block" : "none";
+    document.getElementById("chooserManual").style.display =
+        DISC.manual && !theDiscsOwnIsASmallButton(DISC.look, "manual") ? "block" : "none";
+    document.getElementById("chooserExtras").style.display =
+        DISC.extras && !theDiscsOwnIsASmallButton(DISC.look, "extras") ? "block" : "none";
     showTheDiscsOwn(true);
 
     // Set as TEXT afterwards, never built into the markup above. A game called

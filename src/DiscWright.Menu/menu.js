@@ -831,7 +831,7 @@ function theManualFor(game, disc) {
         return String(game.manual);
     }
 
-    if (disc && discsOwnAreSmallButtons(disc.look)) {
+    if (disc && theDiscsOwnIsASmallButton(disc.look, "manual")) {
         return "";
     }
 
@@ -844,7 +844,7 @@ function theExtrasFor(game, disc) {
         return String(game.extras);
     }
 
-    if (disc && discsOwnAreSmallButtons(disc.look)) {
+    if (disc && theDiscsOwnIsASmallButton(disc.look, "extras")) {
         return "";
     }
 
@@ -857,14 +857,24 @@ function discsOwnAreSmallButtons(look) {
     return !!look && String(look.discsOwn).toLowerCase() === "small";
 }
 
+// Whether one of the two is a small button: "manual" or "extras". The disc
+// says "small" for both, or the name of the one, since each got a tick of
+// its own. Asked with no name it is both or nothing, which is what every
+// disc written before that says.
+function theDiscsOwnIsASmallButton(look, which) {
+    var said = look ? String(look.discsOwn).toLowerCase() : "";
+
+    return said === "small" || (!!which && said === String(which).toLowerCase());
+}
+
 // Whether one of the disc's own, as a small button, is on the screen showing.
 //
 // On the main menu only, which is the list of games on a disc of several and
 // the one game's own screen on a disc of one. Never on a game's screen of a
 // disc of several: that is the game's, and the disc's manual on it is the
 // manual of none of them.
-function aSmallButtonForTheDiscsOwnShows(look, where, howManyGames, onTheListOfGames) {
-    if (!discsOwnAreSmallButtons(look) || !where || String(where).length === 0) {
+function aSmallButtonForTheDiscsOwnShows(look, where, howManyGames, onTheListOfGames, which) {
+    if (!theDiscsOwnIsASmallButton(look, which) || !where || String(where).length === 0) {
         return false;
     }
 
