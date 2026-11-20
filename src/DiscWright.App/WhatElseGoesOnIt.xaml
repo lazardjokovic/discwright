@@ -328,6 +328,38 @@
                              AutomationProperties.AutomationId="MenuHeading" />
                 </Grid>
 
+                <!-- The face the menu is written in, discwright#98. Each
+                     row is drawn in the face it names, which says more
+                     about it than its name does. -->
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Font" />
+                    <ComboBox Grid.Column="1"
+                              HorizontalAlignment="Left"
+                              MinWidth="190"
+                              ItemsSource="{Binding TheMenusFonts}"
+                              SelectedItem="{Binding TheMenusFont}"
+                              ToolTip="The face the menu is written in. Every one of these came with Windows itself, so the disc reads the same on any PC."
+                              AutomationProperties.AutomationId="MenuFont">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding InWords}" FontFamily="{Binding Family}" FontSize="14" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                        <ComboBox.ItemContainerStyle>
+                            <!-- BasedOn, so the rows keep the themed look,
+                                 and named, so a reader says the face's name
+                                 and not what the row prints as. -->
+                            <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding InWords}" />
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
+                    </ComboBox>
+                </Grid>
+
                 <CheckBox Margin="0,8,0,0"
                           Content="No heading on the main menu"
                           IsChecked="{Binding MenuHeadingHidden}"

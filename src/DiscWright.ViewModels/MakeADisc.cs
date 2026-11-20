@@ -1675,6 +1675,28 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </summary>
     public bool MenuHeadingCanBeTyped => !MenuHeadingHidden;
 
+    /// <summary>Every face the menu can be written in, for the list.</summary>
+    public IReadOnlyList<AMenuFont> TheMenusFonts { get; } = MenuFonts.All;
+
+    /// <summary>
+    /// The face the menu is written in, as the row of the list that stands
+    /// for it. discwright#98: "more menu themes (layout / font / font
+    /// colour)".
+    /// </summary>
+    public AMenuFont? TheMenusFont
+    {
+        get => MenuFonts.For(Options.LookOrPlain.Font);
+        set
+        {
+            // A list empties its choice for a moment whenever its rows are
+            // read again, and that is not somebody choosing nothing.
+            if (value is not null)
+            {
+                SwitchTheLook(Options.LookOrPlain with { Font = value.Which });
+            }
+        }
+    }
+
     private void SwitchTheLook(MenuLook now, [CallerMemberName] string? name = null)
     {
         Switch(Options with { Look = now.OrNothingWhenPlain() }, name);

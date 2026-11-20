@@ -155,6 +155,68 @@ public class WhereTheMenusListSits
         Assert.Equal($"{{Binding {named}}}", (string?)control.Attribute(through));
     }
 
+    // ----------------------------------------------------- the menu's face
+
+    [Fact]
+    public void The_face_is_Tahoma_until_somebody_chooses_and_the_list_offers_the_six()
+    {
+        MakeADisc screen = TheScreen();
+
+        Assert.Equal(MenuFont.Tahoma, screen.TheMenusFont?.Which);
+        Assert.Equal(MenuFonts.All, screen.TheMenusFonts);
+        Assert.Null(screen.AsAProject().Options.Look);
+    }
+
+    [Fact]
+    public void Choosing_a_face_reaches_the_disc_and_the_window_hears()
+    {
+        MakeADisc screen = TheScreen();
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.TheMenusFont = MenuFonts.For(MenuFont.Georgia);
+
+        Assert.Equal(MenuFont.Georgia, screen.AsAProject().Options.LookOrPlain.Font);
+        Assert.Equal(MenuFont.Georgia, screen.TheMenusFont?.Which);
+        Assert.Contains(nameof(MakeADisc.TheMenusFont), told, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void A_face_chosen_leaves_the_rest_of_the_look_alone_and_the_rest_leaves_it()
+    {
+        MakeADisc screen = TheScreen();
+        screen.ListOnTheLeft = true;
+
+        screen.TheMenusFont = MenuFonts.For(MenuFont.CourierNew);
+        screen.CornerAtTheBottom = true;
+
+        Assert.Equal(
+            new MenuLook(MenuSide.Left, CornerAtTheBottom: true, Font: MenuFont.CourierNew),
+            screen.AsAProject().Options.Look);
+    }
+
+    [Fact]
+    public void Tahoma_chosen_again_is_a_disc_nobody_touched()
+    {
+        MakeADisc screen = TheScreen();
+        screen.TheMenusFont = MenuFonts.For(MenuFont.Verdana);
+
+        screen.TheMenusFont = MenuFonts.For(MenuFont.Tahoma);
+
+        Assert.Null(screen.AsAProject().Options.Look);
+    }
+
+    [Fact]
+    public void The_list_emptying_its_choice_for_a_moment_changes_no_face()
+    {
+        MakeADisc screen = TheScreen();
+        screen.TheMenusFont = MenuFonts.For(MenuFont.Georgia);
+
+        screen.TheMenusFont = null;
+
+        Assert.Equal(MenuFont.Georgia, screen.TheMenusFont?.Which);
+    }
+
     // ------------------------------------------------------ the project file
 
     [Theory]
