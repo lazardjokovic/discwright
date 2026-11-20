@@ -229,6 +229,115 @@ public class TheMenusFont
                 && (string?)each.Attribute("Value") == "{Binding InWords}");
     }
 
+    // ------------------------------------------------------------ the ink
+    //
+    // discwright#98, the first post: "more menu themes (layout / font /
+    // font colour)". What the heading and the buttons are written in.
+
+    [Fact]
+    public void A_menu_nobody_coloured_is_written_in_its_own_two_shades()
+    {
+        string page = MenuWriter.MenuPage(AMenu(null));
+
+        Assert.Contains("    color: #DFE9EE;", page, StringComparison.Ordinal);
+        Assert.Contains("text-transform: uppercase; color: #CBD6DB;", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("%%INK%%", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("%%BUTTONINK%%", page, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("#FFE9B0")]
+    [InlineData("#ffe9b0")]
+    [InlineData("ffe9b0")]
+    public void A_colour_chosen_is_what_the_heading_and_the_buttons_are_written_in(string ink)
+    {
+        string page = MenuWriter.MenuPage(AMenu(new MenuLook(Ink: ink)));
+        string tidy = SolidColour.Tidied(ink)!;
+
+        Assert.Contains($"    color: {tidy};", page, StringComparison.Ordinal);
+        Assert.Contains($"text-transform: uppercase; color: {tidy};", page, StringComparison.Ordinal);
+
+        // The quiet lines and a dead button keep their greys, which mean
+        // something: a hint, and a button that will not press.
+        Assert.Contains(".btn.dead { color: #5E727A;", page, StringComparison.Ordinal);
+        Assert.Contains(".hint {", page, StringComparison.Ordinal);
+        Assert.Contains("color: #5E727A; }", page, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("red")]
+    [InlineData("#12345")]
+    [InlineData("#FFE9B0; } body { display: none")]
+    [InlineData("")]
+    public void What_is_not_a_colour_never_reaches_the_page(string ink)
+    {
+        // It is written into the page's style, so only ever six hex figures.
+        string page = MenuWriter.MenuPage(AMenu(new MenuLook(Ink: ink)));
+
+        Assert.Equal(MenuWriter.MenuPage(AMenu(new MenuLook())), page);
+    }
+
+    [Fact]
+    public void A_saved_project_names_the_ink_and_comes_back_with_it()
+    {
+        string saved = Saved(new MenuLook(Ink: "#ffe9b0"));
+
+        Assert.Contains("\"Ink\": \"#ffe9b0\"", saved, StringComparison.Ordinal);
+        Assert.Equal(
+            "#ffe9b0",
+            Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(saved)).Value.Options.LookOrPlain.Ink);
+        Assert.NotNull(new MenuLook(Ink: "#ffe9b0").OrNothingWhenPlain());
+    }
+
+    [Theory]
+    [InlineData("\"Ink\": \"mauve\"")]
+    [InlineData("\"Ink\": \"#FFE9B0; } body { display: none\"")]
+    [InlineData("\"Ink\": 7")]
+    public void A_file_that_names_no_colour_is_the_menus_own_and_the_rest_of_its_look_is_still_read(string doctored)
+    {
+        string saved = Saved(new MenuLook(Ink: "#ffe9b0", ListOn: MenuSide.Left))
+            .Replace("\"Ink\": \"#ffe9b0\"", doctored, StringComparison.Ordinal);
+
+        Assert.Contains(doctored, saved, StringComparison.Ordinal);
+
+        MenuLook back = Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(saved)).Value.Options.LookOrPlain;
+
+        Assert.Null(back.Ink);
+        Assert.Equal(MenuSide.Left, back.ListOn);
+    }
+
+    [Fact]
+    public void A_file_from_before_there_was_a_choice_has_no_ink_of_its_own()
+    {
+        string saved = Saved(new MenuLook(ListOn: MenuSide.Left));
+
+        Assert.Contains("\"Ink\": null", saved, StringComparison.Ordinal);
+        Assert.Null(Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(saved)).Value.Options.LookOrPlain.Ink);
+    }
+
+    [Fact]
+    public void The_dialog_has_swatches_and_a_box_for_it_and_a_line_for_text_that_is_no_colour()
+    {
+        System.Xml.Linq.XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        System.Xml.Linq.XElement dialog = System.Xml.Linq.XDocument
+            .Load(Repository.File("src", "DiscWright.App", "WhatElseGoesOnIt.xaml")).Root!;
+
+        string? Id(System.Xml.Linq.XElement each) => (string?)each.Attribute("AutomationProperties.AutomationId");
+
+        System.Xml.Linq.XElement box = Assert.Single(dialog.Descendants(xaml + "TextBox"), each => Id(each) == "MenuInkText");
+
+        Assert.Equal("{Binding MenuInkText, UpdateSourceTrigger=PropertyChanged}", (string?)box.Attribute("Text"));
+        Assert.False(string.IsNullOrWhiteSpace((string?)box.Attribute("AutomationProperties.Name")));
+
+        System.Xml.Linq.XElement swatches = Assert.Single(dialog.Descendants(xaml + "ItemsControl"), each => Id(each) == "TheInksOffered");
+
+        Assert.Equal("{Binding TheInksOffered}", (string?)swatches.Attribute("ItemsSource"));
+        Assert.Equal("PickAnInk", (string?)Assert.Single(swatches.Descendants(xaml + "Button")).Attribute("Click"));
+        Assert.Equal(
+            "{Binding WhatTheInkSays}",
+            (string?)Assert.Single(dialog.Descendants(xaml + "TextBlock"), each => Id(each) == "WhatTheInkSays").Attribute("Text"));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private static MenuFacts AMenu(MenuLook? look) =>

@@ -218,6 +218,103 @@ public class WhereTheMenusListSits
         Assert.Equal(MenuFont.Georgia, screen.TheMenusFont?.Which);
     }
 
+    // -------------------------------------------------------- the menu's ink
+
+    [Fact]
+    public void The_ink_is_the_menus_own_until_somebody_types_a_colour()
+    {
+        MakeADisc screen = TheScreen();
+
+        Assert.Equal(string.Empty, screen.MenuInkText);
+        Assert.Null(screen.MenuInk);
+        Assert.Null(screen.WhatTheInkSays);
+        Assert.All(screen.TheInksOffered, each => Assert.Equal(each, SolidColour.Tidied(each)));
+        Assert.Equal(screen.TheInksOffered.Count, screen.TheInksOffered.Distinct().Count());
+    }
+
+    [Fact]
+    public void A_colour_typed_reaches_the_disc_tidied_and_the_window_hears()
+    {
+        MakeADisc screen = TheScreen();
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.MenuInkText = "FFE9B0";
+
+        Assert.Equal("#ffe9b0", screen.MenuInk);
+        Assert.Equal("#ffe9b0", screen.AsAProject().Options.LookOrPlain.Ink);
+        Assert.Equal("FFE9B0", screen.MenuInkText);
+        Assert.Null(screen.WhatTheInkSays);
+
+        foreach (string named in new[] { nameof(MakeADisc.MenuInkText), nameof(MakeADisc.MenuInk), nameof(MakeADisc.WhatTheInkSays) })
+        {
+            Assert.Contains(named, told, StringComparer.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData("FFE9")]
+    [InlineData("mauve")]
+    public void Half_typed_it_is_no_colour_yet_and_says_so_and_the_box_keeps_what_was_typed(string typed)
+    {
+        MakeADisc screen = TheScreen();
+        screen.MenuInkText = "#ffffff";
+
+        screen.MenuInkText = typed;
+
+        Assert.Null(screen.MenuInk);
+        Assert.Equal(typed, screen.MenuInkText);
+        Assert.Equal("Not a colour yet. Six hex figures name one, like FFE9B0.", screen.WhatTheInkSays);
+    }
+
+    [Fact]
+    public void Emptied_the_menu_is_written_in_its_own_again_and_nothing_is_left_behind()
+    {
+        MakeADisc screen = TheScreen();
+        screen.MenuInkText = "#ffffff";
+
+        screen.MenuInkText = string.Empty;
+
+        Assert.Null(screen.WhatTheInkSays);
+        Assert.Null(screen.AsAProject().Options.Look);
+    }
+
+    [Fact]
+    public void An_ink_leaves_the_rest_of_the_look_alone()
+    {
+        MakeADisc screen = TheScreen();
+        screen.ListOnTheLeft = true;
+        screen.TheMenusFont = MenuFonts.For(MenuFont.Georgia);
+
+        screen.MenuInkText = "#ffe9b0";
+
+        Assert.Equal(
+            new MenuLook(MenuSide.Left, Font: MenuFont.Georgia, Ink: "#ffe9b0"),
+            screen.AsAProject().Options.Look);
+    }
+
+    [Fact]
+    public void An_opened_project_shows_its_ink_in_the_box()
+    {
+        MakeADisc screen = TheScreen();
+
+        screen.OpenThis(new Reopened(
+            new DiscProject(
+                "OPENED",
+                [AGame("Hollow Knight")],
+                new DiscOptions(Look: new MenuLook(Ink: "#9fe3e8")),
+                Artwork: null,
+                Extras: null,
+                AddOns: []),
+            null,
+            null,
+            [],
+            []));
+
+        Assert.Equal("#9fe3e8", screen.MenuInkText);
+        Assert.Equal("#9fe3e8", screen.MenuInk);
+    }
+
     // -------------------------------------------------- a menu with no frame
 
     [Fact]

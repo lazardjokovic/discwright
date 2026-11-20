@@ -1629,7 +1629,7 @@ body {
     margin: 0;
     font-family: %%FONT%%;
     background: #0C1316;
-    color: #DFE9EE;
+    color: %%INK%%;
     overflow: hidden;
     cursor: default;
 }
@@ -1642,7 +1642,7 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
      text-transform: uppercase; line-height: 20px; }
 .btn { display: block; height: 38px; line-height: 38px; margin-bottom: 9px;
        padding-left: 14px; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;
-       text-transform: uppercase; color: #CBD6DB;
+       text-transform: uppercase; color: %%BUTTONINK%%;
        background: #080F12; background: rgba(18, 32, 38, 0.22);
        border: 1px solid #27353B; text-decoration: none; overflow: hidden;
        white-space: nowrap; text-overflow: ellipsis;
