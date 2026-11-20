@@ -926,6 +926,17 @@ function theWindowHasNoFrame(look) {
     return !!look && String(look.frame).toLowerCase() === "none";
 }
 
+// How far down the panel its first line starts. 28 pixels, as it always
+// was, except under the cross of a menu with no frame: the cross ends 28
+// pixels down, which is exactly where the first button began, and with no
+// heading between them the two touched. The owner's screenshot, 20
+// November 2026, one game, no frame and no heading: the cross sat on the
+// corner of Play. Only when the list is under the cross; on the left it is
+// the picture that is under it.
+function howFarDownTheListStarts(look) {
+    return theWindowHasNoFrame(look) && !listIsOnTheLeft(look) ? 40 : 28;
+}
+
 // Where a window ends up when it is dragged: as far from where it was as
 // the pointer is from where it took hold. Whole pixels, because moveTo
 // takes nothing else.

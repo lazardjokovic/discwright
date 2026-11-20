@@ -2243,6 +2243,42 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Theory]
+    [InlineData("{ frame: 'none' }", "40")]
+    [InlineData("{ frame: 'none', listOn: 'right' }", "40")]
+    [InlineData("{ frame: 'none', listOn: 'left' }", "28")]
+    [InlineData("{ frame: 'window' }", "28")]
+    [InlineData("{ listOn: 'left' }", "28")]
+    [InlineData("{}", "28")]
+    [InlineData("null", "28")]
+    public void The_list_starts_lower_only_under_the_cross_of_a_menu_with_no_frame(string look, string pixels)
+    {
+        // The cross ends 28 pixels down, where the first button began. The
+        // owner's screenshot, 20 November 2026: one game, no frame, no
+        // heading, and the cross on the corner of Play.
+        Assert.Equal(pixels, Ask($"String(howFarDownTheListStarts({look}))"));
+    }
+
+    [Fact]
+    public void Under_the_cross_the_list_starts_clear_of_it()
+    {
+        // The cross is 6 down and 20 tall with a line of 1 round it, which
+        // the page's style says and this reads from it, so moving the cross
+        // without moving the list fails here.
+        string page = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.hta.template"));
+        System.Text.RegularExpressions.Match cross = System.Text.RegularExpressions.Regex.Match(
+            page, @"#shut \{ position: absolute; right: 6px; top: (\d+)px; width: 22px; height: (\d+)px;");
+
+        Assert.True(cross.Success, "The cross's own rule was not found in the page.");
+
+        int ends = int.Parse(cross.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture)
+            + int.Parse(cross.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture)
+            + 2;
+        int starts = int.Parse(Ask("String(howFarDownTheListStarts({ frame: 'none' }))"), System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.True(starts >= ends + 8, $"The list starts {starts} down and the cross ends {ends} down.");
+    }
+
+    [Theory]
     [InlineData("{ x: 100, y: 100, left: 10, top: 20 }", 100, 100, "10,20")]
     [InlineData("{ x: 100, y: 100, left: 10, top: 20 }", 130, 90, "40,10")]
     [InlineData("{ x: 100, y: 100, left: 10, top: 20 }", 0, 0, "-90,-80")]
