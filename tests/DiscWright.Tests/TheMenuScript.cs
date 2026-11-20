@@ -2106,6 +2106,77 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal(answer, Ask($"String(aPreviewShowsTheCheck({disc}))"));
     }
 
+    // ------------------------------------------- what an add-on's button says
+
+    [Theory]
+    [InlineData("metro exodus - sams story 3.0.8.39 (64bit) (62413)", "metro exodus - sams story")]
+    [InlineData("sams story 3.0.8.39 (64bit) (62413)", "sams story")]
+    [InlineData("the north isles 1.0 (80001)", "the north isles")]
+    [InlineData("grim fandango soundtrack 2.0", "grim fandango soundtrack")]
+    [InlineData("the witcher enhanced edition directors cut 1.5 (cs) gog 0.2 (77554)", "the witcher enhanced edition directors cut")]
+    [InlineData("Expansion v1.2.3", "Expansion")]
+    [InlineData("Original Soundtrack", "Original Soundtrack")]
+    [InlineData("Better Textures Overhaul", "Better Textures Overhaul")]
+    // A number that is part of the name, with no dot in it, stays.
+    [InlineData("Fallout 2", "Fallout 2")]
+    [InlineData("Soundtrack 2 (flac)", "Soundtrack 2")]
+    [InlineData("Area 51", "Area 51")]
+    // Never down to nothing.
+    [InlineData("1.0 (5)", "1.0")]
+    [InlineData("(64bit)", "(64bit)")]
+    [InlineData("", "")]
+    public void An_add_ons_name_loses_the_version_and_the_build_GOG_writes_after_it(string name, string says) =>
+        Assert.Equal(says, Ask($"withoutItsVersion({AsJScript(name)})"));
+
+    [Fact]
+    public void The_real_discs_two_DLC_are_said_by_what_they_are()
+    {
+        Assert.Equal(
+            "sams story|the two colonels",
+            Ask("whatTheAddOnButtonsSay(['metro exodus - sams story 3.0.8.39 (64bit) (62413)', "
+                + "'metro exodus - the two colonels 3.0.8.39 (64bit) (62413)'], 'Metro Exodus').join('|')"));
+    }
+
+    [Fact]
+    public void Two_builds_of_one_DLC_on_one_disc_keep_their_versions_so_they_can_be_told_apart()
+    {
+        Assert.Equal(
+            "sams story 1.0.8.39 (64bit) (62346)|sams story 3.0.8.39 (64bit) (62413)|the two colonels",
+            Ask("whatTheAddOnButtonsSay(['metro exodus - sams story 1.0.8.39 (64bit) (62346)', "
+                + "'metro exodus - sams story 3.0.8.39 (64bit) (62413)', "
+                + "'metro exodus - the two colonels 3.0.8.39 (64bit) (62413)'], 'Metro Exodus').join('|')"));
+    }
+
+    [Fact]
+    public void No_add_ons_are_no_buttons()
+    {
+        Assert.Equal("0", Ask("String(whatTheAddOnButtonsSay([], 'Metro Exodus').length)"));
+    }
+
+    [Theory]
+    [InlineData("true", "false", "true")]
+    [InlineData("true", "true", "false")]
+    [InlineData("false", "false", "false")]
+    [InlineData("false", "true", "false")]
+    public void An_add_on_starts_only_with_its_game_installed_and_no_other_installing(
+        string installed, string oneIsRunning, string mayStart) =>
+        Assert.Equal(mayStart, Ask($"String(anAddOnMayStart({installed}, {oneIsRunning}))"));
+
+    [Fact]
+    public void What_the_menu_says_when_an_add_ons_installer_closes_claims_no_more_than_it_knows()
+    {
+        // It cannot tell finished from cancelled.
+        Assert.Equal("The installer for sams story has closed.", Ask("whatAnAddOnLeft('sams story')"));
+    }
+
+    [Theory]
+    [InlineData("E:\\Add-ons\\setup_a_(1).exe", "setup_a_(1).exe")]
+    [InlineData("E:/Add-ons/setup_a_(1).exe", "setup_a_(1).exe")]
+    [InlineData("setup.exe", "setup.exe")]
+    [InlineData("", "")]
+    public void An_installer_is_watched_by_its_file_name_whichever_way_its_slashes_lean(string path, string file) =>
+        Assert.Equal(file, Ask($"theFileOf({AsJScript(path)})"));
+
     // ----------------------------------------------- a menu with no frame
 
     [Theory]
