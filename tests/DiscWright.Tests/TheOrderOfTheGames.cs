@@ -238,6 +238,120 @@ public class TheOrderOfTheGames
     }
 
     [Fact]
+    public void The_pointer_says_no_over_the_half_of_a_neighbour_that_is_where_it_already_is()
+    {
+        // The real window, 20 November 2026: an update held over the lower
+        // half of the one above it wore the moving arrow and, let go, moved
+        // nothing. Every pair and both halves, against what moving does.
+        MakeADisc screen = HollowKnightWithItsUpdates();
+
+        for (int moved = 0; moved < 4; moved++)
+        {
+            for (int onto = 0; onto < 4; onto++)
+            {
+                foreach (bool after in new[] { false, true })
+                {
+                    AThingOnTheDisc[] rows = TheAddOnRows(screen);
+                    string[] before = TheAddOnsOnTheDisc(screen);
+
+                    bool said = screen.WouldItMove(rows[moved], rows[onto], after);
+
+                    // Where it would land: before or after the one it is over.
+                    bool lands = moved != onto && moved != (after ? onto + 1 : onto - 1);
+
+                    Assert.Equal(lands, said);
+
+                    bool did = screen.MoveTheAddOnTo(rows[moved], rows[onto], after) is not null;
+
+                    Assert.Equal(said, did);
+                    Assert.Equal(said, !before.SequenceEqual(TheAddOnsOnTheDisc(screen)));
+
+                    // Back as it was, for the next pair.
+                    if (did)
+                    {
+                        screen = HollowKnightWithItsUpdates();
+                    }
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void And_the_same_for_a_game_over_the_half_of_a_neighbour()
+    {
+        for (int moved = 0; moved < 3; moved++)
+        {
+            for (int onto = 0; onto < 3; onto++)
+            {
+                foreach (bool after in new[] { false, true })
+                {
+                    MakeADisc screen = ThreeGames();
+                    string[] before = [.. screen.WhatGoesOnIt.Select(each => each.Name)];
+
+                    // By any row of the one, over any row of the other.
+                    AThingOnTheDisc carried = screen.WhatGoesOnIt[moved];
+                    AThingOnTheDisc over = screen.WhatGoesOnIt[onto].EveryRow().Last();
+
+                    bool said = screen.WouldItMove(carried, over, after);
+                    bool lands = moved != onto && moved != (after ? onto + 1 : onto - 1);
+
+                    Assert.Equal(lands, said);
+
+                    bool did = screen.MoveTheGameTo(carried, over, after) is not null;
+
+                    Assert.Equal(said, did);
+                    Assert.Equal(said, !before.SequenceEqual(screen.WhatGoesOnIt.Select(each => each.Name)));
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void Nothing_would_move_where_nothing_may_be_let_go()
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        screen.Add(AGame("Celeste"), [ADlc("setup_celeste_dlc.exe")]);
+        AThingOnTheDisc update = TheAddOnRows(screen)[0];
+        AThingOnTheDisc game = screen.WhatGoesOnIt[0];
+
+        foreach (bool after in new[] { false, true })
+        {
+            // An add-on over its game, its folder, another game, another
+            // game's add-on, and nothing.
+            foreach (AThingOnTheDisc? over in new[]
+                     {
+                         game, game.EveryRow().Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder),
+                         screen.WhatGoesOnIt[1], TheAddOnRows(screen, 1)[0], null,
+                     })
+            {
+                Assert.False(screen.WouldItMove(update, over, after));
+            }
+
+            // A game over its own rows, and nothing carried at all.
+            Assert.All(game.EveryRow(), over => Assert.False(screen.WouldItMove(game, over, after)));
+            Assert.False(screen.WouldItMove(null, game, after));
+        }
+    }
+
+    [Fact]
+    public void A_row_that_is_no_longer_in_the_list_can_go_nowhere()
+    {
+        // The list is built again when an add-on moves, and the rows it had
+        // are no longer its rows. One of those left picked is not first,
+        // not last and not anywhere: neither arrow is live for it.
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        AThingOnTheDisc[] old = TheAddOnRows(screen);
+        screen.MoveTheAddOnTo(old[3], old[0], after: false);
+
+        screen.WhatIsSelected = old[1];
+
+        Assert.False(screen.CanMoveThePickedUp);
+        Assert.False(screen.CanMoveThePickedDown);
+        Assert.Null(screen.MoveThePicked(1));
+        Assert.Null(screen.MoveThePicked(-1));
+    }
+
+    [Fact]
     public void A_drag_from_an_add_on_carries_the_add_on_and_from_anything_else_the_game()
     {
         MakeADisc screen = HollowKnightWithItsUpdates();
@@ -545,6 +659,166 @@ public class TheOrderOfTheGames
 
         Assert.Contains(nameof(MakeADisc.CanMoveTheGameUp), told, StringComparer.Ordinal);
         Assert.Contains(nameof(MakeADisc.CanMoveTheGameDown), told, StringComparer.Ordinal);
+    }
+
+    // ------------------------------------------- one place, whatever is picked
+    //
+    // The arrows and Alt with an arrow moved only games. An add-on could be
+    // dragged, and dragging needs a mouse and has to be guessed at.
+
+    [Fact]
+    public void A_picked_add_on_goes_one_place_among_its_own_and_stays_picked()
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        screen.WhatIsSelected = TheAddOnRows(screen)[3];
+
+        AThingOnTheDisc? moved = screen.MoveThePicked(-1);
+
+        Assert.Equal(
+            ["Update 1.5.78.11833a (85515)", "Update 1.5.12459 (88294)", "Update 1.5.12620 (89718)", "Update 1.5.12618 (89712)"],
+            TheAddOnsOnTheDisc(screen));
+        Assert.Same(TheAddOnRows(screen)[2], moved);
+        Assert.Same(moved, screen.WhatIsSelected);
+
+        // Again without picking anything between, and then back down.
+        screen.MoveThePicked(-1);
+        screen.MoveThePicked(-1);
+
+        Assert.Equal("Update 1.5.12620 (89718)", TheAddOnsOnTheDisc(screen)[0]);
+        Assert.Null(screen.MoveThePicked(-1));
+
+        screen.MoveThePicked(1);
+
+        Assert.Equal(
+            ["Update 1.5.78.11833a (85515)", "Update 1.5.12620 (89718)", "Update 1.5.12459 (88294)", "Update 1.5.12618 (89712)"],
+            TheAddOnsOnTheDisc(screen));
+    }
+
+    [Theory]
+    [InlineData(0, false, true)]
+    [InlineData(1, true, true)]
+    [InlineData(3, true, false)]
+    public void A_picked_add_on_can_go_up_unless_it_is_first_and_down_unless_it_is_last(int which, bool up, bool down)
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+
+        screen.WhatIsSelected = TheAddOnRows(screen)[which];
+
+        Assert.Equal(up, screen.CanMoveThePickedUp);
+        Assert.Equal(down, screen.CanMoveThePickedDown);
+
+        // The game it is in is the only game, and the game's own answer is
+        // no both ways: it is the add-on that is picked that is asked about.
+        Assert.False(screen.CanMoveTheGameUp);
+        Assert.False(screen.CanMoveTheGameDown);
+    }
+
+    [Fact]
+    public void A_games_only_add_on_has_nowhere_to_go_though_its_game_has()
+    {
+        MakeADisc screen = ThreeGames();
+        AThingOnTheDisc only = TheAddOnRows(screen)[0];
+
+        screen.WhatIsSelected = only;
+
+        Assert.False(screen.CanMoveThePickedUp);
+        Assert.False(screen.CanMoveThePickedDown);
+        Assert.Null(screen.MoveThePicked(1));
+        Assert.Null(screen.MoveThePicked(-1));
+        Assert.Equal(["Alpha", "Beta", "Gamma"], screen.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Anything_else_picked_moves_its_whole_game_as_it_always_did()
+    {
+        MakeADisc screen = ThreeGames();
+
+        // The game's own row, its installer, and the folder its add-on is in.
+        foreach (AThingOnTheDisc row in screen.WhatGoesOnIt[0].EveryRow()
+                     .Where(each => each.What != TheTreeOfWhatGoesOn.AnAddOn).ToArray())
+        {
+            screen.WhatIsSelected = row;
+
+            Assert.False(screen.CanMoveThePickedUp);
+            Assert.True(screen.CanMoveThePickedDown);
+            Assert.Equal(screen.CanMoveTheGameUp, screen.CanMoveThePickedUp);
+            Assert.Equal(screen.CanMoveTheGameDown, screen.CanMoveThePickedDown);
+        }
+
+        screen.WhatIsSelected = screen.WhatGoesOnIt[0];
+        screen.MoveThePicked(1);
+
+        Assert.Equal(["Beta", "Alpha", "Gamma"], screen.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Nothing_picked_and_nothing_can_move_and_nothing_does()
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+
+        Assert.False(screen.CanMoveThePickedUp);
+        Assert.False(screen.CanMoveThePickedDown);
+        Assert.Null(screen.MoveThePicked(1));
+        Assert.Null(screen.MoveThePicked(0));
+
+        screen.WhatIsSelected = TheAddOnRows(screen)[1];
+
+        Assert.Null(screen.MoveThePicked(0));
+    }
+
+    [Fact]
+    public void The_arrows_are_there_only_while_something_has_an_order_to_change()
+    {
+        MakeADisc screen = TheScreen();
+        Assert.False(screen.ThereIsAnOrderToChange);
+
+        // One game with nothing under it, or with one add-on: no order.
+        screen.Add(AGame("Alone"), [ADlc("setup_alone_dlc.exe")]);
+        Assert.False(screen.ThereIsAnOrderToChange);
+
+        // A second game is an order.
+        screen.Add(AGame("Another"));
+        Assert.True(screen.ThereIsAnOrderToChange);
+
+        screen.Remove(screen.Games[1]);
+        Assert.False(screen.ThereIsAnOrderToChange);
+
+        // And so is one game with two add-ons, with no second game at all.
+        Assert.True(HollowKnightWithItsUpdates().ThereIsAnOrderToChange);
+    }
+
+    [Fact]
+    public void The_window_hears_which_way_a_picked_add_on_can_go_when_it_is_picked_and_when_it_moves()
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.WhatIsSelected = TheAddOnRows(screen)[0];
+
+        string[] heard =
+        [
+            nameof(MakeADisc.CanMoveThePickedUp), nameof(MakeADisc.CanMoveThePickedDown),
+            nameof(MakeADisc.ThereIsAnOrderToChange),
+        ];
+
+        Assert.All(heard, named => Assert.Contains(named, told, StringComparer.Ordinal));
+
+        // What a window would read when told, after the move: it went down
+        // one, so now it can go up.
+        List<bool> read = [];
+        screen.PropertyChanged += (_, moved) =>
+        {
+            if (moved.PropertyName == nameof(MakeADisc.CanMoveThePickedUp))
+            {
+                read.Add(screen.CanMoveThePickedUp);
+            }
+        };
+
+        screen.MoveThePicked(1);
+
+        Assert.NotEmpty(read);
+        Assert.True(read[^1]);
     }
 
     // ------------------------------------------------------------------ sorting
@@ -947,18 +1221,65 @@ public class TheOrderOfTheGames
             window.Descendants(xaml + "Button"),
             each => (string?)each.Attribute("AutomationProperties.AutomationId") == id);
 
-        // Grey at the ends, not gone, so the row does not jump about as a
-        // game is walked up the list.
-        Assert.Equal("{Binding CanMoveTheGameUp}", (string?)Named("MoveTheGameUp").Attribute("IsEnabled"));
-        Assert.Equal("{Binding CanMoveTheGameDown}", (string?)Named("MoveTheGameDown").Attribute("IsEnabled"));
+        // Grey at the ends, not gone, so nothing jumps about as a row is
+        // walked up the list. And for whatever is picked, add-on or game.
+        Assert.Equal("{Binding CanMoveThePickedUp}", (string?)Named("MoveTheGameUp").Attribute("IsEnabled"));
+        Assert.Equal("{Binding CanMoveThePickedDown}", (string?)Named("MoveTheGameDown").Attribute("IsEnabled"));
         Assert.Null(Named("MoveTheGameUp").Attribute("Visibility"));
+        Assert.Equal("MoveTheGameUp", (string?)Named("MoveTheGameUp").Attribute("Click"));
+        Assert.Equal("MoveTheGameDown", (string?)Named("MoveTheGameDown").Attribute("Click"));
 
-        // The pair wrap together: in a panel of their own that does not
-        // wrap, inside the line that does.
-        Assert.Same(Named("MoveTheGameUp").Parent, Named("MoveTheGameDown").Parent);
-        Assert.Equal(xaml + "StackPanel", Named("MoveTheGameUp").Parent!.Name);
-        Assert.Equal("Horizontal", (string?)Named("MoveTheGameUp").Parent!.Attribute("Orientation"));
-        Assert.Equal(xaml + "WrapPanel", Named("MoveTheGameUp").Parent!.Parent!.Name);
+        // An arrow each, so each says in words what it is to a screen
+        // reader and to a pointer resting on it.
+        foreach (string id in new[] { "MoveTheGameUp", "MoveTheGameDown" })
+        {
+            Assert.Equal("{StaticResource AnArrow}", (string?)Named(id).Attribute("Style"));
+            Assert.False(string.IsNullOrWhiteSpace((string?)Named(id).Attribute("AutomationProperties.Name")));
+            Assert.Contains("Alt and the", (string?)Named(id).Attribute("ToolTip"), StringComparison.Ordinal);
+        }
+
+        Assert.Equal("Move up", (string?)Named("MoveTheGameUp").Attribute("AutomationProperties.Name"));
+        Assert.Equal("Move down", (string?)Named("MoveTheGameDown").Attribute("AutomationProperties.Name"));
+        Assert.Equal("\u2191", (string?)Named("MoveTheGameUp").Attribute("Content"));
+        Assert.Equal("\u2193", (string?)Named("MoveTheGameDown").Attribute("Content"));
+
+        // The pair together on the total's line, between the total and the
+        // list of ways to sort, and only while there is an order to change.
+        System.Xml.Linq.XElement pair = Named("MoveTheGameUp").Parent!;
+
+        Assert.Same(pair, Named("MoveTheGameDown").Parent);
+        Assert.Equal(xaml + "StackPanel", pair.Name);
+        Assert.Equal("Horizontal", (string?)pair.Attribute("Orientation"));
+        Assert.Equal("Right", (string?)pair.Attribute("DockPanel.Dock"));
+        Assert.Equal(xaml + "DockPanel", pair.Parent!.Name);
+        Assert.Equal(
+            "{Binding ThereIsAnOrderToChange, Converter={StaticResource WhenSo}}",
+            (string?)pair.Attribute("Visibility"));
+
+        // Docked second, after the list of ways, so they are at its left.
+        Assert.Same(pair, pair.Parent.Elements().ElementAt(1));
+
+        // And the line under them is one line: nothing in it wraps, the
+        // name gives way, and what is left on it is the three links.
+        System.Xml.Linq.XElement name = Assert.Single(
+            window.Descendants(xaml + "TextBlock"),
+            each => (string?)each.Attribute("AutomationProperties.AutomationId") == "ThePickedGame");
+
+        Assert.Equal(xaml + "StackPanel", name.Parent!.Name);
+        Assert.Equal("Horizontal", (string?)name.Parent.Attribute("Orientation"));
+        Assert.Equal("CharacterEllipsis", (string?)name.Attribute("TextTrimming"));
+
+        // Said out loud: the style it wears wraps, and a name that wraps
+        // inside its width is three lines tall and trims nothing.
+        Assert.Equal("NoWrap", (string?)name.Attribute("TextWrapping"));
+        Assert.NotNull(name.Attribute("MaxWidth"));
+        Assert.Equal("{Binding ThePickedGame}", (string?)name.Attribute("ToolTip"));
+        Assert.Equal(
+            ["AddAManual", "AddExtras", "AttachAnAddOn"],
+            name.Parent.Elements(xaml + "Button").Select(each => (string?)each.Attribute("AutomationProperties.AutomationId")));
+        Assert.DoesNotContain(
+            window.Descendants(xaml + "Button"),
+            each => (string?)each.Attribute("Content") is "Move up" or "Move down");
 
         // The ways to sort: a list, there with two games or more, saying
         // what it is for while nothing in it is chosen.
@@ -1012,25 +1333,32 @@ public class TheOrderOfTheGames
         Assert.Contains("SystemParameters.MinimumHorizontalDragDistance", window, StringComparison.Ordinal);
         Assert.Contains("DragDrop.DoDragDrop(Games, new DataObject(AGameBeingMoved, game), DragDropEffects.Move);", window, StringComparison.Ordinal);
 
-        // Before the game it is let go over when over its upper half, and
-        // an add-on by the half of the one row it is over.
+        // One answer for where it would go, asked while the drag is in the
+        // air and again when it is let go, so the pointer and the move
+        // cannot disagree. An add-on by the half of the one row it is over,
+        // a game by the half of the whole game it is over.
         Assert.Contains(
-            "KeepPicked(_screen.MoveTheGameTo(carried, onto, e.GetPosition(drawn).Y > drawn.ActualHeight / 2));",
+            "private (AThingOnTheDisc Onto, bool After)? WhereItWouldGo(AThingOnTheDisc carried, DragEventArgs e)",
             window, StringComparison.Ordinal);
-        Assert.Contains(
-            "KeepPicked(_screen.MoveTheAddOnTo(carried, onto, e.GetPosition(row).Y > row.ActualHeight / 2));",
-            window, StringComparison.Ordinal);
+        Assert.Contains("? TheDrawnRowOf(Games, onto, opening: false)", window, StringComparison.Ordinal);
+        Assert.Contains(": Games.ItemContainerGenerator.ContainerFromItem(onto.TheGameItIsIn) as FrameworkElement;", window, StringComparison.Ordinal);
+        Assert.Contains("(onto, e.GetPosition(drawn).Y > drawn.ActualHeight / 2);", window, StringComparison.Ordinal);
+        Assert.Contains("|| !_screen.MayBeLetGoOver(carried, onto))", window, StringComparison.Ordinal);
+
+        // Let go: whichever of the two it is, moved to there and kept picked.
+        Assert.Contains("if (WhereItWouldGo(carried, e) is { } there)", window, StringComparison.Ordinal);
+        Assert.Contains("? _screen.MoveTheAddOnTo(carried, there.Onto, there.After)", window, StringComparison.Ordinal);
+        Assert.Contains(": _screen.MoveTheGameTo(carried, there.Onto, there.After));", window, StringComparison.Ordinal);
 
         // The four-way arrow while it is carried, and never during a run.
         Assert.Contains("System.Windows.Input.Mouse.SetCursor(System.Windows.Input.Cursors.SizeAll);", window, StringComparison.Ordinal);
         Assert.Contains("e.Effects = !_screen.NothingIsRunning ? DragDropEffects.None", window, StringComparison.Ordinal);
 
-        // No-entry wherever letting go would move nothing: the window asks
-        // the screen while the drag is in the air, and again before it acts.
+        // No-entry wherever letting go would move nothing, down to which
+        // half of the row it is over.
         Assert.Contains(
-            "(_screen.MayBeLetGoOver(carried, e.OriginalSource is DependencyObject over ? TheRowAt(over) : null)",
+            "? (WhereItWouldGo(carried, e) is { } there && _screen.WouldItMove(carried, there.Onto, there.After)",
             window, StringComparison.Ordinal);
-        Assert.Contains("|| !_screen.MayBeLetGoOver(carried, onto))", window, StringComparison.Ordinal);
 
         // And only Move wears the arrow, so None is Windows' own no-entry.
         Assert.Contains("if (e.Effects.HasFlag(DragDropEffects.Move))", window, StringComparison.Ordinal);
@@ -1053,11 +1381,14 @@ public class TheOrderOfTheGames
         // No test can see the tree; this reads what the handlers do.
         string window = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
 
-        Assert.Contains("=> KeepPicked(_screen.MoveTheGame(-1));", window, StringComparison.Ordinal);
-        Assert.Contains("=> KeepPicked(_screen.MoveTheGame(1));", window, StringComparison.Ordinal);
+        Assert.Contains("=> KeepPicked(_screen.MoveThePicked(-1));", window, StringComparison.Ordinal);
+        Assert.Contains("=> KeepPicked(_screen.MoveThePicked(1));", window, StringComparison.Ordinal);
         Assert.Contains("drawn.IsSelected = true;", window, StringComparison.Ordinal);
+
+        // However deep the row is: an add-on is two folders down.
+        Assert.Contains("if (TheDrawnRowOf(Games, row, opening: true) is System.Windows.Controls.TreeViewItem drawn)", window, StringComparison.Ordinal);
         Assert.Contains(
-            "KeepPicked(_screen.MoveTheGame(e.SystemKey == System.Windows.Input.Key.Up ? -1 : 1));",
+            "KeepPicked(_screen.MoveThePicked(e.SystemKey == System.Windows.Input.Key.Up ? -1 : 1));",
             window,
             StringComparison.Ordinal);
     }

@@ -4239,6 +4239,79 @@ public sealed class MakeADisc : INotifyPropertyChanged
         !IsWorking && GameOf(_selected) is int at && at >= 0 && at < _tree.Count - 1;
 
     /// <summary>
+    /// Where the picked row is among the things it can change places with,
+    /// and how many of those there are: an add-on among its game's add-ons,
+    /// and anything else as its game among the games.
+    /// </summary>
+    private (int At, int Of) WhereThePickedIs()
+    {
+        int game = GameOf(_selected);
+
+        if (game < 0)
+        {
+            return (-1, 0);
+        }
+
+        if (_selected!.What != TheTreeOfWhatGoesOn.AnAddOn)
+        {
+            return (game, _tree.Count);
+        }
+
+        List<AThingOnTheDisc> its = TheAddOnRowsOf(game);
+
+        return (its.FindIndex(each => ReferenceEquals(each, _selected)), its.Count);
+    }
+
+    private List<AThingOnTheDisc> TheAddOnRowsOf(int game) =>
+        [.. _tree[game].EveryThing().Where(each => each.What == TheTreeOfWhatGoesOn.AnAddOn)];
+
+    /// <summary>Whether what is picked can go one place up.</summary>
+    public bool CanMoveThePickedUp => !IsWorking && WhereThePickedIs().At > 0;
+
+    /// <summary>Whether what is picked can go one place down.</summary>
+    public bool CanMoveThePickedDown =>
+        !IsWorking && WhereThePickedIs() is var (at, of) && at >= 0 && at < of - 1;
+
+    /// <summary>
+    /// Whether anything on the window has an order that could be another
+    /// order: two games, or a game with two add-ons. The two arrows beside
+    /// the list of ways to sort show only then, so a disc of one game with
+    /// nothing under it has no dead buttons in its corner.
+    /// </summary>
+    public bool ThereIsAnOrderToChange =>
+        _tree.Count > 1 || Enumerable.Range(0, _tree.Count).Any(game => TheAddOnRowsOf(game).Count > 1);
+
+    /// <summary>
+    /// Moves what is picked one place up or down: an add-on among its own
+    /// game's add-ons, and anything else as its whole game among the games.
+    /// </summary>
+    /// <remarks>
+    /// The two arrows and Alt with an arrow moved only games. An add-on
+    /// could be dragged since the day before, and dragging needs a mouse and
+    /// has to be guessed at, so the visible way and the keyboard's way move
+    /// whatever dragging moves.
+    /// </remarks>
+    /// <param name="by">Minus one for up, one for down.</param>
+    /// <returns>The moved row, for the window to keep picked, or nothing when nothing moved.</returns>
+    public AThingOnTheDisc? MoveThePicked(int by)
+    {
+        if (_selected is not { What: TheTreeOfWhatGoesOn.AnAddOn } picked)
+        {
+            return MoveTheGame(by);
+        }
+
+        (int from, int of) = WhereThePickedIs();
+        int to = from + Math.Sign(by);
+
+        if (IsWorking || by == 0 || from < 0 || to < 0 || to >= of)
+        {
+            return null;
+        }
+
+        return MoveTheAddOnTo(picked, TheAddOnRowsOf(GameOf(picked))[to], after: by > 0);
+    }
+
+    /// <summary>
     /// Whether there is anything to sort: two games or more, and nothing
     /// running. The list of ways shows only then.
     /// </summary>
@@ -4283,9 +4356,25 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public AThingOnTheDisc? MoveTheGameTo(AThingOnTheDisc? moved, AThingOnTheDisc? onto, bool after)
     {
         int from = GameOf(moved);
-        int target = GameOf(onto);
 
-        if (IsWorking || from < 0 || target < 0)
+        if (IsWorking || TheOrderWith(from, GameOf(onto), after) is not int[] order)
+        {
+            return null;
+        }
+
+        AThingOnTheDisc game = _tree[from];
+        _theOrderIsSomebodysOwn = true;
+
+        return PutInOrder(order, game);
+    }
+
+    /// <summary>
+    /// The games' order with one of them moved to where another is, or
+    /// nothing when that is the order they are already in.
+    /// </summary>
+    private int[]? TheOrderWith(int from, int target, bool after)
+    {
+        if (from < 0 || target < 0)
         {
             return null;
         }
@@ -4297,15 +4386,31 @@ public sealed class MakeADisc : INotifyPropertyChanged
         int at = order.IndexOf(target);
         order.Insert(target == from ? Math.Min(from, order.Count) : (after ? at + 1 : at), from);
 
-        if (InOrder([.. order]))
+        return InOrder([.. order]) ? null : [.. order];
+    }
+
+    /// <summary>
+    /// Whether letting go here would change anything: over this row, on
+    /// this half of it. What the pointer wears while a row is carried.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MayBeLetGoOver"/> says which rows a thing can go to at
+    /// all. That is not enough for the pointer: a row held over the near
+    /// half of its own neighbour is already where letting go would put it,
+    /// and the real window, 20 November 2026, wore the moving arrow there
+    /// and then moved nothing. The pointer now says no wherever nothing
+    /// would happen, which is the only promise it can keep.
+    /// </remarks>
+    public bool WouldItMove(AThingOnTheDisc? carried, AThingOnTheDisc? over, bool after)
+    {
+        if (!MayBeLetGoOver(carried, over))
         {
-            return null;
+            return false;
         }
 
-        AThingOnTheDisc game = _tree[from];
-        _theOrderIsSomebodysOwn = true;
-
-        return PutInOrder([.. order], game);
+        return carried!.What == TheTreeOfWhatGoesOn.AnAddOn
+            ? AddOn.WithOneMoved(_addOnsAsFound, GameOf(carried), carried.ItsPath, over!.ItsPath, after) is not null
+            : TheOrderWith(GameOf(carried), GameOf(over), after) is not null;
     }
 
     /// <summary>
@@ -4499,6 +4604,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
     {
         Tell(nameof(CanMoveTheGameUp));
         Tell(nameof(CanMoveTheGameDown));
+        Tell(nameof(CanMoveThePickedUp));
+        Tell(nameof(CanMoveThePickedDown));
+        Tell(nameof(ThereIsAnOrderToChange));
         Tell(nameof(CanSortTheGames));
     }
 
