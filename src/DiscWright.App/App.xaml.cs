@@ -111,6 +111,7 @@ public partial class App : Application
             // version link is its Store page.
             Updater: package is null ? new TheUpdateWrittenDown(updater, log) : null,
             Remover: new WindowsStageWriter(),
+            Blanks: ANoteAboutTheBlanks.ForThisUser(),
             StorePage: package is null ? null : ThisCopy.StorePage));
 
         // Everything the window says, as it says it.

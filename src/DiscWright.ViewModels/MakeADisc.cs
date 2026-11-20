@@ -98,6 +98,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
     /// <summary>Whether, the last time it was worked out, some size held it all on one disc.</summary>
     private bool _someSizeHoldsItAll = true;
+
+    // The blank discs somebody has, and what was chosen out of them the
+    // last time a size was chosen, or nothing when none of them would do.
+    private BlanksOwned _blanks;
+    private AChoiceFromTheBlanks? _fromTheBlanks;
     private bool _lookingAtTheDrives;
 
     /// <summary>Whether the last look worked out a set of discs at all.</summary>
@@ -160,6 +165,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public MakeADisc(TheMachine machine)
     {
         _machine = machine;
+        _blanks = BlanksOwned.FromText(machine.Blanks?.Recalled());
+        TheBlanks =
+        [
+            .. Media.All.Select(medium => new ABlankCount(medium, _blanks.Of(medium), ThereAreNow))
+        ];
         _settling = new SettlingOnADrive(machine.Drives, machine.Eraser, Say, machine.Patience);
         _reading = new ReadingBackWhatWasWritten(machine.Disk, machine.Hasher, Say);
         _comingBack = new WaitingForTheDiscToComeBack(
@@ -1175,9 +1185,80 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string WhyThatSize =>
         !_theSizeFollowsWhatIsOnIt || _games.Count == 0
             ? string.Empty
-            : _someSizeHoldsItAll
-                ? "The smallest that holds all of it on one disc."
-                : "No size holds all of it on one disc, so the largest, which takes the fewest.";
+            : _fromTheBlanks is not null
+                ? _fromTheBlanks.InWords
+                : (_blanks.IsAnything ? "None of the blanks you have holds it. " : string.Empty)
+                    + (_someSizeHoldsItAll
+                        ? "The smallest that holds all of it on one disc."
+                        : "No size holds all of it on one disc, so the largest, which takes the fewest.");
+
+    /// <summary>
+    /// How many blank discs of each size somebody has, one small box for
+    /// each. discwright#98, the first thing asked for in it.
+    /// </summary>
+    /// <remarks>
+    /// With any of them filled in, "Choose the smallest that fits" chooses
+    /// out of these and no others, the one that wastes least, and a disc
+    /// burned takes one off. Kept with the program and never in a project.
+    /// </remarks>
+    public IReadOnlyList<ABlankCount> TheBlanks { get; }
+
+    /// <summary>
+    /// How many blanks of the size chosen there are, in words, or nothing
+    /// while no blanks have been counted at all.
+    /// </summary>
+    public string WhatThereIsOfThatSize
+    {
+        get
+        {
+            if (!_blanks.IsAnything)
+            {
+                return string.Empty;
+            }
+
+            int have = _blanks.Of(Medium);
+
+            return have switch
+            {
+                0 => $"You have no blank {Medium.Key} counted.",
+                _ => $"You have {have} blank {Medium.Key}.",
+            };
+        }
+    }
+
+    /// <summary>A box was typed in: there are now so many of one size.</summary>
+    private void ThereAreNow(Medium medium, int count)
+    {
+        _blanks = _blanks.With(medium, count);
+        _machine.Blanks?.Keep(_blanks.AsText());
+        Tell(nameof(WhatThereIsOfThatSize));
+
+        // The size may be one chosen out of them.
+        Reconsider();
+    }
+
+    /// <summary>
+    /// A disc was written to, so there is one blank fewer of the size
+    /// chosen. Written, whether or not it read back well: a disc that
+    /// failed its check is not a blank any more either.
+    /// </summary>
+    private void ABlankWasUsed()
+    {
+        if (_blanks.Of(Medium) == 0)
+        {
+            return;
+        }
+
+        _blanks = _blanks.Spending(Medium);
+        _machine.Blanks?.Keep(_blanks.AsText());
+
+        foreach (ABlankCount box in TheBlanks)
+        {
+            box.Show(_blanks.Of(box.Medium));
+        }
+
+        Tell(nameof(WhatThereIsOfThatSize));
+    }
 
     /// <summary>
     /// Moves the size to the one that suits what is on the window, when that
@@ -1194,8 +1275,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
             return;
         }
 
+        // Out of the blanks somebody has, when they have said, and
+        // otherwise, or when none of those would do, the smallest there is.
+        _fromTheBlanks = _blanks.IsAnything
+            ? ChoosingASize.FromTheBlanksOwned(AsAProject(), _machine.HowBigIs, _blanks)
+            : null;
+
         Medium? holdsItAll = ChoosingASize.TheSmallestThatHoldsItOnOneDisc(AsAProject(), _machine.HowBigIs);
-        Medium suits = holdsItAll ?? Media.All[^1];
+        Medium suits = _fromTheBlanks?.Medium ?? holdsItAll ?? Media.All[^1];
 
         _someSizeHoldsItAll = holdsItAll is not null;
 
@@ -2547,6 +2634,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 case Outcome<BurnedDisc>.Ok(BurnedDisc burned):
                     AboutTheImage = burned.AboutTheReporting;
                     Tell(nameof(AboutTheImage));
+                    ABlankWasUsed();
 
                     // Written is not the same as readable. The drive ejected so
                     // that whatever reads it next sees a freshly mounted volume.
@@ -3395,6 +3483,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
                         stopped = refused.Refusal.Headline;
                         return;
                 }
+
+                // Written, so a blank of that size is gone, however the
+                // disc reads back.
+                ABlankWasUsed();
 
                 // Said before the tray, which may wait for a hand, so the
                 // window stops repeating the last thing the burn reported.
@@ -4370,6 +4462,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // game does.
         FollowWhatIsOnIt();
         Tell(nameof(WhyThatSize));
+        Tell(nameof(WhatThereIsOfThatSize));
 
         if (_games.Count == 0)
         {
