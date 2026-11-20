@@ -224,14 +224,23 @@ public class WhatADiscIsReadBackAgainst
     [Fact]
     public async Task Says_which_disc_of_the_set_it_is_working_on()
     {
-        List<string> said = [];
+        // What is said comes through Progress, which hands each line to the
+        // window's thread in the program and, with no window, to the thread
+        // pool. So it can arrive after the check has returned, and from
+        // another thread: the list is one several threads may add to, and
+        // the test waits for the first line instead of expecting it there.
+        // Reading it at once failed about one run in a few on a busy
+        // machine, here and on the runner, with nothing said yet.
+        System.Collections.Concurrent.ConcurrentQueue<string> said = new();
         ADiskThatRemembers disk = new() { TheFiles = [new ListedFile("one.bin", 3)] };
 
-        await new ReadingBackWhatWasWritten(disk, new NoHashing(), (doing, far) => said.Add(doing))
+        await new ReadingBackWhatWasWritten(disk, new NoHashing(), (doing, far) => said.Enqueue(doing))
             .HowItCameOut(InDriveE, new WhichDisc.OfASet(3, 3), ASetOfThree, default);
 
-        Assert.NotEmpty(said);
-        Assert.All(said, line => Assert.StartsWith("disc 3 of 3: ", line, StringComparison.Ordinal));
+        Assert.True(
+            SpinWait.SpinUntil(() => !said.IsEmpty, TimeSpan.FromSeconds(30)),
+            "Nothing was said about the disc being checked.");
+        Assert.All(said.ToArray(), line => Assert.StartsWith("disc 3 of 3: ", line, StringComparison.Ordinal));
     }
 
     // ------------------------------------------------------------- the rig
