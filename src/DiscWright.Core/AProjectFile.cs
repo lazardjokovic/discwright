@@ -237,7 +237,12 @@ public static class AProjectFile
             // Tidied on the way in, so a file somebody edited yields a
             // heading the box could have held, or none.
             MenuLook.TidiedHeading(Text(look, "Heading")),
-            Yes(look, "HeadingHidden"))
+            Yes(look, "HeadingHidden"),
+
+            // A word that names no face on the list, or no word at all, is
+            // the face the menu has always worn. A file can only ever ask
+            // for one of the six, so nothing it says reaches the page.
+            MenuFonts.Named(Text(look, "Font")) ?? MenuFont.Tahoma)
             .OrNothingWhenPlain();
     }
 

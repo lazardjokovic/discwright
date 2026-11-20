@@ -1480,12 +1480,14 @@ function doExit() {
 </script>
 
 <style>
-/* Tahoma because it is on every Windows this disc can reach, back to 95. The
-   faces that read better either arrived with Windows 10 or came with Office,
-   and a disc that has to work in ten years cannot ask. */
+/* Tahoma as it comes, because it is on every Windows this disc can reach,
+   back to 95. The faces that read better either arrived with Windows 10 or
+   came with Office, and a disc that has to work in ten years cannot ask.
+   Whichever face is chosen is one of six that came with Windows itself, with
+   one like it after it for a machine that has lost it. */
 body {
     margin: 0;
-    font-family: Tahoma, sans-serif;
+    font-family: %%FONT%%;
     background: #0C1316;
     color: #DFE9EE;
     overflow: hidden;

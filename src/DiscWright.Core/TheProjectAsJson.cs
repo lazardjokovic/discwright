@@ -205,6 +205,10 @@ public static class TheProjectAsJson
             writing.WriteBoolean("OpenTheDisc", look.OpenTheDiscButton);
             WriteOrNull(writing, "Heading", MenuLook.TidiedHeading(look.Heading));
             writing.WriteBoolean("HeadingHidden", look.HeadingHidden);
+
+            // By the face's own name, which is what somebody reading the
+            // file would look for.
+            writing.WriteString("Font", MenuFonts.For(look.Font).InWords);
             writing.WriteEndObject();
 
             writing.WriteString("BgFit", fit.ToString());

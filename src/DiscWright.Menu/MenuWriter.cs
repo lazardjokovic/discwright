@@ -159,6 +159,12 @@ public static class MenuWriter
                         ? "background: " + colour + ";"
                         : string.Empty,
                 StringComparison.Ordinal)
+            // One of six lines this program wrote, chosen by name. Never
+            // text from a project file: it lands inside the page's style.
+            .Replace(
+                "%%FONT%%",
+                MenuFonts.For((facts.Look ?? MenuLook.Plain).Font).AsThePageAsksForIt,
+                StringComparison.Ordinal)
             .Replace("%%SINGLE%%", facts.OnlyOneAtATime ? "yes" : "no", StringComparison.Ordinal)
             .Replace("%%ICON%%", Markup(facts.Icon), StringComparison.Ordinal)
             .Replace("%%PRIMARY%%", Markup(facts.PrimaryButton), StringComparison.Ordinal)
