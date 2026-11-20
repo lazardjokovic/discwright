@@ -443,6 +443,9 @@
                                   AllowDrop="True"
                                   DragOver="SayWhetherADropWouldLand"
                                   Drop="SomethingWasDropped"
+                                  PreviewMouseLeftButtonDown="AGameMayBeTakenHoldOf"
+                                  PreviewMouseMove="AGameIsDragged"
+                                  GiveFeedback="WearTheMovingPointer"
                                   AutomationProperties.AutomationId="Games">
                             <!-- Without this a row answers to whatever the
                                  thing in it prints as, which here is the whole
@@ -676,22 +679,38 @@
                                         Click="TakeOffWhatIsLeftOff"
                                         AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
 
-                                <!-- Only while it would change something:
-                                     two games or more, not in order by
-                                     name already. Pressed, it has nothing
-                                     left to do and goes. -->
-                                <TextBlock Style="{StaticResource Aside}"
-                                           Text="·"
-                                           Margin="6,0"
-                                           Visibility="{Binding CanSortTheGames, Converter={StaticResource WhenSo}}" />
-                                <Button Content="Sort the games by name"
-                                        Style="{StaticResource AsALink}"
-                                        VerticalAlignment="Center"
-                                        Visibility="{Binding CanSortTheGames, Converter={StaticResource WhenSo}}"
-                                        ToolTip="The menu lists the games in the order they are in here."
-                                        Click="SortTheGames"
-                                        AutomationProperties.AutomationId="SortTheGames" />
                             </WrapPanel>
+
+                            <!-- A list of ways to sort, on a line of its
+                                 own, with two games or more. It was one
+                                 link that sorted by name. Choosing a way
+                                 sorts and the list goes back to saying
+                                 what it is for, because it is a thing to
+                                 do and not a setting that stays. -->
+                            <Grid Margin="0,6,0,0"
+                                  HorizontalAlignment="Left"
+                                  Visibility="{Binding CanSortTheGames, Converter={StaticResource WhenSo}}">
+                                <ComboBox x:Name="WaysToSort"
+                                          MinWidth="190"
+                                          ItemsSource="{Binding TheWaysToSort}"
+                                          DisplayMemberPath="InWords"
+                                          SelectionChanged="SortTheGames"
+                                          ToolTip="The menu lists the games in the order they are in here. A game can also be dragged to where it should be."
+                                          AutomationProperties.Name="Sort the games"
+                                          AutomationProperties.AutomationId="SortTheGames">
+                                    <ComboBox.ItemContainerStyle>
+                                        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                            <Setter Property="AutomationProperties.Name" Value="{Binding InWords}" />
+                                        </Style>
+                                    </ComboBox.ItemContainerStyle>
+                                </ComboBox>
+                                <TextBlock Style="{StaticResource Aside}"
+                                           Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False"
+                                           Text="Sort the games"
+                                           Visibility="{Binding SelectedItem, ElementName=WaysToSort, Converter={StaticResource WhenNothing}}" />
+                            </Grid>
 
                             <!-- The picked game's own manual and extras, for
                                  goodies kept apart from the installer. Only

@@ -232,8 +232,9 @@ public partial class MainWindow : Window
     /// </remarks>
     private void SayWhetherADropWouldLand(object sender, DragEventArgs e)
     {
-        e.Effects = _screen.NothingIsRunning && e.Data.GetDataPresent(DataFormats.FileDrop)
-            ? DragDropEffects.Copy
+        e.Effects = !_screen.NothingIsRunning ? DragDropEffects.None
+            : e.Data.GetDataPresent(AGameBeingMoved) ? DragDropEffects.Move
+            : e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy
             : DragDropEffects.None;
         e.Handled = true;
     }
@@ -259,6 +260,21 @@ public partial class MainWindow : Window
     private void SomethingWasDropped(object sender, DragEventArgs e)
     {
         e.Handled = true;
+
+        // A game of this list, let go over another: it goes before that
+        // one when let go over its upper half, and after it over its lower.
+        if (_screen.NothingIsRunning && e.Data.GetData(AGameBeingMoved) is AThingOnTheDisc carried)
+        {
+            if (e.OriginalSource is DependencyObject over && TheRowAt(over) is AThingOnTheDisc onto
+                && Games.ItemContainerGenerator.ContainerFromItem(onto.TheGameItIsIn) is FrameworkElement drawn)
+            {
+                bool after = e.GetPosition(drawn).Y > drawn.ActualHeight / 2;
+
+                KeepPicked(_screen.MoveTheGameTo(carried, onto, after));
+            }
+
+            return;
+        }
 
         if (!_screen.NothingIsRunning || e.Data.GetData(DataFormats.FileDrop) is not string[] dropped)
         {
@@ -362,7 +378,130 @@ public partial class MainWindow : Window
 
     private void MoveTheGameDown(object sender, RoutedEventArgs e) => KeepPicked(_screen.MoveTheGame(1));
 
-    private void SortTheGames(object sender, RoutedEventArgs e) => KeepPicked(_screen.SortTheGames());
+    /// <summary>
+    /// A way to sort was chosen from the list: asks first when that would
+    /// lose an order somebody arranged, sorts, and empties the list's choice
+    /// so it says what it is for again and the same way can be chosen twice.
+    /// </summary>
+    private void SortTheGames(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (WaysToSort.SelectedItem is not AWayToSort way)
+        {
+            return;
+        }
+
+        if (_screen.WhatSortingWouldLose(way.How) is not AQuestion losing || Ask(losing))
+        {
+            KeepPicked(_screen.SortTheGames(way.How));
+        }
+
+        WaysToSort.SelectedItem = null;
+    }
+
+    // ------------------------------------------------ dragging a game about
+    //
+    // The owner, on the recording of 2026-11-20: a game should be moved by
+    // taking hold of it. The links and Alt with an arrow stay, for a
+    // keyboard and for one place at a time. Which game goes where is the
+    // screen's; this only says which row was taken hold of and which it
+    // was let go over.
+
+    private const string AGameBeingMoved = "DiscWright.AGameBeingMoved";
+
+    private Point? _heldFrom;
+    private AThingOnTheDisc? _heldGame;
+
+    private void AGameMayBeTakenHoldOf(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _heldFrom = null;
+        _heldGame = null;
+
+        // Not from a tick box, a cross or a name being typed: those are
+        // pressed for their own sake, and a drag from one would take the
+        // press away from it.
+        if (!_screen.NothingIsRunning
+            || e.OriginalSource is not DependencyObject pressed
+            || IsInside<System.Windows.Controls.Primitives.ButtonBase>(pressed)
+            || IsInside<System.Windows.Controls.TextBox>(pressed)
+            || TheRowAt(pressed) is not AThingOnTheDisc row)
+        {
+            return;
+        }
+
+        _heldFrom = e.GetPosition(Games);
+        _heldGame = row.TheGameItIsIn;
+    }
+
+    private void AGameIsDragged(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_heldFrom is not Point from || _heldGame is not AThingOnTheDisc game
+            || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        // Only once the pointer has really travelled, so a click that
+        // wobbles is still a click.
+        Vector moved = e.GetPosition(Games) - from;
+
+        if (Math.Abs(moved.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(moved.Y) < SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        _heldFrom = null;
+        _heldGame = null;
+
+        DragDrop.DoDragDrop(Games, new DataObject(AGameBeingMoved, game), DragDropEffects.Move);
+    }
+
+    /// <summary>
+    /// The four-way arrow while a game is carried, the one the picture in
+    /// the artwork window wears while it is dragged.
+    /// </summary>
+    private void WearTheMovingPointer(object sender, GiveFeedbackEventArgs e)
+    {
+        if (e.Effects.HasFlag(DragDropEffects.Move))
+        {
+            e.UseDefaultCursors = false;
+            System.Windows.Input.Mouse.SetCursor(System.Windows.Input.Cursors.SizeAll);
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>The row something in the list belongs to, or nothing.</summary>
+    private static AThingOnTheDisc? TheRowAt(DependencyObject from)
+    {
+        for (DependencyObject? at = from; at is not null; at = Above(at))
+        {
+            if (at is System.Windows.Controls.TreeViewItem { DataContext: AThingOnTheDisc row })
+            {
+                return row;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsInside<T>(DependencyObject from)
+        where T : DependencyObject
+    {
+        for (DependencyObject? at = from; at is not null and not System.Windows.Controls.TreeViewItem; at = Above(at))
+        {
+            if (at is T)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static DependencyObject? Above(DependencyObject at) =>
+        at is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+            ? System.Windows.Media.VisualTreeHelper.GetParent(at)
+            : LogicalTreeHelper.GetParent(at);
 
     /// <summary>
     /// Picks a game's row in the tree again after it has changed places.

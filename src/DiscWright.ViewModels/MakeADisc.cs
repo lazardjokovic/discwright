@@ -4153,10 +4153,74 @@ public sealed class MakeADisc : INotifyPropertyChanged
         !IsWorking && GameOf(_selected) is int at && at >= 0 && at < _tree.Count - 1;
 
     /// <summary>
-    /// Whether sorting would change anything: two games or more, not in
-    /// order by name already.
+    /// Whether there is anything to sort: two games or more, and nothing
+    /// running. The list of ways shows only then.
     /// </summary>
-    public bool CanSortTheGames => !IsWorking && !InOrder(TheGamesByName());
+    public bool CanSortTheGames => !IsWorking && _tree.Count > 1;
+
+    /// <summary>Every way to put the games in order, for the list.</summary>
+    public IReadOnlyList<AWayToSort> TheWaysToSort { get; } = AWayToSort.All;
+
+    // Whether somebody put the games in an order of their own, by moving
+    // one, since the last time they were sorted. A sort would replace it.
+    private bool _theOrderIsSomebodysOwn;
+
+    /// <summary>
+    /// What to ask before sorting, when the games are in an order somebody
+    /// arranged by hand and sorting would change it, or nothing.
+    /// </summary>
+    /// <remarks>
+    /// The owner, on the recording of 2026-11-20: a sort overrides the order
+    /// arranged by dragging, so there should be a warning first. Only when
+    /// there is such an order to lose, and only when this sort would change
+    /// it: asking every time teaches people to press Enter. The likely
+    /// answer is to sort, because that is what was just chosen.
+    /// </remarks>
+    public AQuestion? WhatSortingWouldLose(HowToSort how) =>
+        !IsWorking && _theOrderIsSomebodysOwn && !InOrder(TheGamesInOrder(how))
+            ? new AQuestion(
+                "Sort the games, and lose the order you put them in?",
+                "You moved games into an order of your own. Sorting replaces it, and the only way back is to "
+                    + "move them again.",
+                "Sort them",
+                "Keep my order")
+            : null;
+
+    /// <summary>
+    /// Moves one game to where another is: before it, or after. For a game
+    /// dragged in the list and let go over another.
+    /// </summary>
+    /// <param name="moved">Any row of the game that is moved.</param>
+    /// <param name="onto">Any row of the game it was let go over.</param>
+    /// <param name="after">Whether it goes after that game rather than before it.</param>
+    /// <returns>The moved game's row, for the window to keep picked, or nothing when nothing moved.</returns>
+    public AThingOnTheDisc? MoveTheGameTo(AThingOnTheDisc? moved, AThingOnTheDisc? onto, bool after)
+    {
+        int from = GameOf(moved);
+        int target = GameOf(onto);
+
+        if (IsWorking || from < 0 || target < 0)
+        {
+            return null;
+        }
+
+        List<int> order = [.. Enumerable.Range(0, _tree.Count)];
+        order.RemoveAt(from);
+
+        // Where the game it was let go over is, now that the moved one is out.
+        int at = order.IndexOf(target);
+        order.Insert(target == from ? Math.Min(from, order.Count) : (after ? at + 1 : at), from);
+
+        if (InOrder([.. order]))
+        {
+            return null;
+        }
+
+        AThingOnTheDisc game = _tree[from];
+        _theOrderIsSomebodysOwn = true;
+
+        return PutInOrder([.. order], game);
+    }
 
     /// <summary>
     /// Moves the game the picked row belongs to one place up or down, with
@@ -4177,16 +4241,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
         int[] order = [.. Enumerable.Range(0, _tree.Count)];
         (order[from], order[to]) = (order[to], order[from]);
 
+        _theOrderIsSomebodysOwn = true;
+
         return PutInOrder(order, _tree[from]);
     }
 
     /// <summary>
-    /// Puts the games in order by name. Two of one name stay as they were.
-    /// Returns the picked row's game, for the window to keep picked.
+    /// Puts the games in order, by name unless another way is asked for.
+    /// Two that come out level stay as they were. Returns the picked row's
+    /// game, for the window to keep picked, or nothing when they were in
+    /// that order already.
     /// </summary>
-    public AThingOnTheDisc? SortTheGames()
+    public AThingOnTheDisc? SortTheGames(HowToSort how = HowToSort.ByNameAToZ)
     {
-        int[] order = TheGamesByName();
+        int[] order = TheGamesInOrder(how);
 
         if (IsWorking || InOrder(order))
         {
@@ -4195,12 +4263,32 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         int picked = GameOf(_selected);
 
+        // Sorted, they are in nobody's own order any more.
+        _theOrderIsSomebodysOwn = false;
+
         return PutInOrder(order, picked >= 0 ? _tree[picked] : null) ?? (_tree.Count > 0 ? _tree[0] : null);
     }
 
-    /// <summary>The old place of each game, in the order by name.</summary>
-    private int[] TheGamesByName() =>
-        [.. Enumerable.Range(0, _tree.Count).OrderBy(at => _tree[at].Name, ByName)];
+    /// <summary>
+    /// The old place of each game, in the order asked for. By size is by
+    /// what the list shows beside the game, add-ons and all, which is what
+    /// somebody is looking at when they ask.
+    /// </summary>
+    private int[] TheGamesInOrder(HowToSort how)
+    {
+        IEnumerable<int> places = Enumerable.Range(0, _tree.Count);
+
+        return
+        [
+            .. how switch
+            {
+                HowToSort.ByNameZToA => places.OrderByDescending(at => _tree[at].Name, ByName),
+                HowToSort.BiggestFirst => places.OrderByDescending(at => _tree[at].Bytes),
+                HowToSort.SmallestFirst => places.OrderBy(at => _tree[at].Bytes),
+                _ => places.OrderBy(at => _tree[at].Name, ByName),
+            }
+        ];
+    }
 
     private static bool InOrder(int[] order) => order.Select((old, now) => old == now).All(same => same);
 
@@ -4523,6 +4611,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // under the list that names its game goes with it.
         Tell(nameof(ThePickedGame));
         TellHowTheOrderCanChange();
+
+        if (_tree.Count < 2)
+        {
+            _theOrderIsSomebodysOwn = false;
+        }
 
         Worry = HasNoName ? null : DiscLabel.WhatWindowsWillMakeOfIt(Label, _machine.Encoding);
 
