@@ -4247,7 +4247,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     {
         int game = GameOf(_selected);
 
-        if (game < 0)
+        // A file, a part or a folder inside a game is in no order, and the
+        // arrows are grey for it: they moved its whole game, and on the
+        // recording of 21 November 2026 that read as nothing happening and
+        // the list jumping to the top.
+        if (game < 0 || !HasAnOrder(_selected))
         {
             return (-1, 0);
         }
@@ -4295,6 +4299,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// <returns>The moved row, for the window to keep picked, or nothing when nothing moved.</returns>
     public AThingOnTheDisc? MoveThePicked(int by)
     {
+        if (!HasAnOrder(_selected))
+        {
+            return null;
+        }
+
         if (_selected is not { What: TheTreeOfWhatGoesOn.AnAddOn } picked)
         {
             return MoveTheGame(by);
@@ -4390,37 +4399,72 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Whether letting go here would change anything: over this row, on
-    /// this half of it. What the pointer wears while a row is carried.
+    /// Lets what is carried go over a row: it takes that row's place. Going
+    /// down the list it lands after the one it was let go over, going up it
+    /// lands before it, so either way it ends where that one was.
     /// </summary>
     /// <remarks>
-    /// <see cref="MayBeLetGoOver"/> says which rows a thing can go to at
-    /// all. That is not enough for the pointer: a row held over the near
-    /// half of its own neighbour is already where letting go would put it,
-    /// and the real window, 20 November 2026, wore the moving arrow there
-    /// and then moved nothing. The pointer now says no wherever nothing
-    /// would happen, which is the only promise it can keep.
+    /// <para>
+    /// It went by halves: before the thing when over its upper half, after
+    /// it over its lower. For a game that was the half of the whole game,
+    /// files and all, so the owner, on a recording of 21 November 2026,
+    /// carried the first game onto the second game's name and was refused:
+    /// the name is in the upper half, which means before it, which is where
+    /// the first game already was. To put it below he had to aim at the
+    /// files further down. "It should be possible, the arrow is really hard
+    /// to set up." Carried upward onto the same name, it worked.
+    /// </para>
+    /// <para>
+    /// With no halves there is nowhere over another game, or over another of
+    /// a game's add-ons, where letting go does nothing, so wherever the
+    /// pointer says yes it means it and it says yes over the whole of them.
+    /// </para>
     /// </remarks>
-    public bool WouldItMove(AThingOnTheDisc? carried, AThingOnTheDisc? over, bool after)
+    /// <returns>The moved row, for the window to keep picked, or nothing when nothing moved.</returns>
+    public AThingOnTheDisc? LetGoOver(AThingOnTheDisc? carried, AThingOnTheDisc? over)
     {
         if (!MayBeLetGoOver(carried, over))
         {
-            return false;
+            return null;
         }
 
-        return carried!.What == TheTreeOfWhatGoesOn.AnAddOn
-            ? AddOn.WithOneMoved(_addOnsAsFound, GameOf(carried), carried.ItsPath, over!.ItsPath, after) is not null
-            : TheOrderWith(GameOf(carried), GameOf(over), after) is not null;
+        if (carried!.What != TheTreeOfWhatGoesOn.AnAddOn)
+        {
+            return MoveTheGameTo(carried, over, after: GameOf(carried) < GameOf(over));
+        }
+
+        List<AThingOnTheDisc> its = TheAddOnRowsOf(GameOf(carried));
+
+        return MoveTheAddOnTo(
+            carried,
+            over,
+            after: its.FindIndex(each => ReferenceEquals(each, carried)) < its.FindIndex(each => ReferenceEquals(each, over)));
     }
 
     /// <summary>
-    /// What a drag that starts on a row carries: the add-on itself when the
-    /// row is one, and otherwise the whole game the row is in.
+    /// Whether a row is one of the two things that have an order: a game,
+    /// by its own row, or an add-on. The menu lists games and, under each,
+    /// its add-ons. Nothing else on the list is in any order that reaches
+    /// the disc.
     /// </summary>
-    public static AThingOnTheDisc? WhatADragCarries(AThingOnTheDisc? row) =>
-        row is null ? null
-        : row.What == TheTreeOfWhatGoesOn.AnAddOn ? row
-        : row.TheGameItIsIn;
+    public static bool HasAnOrder(AThingOnTheDisc? row) =>
+        row is not null && (row.IsAWholeGame || row.What == TheTreeOfWhatGoesOn.AnAddOn);
+
+    /// <summary>
+    /// What a drag that starts on a row carries: the row itself when it is a
+    /// game's own row or an add-on, and nothing from anywhere else.
+    /// </summary>
+    /// <remarks>
+    /// A drag from any row inside a game used to carry the whole game. On
+    /// the recording of 21 November 2026 the owner took hold of an
+    /// installer's part and of an extra, meaning to move those, and what he
+    /// was carrying without knowing it was the game: no-entry over every row
+    /// near it, and no way to tell why. "Should a person even be able to
+    /// move this up and down? There is no reason." There is none: a file
+    /// inside a game is in no order that reaches the disc. So it does not
+    /// start a drag, and the game is moved by its own row.
+    /// </remarks>
+    public static AThingOnTheDisc? WhatADragCarries(AThingOnTheDisc? row) => HasAnOrder(row) ? row : null;
 
     /// <summary>
     /// Whether what is carried would move if it were let go over a row. The
@@ -4437,12 +4481,14 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     public bool MayBeLetGoOver(AThingOnTheDisc? carried, AThingOnTheDisc? over)
     {
-        if (IsWorking || carried is null || over is null || GameOf(carried) < 0 || GameOf(over) < 0)
+        // Only what has an order is carried at all. The window never starts
+        // a drag from anything else, and this does not lean on that.
+        if (IsWorking || !HasAnOrder(carried) || over is null || GameOf(carried) < 0 || GameOf(over) < 0)
         {
             return false;
         }
 
-        return carried.What == TheTreeOfWhatGoesOn.AnAddOn
+        return carried!.What == TheTreeOfWhatGoesOn.AnAddOn
             ? over.What == TheTreeOfWhatGoesOn.AnAddOn
               && !ReferenceEquals(carried, over)
               && GameOf(carried) == GameOf(over)
