@@ -289,7 +289,11 @@ public class TheOrderOfTheGames
         Assert.Equal(
             [("Hollow Knight", "patch_hollow_1_to_2.exe"), ("Witcher", "setup_witcher_dlc.exe")],
             project.AddOnsOrNone.Select(each => (project.Games[each.BelongsTo].Name, Path.GetFileName(each.Path))));
-        Assert.False(screen.CanSortTheGames);
+
+        // Sorted, the list of ways is still there, and the way just used
+        // has nothing left to do.
+        Assert.True(screen.CanSortTheGames);
+        Assert.Null(screen.SortTheGames());
     }
 
     [Fact]
@@ -336,7 +340,7 @@ public class TheOrderOfTheGames
     }
 
     [Fact]
-    public void There_is_nothing_to_sort_on_an_empty_list_one_game_or_a_list_in_order()
+    public void There_is_nothing_to_sort_on_an_empty_list_or_one_game_and_a_list_in_order_is_left_alone()
     {
         MakeADisc screen = TheScreen();
         Assert.False(screen.CanSortTheGames);
@@ -345,12 +349,270 @@ public class TheOrderOfTheGames
         screen.Add(AGame("Beta"));
         Assert.False(screen.CanSortTheGames);
 
+        // Two games: the list of ways is offered, and a way that changes
+        // nothing does nothing.
         screen.Add(AGame("Gamma"));
-        Assert.False(screen.CanSortTheGames);
-        Assert.Null(screen.SortTheGames());
-
-        screen.Add(AGame("Alpha"));
         Assert.True(screen.CanSortTheGames);
+        Assert.Null(screen.SortTheGames());
+        Assert.NotNull(screen.SortTheGames(HowToSort.ByNameZToA));
+    }
+
+    // ------------------------------------------------- the ways to sort
+
+    [Fact]
+    public void The_list_offers_four_ways_by_name_first()
+    {
+        MakeADisc screen = TheScreen();
+
+        Assert.Equal(
+            ["By name, A to Z", "By name, Z to A", "By size, biggest first", "By size, smallest first"],
+            screen.TheWaysToSort.Select(each => each.InWords));
+        Assert.Equal(Enum.GetValues<HowToSort>(), screen.TheWaysToSort.Select(each => each.How));
+        Assert.All(screen.TheWaysToSort, each => Assert.Equal(each.InWords, each.ToString()));
+    }
+
+    [Theory]
+    [InlineData(HowToSort.ByNameAToZ, "Alpha,Beta,Gamma")]
+    [InlineData(HowToSort.ByNameZToA, "Gamma,Beta,Alpha")]
+    [InlineData(HowToSort.BiggestFirst, "Beta,Gamma,Alpha")]
+    [InlineData(HowToSort.SmallestFirst, "Alpha,Gamma,Beta")]
+    public void Each_way_puts_them_in_its_order_with_what_is_theirs(HowToSort how, string order)
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Gamma", bytes: 3000), [ADlc("patch_gamma_1_to_2.exe")]);
+        screen.Add(AGame("Alpha", bytes: 1000), [ADlc("setup_alpha_dlc.exe")]);
+        screen.Add(AGame("Beta", bytes: 9000));
+
+        screen.SortTheGames(how);
+
+        DiscProject project = screen.AsAProject();
+
+        Assert.Equal(order.Split(','), project.Games.Select(each => each.Name));
+        Assert.Equal(order.Split(','), screen.WhatGoesOnIt.Select(each => each.Name));
+        Assert.Equal(
+            ["Alpha has setup_alpha_dlc.exe", "Gamma has patch_gamma_1_to_2.exe"],
+            project.AddOnsOrNone
+                .Select(each => $"{project.Games[each.BelongsTo].Name} has {Path.GetFileName(each.Path)}")
+                .Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void By_size_is_by_what_the_list_shows_beside_the_game_add_ons_and_all()
+    {
+        // Small has the smaller installer and a DLC that makes it the
+        // bigger of the two on the disc, which is what somebody is looking
+        // at when they ask for the biggest first.
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Large", bytes: 5000));
+        screen.Add(AGame("Small", bytes: 1000), [new LeftBehind(new ListedFile("setup_small_dlc.exe", 90_000), LeftBehindKind.LooksLikeAnAddOn)]);
+
+        screen.SortTheGames(HowToSort.BiggestFirst);
+
+        Assert.Equal(["Small", "Large"], screen.WhatGoesOnIt.Select(each => each.Name));
+        Assert.True(screen.WhatGoesOnIt[0].Bytes > screen.WhatGoesOnIt[1].Bytes);
+    }
+
+    [Fact]
+    public void Two_of_one_size_stay_in_the_order_they_were_in_either_way()
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Second", bytes: 500));
+        screen.Add(AGame("First", bytes: 500));
+        screen.Add(AGame("Big", bytes: 9000));
+
+        screen.SortTheGames(HowToSort.SmallestFirst);
+        Assert.Equal(["Second", "First", "Big"], screen.WhatGoesOnIt.Select(each => each.Name));
+
+        screen.SortTheGames(HowToSort.BiggestFirst);
+        Assert.Equal(["Big", "Second", "First"], screen.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    // -------------------------------------------- an order somebody arranged
+
+    [Fact]
+    public void Sorting_an_order_nobody_arranged_asks_nothing()
+    {
+        MakeADisc screen = ThreeGames();
+
+        Assert.All(Enum.GetValues<HowToSort>(), how => Assert.Null(screen.WhatSortingWouldLose(how)));
+    }
+
+    [Fact]
+    public void Sorting_after_a_game_was_moved_by_hand_asks_first_and_the_likely_answer_sorts()
+    {
+        // The owner, on the recording: a sort overrides the order arranged
+        // by dragging, so there should be a warning first.
+        MakeADisc screen = ThreeGames();
+        screen.WhatIsSelected = screen.WhatGoesOnIt[2];
+        screen.MoveTheGame(-1);
+
+        AQuestion asked = Assert.IsType<AQuestion>(screen.WhatSortingWouldLose(HowToSort.ByNameAToZ));
+
+        Assert.Equal("Sort the games, and lose the order you put them in?", asked.Headline);
+        Assert.Contains("an order of your own", asked.Because, StringComparison.Ordinal);
+        Assert.Equal("Sort them", asked.TheLikelyOne);
+        Assert.Equal("Keep my order", asked.TheOtherWay);
+
+        // Asking sorts nothing.
+        Assert.Equal(["Alpha", "Gamma", "Beta"], screen.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void A_drag_counts_as_arranging_too()
+    {
+        MakeADisc screen = ThreeGames();
+
+        screen.MoveTheGameTo(screen.WhatGoesOnIt[0], screen.WhatGoesOnIt[2], after: true);
+
+        Assert.NotNull(screen.WhatSortingWouldLose(HowToSort.ByNameAToZ));
+    }
+
+    [Fact]
+    public void A_sort_that_would_change_nothing_loses_nothing_and_asks_nothing()
+    {
+        // Moved up and back down again: by name they are as they were.
+        MakeADisc screen = ThreeGames();
+        screen.WhatIsSelected = screen.WhatGoesOnIt[2];
+        screen.MoveTheGame(-1);
+        screen.MoveTheGame(1);
+
+        Assert.Null(screen.WhatSortingWouldLose(HowToSort.ByNameAToZ));
+        Assert.NotNull(screen.WhatSortingWouldLose(HowToSort.ByNameZToA));
+    }
+
+    [Fact]
+    public void Once_sorted_the_order_is_nobodys_own_and_the_next_sort_asks_nothing()
+    {
+        MakeADisc screen = ThreeGames();
+        screen.WhatIsSelected = screen.WhatGoesOnIt[2];
+        screen.MoveTheGame(-1);
+
+        screen.SortTheGames(HowToSort.ByNameZToA);
+
+        Assert.All(Enum.GetValues<HowToSort>(), how => Assert.Null(screen.WhatSortingWouldLose(how)));
+    }
+
+    [Fact]
+    public void With_one_game_left_there_is_no_order_to_be_anybodys()
+    {
+        MakeADisc screen = ThreeGames();
+        screen.WhatIsSelected = screen.WhatGoesOnIt[2];
+        screen.MoveTheGame(-1);
+
+        screen.Remove(screen.Games[0]);
+        screen.Remove(screen.Games[0]);
+        screen.Add(AGame("Aardvark"));
+
+        Assert.Equal(2, screen.WhatGoesOnIt.Count);
+        Assert.All(Enum.GetValues<HowToSort>(), how => Assert.Null(screen.WhatSortingWouldLose(how)));
+    }
+
+    // ----------------------------------------------------- dragging a game
+
+    [Theory]
+    // Alpha, Beta, Gamma, and where each drag leaves them.
+    [InlineData(0, 2, true, "Beta,Gamma,Alpha")]
+    [InlineData(0, 2, false, "Beta,Alpha,Gamma")]
+    [InlineData(0, 1, true, "Beta,Alpha,Gamma")]
+    [InlineData(2, 0, false, "Gamma,Alpha,Beta")]
+    [InlineData(2, 0, true, "Alpha,Gamma,Beta")]
+    [InlineData(2, 1, false, "Alpha,Gamma,Beta")]
+    [InlineData(1, 0, false, "Beta,Alpha,Gamma")]
+    [InlineData(1, 2, true, "Alpha,Gamma,Beta")]
+    public void A_game_let_go_over_another_goes_before_it_or_after_it(int moved, int onto, bool after, string order)
+    {
+        MakeADisc screen = ThreeGames();
+        AThingOnTheDisc game = screen.WhatGoesOnIt[moved];
+
+        AThingOnTheDisc? picked = screen.MoveTheGameTo(game, screen.WhatGoesOnIt[onto], after);
+
+        Assert.Equal(order.Split(','), screen.WhatGoesOnIt.Select(each => each.Name));
+        Assert.Equal(order.Split(','), screen.AsAProject().Games.Select(each => each.Name));
+        Assert.Same(game, picked);
+        Assert.Same(game, screen.WhatIsSelected);
+
+        DiscProject project = screen.AsAProject();
+
+        Assert.Equal(
+            ["Alpha has setup_alpha_dlc.exe", "Gamma has patch_gamma_1_to_2.exe"],
+            project.AddOnsOrNone
+                .Select(each => $"{project.Games[each.BelongsTo].Name} has {Path.GetFileName(each.Path)}")
+                .Order(StringComparer.Ordinal));
+    }
+
+    [Theory]
+    // Let go where it already is: on itself, just before the one after it,
+    // just after the one before it.
+    [InlineData(1, 1, false)]
+    [InlineData(1, 1, true)]
+    [InlineData(1, 2, false)]
+    [InlineData(1, 0, true)]
+    public void A_game_let_go_where_it_already_is_moves_nothing_and_arranges_nothing(int moved, int onto, bool after)
+    {
+        MakeADisc screen = ThreeGames();
+        List<string> told = [];
+        screen.PropertyChanged += (_, changed) => told.Add(changed.PropertyName!);
+
+        Assert.Null(screen.MoveTheGameTo(screen.WhatGoesOnIt[moved], screen.WhatGoesOnIt[onto], after));
+
+        Assert.Equal(["Alpha", "Beta", "Gamma"], screen.WhatGoesOnIt.Select(each => each.Name));
+        Assert.Empty(told);
+        Assert.Null(screen.WhatSortingWouldLose(HowToSort.ByNameZToA));
+    }
+
+    [Fact]
+    public void Any_row_of_a_game_carries_the_game_and_any_row_of_another_is_that_game()
+    {
+        MakeADisc screen = ThreeGames();
+        AThingOnTheDisc insideAlpha = screen.WhatGoesOnIt[0].EveryThing().First(each => !each.IsAWholeGame);
+        AThingOnTheDisc insideGamma = screen.WhatGoesOnIt[2].EveryThing().Last(each => !each.IsAWholeGame);
+
+        screen.MoveTheGameTo(insideAlpha, insideGamma, after: true);
+
+        Assert.Equal(["Beta", "Gamma", "Alpha"], screen.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Nothing_and_a_row_of_no_game_on_the_list_move_nothing()
+    {
+        MakeADisc screen = ThreeGames();
+        MakeADisc another = ThreeGames();
+
+        Assert.Null(screen.MoveTheGameTo(null, screen.WhatGoesOnIt[0], after: true));
+        Assert.Null(screen.MoveTheGameTo(screen.WhatGoesOnIt[0], null, after: true));
+        Assert.Null(screen.MoveTheGameTo(another.WhatGoesOnIt[0], screen.WhatGoesOnIt[2], after: true));
+        Assert.Null(screen.MoveTheGameTo(screen.WhatGoesOnIt[0], another.WhatGoesOnIt[2], after: true));
+
+        Assert.Equal(["Alpha", "Beta", "Gamma"], screen.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Everything_is_still_its_own_after_a_drag_and_a_tick_taken_off_and_put_back()
+    {
+        // The same danger a move has: the two lists kept as found have to
+        // go with the games, or the next tick gives one game another's.
+        MakeADisc screen = ThreeGames();
+        screen.MoveTheGameTo(screen.WhatGoesOnIt[2], screen.WhatGoesOnIt[0], after: false);
+
+        foreach (AThingOnTheDisc game in screen.WhatGoesOnIt.ToArray())
+        {
+            foreach (AThingOnTheDisc row in game.EveryThing().Where(each => !each.IsAWholeGame).ToArray())
+            {
+                row.IsOn = false;
+                row.IsOn = true;
+            }
+        }
+
+        DiscProject project = screen.AsAProject();
+
+        Assert.Equal(
+            [("Gamma", @"C:\games\Gamma"), ("Alpha", @"C:\games\Alpha"), ("Beta", @"C:\games\Beta")],
+            project.Games.Select(each => (each.Name, each.Path)));
+        Assert.Equal(
+            ["Alpha has setup_alpha_dlc.exe", "Gamma has patch_gamma_1_to_2.exe"],
+            project.AddOnsOrNone
+                .Select(each => $"{project.Games[each.BelongsTo].Name} has {Path.GetFileName(each.Path)}")
+                .Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -419,10 +681,74 @@ public class TheOrderOfTheGames
         Assert.Equal("Horizontal", (string?)Named("MoveTheGameUp").Parent!.Attribute("Orientation"));
         Assert.Equal(xaml + "WrapPanel", Named("MoveTheGameUp").Parent!.Parent!.Name);
 
-        // Gone when there is nothing for it to do.
+        // The ways to sort: a list, there with two games or more, saying
+        // what it is for while nothing in it is chosen.
+        System.Xml.Linq.XElement ways = Assert.Single(
+            window.Descendants(xaml + "ComboBox"),
+            each => (string?)each.Attribute("AutomationProperties.AutomationId") == "SortTheGames");
+
+        Assert.Equal("{Binding TheWaysToSort}", (string?)ways.Attribute("ItemsSource"));
+        Assert.Equal("SortTheGames", (string?)ways.Attribute("SelectionChanged"));
+        Assert.Equal("Sort the games", (string?)ways.Attribute("AutomationProperties.Name"));
         Assert.Equal(
             "{Binding CanSortTheGames, Converter={StaticResource WhenSo}}",
-            (string?)Named("SortTheGames").Attribute("Visibility"));
+            (string?)ways.Parent!.Attribute("Visibility"));
+        Assert.Contains(
+            ways.Parent.Elements(xaml + "TextBlock"),
+            each => (string?)each.Attribute("Text") == "Sort the games"
+                && (string?)each.Attribute("IsHitTestVisible") == "False");
+    }
+
+    [Fact]
+    public void The_window_asks_before_a_sort_loses_an_order_and_empties_the_lists_choice_after()
+    {
+        string window = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+        string handler = window[window.IndexOf("private void SortTheGames(", StringComparison.Ordinal)..];
+        handler = handler[..handler.IndexOf("// ------------------------------------------------ dragging a game about", StringComparison.Ordinal)];
+
+        // Sorted when there is nothing to lose, or when the answer is yes.
+        Assert.Contains(
+            "if (_screen.WhatSortingWouldLose(way.How) is not AQuestion losing || Ask(losing))",
+            handler,
+            StringComparison.Ordinal);
+        Assert.Contains("KeepPicked(_screen.SortTheGames(way.How));", handler, StringComparison.Ordinal);
+
+        // Emptied either way, after, so the same way can be chosen again.
+        Assert.True(
+            handler.IndexOf("WaysToSort.SelectedItem = null;", StringComparison.Ordinal)
+                > handler.IndexOf("KeepPicked(_screen.SortTheGames(way.How));", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_window_lets_a_game_be_dragged_by_its_row_and_not_by_a_tick_a_cross_or_a_name_being_typed()
+    {
+        // No test can drag in a tree. This reads what the handlers do.
+        string window = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
+
+        Assert.Contains("IsInside<System.Windows.Controls.Primitives.ButtonBase>(pressed)", window, StringComparison.Ordinal);
+        Assert.Contains("IsInside<System.Windows.Controls.TextBox>(pressed)", window, StringComparison.Ordinal);
+        Assert.Contains("_heldGame = row.TheGameItIsIn;", window, StringComparison.Ordinal);
+
+        // Only once the pointer has travelled, so a click is still a click.
+        Assert.Contains("SystemParameters.MinimumHorizontalDragDistance", window, StringComparison.Ordinal);
+        Assert.Contains("DragDrop.DoDragDrop(Games, new DataObject(AGameBeingMoved, game), DragDropEffects.Move);", window, StringComparison.Ordinal);
+
+        // Before the game it is let go over when over its upper half.
+        Assert.Contains("bool after = e.GetPosition(drawn).Y > drawn.ActualHeight / 2;", window, StringComparison.Ordinal);
+        Assert.Contains("KeepPicked(_screen.MoveTheGameTo(carried, onto, after));", window, StringComparison.Ordinal);
+
+        // The four-way arrow while it is carried, and never during a run.
+        Assert.Contains("System.Windows.Input.Mouse.SetCursor(System.Windows.Input.Cursors.SizeAll);", window, StringComparison.Ordinal);
+        Assert.Contains("e.Effects = !_screen.NothingIsRunning ? DragDropEffects.None", window, StringComparison.Ordinal);
+
+        System.Xml.Linq.XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        System.Xml.Linq.XElement tree = Assert.Single(
+            System.Xml.Linq.XDocument.Load(Repository.File("src", "DiscWright.App", "MainWindow.xaml"))
+                .Root!.Descendants(xaml + "TreeView"));
+
+        Assert.Equal("AGameMayBeTakenHoldOf", (string?)tree.Attribute("PreviewMouseLeftButtonDown"));
+        Assert.Equal("AGameIsDragged", (string?)tree.Attribute("PreviewMouseMove"));
+        Assert.Equal("WearTheMovingPointer", (string?)tree.Attribute("GiveFeedback"));
     }
 
     [Fact]
@@ -435,7 +761,6 @@ public class TheOrderOfTheGames
 
         Assert.Contains("=> KeepPicked(_screen.MoveTheGame(-1));", window, StringComparison.Ordinal);
         Assert.Contains("=> KeepPicked(_screen.MoveTheGame(1));", window, StringComparison.Ordinal);
-        Assert.Contains("=> KeepPicked(_screen.SortTheGames());", window, StringComparison.Ordinal);
         Assert.Contains("drawn.IsSelected = true;", window, StringComparison.Ordinal);
         Assert.Contains(
             "KeepPicked(_screen.MoveTheGame(e.SystemKey == System.Windows.Input.Key.Up ? -1 : 1));",
@@ -459,9 +784,9 @@ public class TheOrderOfTheGames
 
     private static LeftBehind ADlc(string file) => new(new ListedFile(file, 500), LeftBehindKind.LooksLikeAnAddOn);
 
-    private static GameFolder AGame(string name, string? folder = null)
+    private static GameFolder AGame(string name, string? folder = null, long bytes = 1000)
     {
-        ListedFile installer = new($"setup_{name.Replace(' ', '_')}.exe", 1000);
+        ListedFile installer = new($"setup_{name.Replace(' ', '_')}.exe", bytes);
         ListedFile part = new($"setup_{name.Replace(' ', '_')}-1.bin", 4000);
 
         return new GameFolder(
