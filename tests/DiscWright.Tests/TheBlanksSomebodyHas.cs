@@ -343,6 +343,115 @@ public class TheBlanksSomebodyHas
     }
 
     [Fact]
+    public void A_size_chosen_by_hand_that_takes_more_discs_than_there_are_says_so()
+    {
+        // discwright#98, 3 October: a warning when a backup would run out
+        // of the discs counted. Two files of 400 MB are two CDs, and there
+        // is one.
+        MakeADisc screen = TheScreen(new Paper("CD=1;DVD5=4"));
+        screen.Add(AGame("First", 400 * Mb));
+        screen.Add(AGame("Second", 400 * Mb));
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.Medium = Media.Cd;
+
+        Assert.Equal("This takes 2 CD and you have 1 counted.", screen.WhatThereIsOfThatSize);
+        Assert.Contains(nameof(MakeADisc.WhatThereIsOfThatSize), told, StringComparer.Ordinal);
+
+        // Enough of them, and it is the plain count again.
+        screen.TheBlanks[0].Typed = "2";
+        Assert.Equal("You have 2 blank CD.", screen.WhatThereIsOfThatSize);
+
+        // And one more game than there are discs for says so again.
+        screen.Add(AGame("Third", 400 * Mb));
+        Assert.Equal("This takes 3 CD and you have 2 counted.", screen.WhatThereIsOfThatSize);
+
+        screen.Remove(screen.Games[2]);
+        Assert.Equal("You have 2 blank CD.", screen.WhatThereIsOfThatSize);
+    }
+
+    [Fact]
+    public void The_window_hears_when_only_what_is_on_it_changed()
+    {
+        // Nothing about the size or the count moved: a game was added, and
+        // the line has to be drawn again all the same.
+        MakeADisc screen = TheScreen(new Paper("CD=1"));
+        screen.Medium = Media.Cd;
+        screen.Add(AGame("First", 400 * Mb));
+
+        // What a window would have read each time it was told to look. The
+        // name alone proves nothing: the line is said once before the plan,
+        // when it still has nothing to be short of.
+        List<string> read = [];
+        screen.PropertyChanged += (_, moved) =>
+        {
+            if (moved.PropertyName == nameof(MakeADisc.WhatThereIsOfThatSize))
+            {
+                read.Add(screen.WhatThereIsOfThatSize);
+            }
+        };
+
+        screen.Add(AGame("Second", 400 * Mb));
+
+        Assert.Equal("This takes 2 CD and you have 1 counted.", screen.WhatThereIsOfThatSize);
+        Assert.NotEmpty(read);
+        Assert.Equal("This takes 2 CD and you have 1 counted.", read[^1]);
+    }
+
+    [Fact]
+    public void With_every_game_taken_off_again_nothing_is_short_any_more()
+    {
+        MakeADisc screen = TheScreen(new Paper("CD=1"));
+        screen.Medium = Media.Cd;
+        screen.Add(AGame("First", 400 * Mb));
+        screen.Add(AGame("Second", 400 * Mb));
+        Assert.Equal("This takes 2 CD and you have 1 counted.", screen.WhatThereIsOfThatSize);
+
+        screen.Remove(screen.Games[1]);
+        screen.Remove(screen.Games[0]);
+
+        Assert.Equal("You have 1 blank CD.", screen.WhatThereIsOfThatSize);
+    }
+
+    [Fact]
+    public void A_disc_with_no_name_has_no_plan_and_so_nothing_to_be_short_of()
+    {
+        // The count is the plan's. With the name rubbed out nothing is
+        // planned, and a number left from the plan before would be a guess.
+        MakeADisc screen = TheScreen(new Paper("CD=1"));
+        screen.Medium = Media.Cd;
+        screen.Add(AGame("First", 400 * Mb));
+        screen.Add(AGame("Second", 400 * Mb));
+        Assert.Equal("This takes 2 CD and you have 1 counted.", screen.WhatThereIsOfThatSize);
+
+        screen.Label = string.Empty;
+
+        Assert.Equal("You have 1 blank CD.", screen.WhatThereIsOfThatSize);
+    }
+
+    [Fact]
+    public void A_size_with_none_counted_says_none_and_not_how_many_short()
+    {
+        MakeADisc screen = TheScreen(new Paper("DVD5=4"));
+        screen.Add(AGame("First", 400 * Mb));
+        screen.Add(AGame("Second", 400 * Mb));
+
+        screen.Medium = Media.Cd;
+
+        Assert.Equal("You have no blank CD counted.", screen.WhatThereIsOfThatSize);
+    }
+
+    [Fact]
+    public void With_nothing_on_the_window_there_is_nothing_to_be_short_of()
+    {
+        MakeADisc screen = TheScreen(new Paper("CD=1"));
+        screen.Medium = Media.Cd;
+
+        Assert.Equal("You have 1 blank CD.", screen.WhatThereIsOfThatSize);
+    }
+
+    [Fact]
     public void The_count_is_not_part_of_a_project()
     {
         // About the shelf beside the person, not about a disc: a project

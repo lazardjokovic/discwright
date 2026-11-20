@@ -101,6 +101,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
     // The blank discs somebody has, and what was chosen out of them the
     // last time a size was chosen, or nothing when none of them would do.
+    // How many discs what is on the window takes at the size chosen, or
+    // none while there is no plan to say.
+    private int _discsItWillTake;
+
     private BlanksOwned _blanks;
     private AChoiceFromTheBlanks? _fromTheBlanks;
     private bool _lookingAtTheDrives;
@@ -1217,6 +1221,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
             }
 
             int have = _blanks.Of(Medium);
+
+            // More discs than there are blanks for. discwright#98, 3
+            // October: "a yes or no to continue if you were running out of
+            // inventory discs to use to complete a backup". Said here,
+            // before anything is pressed, where the count already is.
+            if (have > 0 && _discsItWillTake > have)
+            {
+                return $"This takes {_discsItWillTake} {Medium.Key} and you have {have} counted.";
+            }
 
             return have switch
             {
@@ -4697,6 +4710,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         // Settled below with the plan, and nothing until then.
         _theLargerDisc = null;
+        _discsItWillTake = 0;
 
         // Before the plan, so the plan is of the size it moved to. And the
         // line about it is said again either way: it goes when the last
@@ -4744,6 +4758,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 // nowhere to put it" are both true and both worth reading.
                 WhyNot = OutputFolder.Length == 0 ? Refusals.ThereIsNowhereToPutIt() : null;
                 WhatItWillMake = planned.InWords;
+                _discsItWillTake = planned.Discs;
+                Tell(nameof(WhatThereIsOfThatSize));
 
                 // A plan, whether or not there is anywhere to put what it
                 // would make. A preview writes to a temporary folder of its
