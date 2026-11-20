@@ -28,6 +28,13 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
                 // soundtrack or an artbook, goes after everything else
                 // however big it is.
                 .OrderBy(file => AddOn.LooksLikeOne(file.Name))
+                // And after those, anything whose name is another
+                // installer's name with more on the end, which is how GOG
+                // names a DLC: metro_exodus_-_sams_story beside
+                // metro_exodus. Weight alone took a DLC bigger than its
+                // game for the game, and nothing else on the files tells
+                // the two apart.
+                .ThenBy(file => InstallsOntoAnotherIn(folder, file))
                 .ThenByDescending(file => file.Bytes + PartsOf(folder, file).Sum(part => part.Bytes))
         ];
 
@@ -65,6 +72,23 @@ public sealed partial class GogDownloadRecogniser(IFileFacts facts) : IGameFolde
             [installer, .. parts],
             [],
             WarningAbout(installers, installer, parts));
+    }
+
+    /// <summary>
+    /// Whether an installer is named as something built on another installer
+    /// in the same folder.
+    /// </summary>
+    private static bool InstallsOntoAnotherIn(FolderListing folder, ListedFile installer)
+    {
+        if (AGogInstallerName.Of(installer.Name) is not AGogInstallerName named)
+        {
+            return false;
+        }
+
+        return folder.AtTheTop.Any(other =>
+            !ReferenceEquals(other, installer)
+            && AGogInstallerName.Of(other.Name) is AGogInstallerName base_
+            && named.IsBuiltOn(base_));
     }
 
     /// <summary>

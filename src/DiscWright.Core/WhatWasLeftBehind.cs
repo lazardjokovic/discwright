@@ -57,8 +57,53 @@ public static class WhatWasLeftBehind
             .. left
                 .Where(file => !carried.Contains(file.RelativePath))
                 .Select(file => new LeftBehind(
-                    file, KindOf(file), Parts: partsOf.GetValueOrDefault(file.RelativePath)))
+                    file,
+                    KindOf(file),
+                    Parts: partsOf.GetValueOrDefault(file.RelativePath),
+                    ForAnotherVersion: TheOtherVersionItGoesWith(folder, game, file)))
         ];
+    }
+
+    /// <summary>
+    /// Which other version of the game an installer goes with, when the
+    /// folder holds two versions of the game and this one is built for the
+    /// other, or nothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// GOG Galaxy saves every edition of a game into one folder. Metro
+    /// Exodus Gold, measured on 2026-11-20, is the game twice, 1.0.8.39 and
+    /// the Enhanced Edition 3.0.8.39, with Sam's Story and The Two Colonels
+    /// once for each. The Enhanced Edition was taken for the game, rightly,
+    /// and then the other edition and both of its DLC were offered as
+    /// add-ons to it, ticked. A disc made by pressing OK carried 76 GB that
+    /// could never install.
+    /// </para>
+    /// <para>
+    /// Only when the other version's own installer is there to be seen. A
+    /// DLC whose build differs from its game's is ordinary: GOG does not
+    /// rebuild every DLC each time the game is patched. What gives it away
+    /// is a second installer of the game itself carrying the DLC's build.
+    /// </para>
+    /// </remarks>
+    private static string? TheOtherVersionItGoesWith(FolderListing folder, GameFolder game, ListedFile file)
+    {
+        if (game.Installer is null
+            || AGogInstallerName.Of(game.Installer.Name) is not AGogInstallerName theGame
+            || AGogInstallerName.Of(file.Name) is not AGogInstallerName named
+            || named.Build is null
+            || !(string.Equals(named.Product, theGame.Product, StringComparison.Ordinal) || named.IsBuiltOn(theGame)))
+        {
+            return null;
+        }
+
+        return folder.AtTheTop
+            .Select(other => AGogInstallerName.Of(other.Name))
+            .FirstOrDefault(other =>
+                other is not null
+                && other.IsAnotherBuildOf(theGame)
+                && string.Equals(other.Build, named.Build, StringComparison.Ordinal))
+            ?.Which;
     }
 
     /// <summary>
@@ -292,11 +337,16 @@ public static class WhatWasLeftBehind
 /// The numbered parts of an installer, which go wherever it goes and are
 /// never asked about on their own. None for anything else.
 /// </param>
+/// <param name="ForAnotherVersion">
+/// The other version of the game this was built for, when the folder holds
+/// two and this goes with the one that is not on the disc. Nothing otherwise.
+/// </param>
 public sealed record LeftBehind(
     ListedFile File,
     LeftBehindKind Kind,
     IReadOnlyList<ListedFile>? Inside = null,
-    IReadOnlyList<ListedFile>? Parts = null)
+    IReadOnlyList<ListedFile>? Parts = null,
+    string? ForAnotherVersion = null)
 {
     /// <summary>The file, and after it the parts that go with it.</summary>
     public IReadOnlyList<ListedFile> WithItsParts => [File, .. Parts ?? []];
@@ -382,12 +432,33 @@ public sealed record LeftBehind(
                 : "Looks like something to read or look at";
         }
 
-        return WhatItIs(installerFileName) + Parts switch
+        return (WhyItIsLeftOff(installerFileName) ?? WhatItIs(installerFileName)) + Parts switch
         {
             null or { Count: 0 } => string.Empty,
             { Count: 1 } => " Its 1 part goes with it.",
             _ => $" Its {Parts.Count} parts go with it.",
         };
+    }
+
+    /// <summary>
+    /// What to say of something built for another version of the game, or
+    /// nothing for anything else.
+    /// </summary>
+    private string? WhyItIsLeftOff(string? installerFileName)
+    {
+        if (ForAnotherVersion is not string which)
+        {
+            return null;
+        }
+
+        bool theGameItself = AGogInstallerName.Of(File.Name) is AGogInstallerName named
+            && AGogInstallerName.Of(installerFileName ?? string.Empty) is AGogInstallerName theGame
+            && string.Equals(named.Product, theGame.Product, StringComparison.Ordinal);
+
+        return theGameItself
+            ? $"Another version of the game itself, {which}. A disc carries one version, so it starts left off."
+            : $"Goes with another version of this game, {which}, whose installer is in this folder too, "
+                + "so it starts left off.";
     }
 
     private string WhatItIs(string? installerFileName)
@@ -408,8 +479,13 @@ public sealed record LeftBehind(
     /// provably already covers starts off, because keeping a file is the
     /// recoverable mistake and quietly losing one is not.
     /// </summary>
+    /// <remarks>
+    /// And something built for another version of the game than the one
+    /// this disc carries, which cannot install onto it.
+    /// </remarks>
     public bool WantedAgainst(string? installerFileName) =>
-        APatchAgainstTheInstaller.For(installerFileName, File.Name) != WhatAPatchAdds.NothingTheInstallerLacks;
+        ForAnotherVersion is null
+        && APatchAgainstTheInstaller.For(installerFileName, File.Name) != WhatAPatchAdds.NothingTheInstallerLacks;
 }
 
 /// <summary>
