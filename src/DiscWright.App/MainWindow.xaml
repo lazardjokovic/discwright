@@ -668,6 +668,38 @@
                                            Text="Sort the games"
                                            Visibility="{Binding SelectedItem, ElementName=WaysToSort, Converter={StaticResource WhenNothing}}" />
                             </Grid>
+                            <!-- One place up, one place down, for whatever
+                                 is picked: a game among the games, an add-on
+                                 among its game's add-ons. The list is the
+                                 order the menu shows them in, discwright#98.
+                                 Alt and an arrow does the same from the
+                                 list, and so does dragging, which needs a
+                                 mouse and has to be guessed at: these are
+                                 the way that can be seen. Grey at the end,
+                                 not gone, so nothing jumps about as a row
+                                 is walked up. Docked after the list of
+                                 ways, so they sit at its left. -->
+                            <StackPanel DockPanel.Dock="Right"
+                                        Orientation="Horizontal"
+                                        VerticalAlignment="Top"
+                                        Margin="10,0,0,0"
+                                        Visibility="{Binding ThereIsAnOrderToChange, Converter={StaticResource WhenSo}}">
+                                <Button Content="↑"
+                                        Style="{StaticResource AnArrow}"
+                                        IsEnabled="{Binding CanMoveThePickedUp}"
+                                        ToolTip="Moves what is picked one place up: a game among the games, an add-on among its game's add-ons. Alt and the up arrow does the same, and so does dragging it."
+                                        Click="MoveTheGameUp"
+                                        AutomationProperties.Name="Move up"
+                                        AutomationProperties.AutomationId="MoveTheGameUp" />
+                                <Button Content="↓"
+                                        Style="{StaticResource AnArrow}"
+                                        Margin="4,0,0,0"
+                                        IsEnabled="{Binding CanMoveThePickedDown}"
+                                        ToolTip="Moves what is picked one place down: a game among the games, an add-on among its game's add-ons. Alt and the down arrow does the same, and so does dragging it."
+                                        Click="MoveTheGameDown"
+                                        AutomationProperties.Name="Move down"
+                                        AutomationProperties.AutomationId="MoveTheGameDown" />
+                            </StackPanel>
                             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Style="{StaticResource Aside}"
                                            Text="{Binding WhatIsOnIt}"
@@ -723,11 +755,32 @@
                                  goodies kept apart from the installer. Only
                                  while a game is picked, and named, so it is
                                  plain which game they go to. -->
-                            <WrapPanel Orientation="Horizontal"
-                                       Margin="0,4,0,0"
-                                       Visibility="{Binding ThePickedGame, Converter={StaticResource WhenAnything}}">
+                            <!-- One line, always. It was a panel that
+                                 wrapped, with Move up and Move down at its
+                                 end, and at the window's own width the
+                                 pair went to a second line under a dot left
+                                 hanging: the owner's screenshot, 20
+                                 November 2026. The pair are arrows beside
+                                 the list of ways to sort now, and a long
+                                 name gives way with an ellipsis and says
+                                 itself in full when pointed at, so the
+                                 three links are always where they were.
+
+                                 NoWrap is said out loud, because the style
+                                 it wears wraps: without it a long name
+                                 folded into three lines inside its width
+                                 and the row stood 47 pixels tall, measured
+                                 in the real window the day it was made. -->
+                            <StackPanel Orientation="Horizontal"
+                                        Margin="0,4,0,0"
+                                        Visibility="{Binding ThePickedGame, Converter={StaticResource WhenAnything}}">
                                 <TextBlock Style="{StaticResource Aside}"
+                                           MaxWidth="190"
+                                           TextWrapping="NoWrap"
+                                           TextTrimming="CharacterEllipsis"
+                                           VerticalAlignment="Center"
                                            Text="{Binding ThePickedGame, StringFormat={}{0}:}"
+                                           ToolTip="{Binding ThePickedGame}"
                                            AutomationProperties.AutomationId="ThePickedGame" />
                                 <Button Content="Add a manual"
                                         Style="{StaticResource AsALink}"
@@ -755,39 +808,7 @@
                                         ToolTip="A DLC, a patch or a mod that installs onto this game. It goes in the game's Add-ons folder with its parts, and gets a button under the game in the menu."
                                         Click="AttachAnAddOnToThePickedGame"
                                         AutomationProperties.AutomationId="AttachAnAddOn" />
-                                <TextBlock Style="{StaticResource Aside}" Text="·" Margin="6,0" />
-                                <!-- The list is the order the menu shows
-                                     the games in, discwright#98, and until
-                                     these the only way to change it was to
-                                     take every game off and add them again.
-                                     Alt and an arrow does the same from the
-                                     list. Grey at the end of the list, not
-                                     gone, so the row does not jump about
-                                     as a game is walked up it.
-
-                                     The two in a panel of their own, so the
-                                     line wraps before the pair and never
-                                     between them: at the window's first
-                                     width Move down went to a second line
-                                     alone, seen in the real window. -->
-                                <StackPanel Orientation="Horizontal">
-                                <Button Content="Move up"
-                                        Style="{StaticResource AsALink}"
-                                        VerticalAlignment="Center"
-                                        IsEnabled="{Binding CanMoveTheGameUp}"
-                                        ToolTip="Moves this game one place up the list and the menu. Alt and the up arrow does the same."
-                                        Click="MoveTheGameUp"
-                                        AutomationProperties.AutomationId="MoveTheGameUp" />
-                                <TextBlock Style="{StaticResource Aside}" Text="·" Margin="6,0" />
-                                <Button Content="Move down"
-                                        Style="{StaticResource AsALink}"
-                                        VerticalAlignment="Center"
-                                        IsEnabled="{Binding CanMoveTheGameDown}"
-                                        ToolTip="Moves this game one place down the list and the menu. Alt and the down arrow does the same."
-                                        Click="MoveTheGameDown"
-                                        AutomationProperties.AutomationId="MoveTheGameDown" />
-                                </StackPanel>
-                            </WrapPanel>
+                            </StackPanel>
                             </StackPanel>
                         </Border>
                     </Grid>

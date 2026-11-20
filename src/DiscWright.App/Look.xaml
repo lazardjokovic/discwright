@@ -591,6 +591,18 @@
         </Style.Triggers>
     </Style>
 
+    <!-- An ordinary button with one arrow in it and no words: a square the
+         height of the dropdown it sits beside. A style, because a button
+         that sizes itself in a window stops matching its neighbour the
+         moment either is touched. -->
+    <Style x:Key="AnArrow" TargetType="Button" BasedOn="{StaticResource Ordinary}">
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="14" />
+    </Style>
+
     <!-- The one button that makes the thing. There is exactly one on the
          window, and it is the only thing wearing the accent colour. -->
     <Style x:Key="TheButton" TargetType="Button">
