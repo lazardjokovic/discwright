@@ -160,6 +160,9 @@ function showTheWindowsOwnWayOut() {
 
     document.getElementById("shut").style.display = "block";
 
+    // Clear of the cross, when the list is the thing under it.
+    document.getElementById("panel").style.paddingTop = howFarDownTheListStarts(DISC.look) + "px";
+
     var stage = document.getElementById("stage");
 
     stage.onmousedown = takeHoldOfTheWindow;

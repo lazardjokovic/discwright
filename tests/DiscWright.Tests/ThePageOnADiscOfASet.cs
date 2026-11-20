@@ -734,6 +734,27 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.Equal(says, went.Trim());
     }
 
+    [Theory]
+    [InlineData(true, MenuSide.Right, "40px")]
+    [InlineData(true, MenuSide.Left, "28px")]
+    [InlineData(false, MenuSide.Right, "")]
+    public void The_list_of_a_menu_with_no_frame_starts_clear_of_the_cross(bool noFrame, MenuSide side, string padding)
+    {
+        // A menu with its frame is not touched at all: its panel keeps the
+        // rule it was drawn with.
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Frameless", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Frameless", "good.txt", string.Empty)],
+                Look: new MenuLook(side, NoFrame: noFrame))),
+            menuUrl: new Uri(Path.Combine(_folder, "clear", "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "showTheWindowsOwnWayOut();\n"
+                + "WScript.Echo('[' + (document.getElementById('panel').style.paddingTop || '') + ']');\n");
+
+        Assert.Equal("[" + padding + "]", went.Trim());
+    }
+
     [Fact]
     public void Its_picture_drags_the_window_and_a_button_does_not()
     {
