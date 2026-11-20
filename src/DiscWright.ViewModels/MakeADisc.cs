@@ -3862,10 +3862,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _games.Add(game);
         _asFound.Add(game);
 
-        foreach (LeftBehind each in asAddOns ?? [])
+        // Its updates lowest build first, which is the order they are
+        // installed in and not the order their file names sort in.
+        foreach (AddOn addOn in AddOn.WithUpdatesInTheirOrder(
+                     [.. (asAddOns ?? []).Select(each => each.AttachedTo(_games.Count - 1, game.Path))]))
         {
-            AddOn addOn = each.AttachedTo(_games.Count - 1, game.Path);
-
             _addOns.Add(addOn);
             _addOnsAsFound.Add(addOn);
         }
@@ -4305,6 +4306,79 @@ public sealed class MakeADisc : INotifyPropertyChanged
         _theOrderIsSomebodysOwn = true;
 
         return PutInOrder([.. order], game);
+    }
+
+    /// <summary>
+    /// What a drag that starts on a row carries: the add-on itself when the
+    /// row is one, and otherwise the whole game the row is in.
+    /// </summary>
+    public static AThingOnTheDisc? WhatADragCarries(AThingOnTheDisc? row) =>
+        row is null ? null
+        : row.What == TheTreeOfWhatGoesOn.AnAddOn ? row
+        : row.TheGameItIsIn;
+
+    /// <summary>
+    /// Whether what is carried would move if it were let go over a row. The
+    /// window asks while the drag is in the air, and wears no-entry where
+    /// the answer is no.
+    /// </summary>
+    /// <remarks>
+    /// An add-on moves among its own game's add-ons and nowhere else: not
+    /// above its game, not into another game, not onto the folder it is in.
+    /// A game moves to where another game is, so over its own rows, which
+    /// is the whole list when it is the only game, there is nowhere to go.
+    /// The owner, 20 November 2026, dragging in a list of one game: nothing
+    /// happened and nothing said why.
+    /// </remarks>
+    public bool MayBeLetGoOver(AThingOnTheDisc? carried, AThingOnTheDisc? over)
+    {
+        if (IsWorking || carried is null || over is null || GameOf(carried) < 0 || GameOf(over) < 0)
+        {
+            return false;
+        }
+
+        return carried.What == TheTreeOfWhatGoesOn.AnAddOn
+            ? over.What == TheTreeOfWhatGoesOn.AnAddOn
+              && !ReferenceEquals(carried, over)
+              && GameOf(carried) == GameOf(over)
+            : GameOf(carried) != GameOf(over);
+    }
+
+    /// <summary>
+    /// Moves one add-on to where another of the same game is: before it, or
+    /// after. The menu lists a game's add-ons in the order they are in here.
+    /// </summary>
+    /// <returns>The moved add-on's row, for the window to keep picked, or nothing when nothing moved.</returns>
+    public AThingOnTheDisc? MoveTheAddOnTo(AThingOnTheDisc? moved, AThingOnTheDisc? onto, bool after)
+    {
+        if (!MayBeLetGoOver(moved, onto) || moved!.What != TheTreeOfWhatGoesOn.AnAddOn)
+        {
+            return null;
+        }
+
+        int at = GameOf(moved);
+        string path = moved.ItsPath;
+
+        if (AddOn.WithOneMoved(_addOnsAsFound, at, path, onto!.ItsPath, after) is not IReadOnlyList<AddOn> now)
+        {
+            return null;
+        }
+
+        Replace(_addOnsAsFound, now);
+
+        // The branch again, remembering its ticks and what was open, and the
+        // ticks carried into what goes on the disc in the new order.
+        BuildTheBranchAgain(at);
+
+        AThingOnTheDisc? row = _tree[at].EveryThing().FirstOrDefault(each =>
+            each.What == TheTreeOfWhatGoesOn.AnAddOn && TheSameFile(each.ItsPath, path));
+
+        if (row is not null)
+        {
+            WhatIsSelected = row;
+        }
+
+        return row;
     }
 
     /// <summary>

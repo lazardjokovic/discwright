@@ -232,8 +232,14 @@ public partial class MainWindow : Window
     /// </remarks>
     private void SayWhetherADropWouldLand(object sender, DragEventArgs e)
     {
+        // A row of this list being carried lands only where it would move:
+        // no-entry everywhere else, so a game alone in the list, or an
+        // add-on held over another game, says so before it is let go.
         e.Effects = !_screen.NothingIsRunning ? DragDropEffects.None
-            : e.Data.GetDataPresent(AGameBeingMoved) ? DragDropEffects.Move
+            : e.Data.GetData(AGameBeingMoved) is AThingOnTheDisc carried
+                ? (_screen.MayBeLetGoOver(carried, e.OriginalSource is DependencyObject over ? TheRowAt(over) : null)
+                    ? DragDropEffects.Move
+                    : DragDropEffects.None)
             : e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy
             : DragDropEffects.None;
         e.Handled = true;
@@ -265,12 +271,25 @@ public partial class MainWindow : Window
         // one when let go over its upper half, and after it over its lower.
         if (_screen.NothingIsRunning && e.Data.GetData(AGameBeingMoved) is AThingOnTheDisc carried)
         {
-            if (e.OriginalSource is DependencyObject over && TheRowAt(over) is AThingOnTheDisc onto
-                && Games.ItemContainerGenerator.ContainerFromItem(onto.TheGameItIsIn) is FrameworkElement drawn)
+            if (e.OriginalSource is not DependencyObject over || TheRowAt(over) is not AThingOnTheDisc onto
+                || !_screen.MayBeLetGoOver(carried, onto))
             {
-                bool after = e.GetPosition(drawn).Y > drawn.ActualHeight / 2;
+                return;
+            }
 
-                KeepPicked(_screen.MoveTheGameTo(carried, onto, after));
+            // An add-on goes before or after the add-on it was let go
+            // over, by which half of that one row the pointer is in. A
+            // game goes by the half of the whole game it is over.
+            if (carried.What == TheTreeOfWhatGoesOn.AnAddOn)
+            {
+                if (TheDrawnRowOf(Games, onto) is FrameworkElement row)
+                {
+                    KeepPicked(_screen.MoveTheAddOnTo(carried, onto, e.GetPosition(row).Y > row.ActualHeight / 2));
+                }
+            }
+            else if (Games.ItemContainerGenerator.ContainerFromItem(onto.TheGameItIsIn) is FrameworkElement drawn)
+            {
+                KeepPicked(_screen.MoveTheGameTo(carried, onto, e.GetPosition(drawn).Y > drawn.ActualHeight / 2));
             }
 
             return;
@@ -429,7 +448,7 @@ public partial class MainWindow : Window
         }
 
         _heldFrom = e.GetPosition(Games);
-        _heldGame = row.TheGameItIsIn;
+        _heldGame = MakeADisc.WhatADragCarries(row);
     }
 
     private void AGameIsDragged(object sender, System.Windows.Input.MouseEventArgs e)
@@ -468,6 +487,34 @@ public partial class MainWindow : Window
             System.Windows.Input.Mouse.SetCursor(System.Windows.Input.Cursors.SizeAll);
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// Where a row is drawn, however deep in the list it is: a game is the
+    /// list's own, and an add-on is two folders down.
+    /// </summary>
+    private static System.Windows.Controls.TreeViewItem? TheDrawnRowOf(
+        System.Windows.Controls.ItemsControl within, AThingOnTheDisc row)
+    {
+        foreach (object each in within.Items)
+        {
+            if (within.ItemContainerGenerator.ContainerFromItem(each) is not System.Windows.Controls.TreeViewItem drawn)
+            {
+                continue;
+            }
+
+            if (ReferenceEquals(each, row))
+            {
+                return drawn;
+            }
+
+            if (TheDrawnRowOf(drawn, row) is System.Windows.Controls.TreeViewItem deeper)
+            {
+                return deeper;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>The row something in the list belongs to, or nothing.</summary>
@@ -522,7 +569,7 @@ public partial class MainWindow : Window
 
         Games.UpdateLayout();
 
-        if (Games.ItemContainerGenerator.ContainerFromItem(row) is System.Windows.Controls.TreeViewItem drawn)
+        if (TheDrawnRowOf(Games, row) is System.Windows.Controls.TreeViewItem drawn)
         {
             drawn.IsSelected = true;
             drawn.BringIntoView();
