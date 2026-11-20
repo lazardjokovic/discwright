@@ -1,5 +1,6 @@
 ﻿using DiscWright.Core;
 using System.Windows;
+using System.Windows.Input;
 using DiscWright.ViewModels;
 using Microsoft.Win32;
 
@@ -49,6 +50,76 @@ public partial class WhatElseGoesOnIt : Window
         TakeAPicture("The picture the menu is drawn on", path => _screen.Background = path);
 
     private void ClearTheBackground(object sender, RoutedEventArgs e) => _screen.Background = null;
+
+    // ---------------------------------------- the part of the picture kept
+    //
+    // Every sum is the screen's. This turns a pointer's travel into a
+    // fraction of the frame, which is all the screen is ever told.
+
+    private Point? _heldAt;
+
+    private void TakeHoldOfThePicture(object sender, MouseButtonEventArgs e)
+    {
+        _heldAt = e.GetPosition(TheFrame);
+
+        TheFrame.Focus();
+        TheFrame.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void DragThePicture(object sender, MouseEventArgs e)
+    {
+        if (_heldAt is not { } from || TheFrame.ActualWidth <= 0 || TheFrame.ActualHeight <= 0)
+        {
+            return;
+        }
+
+        Point now = e.GetPosition(TheFrame);
+
+        _screen.DragTheBackground(
+            (now.X - from.X) / TheFrame.ActualWidth,
+            (now.Y - from.Y) / TheFrame.ActualHeight);
+
+        _heldAt = now;
+    }
+
+    private void LetGoOfThePicture(object sender, MouseButtonEventArgs e) => TheFrame.ReleaseMouseCapture();
+
+    // Also when Windows takes the pointer away, a dialog opening or Alt and
+    // Tab: without this the picture would go on following a pointer that is
+    // no longer held down.
+    private void ThePictureWasLetGo(object sender, MouseEventArgs e) => _heldAt = null;
+
+    private void ZoomWithTheWheel(object sender, MouseWheelEventArgs e)
+    {
+        _screen.BackgroundZoom += e.Delta > 0 ? 0.1 : -0.1;
+
+        // Or the dialog scrolls under a pointer that is zooming.
+        e.Handled = true;
+    }
+
+    private void NudgeThePicture(object sender, KeyEventArgs e)
+    {
+        // The arrows move the picture the way they point, as a drag does.
+        const double AStep = 0.05;
+
+        (double across, double down) = e.Key switch
+        {
+            Key.Left => (-AStep, 0.0),
+            Key.Right => (AStep, 0.0),
+            Key.Up => (0.0, -AStep),
+            Key.Down => (0.0, AStep),
+            _ => (0.0, 0.0),
+        };
+
+        if (across != 0 || down != 0)
+        {
+            _screen.DragTheBackground(across, down);
+            e.Handled = true;
+        }
+    }
+
+    private void KeepTheMiddle(object sender, RoutedEventArgs e) => _screen.KeepTheMiddleOfTheBackground();
 
     private void PickAColour(object sender, RoutedEventArgs e) =>
         _screen.BackgroundColourText = (string)((FrameworkElement)sender).DataContext;

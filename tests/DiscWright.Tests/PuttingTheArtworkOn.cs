@@ -78,6 +78,31 @@ public class PuttingTheArtworkOn
     }
 
     [Fact]
+    public async Task Hands_the_part_somebody_framed_to_whoever_draws_it()
+    {
+        // The screen can frame a picture all day and the disc still gets
+        // the middle if this one line forgets to pass it on.
+        RecordingImages drew = new();
+
+        await Run(
+            drew,
+            new RecordingWriter(),
+            new DiscArtwork(BackgroundPath: @"C:\art\bg.jpg").Keeping(new KeptPart(0.1, 0.9, 2)));
+
+        Assert.Equal(new KeptPart(0.1, 0.9, 2), Assert.Single(drew.Backgrounds).Kept);
+    }
+
+    [Fact]
+    public async Task And_nothing_where_nothing_was_framed()
+    {
+        RecordingImages drew = new();
+
+        await Run(drew, new RecordingWriter(), new DiscArtwork(BackgroundPath: @"C:\art\bg.jpg"));
+
+        Assert.Null(Assert.Single(drew.Backgrounds).Kept);
+    }
+
+    [Fact]
     public async Task Leaves_the_background_off_a_disc_with_no_menu()
     {
         RecordingImages drew = new();
@@ -182,9 +207,11 @@ public class PuttingTheArtworkOn
 
         public void WriteIcon(string source, string destination) => Icons.Add((source, destination));
 
-        public void WriteBackground(string source, string destination, int width, int height, BackgroundFit how) =>
-            Backgrounds.Add(new Background(source, destination, width, height, how));
+        public void WriteBackground(
+            string source, string destination, int width, int height, BackgroundFit how, KeptPart? kept = null) =>
+            Backgrounds.Add(new Background(source, destination, width, height, how, kept));
 
-        public sealed record Background(string Source, string Destination, int Width, int Height, BackgroundFit How);
+        public sealed record Background(
+            string Source, string Destination, int Width, int Height, BackgroundFit How, KeptPart? Kept = null);
     }
 }

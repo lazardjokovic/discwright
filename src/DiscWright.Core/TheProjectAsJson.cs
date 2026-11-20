@@ -209,6 +209,17 @@ public static class TheProjectAsJson
 
             writing.WriteString("BgFit", fit.ToString());
 
+            // Only when somebody framed the picture. The middle is what a
+            // file without it means, here and in every version before.
+            if (art?.Kept is { IsTheMiddle: false } kept)
+            {
+                writing.WriteStartObject("BgKept");
+                writing.WriteNumber("Across", Math.Round(kept.Across, 4));
+                writing.WriteNumber("Down", Math.Round(kept.Down, 4));
+                writing.WriteNumber("Zoom", Math.Round(kept.Zoom, 4));
+                writing.WriteEndObject();
+            }
+
             writing.WriteEndObject();
         }
 

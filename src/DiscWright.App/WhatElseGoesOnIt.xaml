@@ -11,6 +11,7 @@
 <Window x:Class="DiscWright.App.WhatElseGoesOnIt"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:core="clr-namespace:DiscWright.Core;assembly=DiscWright.Core"
         Title="What else goes on it"
         Height="700" Width="680"
         ResizeMode="NoResize"
@@ -98,7 +99,10 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <Border Grid.Column="0" Width="190" Height="120"
+                    <!-- 190 by 120 inside its edge, a quarter of the menu
+                         each way and exactly its shape, so what the frame
+                         shows is what the menu keeps. -->
+                    <Border Grid.Column="0" Width="196" Height="126"
                             HorizontalAlignment="Left"
                             Background="{DynamicResource Panel}"
                             BorderBrush="{DynamicResource Edge}"
@@ -117,9 +121,40 @@
                                     Background="{Binding BackgroundColour, Converter={StaticResource AsABrush}}"
                                     Visibility="{Binding BackgroundColour, Converter={StaticResource WhenAnything}}" />
                             <Image Source="{Binding Background, Converter={StaticResource APicture}}"
-                                   Stretch="UniformToFill"
+                                   Stretch="{Binding HowTheSmallPictureIsDrawn}"
                                    Margin="2"
+                                   Visibility="{Binding TheBackgroundCanBeFramed, Converter={StaticResource WhenNot}}"
                                    AutomationProperties.AutomationId="TheBackgroundPicture" />
+
+                            <!-- The frame: the part of the picture the menu
+                                 keeps, and the picture is dragged under it.
+                                 Reddit, 20 November 2026. Only when it is
+                                 filled and cropped, the one way to fit that
+                                 leaves any of the picture out by choice.
+                                 A Border has no automation peer, so the
+                                 dragging is checked by eye and by hand; the
+                                 arrow keys move it too, and the sum behind
+                                 both is the suite's. -->
+                            <Border x:Name="TheFrame"
+                                    Margin="2"
+                                    Cursor="SizeAll"
+                                    Focusable="True"
+                                    FocusVisualStyle="{x:Null}"
+                                    ToolTip="Drag the picture to choose the part the menu keeps"
+                                    Visibility="{Binding TheBackgroundCanBeFramed, Converter={StaticResource WhenSo}}"
+                                    MouseLeftButtonDown="TakeHoldOfThePicture"
+                                    MouseMove="DragThePicture"
+                                    MouseLeftButtonUp="LetGoOfThePicture"
+                                    LostMouseCapture="ThePictureWasLetGo"
+                                    MouseWheel="ZoomWithTheWheel"
+                                    KeyDown="NudgeThePicture">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding Background, Converter={StaticResource APicture}, ConverterParameter=480}"
+                                                Viewbox="{Binding WhatTheMenuKeeps, Converter={StaticResource AsARect}}"
+                                                ViewboxUnits="RelativeToBoundingBox"
+                                                Stretch="Fill" />
+                                </Border.Background>
+                            </Border>
                         </Grid>
                     </Border>
 
@@ -155,6 +190,46 @@
                                    TextWrapping="Wrap"
                                    Text="{Binding WhatThatFitDoes}"
                                    AutomationProperties.AutomationId="WhatThatFitDoes" />
+
+                        <!-- Which part is kept, for a picture filled and
+                             cropped. Gone for the other three ways and for
+                             a colour, where there is no part to choose. -->
+                        <StackPanel Margin="0,8,0,0"
+                                    Visibility="{Binding TheBackgroundCanBeFramed, Converter={StaticResource WhenSo}}">
+                            <TextBlock Style="{StaticResource Aside}"
+                                       TextWrapping="Wrap"
+                                       Text="Drag the picture to choose the part that is kept." />
+                            <!-- A grid and not a row of fixed widths: the
+                                 column is as narrow as the dialog makes
+                                 it, and at 120 wide the slider pushed
+                                 Centre off its edge. The slider takes what
+                                 the other two leave. -->
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="Zoom" />
+                                <Slider Grid.Column="1"
+                                        MinWidth="60"
+                                        VerticalAlignment="Center"
+                                        Minimum="1"
+                                        Maximum="{x:Static core:KeptPart.MostZoom}"
+                                        SmallChange="0.1"
+                                        LargeChange="0.5"
+                                        Value="{Binding BackgroundZoom}"
+                                        AutomationProperties.Name="Zoom into the background"
+                                        AutomationProperties.AutomationId="BackgroundZoom" />
+                                <Button Grid.Column="2"
+                                        Content="Centre"
+                                        Style="{StaticResource Ordinary}"
+                                        Margin="10,0,0,0"
+                                        IsEnabled="{Binding TheBackgroundIsFramed}"
+                                        Click="KeepTheMiddle"
+                                        AutomationProperties.AutomationId="CentreTheBackground" />
+                            </Grid>
+                        </StackPanel>
                     </StackPanel>
 
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">

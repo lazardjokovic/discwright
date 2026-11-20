@@ -271,6 +271,43 @@ public class ReopeningAProject : IDisposable
     }
 
     [Fact]
+    public void Brings_back_the_part_of_the_background_that_was_framed()
+    {
+        string game = AGameFolder("A Game", "setup_a_game.exe");
+
+        Reopened back = Reopen(Open($$"""
+            {
+              "Label": "A GAME",
+              "Games": [{ "Folder": {{Json(game)}} }],
+              "Menu": true, "BgPath": "D:\\art\\bg.png", "BgAsIs": false,
+              "BgKept": { "Across": 0.25, "Down": 1, "Zoom": 3 }
+            }
+            """));
+
+        Assert.Equal(new KeptPart(0.25, 1, 3), back.Project.Artwork?.Kept);
+    }
+
+    [Fact]
+    public void A_part_framed_with_no_picture_to_frame_is_dropped()
+    {
+        // A file somebody edited: a colour, and a part of a picture that is
+        // not there. Kept, it would wait for whichever picture came next.
+        string game = AGameFolder("A Game", "setup_a_game.exe");
+
+        Reopened back = Reopen(Open($$"""
+            {
+              "Label": "A GAME",
+              "Games": [{ "Folder": {{Json(game)}} }],
+              "Menu": true, "BgColour": "#1B3A4B",
+              "BgKept": { "Across": 0.25, "Down": 1, "Zoom": 3 }
+            }
+            """));
+
+        Assert.Equal("#1b3a4b", back.Project.Artwork?.BackgroundColour, ignoreCase: true);
+        Assert.Null(back.Project.Artwork?.Kept);
+    }
+
+    [Fact]
     public void Brings_back_the_options_and_the_artwork_and_where_it_was_built()
     {
         string game = AGameFolder("A Game", "setup_a_game.exe");

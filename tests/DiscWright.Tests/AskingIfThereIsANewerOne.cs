@@ -544,7 +544,8 @@ public class AskingIfThereIsANewerOne
         {
         }
 
-        public void WriteBackground(string source, string destination, int width, int height, BackgroundFit how)
+        public void WriteBackground(
+            string source, string destination, int width, int height, BackgroundFit how, KeptPart? kept = null)
         {
         }
     }

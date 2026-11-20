@@ -38,7 +38,12 @@ public interface IImages
     /// How it is made to cover a frame that is almost never its own shape:
     /// see <see cref="BackgroundFit"/>.
     /// </param>
-    void WriteBackground(string source, string destination, int width, int height, BackgroundFit how);
+    /// <param name="kept">
+    /// Which part is kept when it is filled and cropped, or nothing for the
+    /// middle. Read for <see cref="BackgroundFit.Fill"/> alone.
+    /// </param>
+    void WriteBackground(
+        string source, string destination, int width, int height, BackgroundFit how, KeptPart? kept = null);
 }
 
 /// <summary>What could be learned about a picture without opening the window.</summary>

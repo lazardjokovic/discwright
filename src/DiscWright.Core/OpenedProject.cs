@@ -85,7 +85,8 @@ public sealed record ProjectArtwork(
     string? CoverPath,
     string? DiscFacePath,
     string? BackgroundColour = null,
-    BackgroundFit? BackgroundShape = null)
+    BackgroundFit? BackgroundShape = null,
+    KeptPart? BackgroundKept = null)
 {
     /// <summary>
     /// How the background covers the menu: the word when the file has one
