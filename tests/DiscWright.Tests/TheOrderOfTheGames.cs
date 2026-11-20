@@ -412,6 +412,13 @@ public class TheOrderOfTheGames
         Assert.Equal("{Binding CanMoveTheGameDown}", (string?)Named("MoveTheGameDown").Attribute("IsEnabled"));
         Assert.Null(Named("MoveTheGameUp").Attribute("Visibility"));
 
+        // The pair wrap together: in a panel of their own that does not
+        // wrap, inside the line that does.
+        Assert.Same(Named("MoveTheGameUp").Parent, Named("MoveTheGameDown").Parent);
+        Assert.Equal(xaml + "StackPanel", Named("MoveTheGameUp").Parent!.Name);
+        Assert.Equal("Horizontal", (string?)Named("MoveTheGameUp").Parent!.Attribute("Orientation"));
+        Assert.Equal(xaml + "WrapPanel", Named("MoveTheGameUp").Parent!.Parent!.Name);
+
         // Gone when there is nothing for it to do.
         Assert.Equal(
             "{Binding CanSortTheGames, Converter={StaticResource WhenSo}}",

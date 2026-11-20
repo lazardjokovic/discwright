@@ -737,7 +737,14 @@
                                      Alt and an arrow does the same from the
                                      list. Grey at the end of the list, not
                                      gone, so the row does not jump about
-                                     as a game is walked up it. -->
+                                     as a game is walked up it.
+
+                                     The two in a panel of their own, so the
+                                     line wraps before the pair and never
+                                     between them: at the window's first
+                                     width Move down went to a second line
+                                     alone, seen in the real window. -->
+                                <StackPanel Orientation="Horizontal">
                                 <Button Content="Move up"
                                         Style="{StaticResource AsALink}"
                                         VerticalAlignment="Center"
@@ -753,6 +760,7 @@
                                         ToolTip="Moves this game one place down the list and the menu. Alt and the down arrow does the same."
                                         Click="MoveTheGameDown"
                                         AutomationProperties.AutomationId="MoveTheGameDown" />
+                                </StackPanel>
                             </WrapPanel>
                             </StackPanel>
                         </Border>
