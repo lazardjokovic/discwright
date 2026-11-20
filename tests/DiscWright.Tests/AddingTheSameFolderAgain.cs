@@ -82,11 +82,11 @@ public class AddingTheSameFolderAgain
         MakeADisc window = TheMainWindowWithoutAWindow.New();
         window.Add(AGame());
 
-        TakeOff(window, "setup_hollow_knight-1.bin");
+        TakeOff(window, "hollow_knight_soundtrack.zip");
 
         TheSameFolderAgain missing = Assert.IsType<TheSameFolderAgain>(window.WhatIsMissingFrom(AGame(), []));
 
-        Assert.Equal(["setup_hollow_knight-1.bin"], missing.WhatIsMissing);
+        Assert.Equal(["hollow_knight_soundtrack.zip"], missing.WhatIsMissing);
         Assert.Empty(missing.Left);
     }
 
@@ -163,7 +163,7 @@ public class AddingTheSameFolderAgain
 
         TakeOff(window, "patch_1.1.exe");
         TakeOff(window, "patch_1.3.exe");
-        TakeOff(window, "setup_hollow_knight-1.bin");
+        TakeOff(window, "hollow_knight_soundtrack.zip");
 
         TheSameFolderAgain missing = Assert.IsType<TheSameFolderAgain>(window.WhatIsMissingFrom(
             AGame(), [APatch("patch_1.1.exe"), APatch("patch_1.2.exe"), APatch("patch_1.3.exe")]));
@@ -291,7 +291,9 @@ public class AddingTheSameFolderAgain
     private static GameFolder AGame(string name = "Hollow Knight", string? path = null)
     {
         ListedFile installer = new($"setup_{name.ToLowerInvariant().Replace(' ', '_')}.exe", 1000);
-        ListedFile part = new($"setup_{name.ToLowerInvariant().Replace(' ', '_')}-1.bin", 1000);
+        // A second file that is the game's own and not one of the installer's
+        // numbered parts, so it has a row and a cross of its own to press.
+        ListedFile part = new($"{name.ToLowerInvariant().Replace(' ', '_')}_soundtrack.zip", 1000);
 
         return new GameFolder(path ?? Folder, GameKind.GogInstaller, name, name, installer, [installer, part], [], null);
     }

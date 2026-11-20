@@ -39,8 +39,25 @@ public static class TheTreeOfWhatGoesOn
     {
         AThingOnTheDisc root = new(game.Name, 0, null, game.Path, tell);
 
+        // The installer's numbered parts have no rows of their own. They
+        // are the installer: one row, at the size of all of it, with one
+        // tick. The owner, on a recording of 21 November 2026, looking at a
+        // game that came in parts: "what's the point of all these others,
+        // why are they on the disc", the installer itself reading 1.6 MB
+        // beside four rows of 4 GB. And each had a tick, so one of them
+        // could be left off, which makes a disc whose game cannot install.
+        // An add-on's installer and parts have been one row since they were
+        // first listed.
+        IReadOnlyList<ListedFile> parts = game.ThePartsOfItsInstaller;
+        HashSet<string> aPart = new(parts.Select(part => part.RelativePath), StringComparer.OrdinalIgnoreCase);
+
         foreach (ListedFile file in game.Files)
         {
+            if (aPart.Contains(file.RelativePath))
+            {
+                continue;
+            }
+
             string[] steps = file.RelativePath.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
 
             AThingOnTheDisc under = root;
@@ -65,11 +82,19 @@ public static class TheTreeOfWhatGoesOn
             // alternative is an index out of range inside a window, and a
             // mutation pass will go on reporting it as a fault nothing
             // objects to.
-            under.Holding(new AThingOnTheDisc(
-                steps.Length == 0 ? file.RelativePath : steps[^1],
-                file.Bytes,
-                isTheInstaller ? TheInstaller : null,
-                file.RelativePath));
+            under.Holding(isTheInstaller && parts.Count > 0
+                ? new AThingOnTheDisc(
+                    steps[^1],
+                    file.Bytes + parts.Sum(part => part.Bytes),
+                    TheInstaller,
+                    file.RelativePath,
+                    aside: WhatItsPartsAre(parts),
+                    files: 1 + parts.Count)
+                : new AThingOnTheDisc(
+                    steps.Length == 0 ? file.RelativePath : steps[^1],
+                    file.Bytes,
+                    isTheInstaller ? TheInstaller : null,
+                    file.RelativePath));
         }
 
         // Add-ons are not in the game's own listing. They were left behind in
@@ -106,7 +131,8 @@ public static class TheTreeOfWhatGoesOn
                 };
 
                 under.Holding(new AThingOnTheDisc(
-                    addOn.Name, addOn.BytesWithItsParts, AnAddOn, addOn.Path, aside: aside));
+                    addOn.Name, addOn.BytesWithItsParts, AnAddOn, addOn.Path, aside: aside,
+                    files: 1 + addOn.PartsOrNone.Count));
             }
         }
 
@@ -137,6 +163,16 @@ public static class TheTreeOfWhatGoesOn
 
         return root;
     }
+
+    /// <summary>
+    /// What the installer's row says of its parts when pointed at: how many,
+    /// and that they are the game itself, so nobody takes the small program
+    /// for all of it or the parts for something separate.
+    /// </summary>
+    public static string WhatItsPartsAre(IReadOnlyList<ListedFile> parts) =>
+        parts.Count == 1
+            ? "With its 1 part, which holds the game itself. They go on the disc together."
+            : $"With its {parts.Count} parts, which hold the game itself. They go on the disc together.";
 
     /// <summary>
     /// Carries what the rows remember across a rebuild: which of them were
@@ -210,9 +246,20 @@ public static class TheTreeOfWhatGoesOn
             root.EverythingOn().Select(each => each.ItsPath),
             StringComparer.OrdinalIgnoreCase);
 
-        ListedFile[] kept = [.. game.Files.Where(file => on.Contains(file.RelativePath))];
-
         bool theInstallerStayed = game.Installer is not null && on.Contains(game.Installer.RelativePath);
+
+        // The installer's parts have no rows, so no ticks: they stay when
+        // the installer stays and go when it goes.
+        HashSet<string> aPart = new(
+            game.ThePartsOfItsInstaller.Select(part => part.RelativePath),
+            StringComparer.OrdinalIgnoreCase);
+
+        ListedFile[] kept =
+        [
+            .. game.Files.Where(file => aPart.Contains(file.RelativePath)
+                ? theInstallerStayed
+                : on.Contains(file.RelativePath))
+        ];
 
         // The game's own too: a manual unticked stays on the list and off
         // the disc, like any file.
