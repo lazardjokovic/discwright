@@ -279,7 +279,7 @@ public class TheMenusHeading
     {
         string page = MenuWriter.MenuPage(AMenu());
 
-        Assert.Contains("heading: \"\", headingHidden: false},", page, StringComparison.Ordinal);
+        Assert.Contains("heading: \"\", headingHidden: false, frame: \"window\"},", page, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -288,7 +288,7 @@ public class TheMenusHeading
         string page = MenuWriter.MenuPage(
             AMenu() with { Look = new MenuLook(Heading: "GOG Collection", HeadingHidden: true) });
 
-        Assert.Contains("heading: \"GOG Collection\", headingHidden: true},", page, StringComparison.Ordinal);
+        Assert.Contains("heading: \"GOG Collection\", headingHidden: true, frame: \"window\"},", page, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -357,7 +357,7 @@ public class TheMenusHeading
 
         string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
-        Assert.Contains("heading: \"Hallownest\", headingHidden: false},", page, StringComparison.Ordinal);
+        Assert.Contains("heading: \"Hallownest\", headingHidden: false, frame: \"window\"},", page, StringComparison.Ordinal);
 
         // The window's own title bar and what This PC shows are the disc's.
         Assert.Contains("<title>Hollow Knight</title>", page, StringComparison.Ordinal);

@@ -373,6 +373,12 @@
                           AutomationProperties.AutomationId="ListOnTheLeft" />
 
                 <CheckBox Margin="0,8,0,0"
+                          Content="No window frame around the menu"
+                          IsChecked="{Binding MenuWithoutAFrame}"
+                          ToolTip="The menu without Windows' title bar and edge, all picture. It gets a close button of its own in the top right corner, and is moved by dragging the picture."
+                          AutomationProperties.AutomationId="MenuWithoutAFrame" />
+
+                <CheckBox Margin="0,8,0,0"
                           Content="Small buttons in the bottom corner"
                           IsChecked="{Binding CornerAtTheBottom}"
                           ToolTip="The music and disc check buttons, and the two below. They sit on the side away from the list, top or bottom."

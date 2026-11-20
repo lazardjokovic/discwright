@@ -505,6 +505,117 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.Equal("alerts=0", lines[3]);
     }
 
+    [Theory]
+    [InlineData(true, "shut=block wired=true")]
+    [InlineData(false, "shut= wired=false")]
+    public void A_menu_with_no_frame_gets_its_own_cross_and_a_way_to_be_moved(bool noFrame, string says)
+    {
+        string went = Run(
+            PageScriptFor(AFramelessMenu(noFrame)),
+            menuUrl: new Uri(Path.Combine(_folder, "frameless", "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "showTheWindowsOwnWayOut();\n"
+                + "var stage = document.getElementById('stage');\n"
+                + "out.push('shut=' + (document.getElementById('shut').style.display || '') + ' wired=' + (typeof stage.onmousedown === 'function'));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        Assert.Equal(says, went.Trim());
+    }
+
+    [Fact]
+    public void Its_picture_drags_the_window_and_a_button_does_not()
+    {
+        string went = Run(
+            PageScriptFor(AFramelessMenu(true)),
+            menuUrl: new Uri(Path.Combine(_folder, "dragged", "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "var moved = []; var captured = 0; var released = 0;\n"
+                + "window.moveTo = function (left, top) { moved.push(left + ',' + top); };\n"
+                + "window.screenLeft = 300; window.screenTop = 200;\n"
+                + "showTheWindowsOwnWayOut();\n"
+                + "var stage = document.getElementById('stage');\n"
+                + "stage.setCapture = function () { captured++; }; stage.releaseCapture = function () { released++; };\n"
+
+                // Moving the pointer over the picture with nothing held
+                // moves nothing.
+                + "window.event = { button: 1, screenX: 500, screenY: 400, srcElement: { tagName: 'DIV', id: 'stage' } };\n"
+                + "stage.onmousemove();\n"
+                + "out.push('idle=' + moved.length);\n"
+
+                // A press on a button is the button's.
+                + "window.event = { button: 1, screenX: 500, screenY: 400, srcElement: { tagName: 'A', className: 'btn' } };\n"
+                + "stage.onmousedown();\n"
+                + "window.event = { button: 1, screenX: 560, screenY: 400, srcElement: { tagName: 'A', className: 'btn' } };\n"
+                + "stage.onmousemove();\n"
+                + "out.push('on a button=' + moved.length + ' captured=' + captured);\n"
+
+                // The right button is not a drag.
+                + "window.event = { button: 2, screenX: 500, screenY: 400, srcElement: { tagName: 'DIV', id: 'stage' } };\n"
+                + "stage.onmousedown(); stage.onmousemove();\n"
+                + "out.push('right button=' + moved.length);\n"
+
+                // A press on the picture takes hold, and the window follows.
+                + "window.event = { button: 1, screenX: 500, screenY: 400, srcElement: { tagName: 'DIV', id: 'stage' } };\n"
+                + "stage.onmousedown();\n"
+                + "window.event = { button: 1, screenX: 530, screenY: 390, srcElement: { tagName: 'DIV', id: 'stage' } };\n"
+                + "stage.onmousemove();\n"
+                + "window.event = { button: 1, screenX: 100, screenY: 900, srcElement: { tagName: 'DIV', id: 'stage' } };\n"
+                + "stage.onmousemove();\n"
+                + "out.push('dragged=' + moved.join(' ') + ' captured=' + captured);\n"
+
+                // Let go, and it stays where it was put.
+                + "stage.onmouseup();\n"
+                + "window.event = { button: 0, screenX: 0, screenY: 0, srcElement: { tagName: 'DIV', id: 'stage' } };\n"
+                + "stage.onmousemove();\n"
+                + "out.push('let go=' + moved.length + ' released=' + released);\n"
+
+                // And when Windows takes the pointer away, that is letting go.
+                + "window.event = { button: 1, screenX: 500, screenY: 400, srcElement: { tagName: 'DIV', id: 'stage' } };\n"
+                + "stage.onmousedown(); stage.onlosecapture();\n"
+                + "window.event = { button: 1, screenX: 600, screenY: 400, srcElement: { tagName: 'DIV', id: 'stage' } };\n"
+                + "stage.onmousemove();\n"
+                + "out.push('taken away=' + moved.length);\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal(
+            [
+                "idle=0",
+                "on a button=0 captured=0",
+                "right button=0",
+                "dragged=330,190 -100,700 captured=1",
+                "let go=2 released=1",
+                "taken away=2",
+            ],
+            lines);
+    }
+
+    [Fact]
+    public void A_window_that_will_not_move_is_still_a_menu()
+    {
+        string went = Run(
+            PageScriptFor(AFramelessMenu(true)),
+            menuUrl: new Uri(Path.Combine(_folder, "stuck", "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "window.moveTo = function () { throw new Error('Access is denied.'); };\n"
+                + "window.screenLeft = 0; window.screenTop = 0;\n"
+                + "showTheWindowsOwnWayOut();\n"
+                + "var stage = document.getElementById('stage');\n"
+                + "stage.setCapture = function () {}; stage.releaseCapture = function () { throw new Error('not held'); };\n"
+                + "window.event = { button: 1, screenX: 5, screenY: 5, srcElement: { tagName: 'DIV', id: 'stage' } };\n"
+                + "stage.onmousedown(); stage.onmousemove(); stage.onmouseup();\n"
+                + "WScript.Echo('still standing');\n");
+
+        Assert.Equal("still standing", went.Trim());
+    }
+
+    private static MenuFacts AFramelessMenu(bool noFrame) =>
+        new(
+            "Frameless", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+            Games: [new MenuGame("Frameless", "good.txt", string.Empty)],
+            Look: new MenuLook(NoFrame: noFrame));
+
     [Fact]
     public void The_music_button_is_a_small_button_still_when_the_tune_is_turned_off_and_on()
     {
@@ -1526,8 +1637,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         using Process? running = Process.Start(how);
         Assert.NotNull(running);
 
-        string output = running.StandardOutput.ReadToEnd() + running.StandardError.ReadToEnd();
-        running.WaitForExit(120_000);
+        string output = WaitingForAScript.WhatItSaid(running, 120_000);
 
         if (mustSucceed)
         {

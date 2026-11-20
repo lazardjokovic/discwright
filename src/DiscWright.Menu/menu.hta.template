@@ -30,9 +30,9 @@
     applicationname="%%APPNAME%%"
     singleinstance="%%SINGLE%%"
     icon="%%ICON%%"
-    border="thin"
+    border="%%BORDER%%"
     borderstyle="normal"
-    caption="yes"
+    caption="%%CAPTION%%"
     maximizebutton="no"
     minimizebutton="yes"
     scroll="no"
@@ -150,6 +150,71 @@ function placeTheCornerButtons() {
     }
 }
 
+// A menu with no frame has no title bar, and so no cross to close it by and
+// nothing to take hold of. It gets a cross of its own in the top right
+// corner, where every window keeps one, and is moved by its picture.
+function showTheWindowsOwnWayOut() {
+    if (!theWindowHasNoFrame(DISC.look)) {
+        return;
+    }
+
+    document.getElementById("shut").style.display = "block";
+
+    var stage = document.getElementById("stage");
+
+    stage.onmousedown = takeHoldOfTheWindow;
+    stage.onmousemove = moveTheWindow;
+    stage.onmouseup = letGoOfTheWindow;
+    stage.onlosecapture = letGoOfTheWindow;
+}
+
+// Where the pointer was when the window was taken hold of, and where the
+// window was, or null while nothing is held.
+var held = null;
+
+function takeHoldOfTheWindow() {
+    var e = window.event;
+
+    // Only the left button, and never from something that is pressed for
+    // its own sake: a button dragged by mistake must still be a button.
+    if (!e || e.button !== 1 && e.button !== 0 || isSomethingToPress(e.srcElement)) {
+        return;
+    }
+
+    held = { x: e.screenX, y: e.screenY, left: window.screenLeft, top: window.screenTop };
+
+    // So the picture goes on hearing the pointer when it gets ahead of the
+    // window, which it does on the first move of every drag.
+    document.getElementById("stage").setCapture();
+}
+
+function moveTheWindow() {
+    var e = window.event;
+
+    if (!held || !e) {
+        return;
+    }
+
+    var to = whereADragLeavesTheWindow(held, e.screenX, e.screenY);
+
+    try {
+        window.moveTo(to.left, to.top);
+    } catch (cannotMove) {
+        // Nothing turns on it: a window that will not move is still a menu.
+    }
+}
+
+function letGoOfTheWindow() {
+    if (held) {
+        held = null;
+
+        try {
+            document.getElementById("stage").releaseCapture();
+        } catch (notHeld) {
+        }
+    }
+}
+
 // The button that opens the disc in Explorer, when the disc was made with
 // one. In a preview too, where pressing it says why nothing opens.
 function showTheWayIntoTheDisc() {
@@ -198,6 +263,7 @@ function start() {
     startTheMusic();
     showTheCheck();
     showTheWayIntoTheDisc();
+    showTheWindowsOwnWayOut();
     placeTheCornerButtons();
 
     document.title = discTitle(DISC.game, DISC.discNumber, DISC.discsInSet);
@@ -1575,6 +1641,16 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
    font newer than the machine. Each says what it is when hovered, which is
    also what is left if the font is not there. */
 .corner.wing { font-family: Wingdings; font-size: 17px; }
+/* The cross a menu with no frame closes by: top right, where a window keeps
+   its own, above the list when the list is on that side. Always Arial, so
+   it is the same cross whatever the menu is written in. Red under the
+   pointer, as Windows' own is. */
+#shut { position: absolute; right: 6px; top: 6px; width: 22px; height: 20px;
+        line-height: 19px; text-align: center; font-family: Arial, sans-serif;
+        font-size: 15px; cursor: default; color: #CBD6DB; z-index: 5;
+        border: 1px solid #27353B;
+        background: #060E11; background: rgba(6, 14, 17, 0.85); }
+#shut:hover { background: #C42B1C; border-color: #C42B1C; color: #FFFFFF; }
 /* The install page's words: the folder wraps, because a path is long and the
    panel is narrow. */
 #whereSays { margin: 0 0 12px 0; font-size: 11px; line-height: 15px; color: #CBD6DB; word-wrap: break-word; }
@@ -1655,6 +1731,9 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
 
     <div id="openDisc" class="corner wing" style="display: none" title="Open the disc in Explorer"
          onclick="openTheDiscItself(); return false;">1</div>
+
+    <div id="shut" style="display: none" title="Close"
+         onclick="doExit(); return false;">&#215;</div>
 </div>
 </body>
 </html>

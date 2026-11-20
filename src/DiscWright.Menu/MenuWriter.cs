@@ -119,7 +119,12 @@ public static class MenuWriter
             // Tidied here as well as where it is typed and read, because
             // this is the last place before the disc and costs nothing.
             ("heading", JScript.Literal(MenuLook.TidiedHeading(look.Heading) ?? string.Empty)),
-            ("headingHidden", look.HeadingHidden ? "true" : "false"))).Append(",\n");
+            ("headingHidden", look.HeadingHidden ? "true" : "false"),
+
+            // What the page does about having no frame: its own way out and
+            // a way to be moved. The frame itself is taken off in the tag
+            // at the top, which is read before any script runs.
+            ("frame", JScript.Literal(look.NoFrame ? "none" : "window")))).Append(",\n");
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),
@@ -165,6 +170,11 @@ public static class MenuWriter
                 "%%FONT%%",
                 MenuFonts.For((facts.Look ?? MenuLook.Plain).Font).AsThePageAsksForIt,
                 StringComparison.Ordinal)
+            // The window's title bar and its edge, which only the tag at
+            // the top of the page can take off: mshta reads it once, before
+            // the page has a script to ask.
+            .Replace("%%CAPTION%%", (facts.Look ?? MenuLook.Plain).NoFrame ? "no" : "yes", StringComparison.Ordinal)
+            .Replace("%%BORDER%%", (facts.Look ?? MenuLook.Plain).NoFrame ? "none" : "thin", StringComparison.Ordinal)
             .Replace("%%SINGLE%%", facts.OnlyOneAtATime ? "yes" : "no", StringComparison.Ordinal)
             .Replace("%%ICON%%", Markup(facts.Icon), StringComparison.Ordinal)
             .Replace("%%PRIMARY%%", Markup(facts.PrimaryButton), StringComparison.Ordinal)
