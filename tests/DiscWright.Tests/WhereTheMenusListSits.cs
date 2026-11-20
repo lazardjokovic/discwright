@@ -217,6 +217,131 @@ public class WhereTheMenusListSits
         Assert.Equal(MenuFont.Georgia, screen.TheMenusFont?.Which);
     }
 
+    // -------------------------------------------------- a menu with no frame
+
+    [Fact]
+    public void A_menu_has_its_frame_unless_somebody_takes_it_off()
+    {
+        MakeADisc screen = TheScreen();
+
+        Assert.False(screen.MenuWithoutAFrame);
+        Assert.False(new MenuLook().NoFrame);
+
+        string page = MenuWriter.MenuPage(AMenu());
+
+        Assert.Contains("    border=\"thin\"\r\n", page.ReplaceLineEndings("\r\n"), StringComparison.Ordinal);
+        Assert.Contains("    caption=\"yes\"\r\n", page.ReplaceLineEndings("\r\n"), StringComparison.Ordinal);
+        Assert.Contains("frame: \"window\"},", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("%%CAPTION%%", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("%%BORDER%%", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Ticked_the_tag_at_the_top_of_the_page_takes_the_title_bar_and_the_edge_off()
+    {
+        // Only that tag can: mshta reads it once, before the page has a
+        // script to ask, so this is decided when the page is written.
+        MakeADisc screen = TheScreen();
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.MenuWithoutAFrame = true;
+
+        Assert.Equal(new MenuLook(NoFrame: true), screen.AsAProject().Options.Look);
+        Assert.Contains(nameof(MakeADisc.MenuWithoutAFrame), told, StringComparer.Ordinal);
+
+        string page = MenuWriter.MenuPage(AMenu() with { Look = screen.AsAProject().Options.Look })
+            .ReplaceLineEndings("\r\n");
+        string tag = page[page.IndexOf("<hta:application", StringComparison.Ordinal)..];
+        tag = tag[..(tag.IndexOf("/>", StringComparison.Ordinal) + 2)];
+
+        Assert.Contains("    border=\"none\"\r\n", tag, StringComparison.Ordinal);
+        Assert.Contains("    caption=\"no\"\r\n", tag, StringComparison.Ordinal);
+
+        // It is still in the taskbar, which is now the only place it has a
+        // name, and still one window at a time.
+        Assert.Contains("    showintaskbar=\"yes\"\r\n", tag, StringComparison.Ordinal);
+        Assert.Contains("frame: \"none\"},", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_page_has_a_cross_that_leaves_the_way_Exit_does_and_shows_it_before_the_corner_is_laid_out()
+    {
+        string page = MenuWriter.MenuPage(AMenu());
+
+        // Hidden until the page finds it has no frame, and it leaves by
+        // doExit, which stops the tune first: closing the window alone left
+        // music playing in an empty room.
+        Assert.Matches("<div id=\"shut\" style=\"display: none\" title=\"Close\"\\s+onclick=\"doExit\\(\\); return false;\">&#215;</div>", page);
+
+        string start = page[page.IndexOf("function start() {", StringComparison.Ordinal)..];
+        int shown = start.IndexOf("    showTheWindowsOwnWayOut();", StringComparison.Ordinal);
+        int placed = start.IndexOf("    placeTheCornerButtons();", StringComparison.Ordinal);
+
+        Assert.True(shown > 0 && shown < placed);
+
+        // The same cross whatever the menu is written in, top right, above
+        // the list when the list is on that side.
+        Assert.Matches("#shut \\{ position: absolute; right: 6px; top: 6px;", page);
+        Assert.Contains("font-family: Arial, sans-serif;", page, StringComparison.Ordinal);
+        Assert.Contains("z-index: 5;", page, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(true, "\"Frame\": \"None\"")]
+    [InlineData(false, "\"Frame\": \"Window\"")]
+    public void A_saved_project_says_whether_the_menu_has_a_frame_and_comes_back_saying_it(bool none, string written)
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Hollow Knight"));
+        screen.MenuWithoutAFrame = none;
+
+        string saved = Saved(screen);
+
+        Assert.Contains(written, saved, StringComparison.Ordinal);
+        Assert.Equal(
+            none,
+            Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(saved)).Value.Options.LookOrPlain.NoFrame);
+    }
+
+    [Theory]
+    [InlineData("\"Frame\": \"none\"", true)]
+    [InlineData("\"Frame\": \"NONE\"", true)]
+    [InlineData("\"Frame\": \"Borderless\"", false)]
+    [InlineData("\"Frame\": true", false)]
+    [InlineData("\"Frame\": null", false)]
+    [InlineData("\"Unrelated\": 1", false)]
+    public void Only_the_one_word_in_a_file_takes_the_frame_off(string doctored, bool none)
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Hollow Knight"));
+        screen.ListOnTheLeft = true;
+
+        string saved = Saved(screen).Replace("\"Frame\": \"Window\"", doctored, StringComparison.Ordinal);
+
+        Assert.Contains(doctored, saved, StringComparison.Ordinal);
+
+        MenuLook back = Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(saved)).Value.Options.LookOrPlain;
+
+        Assert.Equal(none, back.NoFrame);
+        Assert.Equal(MenuSide.Left, back.ListOn);
+    }
+
+    [Fact]
+    public void The_dialog_has_the_tick_and_says_what_replaces_the_frame()
+    {
+        System.Xml.Linq.XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        System.Xml.Linq.XElement tick = Assert.Single(
+            System.Xml.Linq.XDocument.Load(Repository.File("src", "DiscWright.App", "WhatElseGoesOnIt.xaml"))
+                .Root!.Descendants(xaml + "CheckBox"),
+            each => (string?)each.Attribute("AutomationProperties.AutomationId") == "MenuWithoutAFrame");
+
+        Assert.Equal("{Binding MenuWithoutAFrame}", (string?)tick.Attribute("IsChecked"));
+        Assert.Equal("No window frame around the menu", (string?)tick.Attribute("Content"));
+        Assert.Contains("close button of its own", (string?)tick.Attribute("ToolTip"), StringComparison.Ordinal);
+        Assert.Contains("dragging the picture", (string?)tick.Attribute("ToolTip"), StringComparison.Ordinal);
+    }
+
     // ------------------------------------------------------ the project file
 
     [Theory]
@@ -324,13 +449,13 @@ public class WhereTheMenusListSits
     {
         string page = MenuWriter.MenuPage(AMenu());
 
-        Assert.Contains("look: {listOn: \"right\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},", page, StringComparison.Ordinal);
+        Assert.Contains("look: {listOn: \"right\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},", page, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData(MenuSide.Left, false, "look: {listOn: \"left\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},")]
-    [InlineData(MenuSide.Right, true, "look: {listOn: \"right\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},")]
-    [InlineData(MenuSide.Left, true, "look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},")]
+    [InlineData(MenuSide.Left, false, "look: {listOn: \"left\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},")]
+    [InlineData(MenuSide.Right, true, "look: {listOn: \"right\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},")]
+    [InlineData(MenuSide.Left, true, "look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},")]
     public void A_page_carries_the_look_that_was_chosen(MenuSide side, bool bottom, string carried)
     {
         string page = MenuWriter.MenuPage(AMenu() with { Look = new MenuLook(side, bottom) });
@@ -472,7 +597,7 @@ public class WhereTheMenusListSits
 
         string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
-        Assert.Contains("look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},", page, StringComparison.Ordinal);
+        Assert.Contains("look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},", page, StringComparison.Ordinal);
     }
 
     /// <summary>

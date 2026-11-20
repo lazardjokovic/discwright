@@ -1675,6 +1675,20 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </summary>
     public bool MenuHeadingCanBeTyped => !MenuHeadingHidden;
 
+    /// <summary>
+    /// Whether the menu's window has no title bar and no edge, discwright#98.
+    /// </summary>
+    /// <remarks>
+    /// For a menu that is all picture. It gets a cross of its own in the
+    /// top right corner and is moved by dragging its picture, so nothing a
+    /// window is for is lost with the frame.
+    /// </remarks>
+    public bool MenuWithoutAFrame
+    {
+        get => Options.LookOrPlain.NoFrame;
+        set => SwitchTheLook(Options.LookOrPlain with { NoFrame = value });
+    }
+
     /// <summary>Every face the menu can be written in, for the list.</summary>
     public IReadOnlyList<AMenuFont> TheMenusFonts { get; } = MenuFonts.All;
 

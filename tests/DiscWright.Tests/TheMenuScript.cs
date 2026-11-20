@@ -2106,6 +2106,97 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal(answer, Ask($"String(aPreviewShowsTheCheck({disc}))"));
     }
 
+    // ----------------------------------------------- a menu with no frame
+
+    [Theory]
+    [InlineData("{ frame: 'none' }", "true")]
+    [InlineData("{ frame: 'NONE' }", "true")]
+    [InlineData("{ frame: 'window' }", "false")]
+    [InlineData("{ frame: '' }", "false")]
+    [InlineData("{ frame: true }", "false")]
+    [InlineData("{}", "false")]
+    [InlineData("null", "false")]
+    [InlineData("undefined", "false")]
+    public void Only_the_one_word_takes_the_frame_off(string look, string answer)
+    {
+        // A disc with no look, which is every disc built before this, keeps
+        // the window it always had.
+        Assert.Equal(answer, Ask($"String(theWindowHasNoFrame({look}))"));
+    }
+
+    [Theory]
+    [InlineData("{ x: 100, y: 100, left: 10, top: 20 }", 100, 100, "10,20")]
+    [InlineData("{ x: 100, y: 100, left: 10, top: 20 }", 130, 90, "40,10")]
+    [InlineData("{ x: 100, y: 100, left: 10, top: 20 }", 0, 0, "-90,-80")]
+    [InlineData("{ x: 0.5, y: 0.5, left: 10, top: 20 }", 1, 2, "11,22")]
+    public void A_dragged_window_goes_as_far_as_the_pointer_went(string held, int x, int y, string lands)
+    {
+        // As far from where it was as the pointer is from where it took
+        // hold, in whole pixels. Off the left of the screen is allowed: it
+        // is where a second monitor is.
+        Assert.Equal(lands, Ask($"(function () {{ var to = whereADragLeavesTheWindow({held}, {x}, {y}); return to.left + ',' + to.top; }})()"));
+    }
+
+    [Theory]
+    [InlineData("{ tagName: 'A' }", "true")]
+    [InlineData("{ tagName: 'a', className: '' }", "true")]
+    [InlineData("{ tagName: 'DIV', className: 'btn' }", "true")]
+    [InlineData("{ tagName: 'DIV', className: 'btn next dead' }", "true")]
+    [InlineData("{ tagName: 'DIV', className: 'corner wing' }", "true")]
+    [InlineData("{ tagName: 'DIV', id: 'shut' }", "true")]
+    [InlineData("{ tagName: 'SPAN', parentNode: { tagName: 'A' } }", "true")]
+    [InlineData("{ tagName: 'SPAN', parentNode: { tagName: 'DIV', parentNode: { tagName: 'DIV', className: 'corner' } } }", "true")]
+    [InlineData("{ tagName: 'DIV', id: 'stage' }", "false")]
+    [InlineData("{ tagName: 'DIV', id: 'panel', parentNode: { tagName: 'DIV', id: 'stage' } }", "false")]
+    [InlineData("{ tagName: 'H1', className: 'cornerstone' }", "false")]
+    [InlineData("{ tagName: 'P', className: 'hint' }", "false")]
+    [InlineData("null", "false")]
+    public void A_drag_never_starts_on_something_that_is_pressed_for_its_own_sake(string node, string answer)
+    {
+        // A drag that started on a button would move the window and then
+        // press the button, or press nothing.
+        Assert.Equal(answer, Ask($"String(isSomethingToPress({node}))"));
+    }
+
+    [Fact]
+    public void A_script_that_never_returns_fails_its_test_and_does_not_hold_the_run()
+    {
+        // The harness itself. An endless loop is stopped and said, in
+        // seconds: it held a run for fifty minutes before it was.
+        string job = Path.Combine(_folder, "forever.js");
+        File.WriteAllText(job, "while (true) { }");
+
+        ProcessStartInfo how = new()
+        {
+            FileName = "cscript.exe",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        how.ArgumentList.Add("//nologo");
+        how.ArgumentList.Add(job);
+
+        using Process running = Process.Start(how)!;
+        Stopwatch waited = Stopwatch.StartNew();
+
+        Xunit.Sdk.FailException stopped = Assert.Throws<Xunit.Sdk.FailException>(
+            () => WaitingForAScript.WhatItSaid(running, 2_000));
+
+        Assert.Contains("still running after 2 seconds and was stopped", stopped.Message, StringComparison.Ordinal);
+        Assert.True(waited.Elapsed < TimeSpan.FromSeconds(20), $"It waited {waited.Elapsed.TotalSeconds:0} seconds.");
+        Assert.True(running.HasExited, "The script host was left running.");
+    }
+
+    [Fact]
+    public void A_page_whose_parents_go_round_in_a_circle_does_not_hang_the_menu()
+    {
+        Assert.Equal(
+            "false",
+            Ask("(function () { var a = { tagName: 'DIV' }; var b = { tagName: 'DIV', parentNode: a }; a.parentNode = b; return String(isSomethingToPress(a)); })()"));
+    }
+
     // ------------------------------------------ what a small button wears
 
     [Theory]
@@ -2168,8 +2259,7 @@ public sealed class TheMenuScript : IDisposable
         using Process? running = Process.Start(how);
         Assert.NotNull(running);
 
-        string output = running.StandardOutput.ReadToEnd() + running.StandardError.ReadToEnd();
-        running.WaitForExit(30_000);
+        string output = WaitingForAScript.WhatItSaid(running, 30_000);
 
         return (output, running.ExitCode);
     }

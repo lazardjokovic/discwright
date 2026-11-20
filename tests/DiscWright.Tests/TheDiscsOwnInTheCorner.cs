@@ -180,10 +180,10 @@ public class TheDiscsOwnInTheCorner
     // --------------------------------------------------------------- the page
 
     [Theory]
-    [InlineData(false, false, "discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false},")]
-    [InlineData(true, false, "discsOwn: \"small\", openTheDisc: false, heading: \"\", headingHidden: false},")]
-    [InlineData(false, true, "discsOwn: \"list\", openTheDisc: true, heading: \"\", headingHidden: false},")]
-    [InlineData(true, true, "discsOwn: \"small\", openTheDisc: true, heading: \"\", headingHidden: false},")]
+    [InlineData(false, false, "discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},")]
+    [InlineData(true, false, "discsOwn: \"small\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},")]
+    [InlineData(false, true, "discsOwn: \"list\", openTheDisc: true, heading: \"\", headingHidden: false, frame: \"window\"},")]
+    [InlineData(true, true, "discsOwn: \"small\", openTheDisc: true, heading: \"\", headingHidden: false, frame: \"window\"},")]
     public void The_page_carries_both(bool small, bool open, string carried)
     {
         string page = MenuWriter.MenuPage(AMenu() with { Look = new MenuLook(DiscsOwnAsSmallButtons: small, OpenTheDiscButton: open) });

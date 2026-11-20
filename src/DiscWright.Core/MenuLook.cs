@@ -79,7 +79,8 @@ public sealed record MenuLook(
     bool OpenTheDiscButton = false,
     string? Heading = null,
     bool HeadingHidden = false,
-    MenuFont Font = MenuFont.Tahoma)
+    MenuFont Font = MenuFont.Tahoma,
+    bool NoFrame = false)
 {
     /// <summary>
     /// The longest heading the menu is given. Three lines of the panel in

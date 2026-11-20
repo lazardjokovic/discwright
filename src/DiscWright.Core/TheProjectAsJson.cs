@@ -209,6 +209,7 @@ public static class TheProjectAsJson
             // By the face's own name, which is what somebody reading the
             // file would look for.
             writing.WriteString("Font", MenuFonts.For(look.Font).InWords);
+            writing.WriteString("Frame", look.NoFrame ? "None" : "Window");
             writing.WriteEndObject();
 
             writing.WriteString("BgFit", fit.ToString());

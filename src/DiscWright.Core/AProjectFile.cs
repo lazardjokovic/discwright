@@ -242,7 +242,10 @@ public static class AProjectFile
             // A word that names no face on the list, or no word at all, is
             // the face the menu has always worn. A file can only ever ask
             // for one of the six, so nothing it says reaches the page.
-            MenuFonts.Named(Text(look, "Font")) ?? MenuFont.Tahoma)
+            MenuFonts.Named(Text(look, "Font")) ?? MenuFont.Tahoma,
+
+            // The one word, and anything else is the window as it comes.
+            string.Equals(Text(look, "Frame"), "None", StringComparison.OrdinalIgnoreCase))
             .OrNothingWhenPlain();
     }
 

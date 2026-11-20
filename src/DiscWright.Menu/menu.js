@@ -908,6 +908,48 @@ function whatASmallButtonWears(how) {
     return how && String(how).length > 0 ? "corner " + how : "corner";
 }
 
+// Whether the menu's window has no frame, discwright#98: a menu that is all
+// picture, with no title bar and no edge. Only the one word says so, so a
+// disc with no look at all, which is every disc built before this, keeps
+// the window it always had.
+function theWindowHasNoFrame(look) {
+    return !!look && String(look.frame).toLowerCase() === "none";
+}
+
+// Where a window ends up when it is dragged: as far from where it was as
+// the pointer is from where it took hold. Whole pixels, because moveTo
+// takes nothing else.
+function whereADragLeavesTheWindow(held, pointerX, pointerY) {
+    return {
+        left: Math.round(held.left + (pointerX - held.x)),
+        top: Math.round(held.top + (pointerY - held.y))
+    };
+}
+
+// Whether a press on this is a press on something that answers for itself:
+// a button, a link, a small corner button, or anything inside one. A drag
+// that started on a button would move the window and then press the button,
+// or press nothing, and either is a button that has stopped being one.
+function isSomethingToPress(node) {
+    var steps = 0;
+
+    while (node && steps < 12) {
+        var tag = String(node.tagName || "").toUpperCase();
+        var wears = " " + String(node.className || "") + " ";
+
+        if (tag === "A" || tag === "BUTTON" || tag === "INPUT" || tag === "SELECT"
+                || wears.indexOf(" corner ") >= 0 || wears.indexOf(" btn ") >= 0
+                || String(node.id || "") === "shut") {
+            return true;
+        }
+
+        node = node.parentNode;
+        steps++;
+    }
+
+    return false;
+}
+
 // Whether the corner has a button that opens the disc in Explorer. Only a
 // real true says so, so a disc with no look, or a word in its place, has none.
 function thereIsAButtonThatOpensTheDisc(look) {
