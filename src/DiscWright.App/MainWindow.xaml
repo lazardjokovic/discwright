@@ -1118,15 +1118,22 @@
                                       IsEnabled="{Binding NothingIsRunning}"
                                       IsTabStop="False"
                                       AutomationProperties.AutomationId="TheBlanks">
+                            <!-- Three to a row, and every name the same
+                                 width, so the boxes stand in columns. In a
+                                 row that wrapped where it liked they stood
+                                 wherever their names ended, and the owner
+                                 saw it on the recording: lined up by the
+                                 box, it reads as a table. -->
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <WrapPanel Orientation="Horizontal" />
+                                    <UniformGrid Columns="3" HorizontalAlignment="Left" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
                                         <TextBlock VerticalAlignment="Center"
+                                                   Width="40"
                                                    Margin="0,0,5,0"
                                                    Text="{Binding Name}" />
                                         <!-- Named for a reader, and by an id

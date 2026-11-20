@@ -25,6 +25,12 @@
     <SolidColorBrush x:Key="Edge" Color="#3A4147" />
     <SolidColorBrush x:Key="Dead" Color="#4A545B" />
 
+    <!-- The dark the disc's menu is painted before any picture goes on it.
+         The same in both looks, because it is the menu's and not this
+         program's: behind the small picture of a menu's background, it is
+         what shows where a picture fitted inside does not reach. -->
+    <SolidColorBrush x:Key="TheMenusOwnDark" Color="#0C1316" />
+
     <!-- A refusal and a worry must not look the same here either. -->
     <SolidColorBrush x:Key="RefusalInk" Color="#E4756F" />
     <SolidColorBrush x:Key="WorryInk" Color="#D4A72C" />

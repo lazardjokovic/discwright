@@ -120,11 +120,36 @@
                                     CornerRadius="3"
                                     Background="{Binding BackgroundColour, Converter={StaticResource AsABrush}}"
                                     Visibility="{Binding BackgroundColour, Converter={StaticResource WhenAnything}}" />
-                            <Image Source="{Binding Background, Converter={StaticResource APicture}}"
+                            <!-- The menu's own dark behind a picture,
+                                 which is what shows on the disc where a
+                                 picture fitted inside does not reach. -->
+                            <Border Margin="2"
+                                    Background="{DynamicResource TheMenusOwnDark}"
+                                    Visibility="{Binding Background, Converter={StaticResource WhenAnything}}" />
+
+                            <!-- Fitted inside or stretched: one picture. -->
+                            <Image Source="{Binding Background, Converter={StaticResource APicture}, ConverterParameter=480}"
                                    Stretch="{Binding HowTheSmallPictureIsDrawn}"
                                    Margin="2"
-                                   Visibility="{Binding TheBackgroundCanBeFramed, Converter={StaticResource WhenNot}}"
+                                   Visibility="{Binding TheSmallPictureIsInOnePiece, Converter={StaticResource WhenSo}}"
                                    AutomationProperties.AutomationId="TheBackgroundPicture" />
+
+                            <!-- Tiled: repeated from the top left at a
+                                 quarter of its size, as the menu repeats it
+                                 at the whole of it. It showed one copy. -->
+                            <Border Margin="2"
+                                    ClipToBounds="True"
+                                    Visibility="{Binding TheSmallPictureIsTiled, Converter={StaticResource WhenSo}}">
+                                <Border.Background>
+                                    <ImageBrush ImageSource="{Binding Background, Converter={StaticResource APicture}, ConverterParameter=480}"
+                                                TileMode="Tile"
+                                                Stretch="Fill"
+                                                AlignmentX="Left"
+                                                AlignmentY="Top"
+                                                Viewport="{Binding TheTileInTheSmallPicture, Converter={StaticResource AsARect}}"
+                                                ViewportUnits="Absolute" />
+                                </Border.Background>
+                            </Border>
 
                             <!-- The frame: the part of the picture the menu
                                  keeps, and the picture is dragged under it.
