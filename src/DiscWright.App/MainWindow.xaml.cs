@@ -630,6 +630,15 @@ public partial class MainWindow : Window
         // The only async void in the program, and it has to be one: this is an
         // event handler and WPF has nowhere to put a Task. Everything it can
         // throw is caught here rather than left to take the program down.
+        //
+        // Asked first, and here, because a question is the window's to put
+        // up: the folder already holds an earlier build of this disc, and
+        // building deletes it.
+        if (_screen.WhatBuildingHereReplaces() is AQuestion replacing && !Ask(replacing))
+        {
+            return;
+        }
+
         try
         {
             await _screen.MakeIt();
