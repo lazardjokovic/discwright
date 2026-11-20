@@ -1617,7 +1617,14 @@ function doExit() {
    back to 95. The faces that read better either arrived with Windows 10 or
    came with Office, and a disc that has to work in ten years cannot ask.
    Whichever face is chosen is one of six that came with Windows itself, with
-   one like it after it for a machine that has lost it. */
+   one like it after it for a machine that has lost it.
+
+   A font of somebody's own is on the disc beside this page, as WOFF, which
+   is the form this engine loads whatever the font's own flags say: measured
+   on 2026-11-20, a TrueType file was passed over unless it was flagged as
+   one that may be installed. A machine too old to load it wears the face
+   after it. */
+%%OWNFONT%%
 body {
     margin: 0;
     font-family: %%FONT%%;

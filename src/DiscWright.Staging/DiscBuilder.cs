@@ -25,7 +25,8 @@ public sealed class DiscBuilder(
     IImages images,
     IHasher hasher,
     string madeBy = "",
-    Func<DateTimeOffset>? now = null)
+    Func<DateTimeOffset>? now = null,
+    IFonts? fonts = null)
     : IBuildDiscs
 {
     /// <summary>
@@ -44,7 +45,7 @@ public sealed class DiscBuilder(
         new CopyEachGamesOwnStep(files),
         new CopyTheMusicStep(),
         new WriteTheAutorunStep(),
-        new CopyTheArtworkStep(images),
+        new CopyTheArtworkStep(images, fonts),
         new WriteTheMenuStep(),
         new WriteTheChecksumsStep(files, hasher)
     ];

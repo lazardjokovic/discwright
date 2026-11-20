@@ -76,6 +76,10 @@ public sealed record TheMachine(
     // nowhere: a count typed is used until the program closes.
     IKeepTheBlanks? Blanks = null,
 
+    // What reads a font file somebody chose for the menu. Null means
+    // nothing does, and any file is taken at its word.
+    IFonts? Fonts = null,
+
     // The copy's page in the Microsoft Store, when it came from there, and
     // nothing otherwise. The Store keeps such a copy up to date, so it never
     // asks GitHub and never updates itself: its version link is this page.

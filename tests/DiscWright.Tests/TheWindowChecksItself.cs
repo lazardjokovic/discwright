@@ -182,6 +182,7 @@ public class TheWindowChecksItself
     [InlineData("the menu's heading")]
     [InlineData("no heading on the menu")]
     [InlineData("the menu's font")]
+    [InlineData("a font file of one's own")]
     [InlineData("a menu with no frame")]
     public void Choosing_it_and_putting_it_back_leaves_the_window_exactly_as_it_was(string what)
     {
@@ -307,7 +308,7 @@ public class TheWindowChecksItself
         nameof(MakeADisc.ListOnTheLeft), nameof(MakeADisc.CornerAtTheBottom),
         nameof(MakeADisc.DiscsOwnAsSmallButtons), nameof(MakeADisc.OpenTheDiscButton),
         nameof(MakeADisc.DiscManualAsASmallButton), nameof(MakeADisc.DiscExtrasAsASmallButton),
-        nameof(MakeADisc.MenuHeading), nameof(MakeADisc.MenuHeadingHidden), nameof(MakeADisc.TheMenusFont),
+        nameof(MakeADisc.MenuHeading), nameof(MakeADisc.MenuHeadingHidden), nameof(MakeADisc.TheMenusFont), nameof(MakeADisc.MenuFontFile),
         nameof(MakeADisc.MenuWithoutAFrame),
         nameof(MakeADisc.HowTheBackgroundFits),
         nameof(MakeADisc.BackgroundZoom), nameof(MakeADisc.BackgroundAcross), nameof(MakeADisc.BackgroundDown),
@@ -354,6 +355,7 @@ public class TheWindowChecksItself
             case "a button that opens the disc": screen.OpenTheDiscButton = true; break;
             case "the menu's heading": screen.MenuHeading = "GOG COLLECTION"; break;
             case "the menu's font": screen.TheMenusFont = MenuFonts.For(MenuFont.Georgia); break;
+            case "a font file of one's own": screen.MenuFontFile = @"C:\fonts\mine.ttf"; break;
             case "a menu with no frame": screen.MenuWithoutAFrame = true; break;
             case "no heading on the menu": screen.MenuHeadingHidden = true; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to choose.");
@@ -398,6 +400,7 @@ public class TheWindowChecksItself
             case "a button that opens the disc": screen.OpenTheDiscButton = false; break;
             case "the menu's heading": screen.MenuHeading = string.Empty; break;
             case "the menu's font": screen.TheMenusFont = MenuFonts.For(MenuFont.Tahoma); break;
+            case "a font file of one's own": screen.MenuFontFile = null; break;
             case "a menu with no frame": screen.MenuWithoutAFrame = false; break;
             case "no heading on the menu": screen.MenuHeadingHidden = false; break;
             default: throw new ArgumentOutOfRangeException(nameof(what), what, "No such thing to put back.");

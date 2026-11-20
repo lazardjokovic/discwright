@@ -218,6 +218,13 @@ public static class TheProjectAsJson
             // keep the folder, which is what they always did.
             writing.WriteBoolean("IsoOnly", project.Options.OnlyTheImage);
 
+            // Only when somebody chose one. A file without it is a menu in
+            // one of the faces every Windows has, as every menu was.
+            if (art?.MenuFontPath is string font)
+            {
+                writing.WriteString("MenuFontFile", font);
+            }
+
             // Only when somebody framed the picture. The middle is what a
             // file without it means, here and in every version before.
             if (art?.Kept is { IsTheMiddle: false } kept)

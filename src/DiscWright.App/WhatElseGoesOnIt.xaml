@@ -385,6 +385,47 @@
                     </ComboBox>
                 </Grid>
 
+                <!-- A font of somebody's own, beside the list and not in
+                     its place: the face above is what a machine too old to
+                     load the file falls back to. -->
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Your own font" />
+                    <TextBlock Grid.Column="1"
+                               VerticalAlignment="Center"
+                               Margin="0,0,10,0"
+                               TextWrapping="NoWrap"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip="{Binding MenuFontFile}"
+                               Text="{Binding MenuFontFile, TargetNullValue=Nothing chosen}"
+                               AutomationProperties.AutomationId="TheMenuFontFile" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Content="Choose"
+                                Style="{StaticResource Ordinary}"
+                                Click="ChooseTheMenuFont"
+                                AutomationProperties.AutomationId="ChooseTheMenuFont" />
+                        <Button Content="Clear"
+                                Style="{StaticResource Ordinary}"
+                                Margin="8,0,0,0"
+                                Click="ClearTheMenuFont"
+                                AutomationProperties.AutomationId="ClearTheMenuFont" />
+                    </StackPanel>
+                </Grid>
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="110,2,0,0"
+                           TextWrapping="Wrap"
+                           Text="A TrueType, OpenType or WOFF file. It goes onto the disc for the menu to wear, so check that its licence lets you put it there. A PC too old to load it wears the font chosen above." />
+                <TextBlock Margin="110,2,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource WorryInk}"
+                           Text="{Binding WhyNotThatFont}"
+                           Visibility="{Binding WhyNotThatFont, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhyNotThatFont" />
+
                 <CheckBox Margin="0,8,0,0"
                           Content="No heading on the main menu"
                           IsChecked="{Binding MenuHeadingHidden}"

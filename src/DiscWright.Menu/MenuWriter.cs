@@ -172,9 +172,21 @@ public static class MenuWriter
                 StringComparison.Ordinal)
             // One of six lines this program wrote, chosen by name. Never
             // text from a project file: it lands inside the page's style.
+            // The disc's own font first when it carries one, under a name
+            // no machine has, and after it the face from the list for a
+            // machine that cannot load it. Both are words this program
+            // wrote: the file's own name never reaches the page.
             .Replace(
                 "%%FONT%%",
-                MenuFonts.For((facts.Look ?? MenuLook.Plain).Font).AsThePageAsksForIt,
+                (facts.HasAFontOfItsOwn ? "\"" + AFontForTheMenu.FamilyOnThePage + "\", " : string.Empty)
+                    + MenuFonts.For((facts.Look ?? MenuLook.Plain).Font).AsThePageAsksForIt,
+                StringComparison.Ordinal)
+            .Replace(
+                "%%OWNFONT%%",
+                facts.HasAFontOfItsOwn
+                    ? "@font-face { font-family: \"" + AFontForTheMenu.FamilyOnThePage + "\"; src: url(\""
+                        + AFontForTheMenu.FileName + "\") format(\"woff\"); }"
+                    : string.Empty,
                 StringComparison.Ordinal)
             // The window's title bar and its edge, which only the tag at
             // the top of the page can take off: mshta reads it once, before
@@ -378,7 +390,8 @@ public sealed record MenuFacts(
     string? BackdropColour = null,
     IReadOnlyList<string>? IconsOfTheSet = null,
     MenuLook? Look = null,
-    bool CarriesAChecksumList = false)
+    bool CarriesAChecksumList = false,
+    bool HasAFontOfItsOwn = false)
 {
     /// <summary>The games, or one standing for the disc when none were given.</summary>
     public IReadOnlyList<MenuGame> GamesOrTheOne => Games ?? [new MenuGame(GameName, string.Empty, string.Empty)];

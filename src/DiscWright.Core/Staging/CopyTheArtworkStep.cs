@@ -4,7 +4,7 @@ namespace DiscWright.Core.Staging;
 /// Puts the pictures on the disc: the icon This PC shows, the background the
 /// menu sits on, and the cover and disc face somebody will print.
 /// </summary>
-public sealed class CopyTheArtworkStep(IImages images) : IBuildStep
+public sealed class CopyTheArtworkStep(IImages images, IFonts? fonts = null) : IBuildStep
 {
     /// <summary>
     /// Where the printable artwork lives on the disc.
@@ -75,6 +75,19 @@ public sealed class CopyTheArtworkStep(IImages images) : IBuildStep
                 MenuHeight,
                 artwork.HowItFits,
                 artwork.Kept);
+        }
+
+        // A font of somebody's own, beside the menu that is written in it.
+        // Only with a menu, like the background, and only where there is
+        // something to wrap it with: without, the menu wears the face from
+        // the list, which is what it does on a machine too old for this.
+        if (artwork.MenuFontPath is not null && context.Project.Options.Menu && fonts is not null)
+        {
+            context.Writer.MakeFolder(context.On(MenuFolder));
+
+            fonts.WriteForTheMenu(
+                artwork.MenuFontPath,
+                context.On(MenuFolder + Separator + AFontForTheMenu.FileName));
         }
 
         ct.ThrowIfCancellationRequested();

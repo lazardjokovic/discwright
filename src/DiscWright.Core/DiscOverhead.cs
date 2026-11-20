@@ -61,6 +61,13 @@ public static class DiscOverhead
             bytes += 2 * sizeOf(artwork.BackgroundPath);
         }
 
+        // The menu's own font, on every disc that has a menu. At its own
+        // size: wrapped for the disc it is squeezed and comes out smaller.
+        if (artwork.MenuFontPath is not null && project.Options.Menu)
+        {
+            bytes += sizeOf(artwork.MenuFontPath);
+        }
+
         // The printable artwork is copied exactly as it was given, so it counts
         // once and at its own size. v1 left these out of the sum, which is fine
         // until somebody picks a 60 MB scan of a sleeve and the last disc of a

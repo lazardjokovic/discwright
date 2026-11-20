@@ -20,7 +20,7 @@ namespace DiscWright.Staging;
 /// the menu, to the byte, apart from the one thing that has to differ.
 /// </para>
 /// </remarks>
-public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : IShowTheMenu
+public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures, IFonts? fonts = null) : IShowTheMenu
 {
     /// <summary>Where the menu sits, on a disc and here.</summary>
     private const string Folder = "AUTORUN";
@@ -131,7 +131,7 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures) : I
 
     private IBuildStep[] TheSteps(bool theFirst) =>
     [
-        new CopyTheArtworkStep(pictures),
+        new CopyTheArtworkStep(pictures, fonts),
         .. theFirst ? new IBuildStep[] { new CopyTheMusicStep() } : [],
         new WriteTheMenuStep(forADisc: false, playsMusic: theFirst)
     ];
