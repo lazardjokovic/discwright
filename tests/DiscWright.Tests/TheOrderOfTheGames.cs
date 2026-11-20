@@ -17,6 +17,285 @@ namespace DiscWright.Tests;
 /// </remarks>
 public class TheOrderOfTheGames
 {
+    // ------------------------------------------------- the add-ons' own order
+    //
+    // The owner's own Hollow Knight, 20 November 2026: four updates listed
+    // 1.5.12618, 1.5.12620, 1.5.12459, 1.5.78.11833a, the order their file
+    // names sort in, and nothing to drag them by.
+
+    private static LeftBehind AnUpdate(string file) => new(new ListedFile(file, 500), LeftBehindKind.LooksLikeAnAddOn);
+
+    private static readonly string[] HollowKnightsUpdatesAsTheyAreListed =
+    [
+        "patch_hollow_knight_1.5.12459_(88294)_to_1.5.12618_(89712).exe",
+        "patch_hollow_knight_1.5.12618_(89712)_to_1.5.12620_(89718).exe",
+        "patch_hollow_knight_1.5.78.11833a_(85515)_to_1.5.12459_(88294).exe",
+        "patch_hollow_knight_1.5.78.11833_(77123)_to_1.5.78.11833a_(85515).exe",
+    ];
+
+    private static MakeADisc HollowKnightWithItsUpdates()
+    {
+        MakeADisc screen = TheScreen();
+        screen.Add(AGame("Hollow Knight"), [.. HollowKnightsUpdatesAsTheyAreListed.Select(AnUpdate)]);
+
+        return screen;
+    }
+
+    private static AThingOnTheDisc[] TheAddOnRows(MakeADisc screen, int game = 0) =>
+        [.. screen.WhatGoesOnIt[game].EveryThing().Where(each => each.What == TheTreeOfWhatGoesOn.AnAddOn)];
+
+    private static string[] TheAddOnsOnTheDisc(MakeADisc screen) =>
+        [.. screen.AsAProject().AddOnsOrNone.Select(addOn => addOn.Name)];
+
+    [Theory]
+    [InlineData("patch_hollow_knight_1.5.12459_(88294)_to_1.5.12618_(89712).exe", 89712L)]
+    [InlineData(@"C:\games\Hollow Knight\patch_hollow_knight_1.5.12459_(88294)_to_1.5.12618_(89712).exe", 89712L)]
+    [InlineData("PATCH_x_1_(5)_TO_2_(60).EXE", 60L)]
+    [InlineData("patch_game_1_to_2.exe", null)]
+    [InlineData("patch_game_1_(5)_to_2.exe", null)]
+    [InlineData("setup_game_dlc_(89712).exe", null)]
+    [InlineData("soundtrack_(89712).exe", null)]
+    [InlineData("patch_game_1_to_2_(abc).exe", null)]
+    public void An_update_says_which_build_it_reaches_and_nothing_else_does(string file, long? build)
+    {
+        Assert.Equal(build, AddOn.TheBuildItReaches(file));
+    }
+
+    [Fact]
+    public void A_games_updates_are_listed_lowest_build_first_and_go_on_the_disc_that_way()
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+
+        string[] inOrder =
+        [
+            "Update 1.5.78.11833a (85515)", "Update 1.5.12459 (88294)", "Update 1.5.12618 (89712)", "Update 1.5.12620 (89718)",
+        ];
+
+        Assert.Equal(inOrder, TheAddOnRows(screen).Select(each => each.Name));
+        Assert.Equal(inOrder, TheAddOnsOnTheDisc(screen));
+    }
+
+    [Fact]
+    public void Only_the_updates_move_and_only_among_the_places_updates_had()
+    {
+        // A DLC has no build to go by, so it stays where it was, between
+        // whatever was either side of it. And each game's own stay its own.
+        AddOn[] found =
+        [
+            new(0, @"C:\a\patch_a_1_(1)_to_3_(30).exe", "three", 1),
+            new(0, @"C:\a\setup_a_dlc.exe", "dlc", 1),
+            new(1, @"C:\b\patch_b_1_(1)_to_9_(5).exe", "other game", 1),
+            new(0, @"C:\a\patch_a_1_(1)_to_2_(20).exe", "two", 1),
+            new(0, @"C:\a\patch_a_1_to_2.exe", "no build", 1),
+            new(0, @"C:\a\patch_a_0_(0)_to_1_(10).exe", "one", 1),
+        ];
+
+        Assert.Equal(
+            ["one", "dlc", "other game", "two", "no build", "three"],
+            AddOn.WithUpdatesInTheirOrder(found).Select(addOn => addOn.Name));
+    }
+
+    [Fact]
+    public void Moving_one_games_add_on_leaves_every_other_games_exactly_where_it_was()
+    {
+        // The list holds every game's add-ons together, and they need not
+        // be in runs: one attached by hand later sits after another game's.
+        AddOn[] all =
+        [
+            new(0, @"C:\a\one.exe", "a one", 1),
+            new(1, @"C:\b\one.exe", "b one", 1),
+            new(0, @"C:\a\two.exe", "a two", 1),
+            new(1, @"C:\b\two.exe", "b two", 1),
+            new(0, @"C:\a\three.exe", "a three", 1),
+        ];
+
+        IReadOnlyList<AddOn>? now = AddOn.WithOneMoved(all, 0, @"C:\a\three.exe", @"c:\A\ONE.exe", after: false);
+
+        Assert.NotNull(now);
+        Assert.Equal(["a three", "b one", "a one", "b two", "a two"], now.Select(addOn => addOn.Name));
+
+        // Nothing to move, and nothing is what comes back.
+        Assert.Null(AddOn.WithOneMoved(all, 0, @"C:\a\one.exe", @"C:\a\one.exe", after: true));
+        Assert.Null(AddOn.WithOneMoved(all, 0, @"C:\a\one.exe", @"C:\a\two.exe", after: false));
+        Assert.Null(AddOn.WithOneMoved(all, 0, @"C:\a\one.exe", @"C:\b\one.exe", after: true));
+        Assert.Null(AddOn.WithOneMoved(all, 0, @"C:\a\nowhere.exe", @"C:\a\two.exe", after: true));
+        Assert.Null(AddOn.WithOneMoved(all, 7, @"C:\a\one.exe", @"C:\a\two.exe", after: true));
+    }
+
+    [Fact]
+    public void An_add_on_let_go_over_another_goes_before_it_or_after()
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        AThingOnTheDisc[] rows = TheAddOnRows(screen);
+
+        // The last, let go over the upper half of the first: to the top.
+        AThingOnTheDisc? moved = screen.MoveTheAddOnTo(rows[3], rows[0], after: false);
+
+        string[] now =
+        [
+            "Update 1.5.12620 (89718)", "Update 1.5.78.11833a (85515)", "Update 1.5.12459 (88294)", "Update 1.5.12618 (89712)",
+        ];
+
+        Assert.Equal(now, TheAddOnRows(screen).Select(each => each.Name));
+        Assert.Equal(now, TheAddOnsOnTheDisc(screen));
+
+        // The row handed back is the one now in the list, and it is picked.
+        Assert.NotNull(moved);
+        Assert.Same(TheAddOnRows(screen)[0], moved);
+        Assert.Same(moved, screen.WhatIsSelected);
+
+        // And over the lower half of the one after it: one place down.
+        rows = TheAddOnRows(screen);
+        screen.MoveTheAddOnTo(rows[0], rows[1], after: true);
+
+        Assert.Equal(
+            ["Update 1.5.78.11833a (85515)", "Update 1.5.12620 (89718)", "Update 1.5.12459 (88294)", "Update 1.5.12618 (89712)"],
+            TheAddOnsOnTheDisc(screen));
+    }
+
+    [Theory]
+    [InlineData(0, 1, false)]
+    [InlineData(1, 0, true)]
+    [InlineData(2, 2, false)]
+    [InlineData(2, 2, true)]
+    public void Let_go_where_it_already_is_nothing_moves(int moved, int onto, bool after)
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        AThingOnTheDisc[] rows = TheAddOnRows(screen);
+        string[] before = TheAddOnsOnTheDisc(screen);
+
+        Assert.Null(screen.MoveTheAddOnTo(rows[moved], rows[onto], after));
+
+        Assert.Equal(before, TheAddOnsOnTheDisc(screen));
+        Assert.Same(rows[0], TheAddOnRows(screen)[0]);
+    }
+
+    [Fact]
+    public void A_tick_taken_off_an_add_on_stays_off_when_another_is_moved()
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        TheAddOnRows(screen)[1].IsOn = false;
+
+        AThingOnTheDisc[] rows = TheAddOnRows(screen);
+        screen.MoveTheAddOnTo(rows[3], rows[0], after: false);
+
+        Assert.Equal(
+            ["Update 1.5.12620 (89718)", "Update 1.5.78.11833a (85515)", "Update 1.5.12618 (89712)"],
+            TheAddOnsOnTheDisc(screen));
+        Assert.Equal(false, TheAddOnRows(screen).Single(each => each.Name == "Update 1.5.12459 (88294)").IsOn);
+    }
+
+    [Fact]
+    public void An_add_on_moves_among_its_own_games_add_ons_and_nowhere_else()
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        screen.Add(AGame("Celeste"), [ADlc("setup_celeste_dlc.exe"), ADlc("setup_celeste_more.exe")]);
+
+        AThingOnTheDisc[] its = TheAddOnRows(screen);
+        AThingOnTheDisc[] others = TheAddOnRows(screen, 1);
+        AThingOnTheDisc game = screen.WhatGoesOnIt[0];
+        AThingOnTheDisc folder = game.EveryRow().Single(each => each.Name == TheTreeOfWhatGoesOn.AddOnsAreUnder);
+        AThingOnTheDisc installer = game.EveryRow().First(each => each.Name.StartsWith("setup_", StringComparison.Ordinal));
+
+        Assert.True(screen.MayBeLetGoOver(its[0], its[1]));
+
+        // Not onto itself, its folder, its game, its game's installer,
+        // another game, another game's add-on, or nothing at all.
+        foreach (AThingOnTheDisc? over in new[] { its[0], folder, game, installer, screen.WhatGoesOnIt[1], others[0], null })
+        {
+            Assert.False(screen.MayBeLetGoOver(its[0], over));
+            Assert.Null(screen.MoveTheAddOnTo(its[0], over, after: true));
+        }
+
+        Assert.Equal(
+            ["Update 1.5.78.11833a (85515)", "Update 1.5.12459 (88294)", "Update 1.5.12618 (89712)", "Update 1.5.12620 (89718)", "celeste dlc", "celeste more"],
+            TheAddOnsOnTheDisc(screen));
+
+        // The other game's own two swap, and the first game's are untouched.
+        screen.MoveTheAddOnTo(others[1], others[0], after: false);
+
+        Assert.Equal(
+            ["Update 1.5.78.11833a (85515)", "Update 1.5.12459 (88294)", "Update 1.5.12618 (89712)", "Update 1.5.12620 (89718)", "celeste more", "celeste dlc"],
+            TheAddOnsOnTheDisc(screen));
+    }
+
+    [Fact]
+    public void A_game_has_nowhere_to_go_over_its_own_rows_which_is_the_whole_list_when_it_is_alone()
+    {
+        // The owner, 20 November 2026: one game, dragged, and nothing said
+        // why nothing happened. The pointer wears no-entry now.
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        AThingOnTheDisc game = screen.WhatGoesOnIt[0];
+
+        Assert.All(game.EveryRow(), over => Assert.False(screen.MayBeLetGoOver(game, over)));
+        Assert.False(screen.MayBeLetGoOver(game, null));
+
+        screen.Add(AGame("Celeste"));
+
+        // With another game there is: over that game, or anything of its.
+        Assert.All(screen.WhatGoesOnIt[1].EveryRow(), over => Assert.True(screen.MayBeLetGoOver(game, over)));
+        Assert.All(game.EveryRow(), over => Assert.False(screen.MayBeLetGoOver(game, over)));
+    }
+
+    [Fact]
+    public void A_drag_from_an_add_on_carries_the_add_on_and_from_anything_else_the_game()
+    {
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        AThingOnTheDisc game = screen.WhatGoesOnIt[0];
+        AThingOnTheDisc update = TheAddOnRows(screen)[2];
+
+        Assert.Same(update, MakeADisc.WhatADragCarries(update));
+        Assert.All(
+            game.EveryRow().Where(each => each.What != TheTreeOfWhatGoesOn.AnAddOn),
+            row => Assert.Same(game, MakeADisc.WhatADragCarries(row)));
+        Assert.Null(MakeADisc.WhatADragCarries(null));
+    }
+
+    [Fact]
+    public void An_order_somebody_made_is_what_a_project_file_carries_and_what_comes_back()
+    {
+        // Build order is only for add-ons as they are first found. An order
+        // made by hand is saved as it is and opened as it was.
+        MakeADisc screen = HollowKnightWithItsUpdates();
+        AThingOnTheDisc[] rows = TheAddOnRows(screen);
+        screen.MoveTheAddOnTo(rows[3], rows[0], after: false);
+
+        string saved = TheProjectAsJson.Of(screen.AsAProject(), "2.0.5", "DVD5", "out", DateTimeOffset.UtcNow);
+        OpenedProject opened = Assert.IsType<Outcome<OpenedProject>.Ok>(AProjectFile.Read(saved)).Value;
+
+        Assert.Equal(
+            [
+                "patch_hollow_knight_1.5.12618_(89712)_to_1.5.12620_(89718).exe",
+                "patch_hollow_knight_1.5.78.11833_(77123)_to_1.5.78.11833a_(85515).exe",
+                "patch_hollow_knight_1.5.78.11833a_(85515)_to_1.5.12459_(88294).exe",
+                "patch_hollow_knight_1.5.12459_(88294)_to_1.5.12618_(89712).exe",
+            ],
+            opened.Entries.Where(each => each.IsAnAddOn).Select(each => Path.GetFileName(each.Installer)));
+    }
+
+    [Fact]
+    public void The_sort_list_shares_the_totals_line_and_has_no_line_of_its_own()
+    {
+        // The owner, 20 November 2026: under the total, between it and the
+        // picked game's links, it made the corner messy.
+        System.Xml.Linq.XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        System.Xml.Linq.XElement window = System.Xml.Linq.XDocument
+            .Load(Repository.File("src", "DiscWright.App", "MainWindow.xaml")).Root!;
+
+        string? Id(System.Xml.Linq.XElement each) => (string?)each.Attribute("AutomationProperties.AutomationId");
+
+        System.Xml.Linq.XElement ways = Assert.Single(window.Descendants(xaml + "ComboBox"), each => Id(each) == "SortTheGames");
+        System.Xml.Linq.XElement total = Assert.Single(window.Descendants(xaml + "TextBlock"), each => Id(each) == "WhatIsOnIt");
+        System.Xml.Linq.XElement line = ways.Parent!.Parent!;
+
+        Assert.Equal(xaml + "DockPanel", line.Name);
+        Assert.Same(line, total.Parent!.Parent);
+        Assert.Equal("Right", (string?)ways.Parent!.Attribute("DockPanel.Dock"));
+
+        // Docked before the total, or the total would take the whole line.
+        Assert.Same(ways.Parent, line.Elements().First());
+    }
+
     // --------------------------------------------------- the add-ons' own sum
 
     [Fact]
@@ -727,19 +1006,34 @@ public class TheOrderOfTheGames
 
         Assert.Contains("IsInside<System.Windows.Controls.Primitives.ButtonBase>(pressed)", window, StringComparison.Ordinal);
         Assert.Contains("IsInside<System.Windows.Controls.TextBox>(pressed)", window, StringComparison.Ordinal);
-        Assert.Contains("_heldGame = row.TheGameItIsIn;", window, StringComparison.Ordinal);
+        Assert.Contains("_heldGame = MakeADisc.WhatADragCarries(row);", window, StringComparison.Ordinal);
 
         // Only once the pointer has travelled, so a click is still a click.
         Assert.Contains("SystemParameters.MinimumHorizontalDragDistance", window, StringComparison.Ordinal);
         Assert.Contains("DragDrop.DoDragDrop(Games, new DataObject(AGameBeingMoved, game), DragDropEffects.Move);", window, StringComparison.Ordinal);
 
-        // Before the game it is let go over when over its upper half.
-        Assert.Contains("bool after = e.GetPosition(drawn).Y > drawn.ActualHeight / 2;", window, StringComparison.Ordinal);
-        Assert.Contains("KeepPicked(_screen.MoveTheGameTo(carried, onto, after));", window, StringComparison.Ordinal);
+        // Before the game it is let go over when over its upper half, and
+        // an add-on by the half of the one row it is over.
+        Assert.Contains(
+            "KeepPicked(_screen.MoveTheGameTo(carried, onto, e.GetPosition(drawn).Y > drawn.ActualHeight / 2));",
+            window, StringComparison.Ordinal);
+        Assert.Contains(
+            "KeepPicked(_screen.MoveTheAddOnTo(carried, onto, e.GetPosition(row).Y > row.ActualHeight / 2));",
+            window, StringComparison.Ordinal);
 
         // The four-way arrow while it is carried, and never during a run.
         Assert.Contains("System.Windows.Input.Mouse.SetCursor(System.Windows.Input.Cursors.SizeAll);", window, StringComparison.Ordinal);
         Assert.Contains("e.Effects = !_screen.NothingIsRunning ? DragDropEffects.None", window, StringComparison.Ordinal);
+
+        // No-entry wherever letting go would move nothing: the window asks
+        // the screen while the drag is in the air, and again before it acts.
+        Assert.Contains(
+            "(_screen.MayBeLetGoOver(carried, e.OriginalSource is DependencyObject over ? TheRowAt(over) : null)",
+            window, StringComparison.Ordinal);
+        Assert.Contains("|| !_screen.MayBeLetGoOver(carried, onto))", window, StringComparison.Ordinal);
+
+        // And only Move wears the arrow, so None is Windows' own no-entry.
+        Assert.Contains("if (e.Effects.HasFlag(DragDropEffects.Move))", window, StringComparison.Ordinal);
 
         System.Xml.Linq.XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
         System.Xml.Linq.XElement tree = Assert.Single(

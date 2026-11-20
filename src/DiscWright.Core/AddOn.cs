@@ -258,8 +258,102 @@ public sealed partial record AddOn(
         return name.Length == 0 ? "Add-on" : name;
     }
 
+    /// <summary>
+    /// The build an update leaves a game at: the number GOG writes in
+    /// brackets at the end of a patch's name. Nothing for anything that is
+    /// not an update, or whose name does not end in one.
+    /// </summary>
+    public static long? TheBuildItReaches(string fileName)
+    {
+        Match build = PatchToABuild().Match(System.IO.Path.GetFileNameWithoutExtension(fileName));
+
+        return build.Success && long.TryParse(
+            build.Groups[1].Value, System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out long reached)
+            ? reached
+            : null;
+    }
+
+    /// <summary>
+    /// A game's add-ons as they are found, with its updates in the order
+    /// they are installed in: lowest build first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// They came in the order of their file names, and a patch's file name
+    /// starts with the version it patches <em>from</em> written as text. The
+    /// owner's own Hollow Knight, 20 November 2026, listed 1.5.12618,
+    /// 1.5.12620, 1.5.12459 and 1.5.78.11833a, which by GOG's build numbers
+    /// is the third, the fourth, the second and the first.
+    /// </para>
+    /// <para>
+    /// <strong>Only the updates move, and only among the places updates
+    /// already had.</strong> A DLC or a soundtrack has no build to go by, so
+    /// it stays exactly where it was, and so does an update whose name says
+    /// no build. Only for add-ons as they are first found: an order somebody
+    /// made, or one a project file carries, is never put through this.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<AddOn> WithUpdatesInTheirOrder(IReadOnlyList<AddOn> addOns)
+    {
+        Queue<AddOn> inOrder = new(addOns
+            .Where(addOn => TheBuildItReaches(addOn.Path) is not null)
+            .OrderBy(addOn => addOn.BelongsTo)
+            .ThenBy(addOn => TheBuildItReaches(addOn.Path)));
+
+        // Each game's updates go back into that game's own places, which a
+        // sort that is stable by game does without mixing two games.
+        Dictionary<int, Queue<AddOn>> perGame = inOrder
+            .GroupBy(addOn => addOn.BelongsTo)
+            .ToDictionary(group => group.Key, group => new Queue<AddOn>(group));
+
+        return
+        [
+            .. addOns.Select(addOn => TheBuildItReaches(addOn.Path) is null
+                ? addOn
+                : perGame[addOn.BelongsTo].Dequeue())
+        ];
+    }
+
+    /// <summary>
+    /// One game's add-ons with one of them moved to where another is, before
+    /// it or after, and every other game's left as they were.
+    /// </summary>
+    /// <returns>The list as it is now, or nothing when nothing would move.</returns>
+    public static IReadOnlyList<AddOn>? WithOneMoved(
+        IReadOnlyList<AddOn> addOns, int game, string moved, string onto, bool after)
+    {
+        List<AddOn> its = [.. addOns.Where(addOn => addOn.BelongsTo == game)];
+        int from = its.FindIndex(addOn => string.Equals(addOn.Path, moved, StringComparison.OrdinalIgnoreCase));
+        int target = its.FindIndex(addOn => string.Equals(addOn.Path, onto, StringComparison.OrdinalIgnoreCase));
+
+        if (from < 0 || target < 0 || from == target)
+        {
+            return null;
+        }
+
+        AddOn carried = its[from];
+        AddOn over = its[target];
+        List<AddOn> now = [.. its];
+
+        now.RemoveAt(from);
+        now.Insert(now.IndexOf(over) + (after ? 1 : 0), carried);
+
+        if (now.SequenceEqual(its))
+        {
+            return null;
+        }
+
+        Queue<AddOn> next = new(now);
+
+        return [.. addOns.Select(addOn => addOn.BelongsTo == game ? next.Dequeue() : addOn)];
+    }
+
     [GeneratedRegex(@"^patch_.+_to_(.+)$", RegexOptions.IgnoreCase)]
     private static partial Regex PatchToVersion();
+
+    [GeneratedRegex(@"^patch_.+_to_.+\((\d+)\)$", RegexOptions.IgnoreCase)]
+    private static partial Regex PatchToABuild();
 
     [GeneratedRegex(@"\s+")]
     private static partial Regex RunsOfSpace();

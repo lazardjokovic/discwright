@@ -631,7 +631,44 @@
                                 Padding="10,6"
                                 Visibility="{Binding Games.Count, Converter={StaticResource WhenSome}}">
                             <StackPanel>
-                            <WrapPanel Orientation="Horizontal">
+                            <!-- The total on the left and the list of ways
+                                 to sort on the right of the same line, with
+                                 two games or more. The list had a line of
+                                 its own under the total, between it and the
+                                 picked game's links, and the owner said on
+                                 20 November 2026 that it made the corner
+                                 messy: three lines of small things where
+                                 two will do. Choosing a way sorts and the
+                                 list goes back to saying what it is for,
+                                 because it is a thing to do and not a
+                                 setting that stays. -->
+                            <DockPanel>
+                            <Grid DockPanel.Dock="Right"
+                                  Margin="10,0,0,0"
+                                  VerticalAlignment="Top"
+                                  Visibility="{Binding CanSortTheGames, Converter={StaticResource WhenSo}}">
+                                <ComboBox x:Name="WaysToSort"
+                                          MinWidth="170"
+                                          ItemsSource="{Binding TheWaysToSort}"
+                                          DisplayMemberPath="InWords"
+                                          SelectionChanged="SortTheGames"
+                                          ToolTip="The menu lists the games in the order they are in here. A game can also be dragged to where it should be."
+                                          AutomationProperties.Name="Sort the games"
+                                          AutomationProperties.AutomationId="SortTheGames">
+                                    <ComboBox.ItemContainerStyle>
+                                        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                            <Setter Property="AutomationProperties.Name" Value="{Binding InWords}" />
+                                        </Style>
+                                    </ComboBox.ItemContainerStyle>
+                                </ComboBox>
+                                <TextBlock Style="{StaticResource Aside}"
+                                           Margin="10,0,0,0"
+                                           VerticalAlignment="Center"
+                                           IsHitTestVisible="False"
+                                           Text="Sort the games"
+                                           Visibility="{Binding SelectedItem, ElementName=WaysToSort, Converter={StaticResource WhenNothing}}" />
+                            </Grid>
+                            <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <TextBlock Style="{StaticResource Aside}"
                                            Text="{Binding WhatIsOnIt}"
                                            AutomationProperties.AutomationId="WhatIsOnIt" />
@@ -680,37 +717,7 @@
                                         AutomationProperties.AutomationId="TakeOffWhatIsLeftOff" />
 
                             </WrapPanel>
-
-                            <!-- A list of ways to sort, on a line of its
-                                 own, with two games or more. It was one
-                                 link that sorted by name. Choosing a way
-                                 sorts and the list goes back to saying
-                                 what it is for, because it is a thing to
-                                 do and not a setting that stays. -->
-                            <Grid Margin="0,6,0,0"
-                                  HorizontalAlignment="Left"
-                                  Visibility="{Binding CanSortTheGames, Converter={StaticResource WhenSo}}">
-                                <ComboBox x:Name="WaysToSort"
-                                          MinWidth="190"
-                                          ItemsSource="{Binding TheWaysToSort}"
-                                          DisplayMemberPath="InWords"
-                                          SelectionChanged="SortTheGames"
-                                          ToolTip="The menu lists the games in the order they are in here. A game can also be dragged to where it should be."
-                                          AutomationProperties.Name="Sort the games"
-                                          AutomationProperties.AutomationId="SortTheGames">
-                                    <ComboBox.ItemContainerStyle>
-                                        <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
-                                            <Setter Property="AutomationProperties.Name" Value="{Binding InWords}" />
-                                        </Style>
-                                    </ComboBox.ItemContainerStyle>
-                                </ComboBox>
-                                <TextBlock Style="{StaticResource Aside}"
-                                           Margin="10,0,0,0"
-                                           VerticalAlignment="Center"
-                                           IsHitTestVisible="False"
-                                           Text="Sort the games"
-                                           Visibility="{Binding SelectedItem, ElementName=WaysToSort, Converter={StaticResource WhenNothing}}" />
-                            </Grid>
+                            </DockPanel>
 
                             <!-- The picked game's own manual and extras, for
                                  goodies kept apart from the installer. Only
