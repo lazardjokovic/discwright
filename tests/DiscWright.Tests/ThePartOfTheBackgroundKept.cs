@@ -213,6 +213,128 @@ public class ThePartOfTheBackgroundKept
         Assert.Contains(drawn, TheWaysWpfDraws);
     }
 
+    [Theory]
+    [InlineData(BackgroundFit.Fill, false, false)]
+    [InlineData(BackgroundFit.Fit, true, false)]
+    [InlineData(BackgroundFit.Stretch, true, false)]
+    [InlineData(BackgroundFit.Tile, false, true)]
+    public void Exactly_one_thing_draws_the_small_picture_for_each_way_to_fit(
+        BackgroundFit how, bool inOnePiece, bool tiled)
+    {
+        // The owner, on the recording of the four ways to fit: what the list
+        // is changed to should show in the dialog as well as in the preview.
+        MakeADisc screen = TheScreen(400, 100);
+        screen.Background = @"C:\art\banner.png";
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.HowTheBackgroundFits = WaysToFit.For(how);
+
+        Assert.Equal(inOnePiece, screen.TheSmallPictureIsInOnePiece);
+        Assert.Equal(tiled, screen.TheSmallPictureIsTiled);
+        Assert.Equal(how == BackgroundFit.Fill, screen.TheBackgroundCanBeFramed);
+
+        // One of the three, and never two at once or none.
+        Assert.Single(
+            new[] { screen.TheSmallPictureIsInOnePiece, screen.TheSmallPictureIsTiled, screen.TheBackgroundCanBeFramed },
+            each => each);
+
+        foreach (string named in new[]
+                 {
+                     nameof(MakeADisc.TheSmallPictureIsInOnePiece), nameof(MakeADisc.TheSmallPictureIsTiled),
+                     nameof(MakeADisc.TheTileInTheSmallPicture),
+                 })
+        {
+            Assert.Contains(named, told, StringComparer.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void With_no_picture_nothing_draws_one()
+    {
+        MakeADisc screen = TheScreen(400, 100);
+
+        foreach (BackgroundFit how in Enum.GetValues<BackgroundFit>())
+        {
+            screen.HowTheBackgroundFits = WaysToFit.For(how);
+
+            Assert.False(screen.TheSmallPictureIsInOnePiece);
+            Assert.False(screen.TheSmallPictureIsTiled);
+            Assert.False(screen.TheBackgroundCanBeFramed);
+        }
+    }
+
+    [Theory]
+    [InlineData(400, 100, 100, 25)]
+    [InlineData(64, 64, 16, 16)]
+    [InlineData(1520, 960, 380, 240)]
+    public void A_tile_in_the_small_picture_is_the_picture_at_a_quarter_of_its_size(
+        int wide, int tall, double tileWide, double tileTall)
+    {
+        // The menu is 760 by 480 and the small picture of it 190 by 120, so
+        // a tile there is a quarter of the tile on the disc, from the same
+        // corner. A 400 by 100 banner is seen nearly twice across and nearly
+        // five times down in both.
+        MakeADisc screen = TheScreen(wide, tall);
+        screen.Background = @"C:\art\banner.png";
+        screen.HowTheBackgroundFits = WaysToFit.For(BackgroundFit.Tile);
+
+        Assert.Equal(new Kept(0, 0, tileWide, tileTall), screen.TheTileInTheSmallPicture);
+        Assert.Equal(CopyTheArtworkStep.MenuWidth / 190.0, MakeADisc.TheSmallPictureIsThisMuchSmaller);
+        Assert.Equal(CopyTheArtworkStep.MenuHeight / 120.0, MakeADisc.TheSmallPictureIsThisMuchSmaller);
+    }
+
+    [Fact]
+    public void A_picture_that_cannot_be_read_is_one_tile_and_divides_by_nothing()
+    {
+        MakeADisc screen = TheScreen(new PicturesOfOneSize(0, 0, readable: false));
+        screen.Background = @"C:\art\broken.png";
+        screen.HowTheBackgroundFits = WaysToFit.For(BackgroundFit.Tile);
+
+        Assert.Equal(new Kept(0, 0, 190, 120), screen.TheTileInTheSmallPicture);
+    }
+
+    [Fact]
+    public void The_dialog_draws_a_tiled_picture_as_tiles_from_the_top_left_over_the_menus_own_dark()
+    {
+        System.Xml.Linq.XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        System.Xml.Linq.XElement dialog = System.Xml.Linq.XDocument
+            .Load(Repository.File("src", "DiscWright.App", "WhatElseGoesOnIt.xaml")).Root!;
+
+        System.Xml.Linq.XElement tiles = Assert.Single(
+            dialog.Descendants(xaml + "ImageBrush"), each => each.Attribute("Viewport") is not null);
+
+        Assert.Equal("Tile", (string?)tiles.Attribute("TileMode"));
+        Assert.Equal("{Binding TheTileInTheSmallPicture, Converter={StaticResource AsARect}}", (string?)tiles.Attribute("Viewport"));
+
+        // In the small picture's own pixels, or a tile would be a fraction
+        // of the frame whatever size the picture is.
+        Assert.Equal("Absolute", (string?)tiles.Attribute("ViewportUnits"));
+        Assert.Equal("Left", (string?)tiles.Attribute("AlignmentX"));
+        Assert.Equal("Top", (string?)tiles.Attribute("AlignmentY"));
+
+        System.Xml.Linq.XElement holder = tiles.Ancestors(xaml + "Border").First();
+
+        Assert.Equal(
+            "{Binding TheSmallPictureIsTiled, Converter={StaticResource WhenSo}}",
+            (string?)holder.Attribute("Visibility"));
+        Assert.Equal("True", (string?)holder.Attribute("ClipToBounds"));
+
+        System.Xml.Linq.XElement picture = Assert.Single(
+            dialog.Descendants(xaml + "Image"),
+            each => (string?)each.Attribute("AutomationProperties.AutomationId") == "TheBackgroundPicture");
+
+        Assert.Equal(
+            "{Binding TheSmallPictureIsInOnePiece, Converter={StaticResource WhenSo}}",
+            (string?)picture.Attribute("Visibility"));
+
+        // What a picture fitted inside leaves showing is the menu's dark,
+        // on the disc and here.
+        Assert.Contains(
+            dialog.Descendants(xaml + "Border"),
+            each => (string?)each.Attribute("Background") == "{DynamicResource TheMenusOwnDark}");
+    }
+
     [Fact]
     public void The_dialogs_small_picture_asks_the_screen_how_to_draw_itself()
     {
@@ -504,7 +626,10 @@ public class ThePartOfTheBackgroundKept
         System.Xml.Linq.XElement dialog = System.Xml.Linq.XDocument
             .Load(Repository.File("src", "DiscWright.App", "WhatElseGoesOnIt.xaml")).Root!;
 
-        System.Xml.Linq.XElement brush = Assert.Single(dialog.Descendants(xaml + "ImageBrush"));
+        // The frame's brush, which is the one told which part to show. The
+        // dialog has another, for a picture that is tiled.
+        System.Xml.Linq.XElement brush = Assert.Single(
+            dialog.Descendants(xaml + "ImageBrush"), each => each.Attribute("Viewbox") is not null);
 
         Assert.Equal("{Binding WhatTheMenuKeeps, Converter={StaticResource AsARect}}", (string?)brush.Attribute("Viewbox"));
         Assert.Equal("RelativeToBoundingBox", (string?)brush.Attribute("ViewboxUnits"));

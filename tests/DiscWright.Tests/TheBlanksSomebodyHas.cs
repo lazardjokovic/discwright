@@ -388,6 +388,13 @@ public class TheBlanksSomebodyHas
 
         System.Xml.Linq.XElement box = Assert.Single(boxes.Descendants(xaml + "TextBox"));
 
+        // Three to a row and every name the same width, so the boxes stand
+        // in columns. In a row that wrapped where it liked they stood
+        // wherever their names ended, which the owner saw on the recording.
+        Assert.Equal("3", (string?)Assert.Single(boxes.Descendants(xaml + "UniformGrid")).Attribute("Columns"));
+        Assert.Empty(boxes.Descendants(xaml + "WrapPanel"));
+        Assert.Equal("40", (string?)Assert.Single(boxes.Descendants(xaml + "TextBlock")).Attribute("Width"));
+
         Assert.Equal("{Binding Typed, UpdateSourceTrigger=PropertyChanged}", (string?)box.Attribute("Text"));
 
         // Every box is the same template, so each answers to an id of its

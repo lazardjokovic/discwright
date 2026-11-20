@@ -2838,6 +2838,44 @@ public sealed class MakeADisc : INotifyPropertyChanged
     };
 
     /// <summary>
+    /// Whether the small picture is drawn as a picture in one piece: fitted
+    /// inside or stretched. Filled, the frame draws it, and tiled, the tiles do.
+    /// </summary>
+    public bool TheSmallPictureIsInOnePiece =>
+        Art().BackgroundPath is not null && Art().HowItFits is BackgroundFit.Fit or BackgroundFit.Stretch;
+
+    /// <summary>Whether the small picture is drawn as tiles.</summary>
+    public bool TheSmallPictureIsTiled =>
+        Art().BackgroundPath is not null && Art().HowItFits == BackgroundFit.Tile;
+
+    /// <summary>
+    /// One tile of the small picture, in the small picture's own pixels: the
+    /// background at a quarter of its size, from the top left, which is the
+    /// menu's 760 by 480 drawn at 190 by 120.
+    /// </summary>
+    /// <remarks>
+    /// The small picture showed one copy of a tiled background, at whatever
+    /// size it had been read at, while the menu repeated it. The owner, on
+    /// the recording of the four ways to fit, 2026-11-20: what the list is
+    /// changed to should show here as well as in the preview. A picture
+    /// that cannot be read is one tile the size of the frame.
+    /// </remarks>
+    public Kept TheTileInTheSmallPicture
+    {
+        get
+        {
+            (int width, int height) = TheSizeOfTheBackground();
+
+            return width > 0 && height > 0
+                ? new Kept(0, 0, width / TheSmallPictureIsThisMuchSmaller, height / TheSmallPictureIsThisMuchSmaller)
+                : new Kept(0, 0, CopyTheArtworkStep.MenuWidth / TheSmallPictureIsThisMuchSmaller, CopyTheArtworkStep.MenuHeight / TheSmallPictureIsThisMuchSmaller);
+        }
+    }
+
+    /// <summary>The menu is 760 by 480 and the small picture of it 190 by 120.</summary>
+    public const double TheSmallPictureIsThisMuchSmaller = 4.0;
+
+    /// <summary>
     /// Whether there is a part to choose: a picture, filled and cropped.
     /// Every other way to fit shows all of the picture or none of the
     /// choice, and a colour has no parts.
@@ -3088,7 +3126,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
          nameof(HowTheBackgroundFits), nameof(WhatThatFitDoes),
          nameof(TheBackgroundCanBeFramed), nameof(BackgroundZoom), nameof(BackgroundAcross),
          nameof(BackgroundDown), nameof(WhatTheMenuKeeps), nameof(TheBackgroundIsFramed),
-         nameof(HowTheSmallPictureIsDrawn)];
+         nameof(HowTheSmallPictureIsDrawn), nameof(TheSmallPictureIsInOnePiece),
+         nameof(TheSmallPictureIsTiled), nameof(TheTileInTheSmallPicture)];
 
     private void ChangeTheArtwork(DiscArtwork now)
     {
