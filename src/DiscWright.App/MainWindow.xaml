@@ -687,7 +687,7 @@
                                 <Button Content="↑"
                                         Style="{StaticResource AnArrow}"
                                         IsEnabled="{Binding CanMoveThePickedUp}"
-                                        ToolTip="Moves what is picked one place up: a game among the games, an add-on among its game's add-ons. Alt and the up arrow does the same, and so does dragging it."
+                                        ToolTip="Moves what is picked one place up: a game, picked by its own row, among the games, or an add-on among its game's add-ons. Alt and the up arrow does the same, and so does dragging it."
                                         Click="MoveTheGameUp"
                                         AutomationProperties.Name="Move up"
                                         AutomationProperties.AutomationId="MoveTheGameUp" />
@@ -695,7 +695,7 @@
                                         Style="{StaticResource AnArrow}"
                                         Margin="4,0,0,0"
                                         IsEnabled="{Binding CanMoveThePickedDown}"
-                                        ToolTip="Moves what is picked one place down: a game among the games, an add-on among its game's add-ons. Alt and the down arrow does the same, and so does dragging it."
+                                        ToolTip="Moves what is picked one place down: a game, picked by its own row, among the games, or an add-on among its game's add-ons. Alt and the down arrow does the same, and so does dragging it."
                                         Click="MoveTheGameDown"
                                         AutomationProperties.Name="Move down"
                                         AutomationProperties.AutomationId="MoveTheGameDown" />
