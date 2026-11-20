@@ -129,17 +129,18 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
         // own first and the disc's when it has none.
         IReadOnlyList<GameExtra> own = game?.OwnOrNone ?? [];
 
-        // And the disc's do not count at all when they are small buttons in
-        // the corner: a game's screen then offers only what is its own.
-        bool theDiscsCount = !context.Project.Options.LookOrPlain.DiscsOwnAsSmallButtons;
+        // And the disc's do not count when they are small buttons in the
+        // corner: a game's screen then offers only what is its own. Each of
+        // the two by its own tick.
+        MenuLook look = context.Project.Options.LookOrPlain;
 
-        if ((theDiscsCount && extras?.ManualPath is not null && thisDiscCarriesThem)
+        if ((!look.DiscManualAsASmallButton && extras?.ManualPath is not null && thisDiscCarriesThem)
             || own.Any(each => each.Kind == GameExtraKind.Manual))
         {
             buttons.Add("Manual");
         }
 
-        if ((theDiscsCount && TheExtrasOn(context) is not null) || own.Any(each => each.Kind == GameExtraKind.Extra))
+        if ((!look.DiscExtrasAsASmallButton && TheExtrasOn(context) is not null) || own.Any(each => each.Kind == GameExtraKind.Extra))
         {
             buttons.Add("Extras");
         }

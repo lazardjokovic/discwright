@@ -356,7 +356,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 Games: [.. Enumerable.Range(1, games).Select(number => new MenuGame("Game " + number, "good.txt", string.Empty))],
                 Manual: "Extras/disc.pdf",
                 Extras: "Extras",
-                Look: new MenuLook(DiscsOwnAsSmallButtons: small, OpenTheDiscButton: open))),
+                Look: new MenuLook(DiscManualAsASmallButton: small, DiscExtrasAsASmallButton: small, OpenTheDiscButton: open))),
             menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
             test:
                 "function d(id) { return document.getElementById(id).style.display || ''; }\n"
@@ -386,6 +386,44 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.Equal(
             open ? (games > 1 ? "open still=block at=16px" : "open still=block at=88px") : "open still=none at=",
             lines[^1]);
+    }
+
+    [Theory]
+    // Only the manual is a small button: the book is in the corner, Extras
+    // is still a row of the list, and a game's screen still offers the
+    // disc's extras and not its manual.
+    [InlineData(true, false,
+        "list: rows=none/block corner=block/none",
+        "game: rows=none/block corner=none/none")]
+    // And the other way about.
+    [InlineData(false, true,
+        "list: rows=block/none corner=none/block",
+        "game: rows=block/none corner=none/none")]
+    public void With_one_tick_each_only_the_one_ticked_leaves_the_list_for_the_corner(
+        bool manual, bool extras, string onTheList, string onAGame)
+    {
+        string disc = Path.Combine(_folder, "one each " + manual + extras);
+        Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
+
+        string went = Run(
+            PageScriptFor(new MenuFacts(
+                "Own", "DiscWright.Test", 1, 1, "Install", ["Install", "Exit"], OnlyOneAtATime: true,
+                Games: [new MenuGame("Game 1", "good.txt", string.Empty), new MenuGame("Game 2", "good.txt", string.Empty)],
+                Manual: "Extras/disc.pdf",
+                Extras: "Extras",
+                Look: new MenuLook(DiscManualAsASmallButton: manual, DiscExtrasAsASmallButton: extras))),
+            menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
+            test:
+                "function d(id) { return document.getElementById(id).style.display || ''; }\n"
+                + "showChooser();\n"
+                + "out.push('list: rows=' + d('chooserManual') + '/' + d('chooserExtras') + ' corner=' + d('discManual') + '/' + d('discExtras'));\n"
+                + "showGame(0);\n"
+                + "out.push('game: rows=' + d('manual') + '/' + d('extras') + ' corner=' + d('discManual') + '/' + d('discExtras'));\n"
+                + "WScript.Echo(out.join('\\n'));\n");
+
+        string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Equal([onTheList, onAGame], lines);
     }
 
     [Fact]

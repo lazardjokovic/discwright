@@ -137,7 +137,8 @@ public class WhereTheMenusListSits
     [Theory]
     [InlineData("CheckBox", "ListOnTheLeft", "IsChecked")]
     [InlineData("CheckBox", "CornerAtTheBottom", "IsChecked")]
-    [InlineData("CheckBox", "DiscsOwnAsSmallButtons", "IsChecked")]
+    [InlineData("CheckBox", "DiscManualAsASmallButton", "IsChecked")]
+    [InlineData("CheckBox", "DiscExtrasAsASmallButton", "IsChecked")]
     [InlineData("CheckBox", "OpenTheDiscButton", "IsChecked")]
     [InlineData("TextBlock", "WhereTheCornerButtonsSit", "Text")]
     public void The_dialog_has_each_of_them_bound_to_what_it_is_named_after(

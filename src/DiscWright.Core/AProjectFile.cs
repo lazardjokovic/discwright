@@ -231,7 +231,10 @@ public static class AProjectFile
                 ? MenuSide.Left
                 : MenuSide.Right,
             string.Equals(Text(look, "Corner"), "Bottom", StringComparison.OrdinalIgnoreCase),
-            string.Equals(Text(look, "DiscsOwn"), "SmallButtons", StringComparison.OrdinalIgnoreCase),
+            // One word for which of the disc's own are small buttons, and
+            // any other word is neither.
+            TheWord(look, "DiscsOwn") is "smallbuttons" or "manual",
+            TheWord(look, "DiscsOwn") is "smallbuttons" or "extras",
             Yes(look, "OpenTheDisc"),
 
             // Tidied on the way in, so a file somebody edited yields a
@@ -271,6 +274,10 @@ public static class AProjectFile
             && found.TryGetDouble(out double number)
             ? number
             : null;
+
+    /// <summary>A word a file says, in small letters, or nothing.</summary>
+    private static string TheWord(JsonElement holder, string name) =>
+        (Text(holder, name) ?? string.Empty).Trim().ToLowerInvariant();
 
     private static string? Text(JsonElement holder, string name) =>
         holder.TryGetProperty(name, out JsonElement found) && found.ValueKind == JsonValueKind.String

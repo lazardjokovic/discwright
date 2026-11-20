@@ -176,6 +176,8 @@ public class TheWindowChecksItself
     [InlineData("the menu's list on the left")]
     [InlineData("the small buttons in the bottom corner")]
     [InlineData("the disc's own as small buttons")]
+    [InlineData("the disc's manual as a small button")]
+    [InlineData("the disc's extras as a small button")]
     [InlineData("a button that opens the disc")]
     [InlineData("the menu's heading")]
     [InlineData("no heading on the menu")]
@@ -304,6 +306,7 @@ public class TheWindowChecksItself
         nameof(MakeADisc.StartHere), nameof(MakeADisc.OnlyTheImage),
         nameof(MakeADisc.ListOnTheLeft), nameof(MakeADisc.CornerAtTheBottom),
         nameof(MakeADisc.DiscsOwnAsSmallButtons), nameof(MakeADisc.OpenTheDiscButton),
+        nameof(MakeADisc.DiscManualAsASmallButton), nameof(MakeADisc.DiscExtrasAsASmallButton),
         nameof(MakeADisc.MenuHeading), nameof(MakeADisc.MenuHeadingHidden), nameof(MakeADisc.TheMenusFont),
         nameof(MakeADisc.MenuWithoutAFrame),
         nameof(MakeADisc.HowTheBackgroundFits),
@@ -346,6 +349,8 @@ public class TheWindowChecksItself
             case "the menu's list on the left": screen.ListOnTheLeft = true; break;
             case "the small buttons in the bottom corner": screen.CornerAtTheBottom = true; break;
             case "the disc's own as small buttons": screen.DiscsOwnAsSmallButtons = true; break;
+            case "the disc's manual as a small button": screen.DiscManualAsASmallButton = true; break;
+            case "the disc's extras as a small button": screen.DiscExtrasAsASmallButton = true; break;
             case "a button that opens the disc": screen.OpenTheDiscButton = true; break;
             case "the menu's heading": screen.MenuHeading = "GOG COLLECTION"; break;
             case "the menu's font": screen.TheMenusFont = MenuFonts.For(MenuFont.Georgia); break;
@@ -388,6 +393,8 @@ public class TheWindowChecksItself
             case "the menu's list on the left": screen.ListOnTheLeft = false; break;
             case "the small buttons in the bottom corner": screen.CornerAtTheBottom = false; break;
             case "the disc's own as small buttons": screen.DiscsOwnAsSmallButtons = false; break;
+            case "the disc's manual as a small button": screen.DiscManualAsASmallButton = false; break;
+            case "the disc's extras as a small button": screen.DiscExtrasAsASmallButton = false; break;
             case "a button that opens the disc": screen.OpenTheDiscButton = false; break;
             case "the menu's heading": screen.MenuHeading = string.Empty; break;
             case "the menu's font": screen.TheMenusFont = MenuFonts.For(MenuFont.Tahoma); break;
