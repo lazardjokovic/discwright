@@ -33,6 +33,11 @@ namespace DiscWright.Core;
 /// or not by accident.
 /// </para>
 /// </param>
+/// <param name="MenuFontPath">
+/// A font file of somebody's own for the menu to be written in, or nothing.
+/// It goes onto the disc beside the menu, wrapped as WOFF, and the face
+/// chosen from the list is what a machine that cannot load it falls back to.
+/// </param>
 /// <param name="Kept">
 /// Which part of the background is kept when it is filled and cropped, or
 /// nothing for the middle. It belongs to the picture: choosing another
@@ -46,7 +51,8 @@ public sealed record DiscArtwork(
     string? DiscFacePath = null,
     string? BackgroundColour = null,
     BackgroundFit? Shape = null,
-    KeptPart? Kept = null)
+    KeptPart? Kept = null,
+    string? MenuFontPath = null)
 {
     /// <summary>The part of the background that is kept, the middle when none was chosen.</summary>
     public KeptPart WhatIsKept => Kept ?? KeptPart.TheMiddle;
@@ -83,7 +89,7 @@ public sealed record DiscArtwork(
     /// <summary>Whether there is anything to put on the disc at all.</summary>
     public bool IsAnything =>
         IconPath is not null || BackgroundPath is not null || CoverPath is not null || DiscFacePath is not null
-        || BackgroundColour is not null;
+        || BackgroundColour is not null || MenuFontPath is not null;
 
     /// <summary>Whether there is anything worth printing.</summary>
     public bool HasSomethingToPrint => CoverPath is not null || DiscFacePath is not null;

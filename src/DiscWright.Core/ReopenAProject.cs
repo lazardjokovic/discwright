@@ -170,7 +170,8 @@ public static class ReopenAProject
                 opened.Artwork.DiscFacePath,
                 opened.Artwork.BackgroundColour)
                 .Fitting(opened.Artwork.HowItFits)
-                .Keeping(opened.Artwork.BackgroundPath is null ? null : opened.Artwork.BackgroundKept),
+                .Keeping(opened.Artwork.BackgroundPath is null ? null : opened.Artwork.BackgroundKept)
+                with { MenuFontPath = string.IsNullOrWhiteSpace(opened.Artwork.MenuFontPath) ? null : opened.Artwork.MenuFontPath },
             Extras: new DiscExtras(
                 opened.ManualPath,
                 opened.ExtrasFolderPath,

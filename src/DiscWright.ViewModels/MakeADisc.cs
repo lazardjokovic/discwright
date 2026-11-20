@@ -2172,6 +2172,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         [
             ("disc icon", DiscIcon, false),
             ("menu background", Background, false),
+            ("menu font", MenuFontFile, false),
             ("music", Music, false),
             ("manual", Manual, false),
             ("extras folder", ExtrasFolder, true),
@@ -3035,6 +3036,35 @@ public sealed class MakeADisc : INotifyPropertyChanged
         set => ChangeTheArtwork(Art() with { DiscFacePath = Tidy(value) });
     }
 
+    /// <summary>
+    /// A font file of somebody's own for the menu, or nothing. The owner,
+    /// 2026-11-20: the list of faces stays, and this goes beside it.
+    /// </summary>
+    /// <remarks>
+    /// It goes onto the disc, so the menu wears it on a machine that has
+    /// never had it. The face chosen in the list is what a machine too old
+    /// to load it falls back to.
+    /// </remarks>
+    public string? MenuFontFile
+    {
+        get => _artwork?.MenuFontPath;
+        set => ChangeTheArtwork(Art() with { MenuFontPath = Tidy(value) });
+    }
+
+    /// <summary>
+    /// Looks at a font file before it is accepted, and says why not if not.
+    /// </summary>
+    public bool ThatFontIsUsable(string path)
+    {
+        WhyNotThatFont = _machine.Fonts?.WhyNot(path);
+        Tell(nameof(WhyNotThatFont));
+
+        return WhyNotThatFont is null;
+    }
+
+    /// <summary>Why the last font file picked was turned away, or nothing.</summary>
+    public string? WhyNotThatFont { get; private set; }
+
     /// <summary>What plays behind the menu.</summary>
     public string? Music
     {
@@ -3157,7 +3187,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
          nameof(HowTheBackgroundFits), nameof(WhatThatFitDoes),
          nameof(TheBackgroundCanBeFramed), nameof(BackgroundZoom), nameof(BackgroundAcross),
          nameof(BackgroundDown), nameof(WhatTheMenuKeeps), nameof(TheBackgroundIsFramed),
-         nameof(HowTheSmallPictureIsDrawn), nameof(TheSmallPictureIsInOnePiece),
+         nameof(MenuFontFile), nameof(HowTheSmallPictureIsDrawn), nameof(TheSmallPictureIsInOnePiece),
          nameof(TheSmallPictureIsTiled), nameof(TheTileInTheSmallPicture)];
 
     private void ChangeTheArtwork(DiscArtwork now)

@@ -134,6 +134,22 @@ public partial class WhatElseGoesOnIt : Window
 
     private void ClearTheDiscFace(object sender, RoutedEventArgs e) => _screen.DiscFace = null;
 
+    private void ChooseTheMenuFont(object sender, RoutedEventArgs e) =>
+        TakeAFile(
+            "A font for the menu to be written in",
+            AFontForTheMenu.ForThePicker,
+            path =>
+            {
+                // Said now, with the reason, rather than a menu that turns
+                // up on the disc in another face.
+                if (_screen.ThatFontIsUsable(path))
+                {
+                    _screen.MenuFontFile = path;
+                }
+            });
+
+    private void ClearTheMenuFont(object sender, RoutedEventArgs e) => _screen.MenuFontFile = null;
+
     private void ChooseTheMusic(object sender, RoutedEventArgs e) =>
         TakeAFile(
             "What plays behind the menu",

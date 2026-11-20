@@ -73,7 +73,8 @@ public partial class App : Application
         // The version goes in, because every disc it builds writes a project
         // file that says which build made it.
         DiscBuilder builder = new(
-            disk, new WindowsStageWriter(), new WindowsImages(), new Sha256Hasher(), WhatThisBuildIs());
+            disk, new WindowsStageWriter(), new WindowsImages(), new Sha256Hasher(), WhatThisBuildIs(),
+            fonts: new WindowsFonts());
 
         WindowsBurner burner = new();
 
@@ -102,7 +103,7 @@ public partial class App : Application
             new ANoteOnDisk(),
             burner,
             new WhatGitHubHasReleased(),
-            new APreviewOfTheMenu(new WindowsStageWriter(), new WindowsImages()),
+            new APreviewOfTheMenu(new WindowsStageWriter(), new WindowsImages(), new WindowsFonts()),
             new WindowsImages(),
             WhatThisBuildIs(),
             HowBigIs(disk),
@@ -112,6 +113,7 @@ public partial class App : Application
             Updater: package is null ? new TheUpdateWrittenDown(updater, log) : null,
             Remover: new WindowsStageWriter(),
             Blanks: ANoteAboutTheBlanks.ForThisUser(),
+            Fonts: new WindowsFonts(),
             StorePage: package is null ? null : ThisCopy.StorePage));
 
         // Everything the window says, as it says it.

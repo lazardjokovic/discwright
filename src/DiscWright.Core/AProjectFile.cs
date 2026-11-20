@@ -132,7 +132,10 @@ public static class AProjectFile
 
                     // Absent unless somebody framed the picture, and tidied
                     // so a number typed into the file cannot blank a menu.
-                    BackgroundKept: TheKeptPartIn(root)));
+                    BackgroundKept: TheKeptPartIn(root),
+
+                    // Absent unless somebody chose a font file of their own.
+                    MenuFontPath: Text(root, "MenuFontFile")));
         }
     }
 

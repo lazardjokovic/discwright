@@ -362,6 +362,8 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
 
             Look: context.Project.Options.Look,
 
-            CarriesAChecksumList: context.Project.Options.Checksums);
+            CarriesAChecksumList: context.Project.Options.Checksums,
+
+            HasAFontOfItsOwn: context.Project.Artwork?.MenuFontPath is not null);
     }
 }
