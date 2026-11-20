@@ -877,6 +877,15 @@
                            Visibility="{Binding WhyThatSize, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhyThatSize" />
 
+                <!-- Only once any blanks have been counted, in More
+                     options: how many of the size chosen there are. -->
+                <TextBlock Style="{StaticResource Aside}"
+                           Margin="0,4,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding WhatThereIsOfThatSize}"
+                           Visibility="{Binding WhatThereIsOfThatSize, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhatThereIsOfThatSize" />
+
                 <CheckBox Margin="0,8,0,0"
                           Content="Split a file too big for one disc"
                           IsChecked="{Binding CutFiles}"
@@ -1093,6 +1102,47 @@
                                 </TextBlock>
                             </CheckBox.ToolTip>
                         </CheckBox>
+
+                        <!-- The blank discs somebody has, discwright#98, the
+                             first thing asked for in it. Six small boxes
+                             and not a window of their own: it is six
+                             numbers, typed once and then left alone. -->
+                        <TextBlock Margin="0,12,0,0"
+                                   Text="Blank discs you have"
+                                   AutomationProperties.AutomationId="TheBlanksHeading" />
+                        <TextBlock Style="{StaticResource Aside}"
+                                   Margin="0,2,0,6"
+                                   TextWrapping="Wrap"
+                                   Text="With any counted, Choose the smallest that fits picks from these, whichever wastes least. Burning a disc takes one off." />
+                        <ItemsControl ItemsSource="{Binding TheBlanks}"
+                                      IsEnabled="{Binding NothingIsRunning}"
+                                      IsTabStop="False"
+                                      AutomationProperties.AutomationId="TheBlanks">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,12,6">
+                                        <TextBlock VerticalAlignment="Center"
+                                                   Margin="0,0,5,0"
+                                                   Text="{Binding Name}" />
+                                        <!-- Named for a reader, and by an id
+                                             of its own: every box is the
+                                             same template, so one written
+                                             here would be on all six. -->
+                                        <TextBox Width="46"
+                                                 MaxLength="4"
+                                                 Text="{Binding Typed, UpdateSourceTrigger=PropertyChanged}"
+                                                 ToolTip="{Binding InFull}"
+                                                 AutomationProperties.Name="{Binding InFull}"
+                                                 AutomationProperties.AutomationId="{Binding BoxId}" />
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
                 </Expander>
             </StackPanel>

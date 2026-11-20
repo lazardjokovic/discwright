@@ -72,6 +72,10 @@ public sealed record TheMachine(
     // keeps the image alone. Null means nothing can, and the folder stays.
     IRemoveADiscFolder? Remover = null,
 
+    // Where the count of blank discs is kept between sittings. Null means
+    // nowhere: a count typed is used until the program closes.
+    IKeepTheBlanks? Blanks = null,
+
     // The copy's page in the Microsoft Store, when it came from there, and
     // nothing otherwise. The Store keeps such a copy up to date, so it never
     // asks GitHub and never updates itself: its version link is this page.

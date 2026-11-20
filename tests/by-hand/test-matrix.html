@@ -496,7 +496,7 @@
     except the one place noted in D.</p>
     <div class="panel" data-cases>
 
-      <div class="sub">The main window · 31 controls</div>
+      <div class="sub">The main window · 32 controls</div>
       <label class="case"><input type="checkbox" id="c1" data-controls="CheckForANewVersion"><span class="id">C1</span>
         <span class="what">Check for new version, first of the links under the name</span>
         <span class="look"><span class="live">Never grey.</span> It is the only way to ask, and one that
@@ -643,6 +643,14 @@
         The ISO mounts and its menu runs. Burn it: with the list of what every file should be on the disc, the disc is checked against that list.
         With the disc folder open in Explorer when the build ends, the folder may stay; then a line under the bar names it and says to delete it by hand, and the build is not called failed.
         Unticked, a build leaves the folder exactly as before.</span></label>
+      <label class="case"><input type="checkbox" id="c19c" data-controls="TheBlanks"><span class="id">C19c</span>
+        <span class="what">Blank discs you have</span>
+        <span class="look">In More options: six small boxes, CD to BDXL, empty as they come and <span class="grey">grey</span> during a run. Hovering a box says which disc it counts.
+        With two games of about 400 MB and Choose the smallest that fits ticked, the size is DVD5. Type 10 under CD: the size moves to <b>CD</b> at once, the line under it says "2 of your 10 CD, which wastes the least of the blanks you have", and under that "You have 10 blank CD."
+        Type 1 under CD: it goes back to DVD5, with "None of the blanks you have holds it." Empty every box: the lines about blanks are gone and it is the smallest that fits, as before.
+        Close the program and open it: the boxes hold what was typed.
+        Burn a disc: the box for its size is one lower when the burn has written, whether or not the disc reads back. Building alone changes no box.
+        With the size chosen by hand, typing in a box never moves it.</span></label>
       <label class="case"><input type="checkbox" id="c20" data-controls="TheWayOut TheWorrysWayOut"><span class="id">C20</span>
         <span class="what">The way out under a red line, such as <i>Choose a folder</i>, <i>Name the disc</i> or
         <i>Use DVD5 4.7 GB instead</i>, and <i>Rename the disc</i> under the worry about a name</span>

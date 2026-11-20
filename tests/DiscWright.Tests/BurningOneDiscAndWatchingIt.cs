@@ -56,6 +56,80 @@ public class BurningOneDiscAndWatchingIt
     }
 
     [Fact]
+    public async Task A_disc_burned_takes_one_blank_of_its_size_off_the_count_and_writes_that_down()
+    {
+        // discwright#98: the count goes down as discs are written, so it is
+        // right the next time without anybody keeping it.
+        BlanksOnPaper kept = new("CD=4;DVD5=3;BD25=1");
+        AWindowWatched watched = new(blanks: kept);
+        Medium size = watched.Window.Medium;
+        int before = BlanksOwned.FromText(kept.Text).Of(size);
+
+        Assert.True(before > 0, $"The test has no blank {size.Key} to spend.");
+
+        await watched.Burn();
+
+        BlanksOwned after = BlanksOwned.FromText(kept.Text);
+
+        Assert.Equal(before - 1, after.Of(size));
+
+        // And no other size was touched.
+        foreach (Medium other in Media.All.Where(each => each != size))
+        {
+            Assert.Equal(BlanksOwned.FromText("CD=4;DVD5=3;BD25=1").Of(other), after.Of(other));
+        }
+
+        // The box on the window shows the new count, and the line under the
+        // size says it.
+        Assert.Equal(
+            (before - 1).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            watched.Window.TheBlanks.Single(each => each.Medium == size).Typed);
+        Assert.Contains(nameof(MakeADisc.WhatThereIsOfThatSize), watched.WhatWasAnnounced());
+    }
+
+    [Fact]
+    public async Task Building_a_disc_takes_no_blank()
+    {
+        // The owner's answer on 2026-11-20: an image built twice has used no
+        // disc at all. Only a burn does.
+        BlanksOnPaper kept = new("CD=4;DVD5=3;BD25=1");
+        AWindowWatched watched = new(blanks: kept);
+
+        await watched.Window.MakeIt();
+
+        Assert.Equal("CD=4;DVD5=3;BD25=1", kept.Text);
+        Assert.Equal(0, kept.TimesKept);
+    }
+
+    [Fact]
+    public async Task A_burn_with_no_blanks_counted_counts_nothing_and_goes_no_lower_than_none()
+    {
+        BlanksOnPaper kept = new(null);
+        AWindowWatched watched = new(blanks: kept);
+
+        await watched.Burn();
+
+        Assert.Equal(0, kept.TimesKept);
+        Assert.All(watched.Window.TheBlanks, each => Assert.Equal(string.Empty, each.Typed));
+        Assert.Equal(string.Empty, watched.Window.WhatThereIsOfThatSize);
+    }
+
+    private sealed class BlanksOnPaper(string? text) : IKeepTheBlanks
+    {
+        public string? Text { get; private set; } = text;
+
+        public int TimesKept { get; private set; }
+
+        public string? Recalled() => Text;
+
+        public void Keep(string kept)
+        {
+            Text = kept;
+            TimesKept++;
+        }
+    }
+
+    [Fact]
     public async Task Says_it_is_waiting_for_the_drive_to_read_the_disc_and_for_how_long()
     {
         // A drive that takes three asks, a second apart, to read the disc it
@@ -303,7 +377,7 @@ public class BurningOneDiscAndWatchingIt
     /// </summary>
     private sealed class AWindowWatched
     {
-        internal AWindowWatched(string? picturesRefuse = null, int discNotReadFor = 0)
+        internal AWindowWatched(string? picturesRefuse = null, int discNotReadFor = 0, IKeepTheBlanks? blanks = null)
         {
             Window = new MakeADisc(new TheMachine(
                 new NoEncoding(),
@@ -321,7 +395,8 @@ public class BurningOneDiscAndWatchingIt
                 new PicturesThatRead { Refuse = picturesRefuse },
                 "2.0.0",
                 _ => 1000,
-                Patience: new AClockThatMovesItself().Patience));
+                Patience: new AClockThatMovesItself().Patience,
+                Blanks: blanks));
 
             // So the burner can wait for its own report to be heard before it
             // carries on.
