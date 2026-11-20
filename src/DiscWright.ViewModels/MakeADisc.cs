@@ -1572,6 +1572,24 @@ public sealed class MakeADisc : INotifyPropertyChanged
         set => Switch(Options with { CutFiles = value });
     }
 
+    /// <summary>
+    /// Whether the disc folder is deleted once its image is made, leaving
+    /// the image alone. discwright#98, 15 November 2026: "ISO only, without
+    /// the disc folder, to halve the space needed".
+    /// </summary>
+    /// <remarks>
+    /// Off unless somebody asks. The folder is what a person opens to see
+    /// what is on the disc, and what a burned disc is compared with, so
+    /// taking it away is never the default. What is left is half the size;
+    /// the build itself still needs room for both, because the image is
+    /// made from the folder.
+    /// </remarks>
+    public bool OnlyTheImage
+    {
+        get => Options.OnlyTheImage;
+        set => Switch(Options with { OnlyTheImage = value });
+    }
+
     /// <summary>Whether a disc with a menu carries Start Here.hta at its top.</summary>
     public bool StartHere
     {
@@ -1876,6 +1894,96 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </summary>
     public string? AboutTheImage { get; private set; }
 
+    /// <summary>
+    /// Whether the disc folders of what was just built are still there. Not
+    /// after a build that kept only its images.
+    /// </summary>
+    public bool TheDiscFoldersWereKept { get; private set; } = true;
+
+    /// <summary>
+    /// What to tell somebody when a build has finished, and the folder to
+    /// offer to open, or nothing when nothing was built.
+    /// </summary>
+    /// <remarks>
+    /// Worded here so a test can read it. It named the disc folder whatever
+    /// had become of it, and offered to open a folder that a build keeping
+    /// only its image had just deleted.
+    /// </remarks>
+    public (string Words, string Folder)? WhatToSayOfWhatWasMade()
+    {
+        if (Made is not { Discs.Count: > 0 } made)
+        {
+            return null;
+        }
+
+        string disc = made.Discs[0].Folder;
+        string beside = System.IO.Path.GetDirectoryName(disc) ?? disc;
+        bool one = made.Discs.Count == 1;
+
+        if (!TheDiscFoldersWereKept)
+        {
+            return (one ? "The disc image is ready in:" : $"All {made.Discs.Count} disc images are ready in:", beside);
+        }
+
+        return one
+            ? ("The disc is ready in:", disc)
+            : ($"All {made.Discs.Count} discs are ready in:", beside);
+    }
+
+    /// <summary>
+    /// Deletes the disc folders of a build whose images are all made.
+    /// </summary>
+    /// <remarks>
+    /// A folder that will not go is not a failed build. The image is made
+    /// and is what was asked for, so the folder is left and a line says so,
+    /// in words that name it and say what to do.
+    /// </remarks>
+    private async Task LeaveOnlyTheImages(BuiltDiscs made)
+    {
+        if (_machine.Remover is not IRemoveADiscFolder remover)
+        {
+            return;
+        }
+
+        Doing = "Deleting the disc folder";
+        Tell(nameof(Doing));
+
+        List<string> stayed = [];
+
+        // On the pool: sixty gigabytes of files take a while to delete, and
+        // this is the thread the window is drawn on.
+        await Task.Run(() =>
+        {
+            foreach (BuiltDisc disc in made.Discs)
+            {
+                try
+                {
+                    remover.Remove(disc.Folder);
+                }
+                catch (Exception held) when (held is System.IO.IOException or UnauthorizedAccessException)
+                {
+                    stayed.Add(disc.Folder);
+                }
+            }
+        });
+
+        TheDiscFoldersWereKept = stayed.Count > 0;
+
+        if (stayed.Count > 0)
+        {
+            string left = stayed.Count == 1
+                ? $"The image is made, but {stayed[0]} could not be deleted because something has it open. "
+                    + "Close whatever is using it and delete the folder by hand."
+                : $"The images are made, but {stayed.Count} disc folders could not be deleted because something "
+                    + $"has them open, {stayed[0]} among them. Close whatever is using them and delete them by hand.";
+
+            AboutTheImage = AboutTheImage is null ? left : AboutTheImage + " " + left;
+            Tell(nameof(AboutTheImage));
+        }
+
+        Tell(nameof(TheDiscFoldersWereKept));
+    }
+
     /// <summary>Why the last build stopped, or null when it did not.</summary>
     public Refusal? ItWentWrong { get; private set; }
 
@@ -1975,6 +2083,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Made = null;
         ItWentWrong = null;
         AboutTheImage = null;
+        TheDiscFoldersWereKept = true;
 
         // The line about the last burn is about discs this build is about to
         // replace, so it goes with the drive's note rather than staying under
@@ -2043,6 +2152,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
                     // having to ask for the second one is a step nobody wants.
                     ItWentWrong = await Images(made, ct);
                     Made = made;
+
+                    // Only once every image is made, and only then: a
+                    // folder deleted before its image was written would be
+                    // a build that left nothing.
+                    if (ItWentWrong is null && project.Options.OnlyTheImage)
+                    {
+                        await LeaveOnlyTheImages(made);
+                    }
+
                     break;
 
                 case Outcome<BuiltDiscs>.No stopped:

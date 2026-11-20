@@ -127,7 +127,8 @@ public sealed record DiscOptions(
     bool LegacyFileSystems = false,
     bool CutFiles = false,
     bool StartHere = true,
-    MenuLook? Look = null)
+    MenuLook? Look = null,
+    bool OnlyTheImage = false)
 {
     /// <summary>The look chosen, or the plain one.</summary>
     public MenuLook LookOrPlain => Look ?? MenuLook.Plain;

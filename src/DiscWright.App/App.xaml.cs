@@ -110,6 +110,7 @@ public partial class App : Application
             // The Store updates a Store copy, so it has no Updater and its
             // version link is its Store page.
             Updater: package is null ? new TheUpdateWrittenDown(updater, log) : null,
+            Remover: new WindowsStageWriter(),
             StorePage: package is null ? null : ThisCopy.StorePage));
 
         // Everything the window says, as it says it.

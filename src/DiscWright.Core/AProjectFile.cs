@@ -97,6 +97,10 @@ public static class AProjectFile
                     // in all of them, so absent means on.
                     StartHere: Yes(root, "StartHere", whenMissing: true),
 
+                    // Absent in every file written before 2.0.5, which all
+                    // kept the folder.
+                    OnlyTheImage: Yes(root, "IsoOnly"),
+
                     // Absent in every file written before 2.0.5, which is
                     // the menu as it comes.
                     Look: TheLookIn(root)),

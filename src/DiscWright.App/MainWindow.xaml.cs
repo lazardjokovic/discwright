@@ -1165,14 +1165,16 @@ public partial class MainWindow : Window
 
     private void Say(BuiltDiscs made)
     {
-        string where = made.Discs[0].Folder;
-        string folder = made.Discs.Count == 1 ? where : System.IO.Path.GetDirectoryName(where) ?? where;
+        // The words and the folder are the screen's, which knows whether
+        // the disc folder is still there to be opened.
+        if (_screen.WhatToSayOfWhatWasMade() is not (string words, string folder))
+        {
+            return;
+        }
 
         MessageBoxResult open = MessageBox.Show(
             this,
-            made.Discs.Count == 1
-                ? "The disc is ready in:" + Environment.NewLine + folder + Environment.NewLine + Environment.NewLine + "Open the folder?"
-                : "All " + made.Discs.Count + " discs are ready in:" + Environment.NewLine + folder + Environment.NewLine + Environment.NewLine + "Open the folder?",
+            words + Environment.NewLine + folder + Environment.NewLine + Environment.NewLine + "Open the folder?",
             "DiscWright",
             MessageBoxButton.YesNo,
             MessageBoxImage.Information);

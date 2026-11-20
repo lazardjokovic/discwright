@@ -496,7 +496,7 @@
     except the one place noted in D.</p>
     <div class="panel" data-cases>
 
-      <div class="sub">The main window · 30 controls</div>
+      <div class="sub">The main window · 31 controls</div>
       <label class="case"><input type="checkbox" id="c1" data-controls="CheckForANewVersion"><span class="id">C1</span>
         <span class="what">Check for new version, first of the links under the name</span>
         <span class="look"><span class="live">Never grey.</span> It is the only way to ask, and one that
@@ -636,6 +636,13 @@
         <span class="what">Readable by Windows 98 and Mac OS 9</span>
         <span class="look"><span class="live">Live at all times</span>, including mid-build. Off by
         default.</span></label>
+      <label class="case"><input type="checkbox" id="c19b" data-controls="OnlyTheImage"><span class="id">C19b</span>
+        <span class="what">Keep only the ISO, not the disc folder</span>
+        <span class="look">In More options, off by default, <span class="grey">grey</span> during a run. Hovering says the build still needs room for both.
+        Ticked, build a disc: the box at the end says "The disc image is ready in" and names the folder the ISO is in, Open the folder opens it, and there is no <code>disc</code> folder beside the ISO.
+        The ISO mounts and its menu runs. Burn it: with the list of what every file should be on the disc, the disc is checked against that list.
+        With the disc folder open in Explorer when the build ends, the folder may stay; then a line under the bar names it and says to delete it by hand, and the build is not called failed.
+        Unticked, a build leaves the folder exactly as before.</span></label>
       <label class="case"><input type="checkbox" id="c20" data-controls="TheWayOut TheWorrysWayOut"><span class="id">C20</span>
         <span class="what">The way out under a red line, such as <i>Choose a folder</i>, <i>Name the disc</i> or
         <i>Use DVD5 4.7 GB instead</i>, and <i>Rename the disc</i> under the worry about a name</span>
