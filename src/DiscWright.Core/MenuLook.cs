@@ -29,6 +29,13 @@ public enum MenuSide
 /// side would put them on top of its heading or its last button.
 /// </para>
 /// </remarks>
+/// <param name="Ink">
+/// The colour the menu's heading and buttons are written in, as
+/// <see cref="SolidColour"/> keeps one, or nothing for the menu's own.
+/// discwright#98, the first post: "more menu themes (layout / font / font
+/// colour)". The quiet lines under the buttons and a button that is dead
+/// keep their greys, which mean something.
+/// </param>
 /// <param name="ListOn">Which edge the list of buttons sits against.</param>
 /// <param name="CornerAtTheBottom">
 /// Whether the small buttons sit in the bottom corner rather than the top one.
@@ -83,8 +90,15 @@ public sealed record MenuLook(
     string? Heading = null,
     bool HeadingHidden = false,
     MenuFont Font = MenuFont.Tahoma,
-    bool NoFrame = false)
+    bool NoFrame = false,
+    string? Ink = null)
 {
+    /// <summary>What the heading is written in when nobody chose: nearly white.</summary>
+    public const string TheHeadingsOwnInk = "#DFE9EE";
+
+    /// <summary>What the buttons are written in when nobody chose: a shade quieter.</summary>
+    public const string TheButtonsOwnInk = "#CBD6DB";
+
     /// <summary>
     /// The longest heading the menu is given. Three lines of the panel in
     /// the menu's own capitals, past which it pushes the buttons down for

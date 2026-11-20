@@ -251,7 +251,11 @@ public static class AProjectFile
             MenuFonts.Named(Text(look, "Font")) ?? MenuFont.Tahoma,
 
             // The one word, and anything else is the window as it comes.
-            string.Equals(Text(look, "Frame"), "None", StringComparison.OrdinalIgnoreCase))
+            string.Equals(Text(look, "Frame"), "None", StringComparison.OrdinalIgnoreCase),
+
+            // Tidied, so a file somebody edited yields a colour or nothing:
+            // it is written into the page's style.
+            SolidColour.Tidied(Text(look, "Ink")))
             .OrNothingWhenPlain();
     }
 

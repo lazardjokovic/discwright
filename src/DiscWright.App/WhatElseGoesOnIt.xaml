@@ -426,6 +426,59 @@
                            Visibility="{Binding WhyNotThatFont, Converter={StaticResource WhenAnything}}"
                            AutomationProperties.AutomationId="WhyNotThatFont" />
 
+                <!-- What the heading and the buttons are written in,
+                     discwright#98: "layout / font / font colour". The same
+                     swatches and box as the backdrop's colour, because it
+                     is the same kind of choice. Emptied, the menu's own. -->
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <TextBlock VerticalAlignment="Center" Width="110" Text="Text colour" />
+
+                    <ItemsControl ItemsSource="{Binding TheInksOffered}"
+                                  VerticalAlignment="Center"
+                                  AutomationProperties.AutomationId="TheInksOffered">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Click="PickAnInk"
+                                        Cursor="Hand"
+                                        ToolTip="{Binding}"
+                                        AutomationProperties.Name="{Binding}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Width="22" Height="22"
+                                                    Margin="0,0,6,0"
+                                                    CornerRadius="3"
+                                                    Background="{Binding Converter={StaticResource AsABrush}}"
+                                                    BorderBrush="{DynamicResource Edge}"
+                                                    BorderThickness="1" />
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBox Width="86"
+                             Margin="6,0,0,0"
+                             VerticalAlignment="Center"
+                             Text="{Binding MenuInkText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="Six hex figures, with or without the #. Left empty, the menu is written in its own colours."
+                             AutomationProperties.Name="The menu's text colour"
+                             AutomationProperties.AutomationId="MenuInkText" />
+                </StackPanel>
+
+                <TextBlock Margin="110,4,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource WorryInk}"
+                           FontSize="12"
+                           Text="{Binding WhatTheInkSays}"
+                           Visibility="{Binding WhatTheInkSays, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhatTheInkSays" />
+
                 <CheckBox Margin="0,8,0,0"
                           Content="No heading on the main menu"
                           IsChecked="{Binding MenuHeadingHidden}"

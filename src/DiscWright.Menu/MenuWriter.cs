@@ -193,6 +193,17 @@ public static class MenuWriter
             // the page has a script to ask.
             .Replace("%%CAPTION%%", (facts.Look ?? MenuLook.Plain).NoFrame ? "no" : "yes", StringComparison.Ordinal)
             .Replace("%%BORDER%%", (facts.Look ?? MenuLook.Plain).NoFrame ? "none" : "thin", StringComparison.Ordinal)
+            // What the heading and the buttons are written in. Tidied here
+            // as well, the last place before the disc, so only ever six hex
+            // figures reach the page's style.
+            .Replace(
+                "%%INK%%",
+                SolidColour.Tidied((facts.Look ?? MenuLook.Plain).Ink) ?? MenuLook.TheHeadingsOwnInk,
+                StringComparison.Ordinal)
+            .Replace(
+                "%%BUTTONINK%%",
+                SolidColour.Tidied((facts.Look ?? MenuLook.Plain).Ink) ?? MenuLook.TheButtonsOwnInk,
+                StringComparison.Ordinal)
             .Replace("%%SINGLE%%", facts.OnlyOneAtATime ? "yes" : "no", StringComparison.Ordinal)
             .Replace("%%ICON%%", Markup(facts.Icon), StringComparison.Ordinal)
             .Replace("%%PRIMARY%%", Markup(facts.PrimaryButton), StringComparison.Ordinal)

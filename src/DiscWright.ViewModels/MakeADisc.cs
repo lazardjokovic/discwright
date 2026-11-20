@@ -1807,6 +1807,48 @@ public sealed class MakeADisc : INotifyPropertyChanged
         set => SwitchTheLook(Options.LookOrPlain with { NoFrame = value });
     }
 
+    private string _menuInkText = string.Empty;
+
+    /// <summary>
+    /// The colour the menu's heading and buttons are written in, as typed.
+    /// discwright#98: "more menu themes (layout / font / font colour)".
+    /// </summary>
+    /// <remarks>
+    /// The raw text, so the box never fights the person typing in it. What
+    /// reaches the disc is only ever a colour, or nothing while the text is
+    /// half typed or wrong, with <see cref="WhatTheInkSays"/> saying so.
+    /// Emptied, the menu is written in its own colours again.
+    /// </remarks>
+    public string MenuInkText
+    {
+        get => _menuInkText;
+        set
+        {
+            _menuInkText = value ?? string.Empty;
+            SwitchTheLook(Options.LookOrPlain with { Ink = SolidColour.Tidied(_menuInkText) });
+            Tell(nameof(MenuInkText));
+            Tell(nameof(MenuInk));
+            Tell(nameof(WhatTheInkSays));
+        }
+    }
+
+    /// <summary>The colour as the disc will get it, or nothing.</summary>
+    public string? MenuInk => Options.LookOrPlain.Ink;
+
+    /// <summary>Why the typed text is not a colour yet, or nothing.</summary>
+    public string? WhatTheInkSays =>
+        _menuInkText.Trim().Length > 0 && !SolidColour.Fits(_menuInkText)
+            ? "Not a colour yet. Six hex figures name one, like FFE9B0."
+            : null;
+
+    /// <summary>
+    /// A handful of colours that read on a dark menu, for the swatches
+    /// beside the box. Every one of them must satisfy SolidColour, which a
+    /// test holds.
+    /// </summary>
+    public IReadOnlyList<string> TheInksOffered { get; } =
+        ["#ffffff", "#ffe9b0", "#ffc46b", "#9fe3e8", "#c8f0b4", "#f6b6c8"];
+
     /// <summary>Every face the menu can be written in, for the list.</summary>
     public IReadOnlyList<AMenuFont> TheMenusFonts { get; } = MenuFonts.All;
 
@@ -4579,6 +4621,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // The box shows the heading the project carries, so a project
         // opened and saved again keeps it without anybody retyping it.
         _menuHeadingText = _options.LookOrPlain.Heading ?? string.Empty;
+        _menuInkText = _options.LookOrPlain.Ink ?? string.Empty;
+        Tell(nameof(MenuInkText));
+        Tell(nameof(MenuInk));
+        Tell(nameof(WhatTheInkSays));
         Tell(nameof(MenuHeading));
         Tell(nameof(MenuHeadingHidden));
         Tell(nameof(MenuHeadingCanBeTyped));

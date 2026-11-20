@@ -210,6 +210,7 @@ public static class TheProjectAsJson
             // file would look for.
             writing.WriteString("Font", MenuFonts.For(look.Font).InWords);
             writing.WriteString("Frame", look.NoFrame ? "None" : "Window");
+            WriteOrNull(writing, "Ink", SolidColour.Tidied(look.Ink));
             writing.WriteEndObject();
 
             writing.WriteString("BgFit", fit.ToString());
