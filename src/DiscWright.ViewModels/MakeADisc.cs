@@ -2574,6 +2574,25 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string WhatThatFitDoes => WaysToFit.For(Art().HowItFits).WhatItDoes;
 
     /// <summary>
+    /// How the small picture in the dialog is drawn, so it looks like the
+    /// way chosen: all of it inside for Fit, pulled for Stretch, at its own
+    /// size for Tile.
+    /// </summary>
+    /// <remarks>
+    /// It was filled and cropped whatever the list said, and from the left
+    /// at that, so a wide picture fitted inside showed its left third in
+    /// the dialog and all of itself on the disc. Seen in the real window on
+    /// 2026-11-20. Filled, the frame draws it instead, and this is not read.
+    /// </remarks>
+    public string HowTheSmallPictureIsDrawn => Art().HowItFits switch
+    {
+        BackgroundFit.Fit => "Uniform",
+        BackgroundFit.Stretch => "Fill",
+        BackgroundFit.Tile => "None",
+        _ => "UniformToFill",
+    };
+
+    /// <summary>
     /// Whether there is a part to choose: a picture, filled and cropped.
     /// Every other way to fit shows all of the picture or none of the
     /// choice, and a colour has no parts.
@@ -2823,7 +2842,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
          nameof(BackgroundColour), nameof(BackgroundColourText), nameof(WhatTheColourSays),
          nameof(HowTheBackgroundFits), nameof(WhatThatFitDoes),
          nameof(TheBackgroundCanBeFramed), nameof(BackgroundZoom), nameof(BackgroundAcross),
-         nameof(BackgroundDown), nameof(WhatTheMenuKeeps), nameof(TheBackgroundIsFramed)];
+         nameof(BackgroundDown), nameof(WhatTheMenuKeeps), nameof(TheBackgroundIsFramed),
+         nameof(HowTheSmallPictureIsDrawn)];
 
     private void ChangeTheArtwork(DiscArtwork now)
     {

@@ -121,7 +121,7 @@
                                     Background="{Binding BackgroundColour, Converter={StaticResource AsABrush}}"
                                     Visibility="{Binding BackgroundColour, Converter={StaticResource WhenAnything}}" />
                             <Image Source="{Binding Background, Converter={StaticResource APicture}}"
-                                   Stretch="UniformToFill"
+                                   Stretch="{Binding HowTheSmallPictureIsDrawn}"
                                    Margin="2"
                                    Visibility="{Binding TheBackgroundCanBeFramed, Converter={StaticResource WhenNot}}"
                                    AutomationProperties.AutomationId="TheBackgroundPicture" />
@@ -199,9 +199,20 @@
                             <TextBlock Style="{StaticResource Aside}"
                                        TextWrapping="Wrap"
                                        Text="Drag the picture to choose the part that is kept." />
-                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
-                                <TextBlock VerticalAlignment="Center" Margin="0,0,8,0" Text="Zoom" />
-                                <Slider Width="120"
+                            <!-- A grid and not a row of fixed widths: the
+                                 column is as narrow as the dialog makes
+                                 it, and at 120 wide the slider pushed
+                                 Centre off its edge. The slider takes what
+                                 the other two leave. -->
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="Zoom" />
+                                <Slider Grid.Column="1"
+                                        MinWidth="60"
                                         VerticalAlignment="Center"
                                         Minimum="1"
                                         Maximum="{x:Static core:KeptPart.MostZoom}"
@@ -210,13 +221,14 @@
                                         Value="{Binding BackgroundZoom}"
                                         AutomationProperties.Name="Zoom into the background"
                                         AutomationProperties.AutomationId="BackgroundZoom" />
-                                <Button Content="Centre"
+                                <Button Grid.Column="2"
+                                        Content="Centre"
                                         Style="{StaticResource Ordinary}"
                                         Margin="10,0,0,0"
                                         IsEnabled="{Binding TheBackgroundIsFramed}"
                                         Click="KeepTheMiddle"
                                         AutomationProperties.AutomationId="CentreTheBackground" />
-                            </StackPanel>
+                            </Grid>
                         </StackPanel>
                     </StackPanel>
 

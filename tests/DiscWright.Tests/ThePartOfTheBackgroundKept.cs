@@ -17,6 +17,9 @@ namespace DiscWright.Tests;
 /// </remarks>
 public class ThePartOfTheBackgroundKept
 {
+    /// <summary>System.Windows.Media.Stretch, which this project cannot see.</summary>
+    private static readonly string[] TheWaysWpfDraws = ["None", "Fill", "Uniform", "UniformToFill"];
+
     private const int MenuWide = 760;
     private const int MenuTall = 480;
 
@@ -185,6 +188,41 @@ public class ThePartOfTheBackgroundKept
 
         screen.BackgroundColourText = "#1B3A4B";
         Assert.False(screen.TheBackgroundCanBeFramed);
+    }
+
+    [Theory]
+    [InlineData(BackgroundFit.Fill, "UniformToFill")]
+    [InlineData(BackgroundFit.Fit, "Uniform")]
+    [InlineData(BackgroundFit.Stretch, "Fill")]
+    [InlineData(BackgroundFit.Tile, "None")]
+    public void The_small_picture_is_drawn_the_way_the_list_says(BackgroundFit how, string drawn)
+    {
+        // Fitted inside, a wide picture showed its left third in the
+        // dialog and all of itself on the disc.
+        MakeADisc screen = TheScreen(1520, 480);
+        screen.Background = @"C:\art\back.png";
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.HowTheBackgroundFits = WaysToFit.For(how);
+
+        Assert.Equal(drawn, screen.HowTheSmallPictureIsDrawn);
+        Assert.Contains(nameof(MakeADisc.HowTheSmallPictureIsDrawn), told, StringComparer.Ordinal);
+
+        // And every word is one WPF can draw by.
+        Assert.Contains(drawn, TheWaysWpfDraws);
+    }
+
+    [Fact]
+    public void The_dialogs_small_picture_asks_the_screen_how_to_draw_itself()
+    {
+        System.Xml.Linq.XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        System.Xml.Linq.XElement picture = Assert.Single(
+            System.Xml.Linq.XDocument.Load(Repository.File("src", "DiscWright.App", "WhatElseGoesOnIt.xaml"))
+                .Root!.Descendants(xaml + "Image"),
+            each => (string?)each.Attribute("AutomationProperties.AutomationId") == "TheBackgroundPicture");
+
+        Assert.Equal("{Binding HowTheSmallPictureIsDrawn}", (string?)picture.Attribute("Stretch"));
     }
 
     [Fact]
@@ -489,6 +527,18 @@ public class ThePartOfTheBackgroundKept
             each => (string?)each.Attribute("AutomationProperties.AutomationId") == "CentreTheBackground");
 
         Assert.Equal("{Binding TheBackgroundIsFramed}", (string?)centre.Attribute("IsEnabled"));
+
+        // The slider has no width of its own. At 120 wide, in a row of
+        // fixed widths, it pushed Centre off the edge of the column, which
+        // only the real window showed. It takes what the other two leave.
+        Assert.Null(slider.Attribute("Width"));
+        Assert.Equal(xaml + "Grid", slider.Parent!.Name);
+        Assert.Same(slider.Parent, centre.Parent);
+        Assert.Equal(
+            ["Auto", "*", "Auto"],
+            slider.Parent.Element(xaml + "Grid.ColumnDefinitions")!.Elements().Select(each => (string?)each.Attribute("Width")));
+        Assert.Equal("1", (string?)slider.Attribute("Grid.Column"));
+        Assert.Equal("2", (string?)centre.Attribute("Grid.Column"));
 
         // The frame's shape is the menu's, a quarter each way, inside a
         // margin of 2 and an edge of 1 on every side.
