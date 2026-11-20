@@ -77,6 +77,36 @@ public static partial class TheImageOf
         return [.. found.Values];
     }
 
+    /// <summary>
+    /// Whether a file is an image a disc with this label is built as: the
+    /// one image of a single disc, or any disc of a set.
+    /// </summary>
+    /// <remarks>
+    /// For asking before a build writes over one. By the same naming as
+    /// <see cref="That"/>, so the two cannot drift, and by nothing looser:
+    /// "WITCHER 3.iso" is not an image of a disc called WITCHER.
+    /// </remarks>
+    public static bool IsOneOfADiscCalled(string label, string fileName)
+    {
+        if (!fileName.EndsWith(".iso", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        string wanted = OnTheDisc.Tidied(label);
+        string name = System.IO.Path.GetFileNameWithoutExtension(fileName);
+
+        if (string.Equals(name, wanted, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        Match match = ADiscOfASet().Match(name);
+
+        return match.Success
+            && string.Equals(match.Groups["label"].Value, wanted, StringComparison.OrdinalIgnoreCase);
+    }
+
     [GeneratedRegex(@"^(?<label>.+) D(?<number>[0-9]+)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ADiscOfASet();
 }

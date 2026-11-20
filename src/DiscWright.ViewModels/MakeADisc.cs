@@ -2871,6 +2871,50 @@ public sealed class MakeADisc : INotifyPropertyChanged
     }
 
     /// <summary>
+    /// What to ask before building, when the folder chosen already holds an
+    /// earlier build of this disc, or nothing when it holds none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A build empties its disc folder and writes over its image, and did
+    /// both without a word. discwright#98, 15 November 2026, and the owner's
+    /// answer on the 20th: always ask.
+    /// </para>
+    /// <para>
+    /// A method the window calls when the button is pressed, and not part of
+    /// <see cref="MakeIt"/>: the screen never puts up a dialog, and a test
+    /// that builds twice is not answering questions. The likely answer is to
+    /// build, because building again after changing something is what the
+    /// button is nearly always pressed for. Nothing is asked while the
+    /// button could not build anyway.
+    /// </para>
+    /// </remarks>
+    public AQuestion? WhatBuildingHereReplaces()
+    {
+        if (!CanMakeIt)
+        {
+            return null;
+        }
+
+        AnEarlierBuild there = AnEarlierBuild.In(_machine.Disk, OutputFolder, Label);
+
+        if (!there.IsThere)
+        {
+            return null;
+        }
+
+        bool one = there.Folders.Count + there.Images.Count == 1;
+
+        return new AQuestion(
+            "Build over the disc that is already in this folder?",
+            $"{OutputFolder} holds {there.InWords} from an earlier build. Building here deletes "
+                + (one ? "it" : "them")
+                + " and makes the disc again. To keep the earlier one, cancel and choose another folder.",
+            "Build over it",
+            "Cancel");
+    }
+
+    /// <summary>
     /// Whether there is anything on this screen worth losing.
     /// </summary>
     /// <remarks>
