@@ -478,7 +478,7 @@
                             </TreeView.ItemContainerStyle>
 
                             <TreeView.ItemTemplate>
-                                <HierarchicalDataTemplate ItemsSource="{Binding Inside}">
+                                <HierarchicalDataTemplate ItemsSource="{Binding WhatOpensUnderIt}">
                                     <!-- Laid out left to right with the
                                          name given a width, rather than a
                                          grid with a column pushed to the
@@ -499,11 +499,28 @@
                                          the row cannot outgrow the panel
                                          whatever is in it. -->
                                     <StackPanel Orientation="Horizontal" Margin="0,3">
+                                        <!-- No tick on a row that is only there
+                                             to be looked at, a part of an
+                                             installer: leaving one off would
+                                             break the installer, and its one
+                                             tick is the installer's. Hidden,
+                                             not collapsed, so the name starts
+                                             where every other name does. -->
                                         <CheckBox VerticalAlignment="Center"
                                                   Margin="0,0,7,0"
                                                   IsThreeState="{Binding HasThingsInside}"
                                                   IsChecked="{Binding IsOn, Mode=TwoWay}"
-                                                  AutomationProperties.Name="{Binding Name}" />
+                                                  AutomationProperties.Name="{Binding Name}">
+                                            <CheckBox.Style>
+                                                <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsOnlyToLookAt}" Value="True">
+                                                            <Setter Property="Visibility" Value="Hidden" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </CheckBox.Style>
+                                        </CheckBox>
 
                                         <!-- Narrowed by however far the tree has
                                              already pushed this row in, which
@@ -593,6 +610,13 @@
                                              The tick stays what it always
                                              was, on this disc or off it; the
                                              cross is off the list. -->
+                                        <!-- In a panel of its own that is not
+                                             there at all for a part of an
+                                             installer, which has no way off
+                                             the list but its installer's. The
+                                             button's own style decides when it
+                                             shows, and is left to. -->
+                                        <Grid Visibility="{Binding IsOnlyToLookAt, Converter={StaticResource WhenNot}}">
                                         <Button Margin="4,0,0,0"
                                                 VerticalAlignment="Center"
                                                 Style="{StaticResource OffTheRow}"
@@ -600,6 +624,7 @@
                                                 ToolTip="Take it off the list"
                                                 AutomationProperties.Name="Take it off the list"
                                                 AutomationProperties.AutomationId="TakeOffThisRow" />
+                                        </Grid>
                                     </StackPanel>
                                 </HierarchicalDataTemplate>
                             </TreeView.ItemTemplate>

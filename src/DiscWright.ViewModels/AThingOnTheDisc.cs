@@ -26,6 +26,7 @@ namespace DiscWright.ViewModels;
 public sealed class AThingOnTheDisc : INotifyPropertyChanged
 {
     private readonly List<AThingOnTheDisc> _inside = [];
+    private readonly List<AThingOnTheDisc> _shown = [];
     private readonly Action? _tell;
     private readonly long _own;
     private readonly int _files;
@@ -67,6 +68,7 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
         _tell = tell;
         _aside = aside;
         Inside = new ReadOnlyCollection<AThingOnTheDisc>(_inside);
+        ShownUnderIt = new ReadOnlyCollection<AThingOnTheDisc>(_shown);
     }
 
     /// <inheritdoc/>
@@ -216,6 +218,44 @@ public sealed class AThingOnTheDisc : INotifyPropertyChanged
 
     /// <summary>Whether it has anything under it.</summary>
     public bool HasThingsInside => _inside.Count > 0;
+
+    /// <summary>
+    /// Rows under it that are only there to be looked at: the numbered
+    /// parts of an installer. They are not <see cref="Inside"/> it. Nothing
+    /// that reads ticks, sizes or what goes on the disc walks them, because
+    /// they have no tick: the installer's one tick is theirs.
+    /// </summary>
+    /// <remarks>
+    /// The owner, 21 November 2026, the day the parts became one row with
+    /// their installer: leaving one off would break the installer, so they
+    /// must not be tickable, "but the user should still be able to drop
+    /// them down if he wants, always collapsed by default".
+    /// </remarks>
+    public ReadOnlyCollection<AThingOnTheDisc> ShownUnderIt { get; }
+
+    /// <summary>
+    /// What the list draws under this row when it is opened: what is inside
+    /// it, or for a row with nothing inside, what is only shown under it.
+    /// </summary>
+    public ReadOnlyCollection<AThingOnTheDisc> WhatOpensUnderIt => _inside.Count > 0 ? Inside : ShownUnderIt;
+
+    /// <summary>Whether there is anything to open it for.</summary>
+    public bool CanBeOpened => _inside.Count > 0 || _shown.Count > 0;
+
+    /// <summary>
+    /// Whether this row is only there to be looked at: no tick, no cross,
+    /// nothing to take hold of. It goes where the row above it goes.
+    /// </summary>
+    public bool IsOnlyToLookAt { get; private set; }
+
+    /// <summary>Puts a row under it to be looked at and nothing else.</summary>
+    public AThingOnTheDisc Showing(AThingOnTheDisc thing)
+    {
+        thing._above = this;
+        thing.IsOnlyToLookAt = true;
+        _shown.Add(thing);
+        return this;
+    }
 
     /// <summary>
     /// Whether the row is open on the window, showing what is under it.
