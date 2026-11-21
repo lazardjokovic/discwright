@@ -640,7 +640,7 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             // Another game's screen does not keep this one's button.
             + "goBack(); showGame(2);\n"
             + "out.push('another game: remove=' + shown('removeTheCopy'));\n"
-            + "showGame(1); out.push('and back: ' + el('doIt').innerText);\n");
+            + "showGame(1); out.push('and back: ' + el('doIt').innerText + ' remove=' + shown('removeTheCopy') + ' ' + el('removeTheCopy').innerText.split(',')[0]);\n");
 
         Assert.Equal("page: block name=Lanternhold go=Copy and install | started=0", said[0]);
         Assert.StartsWith(
@@ -670,7 +670,15 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
 
         Assert.StartsWith("after: Play | Lanternhold is installed. Play starts it. The ", said[8], StringComparison.Ordinal);
         Assert.Contains(" copied to <HDD>/Lanternhold installer is not needed any more. | remove=block Remove the copy, ", said[8], StringComparison.Ordinal);
-        Assert.Equal(["another game: remove=hidden", "and back: Play"], said[9..]);
+        Same(
+            [
+                "another game: remove=hidden",
+
+                // Its own screen again, and the copy is offered again: it
+                // is still there, and the game is installed.
+                "and back: Play remove=block Remove the copy",
+            ],
+            said[9..]);
 
         // Byte for byte what the build was given.
         foreach (string name in new[] { "setup_lanternhold.exe", "setup_lanternhold-1.bin", "setup_lanternhold-2.bin", "setup_lanternhold-3.bin" })
@@ -898,10 +906,16 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             + "putIn(2); pump(function () { return started.length > 0; });\n"
             + "out.push('started: ' + started.join(' + '));\n"
             + "runningNow = true; tick(); installedNow['Second'] = true; runningNow = false; tick();\n"
-            + "out.push('installed: ' + el('doIt').innerText + ' | add-ons ' + addOnsAre());\n"
+            + "out.push('installed: ' + el('doIt').innerText + ' | add-ons ' + addOnsAre() + ' | remove=' + shown('removeTheCopy'));\n"
             + "started = []; runTheAddOn(addOnNamed('isles'));\n"
-            + "out.push('the isles: ' + started.join(' + ') + ' | page=' + shown('whereScreen') + ' alerts=' + alerts.length);\n"
+            + "out.push('the isles: ' + started.join(' + ') + ' | page=' + shown('whereScreen') + ' alerts=' + alerts.length + ' remove=' + shown('removeTheCopy'));\n"
+
+            // Going to the list and back while it installs does not bring
+            // the offer back either: it is running from that copy.
+            + "goBack(); showGame(1);\n"
+            + "out.push('back and in again while it installs: remove=' + shown('removeTheCopy'));\n"
             + "runningNow = true; tick(); runningNow = false; tick();\n"
+            + "out.push('the isles closed: remove=' + shown('removeTheCopy'));\n"
             + "started = []; runTheAddOn(addOnNamed('soundtrack'));\n"
             + "out.push('the soundtrack: ' + started.join(' + '));\n");
 
@@ -915,8 +929,13 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
 
                 // Drawn alive once the game is installed, which on a set
                 // they were not until the menu was opened again.
-                "installed: Play | add-ons live",
-                "the isles: <HDD>/Second installer/02 - Second/Add-ons/setup_second_isles.exe | page=hidden alerts=0",
+                "installed: Play | add-ons live | remove=block",
+
+                // The copy is not offered for removal under an installer
+                // that is running from it, and is again when that closes.
+                "the isles: <HDD>/Second installer/02 - Second/Add-ons/setup_second_isles.exe | page=hidden alerts=0 remove=hidden",
+                "back and in again while it installs: remove=hidden",
+                "the isles closed: remove=block",
                 "the soundtrack: <HDD>/Second installer/02 - Second/Add-ons/setup_second_soundtrack.exe",
             ],
             said);
@@ -971,7 +990,13 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             + "putIn(2); pump(function () { return started.length > 0; });\n"
             + "out.push('started: ' + started.join(' + '));\n"
             + "out.push('there: ' + under(HDD));\n"
-            + "out.push('afterwards: what=' + (restoring.what ? 'kept' : 'gone') + ' busy=' + restoring.busy + ' the game asked=' + theShare(1).asked + ' | ' + el('doIt').innerText);\n");
+            + "out.push('afterwards: what=' + (restoring.what ? 'kept' : 'gone') + ' busy=' + restoring.busy + ' the game asked=' + theShare(1).asked + ' | ' + el('doIt').innerText);\n"
+
+            // Its installer comes up and closes. What was fetched for it
+            // is offered back, which is the one moment it could be.
+            + "out.push('while it installs: remove=' + shown('removeTheCopy'));\n"
+            + "runningNow = true; tick(); runningNow = false; tick();\n"
+            + "out.push('closed: remove=' + shown('removeTheCopy') + ' ' + el('removeTheCopy').innerText.split(',')[0] + ' | ' + lineIs());\n");
 
         Same(
             [
@@ -988,8 +1013,71 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
                 // And its part alone: not the soundtrack, which is on disc 2 too.
                 "there: Second installer/02 - Second/Add-ons/setup_second_isles-1.bin, Second installer/02 - Second/Add-ons/setup_second_isles.exe",
                 "afterwards: what=gone busy=false the game asked=false | Play",
+                "while it installs: remove=hidden",
+                "closed: remove=block Remove the copy | The installer for isles has closed.",
             ],
             said);
+    }
+
+    [Fact]
+    public async Task A_copy_left_from_another_day_is_offered_when_the_menu_is_opened_again_and_only_for_a_game_that_is_installed()
+    {
+        string[] discs = await TheThreeGames();
+
+        // A whole copy of Lanternhold, as an earlier evening left it.
+        string copy = Path.Combine(_hdd, "Lanternhold installer", "02 - Lanternhold");
+        Directory.CreateDirectory(copy);
+
+        foreach (string name in new[] { "setup_lanternhold.exe", "setup_lanternhold-1.bin", "setup_lanternhold-2.bin", "setup_lanternhold-3.bin" })
+        {
+            File.Copy(Path.Combine(_root, "src", "Lanternhold", name), Path.Combine(copy, name));
+        }
+
+        string[] said = Page(discs, 1,
+            // Not installed: the copy is what it would install from.
+            "showGame(1);\n"
+            + "out.push('not installed: ' + el('doIt').innerText + ' remove=' + shown('removeTheCopy'));\n"
+
+            // Installed: offered, on its own screen and on no other game's.
+            + "installedNow['Lanternhold'] = true; installedNow['Harbour Tales'] = true; installedNow['Quiet Orchard'] = true;\n"
+            + "showGame(1);\n"
+            + "out.push('installed: ' + el('doIt').innerText + ' remove=' + shown('removeTheCopy') + ' ' + el('removeTheCopy').innerText.split(',')[0]);\n"
+            + "showGame(0); out.push('a game on this disc: remove=' + shown('removeTheCopy'));\n"
+            + "showGame(2); out.push('a game on another disc: remove=' + shown('removeTheCopy'));\n"
+
+            // Not while the set is at work for it.
+            + "showGame(1); el('removeTheCopy').style.display = 'none'; restoring.busy = true; showGame(1);\n"
+            + "out.push('at work: remove=' + shown('removeTheCopy'));\n"
+            + "restoring.busy = false;\n"
+
+            // Looking removed nothing. Pressing it removes that game's copy,
+            // and it is not offered again.
+            + "showGame(1);\n"
+            + "out.push('still there: ' + under(HDD).split(', ').length + ' files');\n"
+            + "removeTheCopyNow();\n"
+            + "out.push('removed: remove=' + shown('removeTheCopy') + ' there=[' + under(HDD) + '] | ' + lineIs());\n"
+            + "goBack(); showGame(1);\n"
+            + "out.push('and back: ' + state() + ' remove=' + shown('removeTheCopy'));\n"
+
+            // And never on a preview, where nothing is removed either.
+            + "thisIsAPreview(); showGame(1);\n"
+            + "out.push('a preview: remove=' + shown('removeTheCopy'));\n");
+
+        Same(
+            [
+                "not installed: Install remove=hidden",
+                "installed: Play remove=block Remove the copy",
+                "a game on this disc: remove=hidden",
+                "a game on another disc: remove=hidden",
+                "at work: remove=hidden",
+                "still there: 4 files",
+                "removed: remove=hidden there=[] | The copy is gone. Lanternhold is installed. Play starts it.",
+                "and back: Play | (no line) | back live remove=hidden",
+                "a preview: remove=hidden",
+            ],
+            said);
+
+        Assert.False(Directory.Exists(Path.Combine(_hdd, "Lanternhold installer")));
     }
 
     [Fact]
@@ -1067,8 +1155,13 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
 
         string[] previewed = [.. menus.Select(menu => Path.GetDirectoryName(Path.GetDirectoryName(menu))!)];
 
-        // The set's own list is beside each of them, written from the plan.
+        // The set's own list is beside each of them, written from the plan,
+        // and it says of the games what a built one says.
         Assert.All(previewed, disc => Assert.True(File.Exists(Path.Combine(disc, SetManifest.FileName))));
+        Assert.All(previewed, disc => Assert.Contains(
+            "  Harbour Tales   disc 1\n  Lanternhold     discs 2 and 3\n  Quiet Orchard   disc 3\n",
+            File.ReadAllText(Path.Combine(disc, SetManifest.FileName)),
+            StringComparison.Ordinal));
 
         string[] said = Page(previewed, 2,
             "if (!DISC.onADisc) { thisIsAPreview(); out.push('a preview'); }\n"
@@ -1447,7 +1540,8 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             + "whereGo(); pump(function () { return restoring.wanting > 0; });\n"
             + "putIn(2); pump(function () { return started.length > 0; });\n"
             + "out.push('started: ' + started.join(' + '));\n"
-            + "out.push('there: ' + under(HDD));\n");
+            + "out.push('there: ' + under(HDD));\n"
+            + "out.push('remove=' + shown('removeTheCopy'));\n");
 
         Same(
             [
@@ -1455,6 +1549,10 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
                 "started: cmd /s /c \"\"<HDD>/Second installer/02 - Second/Add-ons/patch_second_1_to_2.exe\" && "
                     + "\"<HDD>/Second installer/02 - Second/Add-ons/patch_second_2_to_3.exe\"\"",
                 "there: Second installer/02 - Second/Add-ons/patch_second_1_to_2.exe, Second installer/02 - Second/Add-ons/patch_second_2_to_3.exe",
+
+                // Nothing hears the last of them close, so the copy they
+                // run from is not offered for removal under them.
+                "remove=hidden",
             ],
             said);
     }

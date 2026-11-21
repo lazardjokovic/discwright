@@ -433,6 +433,7 @@ function showGame(index) {
         }
 
         showTheSet(game);
+        offerTheCopyThatIsThere(game);
     } else {
         document.getElementById("doIt").innerText = whatToDoWith(game, isInstalled(game));
     }
@@ -915,6 +916,7 @@ function watchTheAddOn(game, which, name, exeName) {
     var polls = 0;
 
     addOnRunning = { game: game, which: which, name: name };
+    withdrawTheCopysOffer();
     showAddOnsOf(game);
     sayUnderneath(whatInstallingSays(name));
 
@@ -946,6 +948,10 @@ function watchTheAddOn(game, which, name, exeName) {
 
         if (onScreen === game) {
             sayUnderneath(whatAnAddOnLeft(name));
+
+            // It may have run from a copy, and one fetched for it alone
+            // has no other moment at which it could be offered back.
+            offerTheCopyThatIsThere(game);
         }
     }
 
@@ -1040,6 +1046,13 @@ function runTheUpdate() {
     }
 
     var line = theUpdateCommand(addOns, installed, from);
+
+    // Run from the copy, they are several installers one after another and
+    // nothing here hears the last of them close. The copy is not offered
+    // for removal under them; it is again when this screen is next shown.
+    if (from !== theDisc()) {
+        withdrawTheCopysOffer();
+    }
 
     var wrong = startTheCommand(line);
 
@@ -1511,7 +1524,20 @@ function whenItIsAllHere() {
 
     theSetStops();
     showGame(showing);
+
+    // What was just fetched is about to be run, and is not offered back
+    // until it has been.
+    withdrawTheCopysOffer();
     then();
+}
+
+// The button that removes the copy, taken away while something is run from
+// that copy: an add-on's installer, or the updates one after another.
+function withdrawTheCopysOffer() {
+    if (SET) {
+        document.getElementById("removeTheCopy").style.display = "none";
+        fitTheAddOns();
+    }
 }
 
 // The install page: where the installer is put back together, asked before
@@ -1926,6 +1952,43 @@ function offerToRemoveTheCopy(installed) {
     button.innerText = bytes > 0 ? removeTheCopyButtonSays(bytes) : "";
     button.style.display = bytes > 0 ? "block" : "none";
     fitTheAddOns();
+}
+
+// The copy of the game on screen, offered for removal whenever the game is
+// installed and the copy is still there, and not only in the moment after
+// its installer closed.
+//
+// That moment was the one chance. Going back to the list and returning lost
+// the button on a set several games share, an add-on fetched off the discs
+// by itself left its gigabytes with nothing to offer them back, and a menu
+// opened again another day said Play over a copy nobody would think to look
+// for. Never while the set is at work, never for a game that is not
+// installed, which still needs its copy to install from, and never on a
+// preview. A folder of game files is not installed in this sense at all:
+// its copy is the game, and it is never offered.
+function offerTheCopyThatIsThere(game) {
+    var button = document.getElementById("removeTheCopy");
+    var bytes = 0;
+    var dir;
+
+    // Nor while an add-on installs: it may be running from that copy.
+    if (!SET || restoring.busy || addOnRunning !== null || whyNothingRuns()
+            || whereItIs() !== "gathered" || !isInstalled(game)) {
+        return;
+    }
+
+    try {
+        dir = theRestoreFolder();
+        bytes = mayRemoveTheCopy(dir) ? bytesIn(new ActiveXObject("Scripting.FileSystemObject"), dir) : 0;
+    } catch (cannotLook) {
+        bytes = 0;
+    }
+
+    if (bytes > 0) {
+        button.innerText = removeTheCopyButtonSays(bytes);
+        button.style.display = "block";
+        fitTheAddOns();
+    }
 }
 
 function removeTheCopyNow() {
