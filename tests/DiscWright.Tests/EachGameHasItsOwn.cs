@@ -137,7 +137,8 @@ public sealed class EachGameHasItsOwn : IDisposable
         };
         GameFolder second = AGame("Second", 4500);
 
-        BuiltDiscs built = await Build(OnADisc(first, second), capacity: Overhead + 5000);
+        BuiltDiscs built = await Build(
+            OnADisc(first, second) with { Options = new DiscOptions(ADiscForEachGame: true) }, capacity: Overhead + 5000);
 
         Assert.Equal(2, built.Discs.Count);
         Assert.True(File.Exists(Path.Combine(built.Discs[0].Folder, "First", "Extras", "artbook.zip"))

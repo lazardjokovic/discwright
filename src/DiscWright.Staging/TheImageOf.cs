@@ -21,6 +21,21 @@ namespace DiscWright.Staging;
 /// </remarks>
 public static partial class TheImageOf
 {
+    /// <summary>
+    /// What the window says while that disc's image is written: whose it
+    /// is, which disc of a set, and how far along.
+    /// </summary>
+    /// <remarks>
+    /// Every disc of a set has the set's name, so "THREE GAMES: writing the
+    /// image, 40%" was said of each in turn and of none in particular: the
+    /// bar went to the end and began again with nothing to say why (a real
+    /// build of a set, 21 November 2026). One disc says what it always did.
+    /// </remarks>
+    public static string BeingWritten(BuiltDisc disc, ImageProgress step) =>
+        disc.OfDiscs > 1
+            ? $"{disc.Label}, disc {disc.Number} of {disc.OfDiscs}: {step}"
+            : $"{disc.Label}: {step}";
+
     public static string That(BuiltDisc disc)
     {
         string beside = System.IO.Path.GetDirectoryName(disc.Folder) ?? disc.Folder;

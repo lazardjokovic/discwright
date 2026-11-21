@@ -438,11 +438,38 @@ The design board is marked CHOSEN and says to find the game installer's window b
 
 So it is done from the other side. **The menu cannot move the installer, but it can move itself**, which is a thing it is plainly allowed to do: it shrinks or steps aside so the installer is not covered, and says underneath what is running. If even that fails the installer simply sits where Windows put it, which the board already calls acceptable in its own words.
 
-## A numbered set holds one game. Several games get a disc each.
+## Several games that do not fit on one disc share a set. A disc each is a tick away.
 
-**DECIDED 2026-10-14.** This replaces both the behaviour v1 removed and the refusal it left behind.
+**DECIDED 2026-11-21, by the owner**, with three games on the window, 18.9 GB on a disc of 8.5, which came to five discs where three hold them and no menu that listed them all: "it says it needs 5 discs, it should be 3". This replaces the decision of 2026-10-14, a disc for each game always. That decision is kept underneath, because its reasons were sound and what replaced it answers them one by one.
 
 | What was added | What comes out |
+|---|---|
+| Several games, and they fit one disc | One disc, with a chooser. Unchanged. |
+| Several games, too big for one disc | **One set.** Filled in the order of the list, a disc before the next is begun, and the menu on every disc lists every game. |
+| The same, with *Give each game a disc of its own* ticked | A disc each, or a set each, named after its game, as 2.0.4 always did. |
+| One game, too big for one disc | A numbered set, D1 and D2. Unchanged. |
+
+### What the earlier decision objected to, and what answers each
+
+- **"A packer working from byte counts was making that choice silently."** Nothing is packed. The games go on in the order of the list, which a person arranges by dragging, and a disc is filled before the next is begun: no game is moved to fill a gap. And it is not silent. Before anything is built the window says *Disc 1: Alan Wake. Disc 2: Alan Wake, Dead Space. Disc 3: Dead Space, Hollow Knight. They go on in the order of the list.*, and moving a game changes the line.
+- **"Discs labelled D1 and D2 as though one continued the other, when nothing on either depended on the other."** Now they do continue one another. Every disc's menu lists every game and knows which disc each is on, asks for that disc, and carries on when it is in. `Disc set.txt` on every disc says which discs each game is on.
+- **"The label is seeded from the first game."** The label of a disc of several games is the disc's own name, which the window asks for.
+- **"A disc says what is on it."** The cost that is left. A disc called `GAMES D2` says less than one called `Gothic`, and whoever minds ticks the box.
+
+### What it costs
+
+- **A game spread over two discs cannot install from either.** It is copied off both into a folder on the hard drive and installed from there, which is how a set of one game always worked. A game that is whole on one disc installs straight from that disc.
+- **A game's own manual and extras are on one disc, not on every disc.** On a set of one game they ride every disc, so the buttons work whichever is in. Three games' worth of them on every disc is a disc more than the games need, so here each goes on once, with its game, and the button says which disc when another is in.
+
+### What it means for the code
+
+`DiscPlanner` is still arithmetic over a flat list of files and is still told nothing about games. `WhatWouldBeMade.RequestForASet` is the layer above it: each game's files, then its add-ons, then its own manual and extras as things that go on whole (`PlanFile.KeepWhole`), and then the next game. `DiscLayout.EachGamesOwnIsPlaced` tells the step that copies them and the menu which of the two ways a set was laid out.
+
+In the menu a game is a share of the set and no longer the whole of it: the rows under its folder, less what the disc says is apart from it (`aGamesShare` in `menu.js`). Where that share sits against the disc in the drive (`whereAShareIs`) decides whether its button installs from the disc, asks for another disc, or copies the game off several.
+
+### The decision of 2026-10-14, which this replaces: a numbered set holds one game, several games get a disc each
+
+| What was added | What came out |
 |---|---|
 | Several games, and they fit one disc | One disc, with a chooser. Unchanged from v1. |
 | Several games, too big for one disc | **A disc each.** Standalone, each with its own name, menu and cover. |
@@ -463,13 +490,15 @@ Three things follow, and all three are improvements rather than compromises:
 - **Nothing is decided on anybody's behalf.** The app never groups games, so it never makes a curation choice silently. One game, one disc.
 - **A disc says what is on it.** In ten years a disc labelled `Gothic` is obvious and one labelled `Games, 2 of 3` is not, which is the whole promise of the thing.
 
-### What it costs
+### What it cost
 
 More blanks, sometimes. Four games of 3 GB, 1 GB, 0.5 GB and 0.4 GB would fit two DVDs packed and take four this way. That is two blanks against four discs that each say what they hold, and it is the right side of that trade. If it ever is not, the answer is an option that offers to combine them, never a default that does it quietly.
 
-### What it means for the code
+It was not the right side of it for the owner's three games, and the answer of 2026-11-21 keeps the last sentence: the set is the default now, and it is not quiet about it.
 
-`DiscPlanner` is unaffected and stays as it is: arithmetic over a flat list of files, told nothing about games. What this decides is the layer **above** it, which runs the planner once per game and hands back a batch of outputs, most of them a single disc and occasionally one of them a numbered set. That layer does not exist yet.
+### What it meant for the code
+
+`DiscPlanner` is unaffected and stays as it is: arithmetic over a flat list of files, told nothing about games. What this decided is the layer **above** it, which runs the planner once per game and hands back a batch of outputs, most of them a single disc and occasionally one of them a numbered set. That is `WhatWouldBeMade`, and it still does exactly this when the box is ticked.
 
 The `L - a bundle, one big and three small` fixture is the test for it: four games, a target they do not all fit on, and the expected answer is four discs rather than a refusal and rather than a packed set.
 

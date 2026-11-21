@@ -218,6 +218,7 @@ public static class TheProjectAsJson
             // After everything the older versions wrote. They ignore it and
             // keep the folder, which is what they always did.
             writing.WriteBoolean("IsoOnly", project.Options.OnlyTheImage);
+            writing.WriteBoolean("ADiscForEachGame", project.Options.ADiscForEachGame);
 
             // Only when somebody chose one. A file without it is a menu in
             // one of the faces every Windows has, as every menu was.

@@ -12,4 +12,10 @@ namespace DiscWright.Core;
 /// <param name="RelativePath">Where it goes on the disc, relative to the root.</param>
 /// <param name="Source">Where it comes from. Carried through untouched, for whoever copies it.</param>
 /// <param name="Bytes">How big it is.</param>
-public sealed record PlanFile(string RelativePath, string Source, long Bytes);
+/// <param name="KeepWhole">
+/// Whether it goes on a disc as one thing or not at all: one of a game's own
+/// manual or extras, which may be a folder and is never cut between discs.
+/// The planner still knows nothing about what it is, only that it will not
+/// divide.
+/// </param>
+public sealed record PlanFile(string RelativePath, string Source, long Bytes, bool KeepWhole = false);

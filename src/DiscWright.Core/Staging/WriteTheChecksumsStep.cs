@@ -22,7 +22,13 @@ public sealed class WriteTheChecksumsStep(IFileSystem files, IHasher hasher) : I
 {
     public string Says => "checking every file";
 
-    public bool AppliesTo(BuildContext context) => context.Project.Options.Checksums;
+    // Always on a set, asked for or not. The set's own list of every file on
+    // every disc is made from these, and without it no disc of the set knows
+    // what the others hold: the menu says its list of files is missing and
+    // nothing on any of them can be installed. A set built with the option
+    // off was exactly that until 2026-11-21.
+    public bool AppliesTo(BuildContext context) =>
+        context.Project.Options.Checksums || context.Layout.Discs.Count > 1;
 
     public Task Run(BuildContext context, CancellationToken ct)
     {

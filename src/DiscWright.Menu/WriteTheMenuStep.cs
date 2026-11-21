@@ -247,7 +247,12 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
                         != WhatAPatchAdds.NothingTheInstallerLacks)
                     .Select(addOn => new MenuAddOn(
                         addOn.Name,
-                        Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(addOn.Path))))
+                        Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(addOn.Path)),
+
+                        // Its parts, where the build put them: beside it and
+                        // under their own names.
+                        [.. addOn.PartsOrNone.Select(part =>
+                            Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(part.Path)))]))
             ];
 
             // Only when there is exactly one. Several is a question nobody
@@ -273,7 +278,13 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
                 ? Join(folder, GameExtra.ExtrasFolder)
                 : string.Empty;
 
-            onTheMenu.Add(new MenuGame(game.Name, runs, folder, addOns, game.MatchName, plays, manual, extras));
+            // Only where the plan put each game's own on one disc with it.
+            // Anywhere else they ride every disc and are the disc's to open.
+            IReadOnlyList<string>? apart = context.Layout.EachGamesOwnIsPlaced
+                ? [.. game.OwnOrNone.Select(own => WithForwardSlashes(own.OnTheDisc(folder)))]
+                : null;
+
+            onTheMenu.Add(new MenuGame(game.Name, runs, folder, addOns, game.MatchName, plays, manual, extras, apart));
         }
 
         return onTheMenu;

@@ -2050,7 +2050,11 @@ function restoreBarPercent(progress, now) {
 // drive or -1 when that cannot be told, and discs is how many the set has.
 // Returns {headline, says, go, note, short}: short is true when the drive
 // cannot hold what is needed.
-function installPageSays(name, folder, needBytes, free, scan, discs) {
+//
+// onDiscs is given on a set several games share, and is the discs this game
+// is on. "Comes on 3 discs" is true of the set there and not of the game,
+// which may be on two of them, so it says which.
+function installPageSays(name, folder, needBytes, free, scan, discs, onDiscs) {
     var game = String(name || "This game");
     var short = free >= 0 && free < needBytes;
     var room = "It needs " + bytesInWords(needBytes) + (free >= 0 ? ", and that drive has " + bytesInWords(free) + " free." : ".");
@@ -2064,8 +2068,10 @@ function installPageSays(name, folder, needBytes, free, scan, discs) {
         says = "Part of the installer is already copied to " + folder + ". Copying carries on there. " + room;
         go = "Copy and install";
     } else {
-        says = game + " comes on " + discs + " discs. Its installer is copied off them and put back together in "
-            + folder + ". " + room;
+        says = (onDiscs && onDiscs.length
+                ? game + " is on " + discsInWords(onDiscs) + " of this set."
+                : game + " comes on " + discs + " discs.")
+            + " Its installer is copied off them and put back together in " + folder + ". " + room;
         go = "Copy and install";
     }
 
@@ -2186,6 +2192,317 @@ function setBytesNeeded(rows, joins) {
     }
 
     return bytes + biggest;
+}
+
+// ===========================================================================
+// A set that several games share.
+//
+// Since 2026-11-21 several games that do not fit on one disc go onto one set,
+// laid down in the order of the list, and every disc's menu lists every one
+// of them. Asked for by the owner with three games on the window, which came
+// to five discs with a disc or a set each, where three hold them, and with no
+// menu that listed them all.
+//
+// So a game is no longer the whole of its set. It is a share of it, the rows
+// under its own folder, and where that share sits decides what its button
+// does:
+//
+//   here        all of it on the disc in the drive. It installs straight
+//               from the disc, as on a disc that stands alone.
+//   elsewhere   all of it on one other disc. The button says which, asks
+//               for it, and carries on by itself once it is in.
+//   gathered    spread over discs, or one game with a set to itself, which
+//               is how a set always worked: copied off each disc into one
+//               folder, put back together, and installed from there.
+//
+// Nothing here touches the page, like the rest of the set's engine.
+// ===========================================================================
+
+// Whether a path in the set is that one or under it, compared the way
+// Windows compares names. Nothing is under the empty path: that would make
+// every file on the set one game's.
+function isAtOrUnder(path, under) {
+    var p = String(path || "").toLowerCase();
+    var u = String(under || "").toLowerCase();
+
+    return u.length > 0 && (p === u || p.substring(0, u.length + 1) === u + "/");
+}
+
+// The numbers of the discs those rows are on, each once, lowest first.
+function theDiscsOf(rows) {
+    var seen = {};
+    var discs = [];
+    var i;
+
+    for (i = 0; i < rows.length; i++) {
+        if (!seen[rows[i].disc]) {
+            seen[rows[i].disc] = true;
+            discs.push(rows[i].disc);
+        }
+    }
+
+    discs.sort(function (a, b) { return a - b; });
+
+    return discs;
+}
+
+// One game's share of a set: {rows, joins, discs}.
+//
+// With one game on the disc, everything that is not the disc's own is that
+// game's, as it always was, and nothing is asked of its folder. With
+// several, a game's share is what is under its own folder, less what the
+// disc says is apart from it: its own manual and extras, which the build
+// put on one disc with it. Those are for reading. Counted in, a game whose
+// installer is whole on one disc would want a second disc for its artbook
+// before it would install.
+function aGamesShare(rows, joins, game, howManyGames) {
+    var share = { rows: [], joins: [], discs: [] };
+    var folder = game && game.folder ? String(game.folder) : "";
+    var apart = game && game.apart ? game.apart : [];
+    var i;
+
+    function isItsOwn(path) {
+        var k;
+
+        if (howManyGames > 1 && !isAtOrUnder(path, folder)) {
+            return false;
+        }
+
+        for (k = 0; k < apart.length; k++) {
+            if (isAtOrUnder(path, apart[k])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    for (i = 0; i < (rows || []).length; i++) {
+        if (isItsOwn(rows[i].path)) {
+            share.rows.push(rows[i]);
+        }
+    }
+
+    for (i = 0; i < (joins || []).length; i++) {
+        if (isItsOwn(joins[i].path)) {
+            share.joins.push(joins[i]);
+        }
+    }
+
+    share.discs = theDiscsOf(share.rows);
+
+    return share;
+}
+
+// Where a game's share is, against the disc in the drive: "here",
+// "elsewhere" or "gathered", as the head of this part says.
+//
+// One game on the disc is always gathered, whatever its rows say, because
+// that is the set as it has always been and nothing about it changes.
+function whereAShareIs(share, discIn, howManyGames) {
+    if (howManyGames <= 1 || !share || share.discs.length !== 1) {
+        return "gathered";
+    }
+
+    return share.discs[0] === discIn ? "here" : "elsewhere";
+}
+
+// Discs in words: "disc 3", "discs 1 and 2", "discs 2 to 4", and with a
+// gap in them, which a game's share never has, "discs 1, 3 and 4".
+function discsInWords(discs) {
+    var i, run = true;
+
+    if (!discs || discs.length === 0) {
+        return "";
+    }
+
+    if (discs.length === 1) {
+        return "disc " + discs[0];
+    }
+
+    if (discs.length === 2) {
+        return "discs " + discs[0] + " and " + discs[1];
+    }
+
+    for (i = 1; i < discs.length; i++) {
+        if (discs[i] !== discs[i - 1] + 1) {
+            run = false;
+        }
+    }
+
+    return run
+        ? "discs " + discs[0] + " to " + discs[discs.length - 1]
+        : "discs " + discs.slice(0, discs.length - 1).join(", ") + " and " + discs[discs.length - 1];
+}
+
+// What the one big button says for a game on a set several games share.
+//
+// Twenty-six characters is what a button holds, so a game on several discs
+// says how many and the line under it says which: "Copy and play from discs
+// 10 and 11" would be cut in the middle of the one thing it had to say.
+function aSharedSetsButtonSays(where, share, scan, installed, verb) {
+    var does = verb || "Install";
+
+    if (installed === true) {
+        return "Play";
+    }
+
+    if (where === "here" || !share || share.discs.length === 0 || (scan && scan.complete)) {
+        return does;
+    }
+
+    if (where === "elsewhere" || share.discs.length === 1) {
+        return does + " from disc " + share.discs[0];
+    }
+
+    return does + " from " + share.discs.length + " discs";
+}
+
+// The line under the button for a game that is whole on one disc of a set
+// several games share. Nothing when that disc is the one in the drive: it
+// is then a game on a disc, and those have never needed a line.
+function aSharedSetsLineSays(where, share, name) {
+    if (where !== "elsewhere" || !share || share.discs.length === 0) {
+        return "";
+    }
+
+    return String(name || "This game") + " is on disc " + share.discs[0]
+        + ", not on this one. The button above asks for it, and carries on by itself once it is in.";
+}
+
+// Where a game is, for whoever hovers over its row in the list of games.
+function whereAGameIsSays(share) {
+    return share && share.discs.length ? "On " + discsInWords(share.discs) : "";
+}
+
+// The discs with that file on them, or with anything under that folder.
+function whichDiscsHold(rows, path) {
+    var held = [];
+    var i;
+
+    for (i = 0; i < (rows || []).length; i++) {
+        if (isAtOrUnder(rows[i].path, path)) {
+            held.push(rows[i]);
+        }
+    }
+
+    return theDiscsOf(held);
+}
+
+// What is said when what a button opens is not on the disc in the drive.
+// what is the thing, "The manual of Dead Space". The button is not named: the
+// one just pressed is the one meant, and a page that carries the word
+// Manual in its script carries it whether or not the disc has a manual.
+function itIsOnAnotherDiscSays(what, discs, plural) {
+    return what + (plural ? " are on " : " is on ") + discsInWords(discs) + ". Put "
+        + (discs.length === 1 ? "disc " + discs[0] : "one of them")
+        + " in and press this again.";
+}
+
+// And when the disc in the drive holds some of it and other discs the rest,
+// which is two extras of one game that landed on two discs.
+function someOfItIsElsewhereSays(what, discs) {
+    return what + " are spread over " + discsInWords(discs) + ". This opened what the disc in the drive holds.";
+}
+
+// The files those add-ons are, as paths in the set: each one's own file,
+// and its parts where it has them.
+function whatAddOnsAreMadeOf(addOns) {
+    var paths = [];
+    var i, k;
+
+    for (i = 0; i < (addOns || []).length; i++) {
+        paths.push(String(addOns[i].runs));
+
+        for (k = 0; k < (addOns[i].parts || []).length; k++) {
+            paths.push(String(addOns[i].parts[k]));
+        }
+    }
+
+    return paths;
+}
+
+// Where those files are in the set: {rows, joins, discs, cut, known}.
+//
+// cut says one of them was cut to fit, so it is whole on no disc at all and
+// runs only from a folder it was put back together in. known is false when
+// the list does not have one of them, and then nothing here can be trusted
+// to say where anything is.
+function whereTheyAreInTheSet(rows, joins, paths) {
+    var found = { rows: [], joins: [], discs: [], cut: false, known: (paths || []).length > 0 };
+    var i, k, p, wanted, hit;
+
+    function sameName(a, b) {
+        return String(a).toLowerCase() === String(b).toLowerCase();
+    }
+
+    for (i = 0; i < (paths || []).length; i++) {
+        wanted = paths[i];
+        hit = false;
+
+        for (k = 0; k < (rows || []).length; k++) {
+            if (sameName(rows[k].path, wanted)) {
+                found.rows.push(rows[k]);
+                hit = true;
+            }
+        }
+
+        for (k = 0; !hit && k < (joins || []).length; k++) {
+            if (sameName(joins[k].path, wanted)) {
+                found.joins.push(joins[k]);
+                found.cut = true;
+                hit = true;
+
+                for (p = 0; p < joins[k].pieces.length; p++) {
+                    found.rows = found.rows.concat(theRowsNamed(rows, joins[k].pieces[p]));
+                }
+            }
+        }
+
+        if (!hit) {
+            found.known = false;
+        }
+    }
+
+    found.discs = theDiscsOf(found.rows);
+
+    return found;
+}
+
+function theRowsNamed(rows, path) {
+    var named = [];
+    var i;
+
+    for (i = 0; i < (rows || []).length; i++) {
+        if (String(rows[i].path).toLowerCase() === String(path).toLowerCase()) {
+            named.push(rows[i]);
+        }
+    }
+
+    return named;
+}
+
+// What the install page says when it is an add-on that has to be fetched
+// by itself: spread over discs, with no copy of the game left on this
+// machine for it to run from. The same shape installPageSays hands back.
+function anAddOnsPageSays(name, folder, needBytes, free, scan, discs) {
+    var short = free >= 0 && free < needBytes;
+    var room = "It needs " + bytesInWords(needBytes) + (free >= 0 ? ", and that drive has " + bytesInWords(free) + " free." : ".");
+    var says = String(name || "This") + " is spread over " + discsInWords(discs)
+        + ", so it cannot run from one of them. It is copied off them and put back together in "
+        + folder + ". " + (scan && scan.ok > 0 ? "Part of it is there already. " : "") + room;
+
+    if (short) {
+        says += " That is not enough. Change the folder to a drive with more room.";
+    }
+
+    return {
+        headline: "Where it is put back together",
+        says: says,
+        go: "Copy and install",
+        note: "Afterwards, its own installer starts.",
+        short: short
+    };
 }
 
 // A path in quotes for the command line, which is not as simple as putting
@@ -2708,6 +3025,14 @@ function copyTheSetDisc(work) {
             } else {
                 state.done += row.bytes;
                 state.samples.push({ bytes: row.bytes, seconds: ((new Date()).getTime() - state.startedAt) / 1000 });
+
+                // The read-only it came off the disc with, taken off, as a
+                // game copied off one disc has had since case 7. A folder of
+                // game files that came on a set was put back together
+                // read-only, so the game it made could not save over
+                // anything it shipped with. Nothing is said when it will not
+                // go: an installer does not care, and the copy is there.
+                makeItWritable(work.files, onTheDisc(work.dir, row.path));
             }
 
             state.at++;

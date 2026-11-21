@@ -173,6 +173,7 @@ public class TheWindowChecksItself
     [InlineData("readable by Windows 98")]
     [InlineData("a Start Here file")]
     [InlineData("keeping only the image")]
+    [InlineData("a disc for each game")]
     [InlineData("the menu's list on the left")]
     [InlineData("the small buttons in the bottom corner")]
     [InlineData("the disc's own as small buttons")]
@@ -305,7 +306,7 @@ public class TheWindowChecksItself
         nameof(MakeADisc.OutputFolder), nameof(MakeADisc.Medium), nameof(MakeADisc.TheSizeChosen),
         nameof(MakeADisc.CutFiles),
         nameof(MakeADisc.Menu), nameof(MakeADisc.Checksums), nameof(MakeADisc.LegacyFileSystems),
-        nameof(MakeADisc.StartHere), nameof(MakeADisc.OnlyTheImage),
+        nameof(MakeADisc.StartHere), nameof(MakeADisc.OnlyTheImage), nameof(MakeADisc.ADiscForEachGame),
         nameof(MakeADisc.ListOnTheLeft), nameof(MakeADisc.CornerAtTheBottom),
         nameof(MakeADisc.DiscsOwnAsSmallButtons), nameof(MakeADisc.OpenTheDiscButton),
         nameof(MakeADisc.DiscManualAsASmallButton), nameof(MakeADisc.DiscExtrasAsASmallButton),
@@ -348,6 +349,7 @@ public class TheWindowChecksItself
             case "readable by Windows 98": screen.LegacyFileSystems = true; break;
             case "a Start Here file": screen.StartHere = false; break;
             case "keeping only the image": screen.OnlyTheImage = true; break;
+            case "a disc for each game": screen.ADiscForEachGame = true; break;
             case "the menu's list on the left": screen.ListOnTheLeft = true; break;
             case "the small buttons in the bottom corner": screen.CornerAtTheBottom = true; break;
             case "the disc's own as small buttons": screen.DiscsOwnAsSmallButtons = true; break;
@@ -394,6 +396,7 @@ public class TheWindowChecksItself
             case "readable by Windows 98": screen.LegacyFileSystems = false; break;
             case "a Start Here file": screen.StartHere = true; break;
             case "keeping only the image": screen.OnlyTheImage = false; break;
+            case "a disc for each game": screen.ADiscForEachGame = false; break;
             case "the menu's list on the left": screen.ListOnTheLeft = false; break;
             case "the small buttons in the bottom corner": screen.CornerAtTheBottom = false; break;
             case "the disc's own as small buttons": screen.DiscsOwnAsSmallButtons = false; break;

@@ -23,10 +23,17 @@ namespace DiscWright.Core;
 /// that work on one disc and not the other confuse, and they are small, "it's
 /// just something nostalgic", so every disc carries them and pays the room.
 /// </remarks>
+/// <param name="EachGamesOwnIsPlaced">
+/// Whether each game's own manual and extras were planned as things of the
+/// game, on one disc with it, rather than riding every disc. So on a set that
+/// several games share, where every game's artbook on every disc would cost
+/// more discs than the games do.
+/// </param>
 public sealed record DiscLayout(
     IReadOnlyList<PlannedDisc> Discs,
     long RoomPerDisc,
-    bool ExtrasOnEveryDisc)
+    bool ExtrasOnEveryDisc,
+    bool EachGamesOwnIsPlaced = false)
 {
     /// <summary>Whether this disc carries the manual, the extras and the loose files.</summary>
     public bool CarriesTheExtras(int discNumber) =>
@@ -47,7 +54,11 @@ public sealed record PlannedDisc(int Number, IReadOnlyList<PlannedFile> Files, l
 /// any single disc, in which case <see cref="RelativePath"/> is the piece's name
 /// rather than the file's.
 /// </param>
-public sealed record PlannedFile(string RelativePath, string Source, long Bytes, FilePart? Part);
+/// <param name="GoesWhole">
+/// One of a game's own manual or extras, put on this disc by the plan. It may
+/// be a folder, and whoever copies it copies all of it under this name.
+/// </param>
+public sealed record PlannedFile(string RelativePath, string Source, long Bytes, FilePart? Part, bool GoesWhole = false);
 
 /// <summary>
 /// Which piece of a cut file this is, and everything needed to put it back.

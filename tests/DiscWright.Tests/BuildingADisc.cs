@@ -430,7 +430,7 @@ public sealed class BuildingADisc : IDisposable
         // room, which the two games fit EXACTLY, so one disc was the right
         // answer and the test was the thing that was wrong.
         BuiltDiscs built = await Build(
-            Project(AGogDownload("One", 3000), AGogDownload("Two", 3000)),
+            Project(AGogDownload("One", 3000), AGogDownload("Two", 3000)) with { Options = new DiscOptions(ADiscForEachGame: true) },
             capacity: Overhead + 5000);
 
         // A numbered set is a promise that disc 2 continues disc 1, and that is
@@ -558,6 +558,7 @@ public sealed class BuildingADisc : IDisposable
 
         DiscProject project = Project(one, two) with
         {
+            Options = new DiscOptions(ADiscForEachGame: true),
             AddOns = [new AddOn(0, forOne, "Update 2 (one)", 100), new AddOn(1, forTwo, "Update 2 (two)", 100)]
         };
 

@@ -61,6 +61,20 @@ public static class MenuWriter
     public static string TheWayInWithoutAutorun() => TheWayIn;
 
     /// <summary>
+    /// One add-on as the page carries it. Its parts are written only when it
+    /// has them, so an add-on that is one file is written as it always was.
+    /// </summary>
+    private static string AnAddOn(MenuAddOn addOn) =>
+        addOn.Parts is { Count: > 0 } parts
+            ? JScript.Fields(
+                ("name", JScript.Literal(addOn.Name)),
+                ("runs", JScript.Literal(addOn.Runs)),
+                ("parts", JScript.ListOf(parts)))
+            : JScript.Fields(
+                ("name", JScript.Literal(addOn.Name)),
+                ("runs", JScript.Literal(addOn.Runs)));
+
+    /// <summary>
     /// The shell, carrying this disc's own facts and nothing else generated.
     /// </summary>
     public static string MenuPage(MenuFacts facts)
@@ -142,9 +156,13 @@ public static class MenuWriter
                 ("plays", JScript.Literal(game.Plays)),
                 ("manual", JScript.Literal(game.Manual)),
                 ("extras", JScript.Literal(game.Extras)),
-                ("addOns", JScript.ArrayOf(game.AddOns.Select(addOn => JScript.Fields(
-                    ("name", JScript.Literal(addOn.Name)),
-                    ("runs", JScript.Literal(addOn.Runs)))))))))).Append('\n');
+
+                // What under the game's folder is not what installs it: its
+                // own manual and extras, on a set several games share. The
+                // menu works out which discs a game needs from everything
+                // under its folder but these.
+                ("apart", JScript.ListOf(game.Apart ?? [])),
+                ("addOns", JScript.ArrayOf(game.AddOns.Select(AnAddOn))))))).Append('\n');
         data.Append('}');
 
         return Template
@@ -452,7 +470,8 @@ public sealed record MenuGame(
     string? MatchName = null,
     string Plays = "",
     string Manual = "",
-    string Extras = "")
+    string Extras = "",
+    IReadOnlyList<string>? Apart = null)
 {
     /// <summary>Its add-ons, or none.</summary>
     public IReadOnlyList<MenuAddOn> AddOns => Given ?? [];
@@ -461,4 +480,9 @@ public sealed record MenuGame(
 /// <summary>One add-on, as the menu sees it.</summary>
 /// <param name="Name">What the button says.</param>
 /// <param name="Runs">What it runs, relative to the root of the disc.</param>
-public sealed record MenuAddOn(string Name, string Runs);
+/// <param name="Parts">
+/// The files beside it that it cannot run without, the way a GOG installer
+/// has its -1.bin, as paths on the disc. On a set they may be on another disc
+/// than the installer, and the menu has to know before it starts one.
+/// </param>
+public sealed record MenuAddOn(string Name, string Runs, IReadOnlyList<string>? Parts = null);

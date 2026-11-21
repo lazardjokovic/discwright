@@ -128,7 +128,12 @@ public sealed record DiscOptions(
     bool CutFiles = false,
     bool StartHere = true,
     MenuLook? Look = null,
-    bool OnlyTheImage = false)
+    bool OnlyTheImage = false,
+
+    // Several games that do not fit on one disc share a set, and this is the
+    // other way: a disc, or a set, for each game on its own, named after it,
+    // which is what they got before 2026-11-21 whether asked for or not.
+    bool ADiscForEachGame = false)
 {
     /// <summary>The look chosen, or the plain one.</summary>
     public MenuLook LookOrPlain => Look ?? MenuLook.Plain;

@@ -13,14 +13,23 @@ namespace DiscWright.Core;
 /// their disc without asking.
 /// </para>
 /// <para>
-/// <strong>It plans one game's files, not a compilation.</strong> The shipped
-/// app briefly spread several games over a set and packed them in whatever order
-/// the rows happened to sit in, and that was removed on purpose: which games
-/// belong together on a disc is curation, and a packer working from byte counts
-/// was making that choice silently. It also produced discs labelled D1 and D2 as
-/// though one continued the other when nothing on either depended on the other.
-/// So this takes a list of files and is told nothing about games, and whoever
-/// calls it decides what belongs on a disc.
+/// <strong>It plans a list of files and is told nothing about games.</strong>
+/// The shipped app briefly spread several games over a set and packed them in
+/// whatever order the rows happened to sit in, and that was removed on purpose:
+/// which games belong together on a disc is curation, and a packer working from
+/// byte counts was making that choice silently. It also produced discs labelled
+/// D1 and D2 as though one continued the other when nothing on either depended
+/// on the other.
+/// </para>
+/// <para>
+/// Several games share a set again since 2026-11-21, asked for by the owner
+/// with three games on the window that came to five discs, a disc or a set
+/// each, where three hold them. Both objections are answered where they
+/// arose and not here: the order is the list's, which a person arranges by
+/// hand, the window says which games land on which disc before anything is
+/// built, and every disc's menu lists every game and where it is, so the
+/// discs do continue one another. Whoever calls this still decides what
+/// belongs on a disc, and it still only does the arithmetic.
 /// </para>
 /// <para>
 /// Static because it holds nothing and needs nothing. The day it needs a
@@ -121,6 +130,14 @@ public static class DiscPlanner
             // file that will not fit one of them will not fit any of them.
             if (file.Bytes > RoomHere())
             {
+                // A manual or extras of a game's own goes on whole or not at
+                // all: it may be a folder, and half an artbook on each of two
+                // discs is an artbook on neither.
+                if (file.KeepWhole)
+                {
+                    return Refusals.AGamesOwnIsBiggerThanADisc(file, request.Medium, RoomHere());
+                }
+
                 if (!request.MayCutFiles)
                 {
                     return Refusals.ThatOneFileIsBiggerThanADisc(file, request.Medium, RoomHere());
@@ -192,7 +209,7 @@ public static class DiscPlanner
                 FinishThisDisc();
             }
 
-            onThisDisc.Add(new PlannedFile(file.RelativePath, file.Source, file.Bytes, null));
+            onThisDisc.Add(new PlannedFile(file.RelativePath, file.Source, file.Bytes, null, file.KeepWhole));
             bytesOnThisDisc += file.Bytes;
         }
 
@@ -201,6 +218,6 @@ public static class DiscPlanner
             FinishThisDisc();
         }
 
-        return new DiscLayout(discs, room, reserved > 0);
+        return new DiscLayout(discs, room, reserved > 0, request.EachGamesOwnIsPlaced);
     }
 }

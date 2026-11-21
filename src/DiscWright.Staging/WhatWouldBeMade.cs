@@ -66,9 +66,27 @@ public static class WhatWouldBeMade
             };
         }
 
-        // Several games that will not share a disc. A disc each, each named
-        // after its own game, and none of them numbered, because none of them
-        // continues another.
+        // Several games that will not share one disc share a set: laid down
+        // in the order of the list, a disc filled before the next is begun,
+        // so three games that come to two and a half discs take three.
+        //
+        // Until 2026-11-21 each game got a disc or a set of its own, always.
+        // The owner, with three games of 18.9 GB and a disc of 8.5: "it says
+        // it needs 5 discs, it should be 3", and no menu listed them all.
+        // That way is still there for whoever asks for it.
+        if (!project.Options.ADiscForEachGame)
+        {
+            return DiscPlanner.Plan(RequestForASet(project, medium, overhead, sizeOf)) switch
+            {
+                Outcome<DiscLayout>.No refused => refused.Refusal,
+                Outcome<DiscLayout>.Ok(DiscLayout set) =>
+                    new PlannedBuild([new PlannedOutput(project.Label, project.Games, set, false)]),
+                _ => Refusals.ThereIsNothingToPutOnADisc()
+            };
+        }
+
+        // A disc each, each named after its own game, and none of them
+        // numbered across games, because none of them continues another.
         List<PlannedOutput> outputs = [];
 
         foreach (GameFolder game in project.Games)
@@ -112,6 +130,84 @@ public static class WhatWouldBeMade
             ExtrasBytes(project, games, sizeOf),
             project.Options.CutFiles);
 
+    /// <summary>
+    /// What a set that several games share is planned from: every game in the
+    /// order of the list, and each with everything of its own directly after
+    /// it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A game's files, then its add-ons, then its own manual and
+    /// extras, and then the next game.</strong> So an add-on is never on a
+    /// disc its game has finished before, and what a game brought with it
+    /// is on the disc the game ends on or the one after.
+    /// </para>
+    /// <para>
+    /// <strong>A game's own manual and extras go on once.</strong> On one
+    /// disc, and on a set of one game, they ride every disc, so that the
+    /// buttons for them work whichever disc is in. On a set several games
+    /// share that would put every game's artbook on every disc: the owner's
+    /// three games carry 1.2 GB of extras between them, and three copies of
+    /// that are a fourth disc. They are whole things, a folder as often as
+    /// a file, so they are never cut. Only the disc's own manual and extras
+    /// still ride every disc.
+    /// </para>
+    /// </remarks>
+    public static PlanRequest RequestForASet(
+        DiscProject project, Medium medium, long overhead, Func<string, long> sizeOf)
+    {
+        IReadOnlyList<GameFolder> games = project.Games;
+        List<PlanFile> files = [];
+
+        for (int at = 0; at < games.Count; at++)
+        {
+            GameFolder game = games[at];
+            string folder = OnTheDisc.FolderFor(at + 1, game, games.Count);
+
+            files.AddRange(game.Files.Select(file => new PlanFile(
+                WhereItGoes(games, game, file),
+                System.IO.Path.Combine(game.Path, file.RelativePath),
+                file.Bytes)));
+
+            files.AddRange(AddOnsOf(project, games, at).Select(each =>
+                new PlanFile(each.RelativePath, each.Source, each.Bytes)));
+
+            files.AddRange(game.OwnOrNone.Select(own =>
+                new PlanFile(own.OnTheDisc(folder), own.Path, sizeOf(own.Path), KeepWhole: true)));
+        }
+
+        return new PlanRequest(
+            files,
+            medium,
+            overhead,
+            TheDiscsOwnExtras(project, sizeOf),
+            project.Options.CutFiles,
+            EachGamesOwnIsPlaced: true);
+    }
+
+    /// <summary>
+    /// The games of a set several of them share, for the list every disc of
+    /// it carries, or nothing for any other set: one game has the set to
+    /// itself and the list says so in the words it always used.
+    /// </summary>
+    public static IReadOnlyList<SetGame>? TheGamesOnASet(DiscProject project, DiscLayout layout)
+    {
+        if (!layout.EachGamesOwnIsPlaced || project.Games.Count < 2)
+        {
+            return null;
+        }
+
+        return
+        [
+            .. project.Games.Select((game, at) =>
+            {
+                string folder = OnTheDisc.FolderFor(at + 1, game, project.Games.Count);
+
+                return new SetGame(game.Name, folder, [.. game.OwnOrNone.Select(own => own.OnTheDisc(folder))]);
+            })
+        ];
+    }
+
     private static string WhereItGoes(IReadOnlyList<GameFolder> games, GameFolder game, ListedFile file)
     {
         string folder = OnTheDisc.FolderFor(games.ToList().IndexOf(game) + 1, game, games.Count);
@@ -120,30 +216,32 @@ public static class WhatWouldBeMade
     }
 
     private static IEnumerable<(string RelativePath, string Source, long Bytes)> AddOnsOf(
-        DiscProject project, IReadOnlyList<GameFolder> games)
-    {
-        for (int at = 0; at < games.Count; at++)
-        {
-            string folder = OnTheDisc.FolderFor(at + 1, games[at], games.Count);
-            int which = project.Games.ToList().IndexOf(games[at]);
+        DiscProject project, IReadOnlyList<GameFolder> games) =>
+        Enumerable.Range(0, games.Count).SelectMany(at => AddOnsOf(project, games, at));
 
-            foreach (AddOn addOn in project.AddOnsFor(which))
+    /// <summary>One game's add-ons, each with its parts beside it.</summary>
+    private static IEnumerable<(string RelativePath, string Source, long Bytes)> AddOnsOf(
+        DiscProject project, IReadOnlyList<GameFolder> games, int at)
+    {
+        string folder = OnTheDisc.FolderFor(at + 1, games[at], games.Count);
+        int which = project.Games.ToList().IndexOf(games[at]);
+
+        foreach (AddOn addOn in project.AddOnsFor(which))
+        {
+            yield return (
+                System.IO.Path.Combine(folder, AddOn.Folder, System.IO.Path.GetFileName(addOn.Path)),
+                addOn.Path,
+                addOn.Bytes);
+
+            // Its parts beside it, under their own names, because the
+            // installer looks for them by name in the folder it runs
+            // from and nowhere else.
+            foreach (AddOnPart part in addOn.PartsOrNone)
             {
                 yield return (
-                    System.IO.Path.Combine(folder, AddOn.Folder, System.IO.Path.GetFileName(addOn.Path)),
-                    addOn.Path,
-                    addOn.Bytes);
-
-                // Its parts beside it, under their own names, because the
-                // installer looks for them by name in the folder it runs
-                // from and nowhere else.
-                foreach (AddOnPart part in addOn.PartsOrNone)
-                {
-                    yield return (
-                        System.IO.Path.Combine(folder, AddOn.Folder, System.IO.Path.GetFileName(part.Path)),
-                        part.Path,
-                        part.Bytes);
-                }
+                    System.IO.Path.Combine(folder, AddOn.Folder, System.IO.Path.GetFileName(part.Path)),
+                    part.Path,
+                    part.Bytes);
             }
         }
     }
@@ -157,9 +255,13 @@ public static class WhatWouldBeMade
     /// games get a disc each, one game's artbook must not take room from
     /// another game's disc it is not on.
     /// </remarks>
-    private static long ExtrasBytes(DiscProject project, IReadOnlyList<GameFolder> games, Func<string, long> sizeOf)
+    private static long ExtrasBytes(DiscProject project, IReadOnlyList<GameFolder> games, Func<string, long> sizeOf) =>
+        games.Sum(game => game.OwnOrNone.Sum(own => sizeOf(own.Path))) + TheDiscsOwnExtras(project, sizeOf);
+
+    /// <summary>The disc's own manual, extras and loose files, which ride every disc whatever the set.</summary>
+    private static long TheDiscsOwnExtras(DiscProject project, Func<string, long> sizeOf)
     {
-        long bytes = games.Sum(game => game.OwnOrNone.Sum(own => sizeOf(own.Path)));
+        long bytes = 0;
 
         DiscExtras? extras = project.Extras;
 
@@ -216,10 +318,15 @@ public sealed record PlannedBuild(IReadOnlyList<PlannedOutput> Outputs)
             }
 
             int discs = Outputs[0].Layout.Discs.Count;
+            int games = Outputs[0].Games.Count;
 
             // "one disc" rather than "1 disc", because this is a sentence
-            // somebody reads rather than a figure they compare.
-            return discs == 1 ? "one disc" : $"a set of {discs} discs";
+            // somebody reads rather than a figure they compare. And how
+            // many games, when several share the set: "a set of 3 discs"
+            // under three games left it open whether that was one of them.
+            return discs == 1 ? "one disc"
+                : games > 1 ? $"{games} games on a set of {discs} discs"
+                : $"a set of {discs} discs";
         }
     }
 
@@ -300,6 +407,34 @@ public sealed record PlannedBuild(IReadOnlyList<PlannedOutput> Outputs)
     /// with words of its own and never reaches here.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Which games land on which disc, for a set several games share, in a
+    /// sentence a disc. Empty for anything else, where there is nothing to
+    /// say: one disc holds them all, or one game is all there is.
+    /// </summary>
+    /// <remarks>
+    /// Said before anything is built, because which games share a disc is
+    /// the person's to decide and a packer working from byte counts decides
+    /// it without a word. That is why several games were taken off sets
+    /// once. They go on in the order of the list, so somebody who does not
+    /// like what this says moves a game and reads it again.
+    /// </remarks>
+    public string WhereEachGameGoes
+    {
+        get
+        {
+            if (Outputs.Count != 1 || Outputs[0].Games.Count < 2 || Outputs[0].Layout.Discs.Count < 2)
+            {
+                return string.Empty;
+            }
+
+            PlannedOutput set = Outputs[0];
+
+            return string.Join(" ", set.Layout.Discs.Select(disc =>
+                $"Disc {disc.Number}: {string.Join(", ", set.GamesOn(disc).Select(game => game.Name))}."));
+        }
+    }
+
     public string WhatCuttingComesTo(bool cuttingIsOn)
     {
         if (Discs > 1)
@@ -328,4 +463,32 @@ public sealed record PlannedOutput(
     string Label,
     IReadOnlyList<GameFolder> Games,
     DiscLayout Layout,
-    bool InItsOwnFolder);
+    bool InItsOwnFolder)
+{
+    /// <summary>
+    /// The games with anything of theirs on that disc, in the order of the
+    /// list: a file, an add-on, or a manual or extras of their own.
+    /// </summary>
+    public IReadOnlyList<GameFolder> GamesOn(PlannedDisc disc)
+    {
+        List<GameFolder> there = [];
+
+        for (int at = 0; at < Games.Count; at++)
+        {
+            string folder = OnTheDisc.FolderFor(at + 1, Games[at], Games.Count);
+
+            // One game is the disc: everything on it is that game's.
+            if (folder.Length == 0
+                || disc.Files.Any(file => file.RelativePath.StartsWith(folder + (char)92, StringComparison.OrdinalIgnoreCase)))
+            {
+                there.Add(Games[at]);
+            }
+        }
+
+        return there;
+    }
+
+    /// <summary>The numbers of the discs with anything of that game's on them, in order.</summary>
+    public IReadOnlyList<int> DiscsOf(GameFolder game) =>
+        [.. Layout.Discs.Where(disc => GamesOn(disc).Contains(game)).Select(disc => disc.Number)];
+}

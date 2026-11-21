@@ -54,6 +54,15 @@ public static class WhatAPreviewAsks
             return null;
         }
 
+        // One set that several games share: every disc's menu lists every
+        // game, so there is no game a window could be said to be for.
+        if (planned is { Outputs.Count: 1 } shared
+            && shared.Outputs[0].Games.Count > 1
+            && shared.Outputs[0].Layout.Discs.Count > 1)
+        {
+            return ForASetSeveralGamesShare(shared.Outputs[0].Games.Count, menus);
+        }
+
         if (planned is not { Outputs.Count: > 1 } several)
         {
             return ForASetOf(menus);
@@ -64,13 +73,28 @@ public static class WhatAPreviewAsks
 
         return new AQuestion(
             several.Discs == games
-                ? $"These {games} games do not fit on one disc, so each gets a disc and a menu of its own."
-                : $"These {games} games do not fit on one disc, so they go on {several.Discs} discs, each with a menu of its own.",
+                ? $"These {games} games do not fit on one disc, and each was given a disc and a menu of its own."
+                : $"These {games} games do not fit on one disc, and were given {several.Discs} discs, each game's with a menu of its own.",
             $"No menu lists them all: each disc's menu is for the game on it. One window opens the first, {first}. "
-                + "To have every game on one menu, choose a size of disc that holds them all.",
+                + "To have every game on every menu, untick \"Give each game a disc of its own\".",
             "Open one window",
             menus == 2 ? "Open both" : $"Open all {menus}");
     }
+
+    /// <summary>
+    /// The question for one set that several games share. Not what a set of
+    /// one game is told: there every disc carries the manual and the extras,
+    /// and here each game's own are on one disc with it.
+    /// </summary>
+    public static AQuestion? ForASetSeveralGamesShare(int games, int discs) =>
+        discs < 2
+            ? null
+            : new AQuestion(
+                $"These {games} games go on a set of {discs} discs, and every disc's menu lists all of them.",
+                "One window opens disc 1, the menu somebody meets first. A game's button says which disc it is on, "
+                    + "so each disc's menu reads a little differently. Opening every disc shows them all at once.",
+                "Open one window",
+                discs == 2 ? "Open both" : $"Open all {discs}");
 
     public static AQuestion? ForASetOf(int discs) =>
         discs < 2

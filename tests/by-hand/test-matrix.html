@@ -387,7 +387,7 @@
   happens when you try the thing that should not be there, and whether what it says still reads right at none
   and at one as well as at many.</p>
 
-  <p class="lede"><strong>68 of these are now run by the suite and are hidden.</strong> They are still
+  <p class="lede"><strong>70 of these are now run by the suite and are hidden.</strong> They are still
   here, because this is a map of everything the program can be asked to do and a map with roads missing is
   worse than a long one, but a pass by hand should only be the part a person has to do. Turn them on with the
   switch above and each says which test runs it.</p>
@@ -496,7 +496,7 @@
     except the one place noted in D.</p>
     <div class="panel" data-cases>
 
-      <div class="sub">The main window · 34 controls</div>
+      <div class="sub">The main window · 35 controls</div>
       <label class="case"><input type="checkbox" id="c1" data-controls="CheckForANewVersion"><span class="id">C1</span>
         <span class="what">Check for new version, first of the links under the name</span>
         <span class="look"><span class="live">Never grey.</span> It is the only way to ask, and one that
@@ -611,6 +611,12 @@
       <label class="case"><input type="checkbox" id="c11" data-controls="CutFiles"><span class="id">C11</span>
         <span class="what">Split a file too big for one disc</span>
         <span class="look"><span class="live">Live at all times</span>, including mid-build.</span></label>
+      <label class="case"><input type="checkbox" id="c11b" data-controls="ADiscForEachGame"><span class="id">C11b</span>
+        <span class="what">Give each game a disc of its own, and the line saying which games land on which disc</span>
+        <span class="look">Not there with one game, or with games that fit on one disc. Add games that do not fit on one disc: the box appears, unticked, and the line above it says which games land on which disc ("Disc 1: ... Disc 2: ...") and that they go on in the order of the list. The line at the bottom says how many games on a set of how many discs.
+        Drag a game to another place in the list and the line follows. Hovering the box says what it does. <span class="grey">Grey</span> during a run.
+        Ticked, the line goes, and the bottom line says a disc each or how many discs. Unticked again, the set is back.
+        Built unticked: <code>disc D1</code>, <code>disc D2</code> and so on side by side, and every disc's menu lists every game. Built ticked: a folder for each game, each with its own disc or set.</span></label>
       <label class="case"><input type="checkbox" id="c12" data-controls="WhichDrive"><span class="id">C12</span>
         <span class="what">WHICH DRIVE</span>
         <span class="look"><span class="live">Live at all times</span>, including mid-burn. See D8.</span></label>
@@ -862,7 +868,7 @@
         <span class="what">Manual, and Extras</span>
         <span class="look">On a game's screen, each shown only when that game has one of its own or the disc does,
         and it opens the game's own first. On the list of games, each shown only when the disc has one of its own.
-        Every disc of a set carries both. Section F, F15 onwards, has the cases.</span></label>
+        Every disc of a set of one game carries both. On a set several games share, a game's own are on one disc with it, and pressed with another disc in the button says which disc. Section F, F15 onwards, has the cases.</span></label>
       <label class="case"><input type="checkbox" id="c47"><span class="id">C47</span>
         <span class="what">Back</span>
         <span class="look">Shown only when there is more than one game to go back to.</span></label>
@@ -876,6 +882,29 @@
       <label class="case"><input type="checkbox" id="c50"><span class="id">C50</span>
         <span class="what">The line saying which discs of the set are still wanted</span>
         <span class="look">Only on a set, and it must name the right ones.</span></label>
+      <label class="case"><input type="checkbox" id="c50c"><span class="id">C50c</span>
+        <span class="what">A set several games share: every disc lists every game</span>
+        <span class="look">Several games that do not fit on one disc, built with <i>Give each game a disc of its own</i> unticked, and burned or mounted. <b>Every</b> disc opens on the list of all the games, and hovering a game says which discs it is on.
+        A game that is all on the disc in the drive says <i>Install</i> and installs straight from it, with nothing under the button. One that is all on another disc says <i>Install from disc N</i>, and the line says it is on that disc and not this one. One spread over discs says <i>Install from N discs</i>, and the line says which disc is asked for next.
+        A game that is installed says <i>Play</i> on every disc, with no line about discs under it.</span></label>
+      <label class="case"><input type="checkbox" id="c50d"><span class="id">C50d</span>
+        <span class="what">A game that is on another disc of the set</span>
+        <span class="look">Press <i>Install from disc N</i>: the button goes grey, the line says to put disc N in and that it carries on by itself, and the tray opens. <b>Nothing is copied</b>, and no page asks where anything goes.
+        Put a disc of the set in that is not N: it keeps waiting, and the tray stays shut. Put N in: the title follows, and the game's installer starts from that disc without another press.
+        While it waits, Back is live and goes to the list, and the disc that was asked for no longer starts anything when it goes in. While an installer runs, Back is grey.</span></label>
+      <label class="case"><input type="checkbox" id="c50e"><span class="id">C50e</span>
+        <span class="what">A game spread over several discs of a set other games share</span>
+        <span class="look">Press <i>Install from N discs</i>: the install page names the game, says which discs it is on, and proposes a folder named after <b>the game</b> and the word installer. Copy and install copies only that game's files off the disc in the drive, <b>none of another game's and not the game's own manual or extras</b>, then asks for the others, in whichever order they go in.
+        From a disc with none of the game on it, the tray opens and it asks for the first that has. After the last, the installer runs from the folder. Installed, <i>Remove the copy</i> is offered on that game's screen and <b>not on another game's</b>.
+        Each game spread over discs is asked where its own installer goes, and Cancel copies nothing.</span></label>
+      <label class="case"><input type="checkbox" id="c50f"><span class="id">C50f</span>
+        <span class="what">A disc swapped by hand while the menu is open</span>
+        <span class="look">With the menu opened from disc 1, take it out and put disc 2 in without pressing anything. Press <i>Install</i> on a game that is on disc 1: <b>no error about a missing file</b>. The menu sees which disc is in, says to put disc 1 in, and the title and the buttons follow the disc that is really there.
+        Press Install on a game spread over discs: what is copied is what is on the disc in the drive, and <b>nothing is called scratched</b>. With no disc in at all, it asks for the first disc it needs.</span></label>
+      <label class="case"><input type="checkbox" id="c50g"><span class="id">C50g</span>
+        <span class="what">Manual, Extras and add-ons on a set several games share</span>
+        <span class="look">A game's own manual and extras are on one disc. Pressed with another disc in: a box says <i>The manual of X is on disc N. Put disc N in and press this again</i>, and with that disc in it opens. The disc's own manual opens from every disc.
+        Add-ons, with the game installed: on the disc in the drive, they run from it. On another disc, a box says which. For a game that was copied off its discs, they run from that copy while it is there, which is the only place an add-on is whole when its installer is on one disc and its parts on the next. With the copy removed, pressing such an add-on opens the install page for <b>the add-on alone</b>, copies only its files, and then starts it.</span></label>
       <label class="case"><input type="checkbox" id="c50b"><span class="id">C50b</span>
         <span class="what">The check, beside the music control</span>
         <span class="look">Shown only when the disc carries checksums.sha256, never on a preview. Pressing it
@@ -1355,6 +1384,9 @@
         <span class="what">Walk the same project through all six sizes</span>
         <span class="look">The disc count, the splitting line and the refusal all follow, every time, in both
         directions.</span></label>
+      <label class="case run" data-by="SeveralGamesOnOneSet"><input type="checkbox" id="g3b"><span class="id">G3b</span>
+        <span class="what">Several games that do not fit on one disc</span>
+        <span class="look"><i>N games on a set of M discs</i>: one set between them, filled in the order of the list, and a line saying which games land on which disc. A game's own manual and extras go on once, on one disc with it. With <i>Give each game a disc of its own</i> ticked, a disc or a set for each game, as it was before 2.0.5.</span></label>
       <label class="case run" data-by="ThePlanner"><input type="checkbox" id="g9"><span class="id">G9</span>
         <span class="what">Extras too big for the last disc of a set</span>
         <span class="look">They get a disc of their own, and the count goes up by one.</span></label>

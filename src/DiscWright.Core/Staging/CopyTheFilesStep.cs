@@ -16,11 +16,14 @@ public sealed class CopyTheFilesStep : IBuildStep
     /// and the extras can need a disc to themselves, and that disc still gets a
     /// menu and an autorun.
     /// </summary>
-    public bool AppliesTo(BuildContext context) => context.Disc.Files.Count > 0;
+    // A game's own manual and extras the plan put on this disc are not this
+    // step's: one of them may be a folder, and the step that knows how to
+    // copy a folder under its own name copies them.
+    public bool AppliesTo(BuildContext context) => context.Disc.Files.Any(file => !file.GoesWhole);
 
     public Task Run(BuildContext context, CancellationToken ct)
     {
-        foreach (PlannedFile file in context.Disc.Files)
+        foreach (PlannedFile file in context.Disc.Files.Where(file => !file.GoesWhole))
         {
             ct.ThrowIfCancellationRequested();
 
