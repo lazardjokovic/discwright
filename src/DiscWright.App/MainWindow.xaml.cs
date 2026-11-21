@@ -1063,13 +1063,17 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Asked of the screen, which knows whether these are a set or games
+        // with a disc each, and says which: the two are not the same thing
+        // to somebody choosing one window.
+        //
         // A set asks before any window opens, the owner's design on
         // 2026-11-09: the windows land exactly on top of one another, and
         // every menu at once with no warning read to him as a bug. One
         // window, disc 1, is the likely answer, and the question says the
         // manual and the extras are on every disc, so one window misses
         // nothing of them.
-        if (WhatAPreviewAsks.ForASetOf(menus.Length) is AQuestion crowd && Ask(crowd))
+        if (_screen.WhatThePreviewAsks(menus.Length) is AQuestion crowd && Ask(crowd))
         {
             menus = [menus[0]];
         }

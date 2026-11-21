@@ -1,3 +1,5 @@
+using DiscWright.Staging;
+
 namespace DiscWright.ViewModels;
 
 /// <summary>
@@ -24,6 +26,52 @@ public static class WhatAPreviewAsks
     /// The question for a set of that many discs, or nothing for one disc,
     /// which opens its one window unasked.
     /// </summary>
+    /// <summary>
+    /// What a preview asks before it opens anything, from what the build
+    /// would make and how many menus were written, or nothing when there is
+    /// one menu and nothing to decide.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// More than one menu is not always a set. Games that do not all fit on
+    /// one disc get a disc each, and each disc's menu is for its own game:
+    /// no menu lists them all. The question said "this is a set of 3 discs"
+    /// and "one window opens disc 1" all the same, and the owner, on 21
+    /// November 2026, with several games on the window, chose one window
+    /// expecting the menu with all his games and got one game's Install,
+    /// "not sure which disc it is".
+    /// </para>
+    /// <para>
+    /// So it says which it is, names the game the one window is for, and
+    /// says how to get them all on one menu, which is the thing he was
+    /// looking for.
+    /// </para>
+    /// </remarks>
+    public static AQuestion? For(PlannedBuild? planned, int menus)
+    {
+        if (menus < 2)
+        {
+            return null;
+        }
+
+        if (planned is not { Outputs.Count: > 1 } several)
+        {
+            return ForASetOf(menus);
+        }
+
+        int games = several.Outputs.Count;
+        string first = several.Outputs[0].Games.Count > 0 ? several.Outputs[0].Games[0].Name : several.Outputs[0].Label;
+
+        return new AQuestion(
+            several.Discs == games
+                ? $"These {games} games do not fit on one disc, so each gets a disc and a menu of its own."
+                : $"These {games} games do not fit on one disc, so they go on {several.Discs} discs, each with a menu of its own.",
+            $"No menu lists them all: each disc's menu is for the game on it. One window opens the first, {first}. "
+                + "To have every game on one menu, choose a size of disc that holds them all.",
+            "Open one window",
+            menus == 2 ? "Open both" : $"Open all {menus}");
+    }
+
     public static AQuestion? ForASetOf(int discs) =>
         discs < 2
             ? null
