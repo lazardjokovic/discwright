@@ -41,7 +41,7 @@ public class StoppingFromTheWindow
         Assert.False(screen.CanMakeIt);
 
         builder.LetItFinish();
-        await building;
+        await Ended(building);
 
         Assert.False(screen.CanStopTheBuild);
         Assert.Null(screen.WhatStoppingWouldLose());
@@ -73,7 +73,7 @@ public class StoppingFromTheWindow
         Assert.True(screen.CanStopTheBuild);
 
         builder.LetItFinish();
-        await building;
+        await Ended(building);
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class StoppingFromTheWindow
         Assert.False(screen.CanStopTheBuild);
         Assert.Null(screen.WhatStoppingWouldLose());
 
-        await building;
+        await Ended(building);
 
         Assert.Equal("The build was stopped, and what it had written was deleted.", screen.HowTheStopWent);
         Assert.Null(screen.Made);
@@ -143,7 +143,7 @@ public class StoppingFromTheWindow
         await builder.Started.Task;
 
         screen.StopTheBuild();
-        await building;
+        await Ended(building);
 
         Assert.Equal(
             @"The build was stopped. Something has these open, so they could not be deleted: C:\out\disc.",
@@ -160,7 +160,7 @@ public class StoppingFromTheWindow
         Task building = screen.MakeIt(theirs.Token);
         await builder.Started.Task;
         await theirs.CancelAsync();
-        await building;
+        await Ended(building);
 
         Assert.Equal("The build was stopped, and what it had written was deleted.", screen.HowTheStopWent);
     }
@@ -173,7 +173,7 @@ public class StoppingFromTheWindow
         Task building = screen.MakeIt();
         await builder.Started.Task;
         screen.StopTheBuild();
-        await building;
+        await Ended(building);
         Assert.NotNull(screen.HowTheStopWent);
 
         builder.StartAgain();
@@ -184,7 +184,7 @@ public class StoppingFromTheWindow
         Assert.True(screen.CanStopTheBuild);
 
         builder.LetItFinish();
-        await again;
+        await Ended(again);
 
         Assert.NotNull(screen.Made);
         Assert.Null(screen.HowTheStopWent);
@@ -202,7 +202,7 @@ public class StoppingFromTheWindow
         Task building = screen.MakeIt();
         await images.Waiting.Task;
         screen.StopTheBuild();
-        await building;
+        await Ended(building);
 
         // The first image was finished and the second begun. The third was
         // never started, so there is nothing of it to delete.
@@ -227,7 +227,7 @@ public class StoppingFromTheWindow
         Task building = screen.MakeIt();
         await images.Waiting.Task;
         screen.StopTheBuild();
-        await building;
+        await Ended(building);
 
         Assert.Equal([@"C:\out\Alpha\disc", @"C:\out\Beta\disc"], remover.Folders);
         Assert.Equal([@"C:\out\Alpha", @"C:\out\Beta"], remover.IfEmpty);
@@ -246,7 +246,7 @@ public class StoppingFromTheWindow
         Task building = screen.MakeIt();
         await images.Waiting.Task;
         screen.StopTheBuild();
-        await building;
+        await Ended(building);
 
         Assert.Equal(
             @"The build was stopped. Something has these open, so they could not be deleted: "
@@ -266,7 +266,7 @@ public class StoppingFromTheWindow
         ARemover remover = new();
         MakeADisc screen = TheScreen(new ABuilderOfSoMany(2), new ImagesThatFail(), remover);
 
-        await screen.MakeIt();
+        await Ended(screen.MakeIt());
 
         Assert.NotNull(screen.ItWentWrong);
         Assert.Null(screen.HowTheStopWent);
@@ -284,7 +284,7 @@ public class StoppingFromTheWindow
         Task building = screen.MakeIt();
         await images.Waiting.Task;
         screen.StopTheBuild();
-        await building;
+        await Ended(building);
 
         Assert.NotNull(screen.HowTheStopWent);
         Assert.False(screen.IsWorking);
@@ -338,6 +338,15 @@ public class StoppingFromTheWindow
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /// <summary>
+    /// Waits for a build to end, and not for ever. A Stop that stopped
+    /// nothing left these tests waiting on a build that would never be let
+    /// finish: the fault was planted, and the run sat for fifty minutes
+    /// until somebody ended it by hand. A fault that hangs a test is worse
+    /// than one that passes.
+    /// </summary>
+    private static Task Ended(Task build) => build.WaitAsync(TimeSpan.FromSeconds(30));
 
     private static MakeADisc TheScreen(IBuildDiscs builder, IMakeImages? images = null, ARemover? remover = null)
     {

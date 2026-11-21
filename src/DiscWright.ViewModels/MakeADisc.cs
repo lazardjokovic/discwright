@@ -2486,7 +2486,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 stayed.AddRange(await TakeAwayWhatWasBuilt(built, imagesBegun, into));
             }
 
-            Made = null;
+            // Nothing was made: Made was emptied when the build began, and
+            // is only filled once every image is written.
             HowTheStopWent = stayed.Count == 0
                 ? "The build was stopped, and what it had written was deleted."
                 : "The build was stopped. Something has these open, so they could not be deleted: "

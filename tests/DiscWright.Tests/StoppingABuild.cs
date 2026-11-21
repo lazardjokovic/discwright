@@ -105,7 +105,12 @@ public sealed class StoppingABuild : IDisposable
         // Three games that will not share a disc: a folder each. Stopped in
         // the second. The third's folder holds a whole earlier build, which
         // this one had not come to and must not touch.
-        GameFolder[] games = [AGame("Alpha"), AGame("Beta"), AGame("Gamma")];
+        GameFolder[] games = [AGame("Alpha"), AGame("Beta"), AGame("Gamma"), AGame("Delta")];
+
+        // And a fourth, never reached either, whose folder is there and
+        // empty. Empty or not, this build did not make it and has not come
+        // to it, so it is not this build's to take away.
+        Directory.CreateDirectory(Path.Combine(_out, "Delta"));
 
         string gamma = Path.Combine(_out, "Gamma");
         Directory.CreateDirectory(Path.Combine(gamma, "disc"));
@@ -136,6 +141,9 @@ public sealed class StoppingABuild : IDisposable
         // And the earlier build of the third is exactly as it was.
         Assert.Equal("an earlier build", File.ReadAllText(Path.Combine(gamma, "disc", "setup_gamma.exe")));
         Assert.Equal("its image", File.ReadAllText(Path.Combine(gamma, "Gamma.iso")));
+
+        // So is the empty folder of the fourth.
+        Assert.True(Directory.Exists(Path.Combine(_out, "Delta")));
     }
 
     [Fact]
