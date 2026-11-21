@@ -71,4 +71,15 @@ public interface IFileSystem
     /// True by default, which is every fake that does not care.
     /// </remarks>
     bool FileExists(string path) => true;
+
+    /// <summary>
+    /// How many bytes can still be written to the drive that folder is on,
+    /// or nothing when that cannot be told. The folder need not be there
+    /// yet: a build makes it.
+    /// </summary>
+    /// <remarks>
+    /// Nothing by default, so a disk that only pretends, and a share that
+    /// will not say, are both a drive nobody is stopped over.
+    /// </remarks>
+    long? RoomAt(string folder) => null;
 }

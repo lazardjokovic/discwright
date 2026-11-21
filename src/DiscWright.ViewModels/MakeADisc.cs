@@ -3470,6 +3470,50 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// button could not build anyway.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Whether the drive has room for what is about to be built, asked
+    /// before it starts. Nothing when there is room, or when the drive will
+    /// not say.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The owner's own build, 21 November 2026: four games, 153 GB written
+    /// over forty minutes onto a drive that could not take the last 37. A
+    /// build writes every disc twice, the folder and an image as big again,
+    /// and nothing had looked.
+    /// </para>
+    /// <para>
+    /// A question and not a refusal. The sum cannot know what else will
+    /// come or go on the drive, so it says the figures and somebody who
+    /// knows better builds anyway. Shutting it is the other answer, so
+    /// nothing is built by walking away from it.
+    /// </para>
+    /// </remarks>
+    public AQuestion? WhetherThereIsRoom()
+    {
+        if (!CanMakeIt || _whatItWouldMake is not PlannedBuild build
+            || RoomForABuild.For(build, _machine.Disk, OutputFolder) is not RoomForABuild room
+            || room.IsEnough)
+        {
+            return null;
+        }
+
+        string drive = System.IO.Path.GetPathRoot(OutputFolder) is { Length: > 0 } root ? root.TrimEnd((char)92) : "that drive";
+
+        return new AQuestion(
+            $"There is not room on {drive} for this build.",
+            $"It needs about {ByteSize.Describe(room.Needed)}: the disc "
+                + (build.Discs == 1 ? "folder and an image of it" : "folders and an image of each")
+                + $", which is as big again. {drive} has {ByteSize.Describe(room.Free)} free"
+                + (room.ComesBack > 0
+                    ? $", and {ByteSize.Describe(room.ComesBack)} more comes back from the earlier build this replaces"
+                    : string.Empty)
+                + $". That is {ByteSize.Describe(room.TooLittleBy)} short, and a drive that fills part way stops the build "
+                + "with nothing finished. Make room, or cancel and choose another folder under WHERE TO SAVE THE ISO.",
+            "Build anyway",
+            "Cancel");
+    }
+
     public AQuestion? WhatBuildingHereReplaces()
     {
         if (!CanMakeIt)
