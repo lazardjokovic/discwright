@@ -1,3 +1,4 @@
+using DiscWright.Core;
 using DiscWright.ViewModels;
 
 namespace DiscWright.Tests;
@@ -92,6 +93,135 @@ public class TheQuestionsASetAsks
         Assert.Equal("Open both", Assert.IsType<AQuestion>(WhatAPreviewAsks.ForASetOf(2)).TheOtherWay);
     }
 
+    // ------------------- and games with a disc each, which are not a set
+    //
+    // The owner, 21 November 2026: several games on the window, one window
+    // chosen, and one game's Install where he expected the menu with all of
+    // them, "not sure which disc it is". The question had called it a set.
+
+    private static MakeADisc GamesThatDoNotShareADisc(params string[] names)
+    {
+        MakeADisc screen = TheMainWindowWithoutAWindow.New();
+        screen.OutputFolder = @"C:\out";
+        screen.Medium = new Medium("TEST", "a test disc", (2L * 1024 * 1024) + 1500);
+
+        foreach (string name in names)
+        {
+            screen.Add(TheMainWindowWithoutAWindow.AGame(name, 1000));
+        }
+
+        return screen;
+    }
+
+    [Fact]
+    public void Games_with_a_disc_each_are_not_called_a_set_and_the_one_window_is_named()
+    {
+        MakeADisc screen = GamesThatDoNotShareADisc("Alan Wake", "Dead Space", "Hollow Knight");
+        Assert.Equal("3 games, a disc each", screen.WhatItWillMake);
+
+        AQuestion asked = Assert.IsType<AQuestion>(screen.WhatThePreviewAsks(3));
+
+        Assert.Equal(
+            "These 3 games do not fit on one disc, so each gets a disc and a menu of its own.",
+            asked.Headline);
+        Assert.DoesNotContain("set", asked.Headline + asked.Because, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("No menu lists them all", asked.Because, StringComparison.Ordinal);
+        Assert.Contains("One window opens the first, Alan Wake.", asked.Because, StringComparison.Ordinal);
+        Assert.Contains("choose a size of disc that holds them all", asked.Because, StringComparison.Ordinal);
+        Assert.Equal("Open one window", asked.TheLikelyOne);
+        Assert.Equal("Open all 3", asked.TheOtherWay);
+    }
+
+    [Fact]
+    public void Two_of_them_say_both_and_the_first_named_is_whichever_is_first_in_the_list()
+    {
+        MakeADisc screen = GamesThatDoNotShareADisc("Alan Wake", "Dead Space");
+        screen.MoveTheGameTo(screen.WhatGoesOnIt[1], screen.WhatGoesOnIt[0], after: false);
+
+        AQuestion asked = Assert.IsType<AQuestion>(screen.WhatThePreviewAsks(2));
+
+        Assert.StartsWith("These 2 games do not fit on one disc", asked.Headline, StringComparison.Ordinal);
+        Assert.Contains("One window opens the first, Dead Space.", asked.Because, StringComparison.Ordinal);
+        Assert.Equal("Open both", asked.TheOtherWay);
+    }
+
+    [Fact]
+    public void When_one_of_them_needs_discs_of_its_own_it_says_how_many_discs_in_all()
+    {
+        MakeADisc screen = TheMainWindowWithoutAWindow.New();
+        screen.OutputFolder = @"C:\out";
+        screen.Medium = new Medium("TEST", "a test disc", (2L * 1024 * 1024) + 1500);
+        screen.Add(TheMainWindowWithoutAWindow.AGame("Small", 1000));
+        screen.Add(TheMainWindowWithoutAWindow.AGame("Big", 1200, parts: 2));
+
+        // Whatever the plan says it comes to, the question says the same.
+        string made = screen.WhatItWillMake;
+        Assert.StartsWith("2 games on ", made, StringComparison.Ordinal);
+        int discs = int.Parse(made.Split(' ')[3], System.Globalization.CultureInfo.InvariantCulture);
+
+        AQuestion asked = Assert.IsType<AQuestion>(screen.WhatThePreviewAsks(discs));
+
+        Assert.Equal(
+            $"These 2 games do not fit on one disc, so they go on {discs} discs, each with a menu of its own.",
+            asked.Headline);
+        Assert.Equal($"Open all {discs}", asked.TheOtherWay);
+    }
+
+    [Fact]
+    public void A_set_is_still_called_a_set_and_one_menu_still_asks_nothing()
+    {
+        // One game too big for one disc: a real set, the question it always had.
+        MakeADisc set = TheMainWindowWithoutAWindow.New();
+        set.OutputFolder = @"C:\out";
+        set.Medium = new Medium("TEST", "a test disc", (2L * 1024 * 1024) + 1500);
+        set.Add(TheMainWindowWithoutAWindow.AGame("Big", 1200, parts: 4));
+        Assert.StartsWith("a set of ", set.WhatItWillMake, StringComparison.Ordinal);
+
+        Assert.Equal(WhatAPreviewAsks.ForASetOf(3), set.WhatThePreviewAsks(3));
+
+        // Games with a disc each, and only one menu written: nothing to ask.
+        Assert.Null(GamesThatDoNotShareADisc("One", "Two").WhatThePreviewAsks(1));
+
+        // With nothing on the window there is no plan, and several menus are
+        // asked about the way they always were.
+        Assert.Equal(WhatAPreviewAsks.ForASetOf(2), TheMainWindowWithoutAWindow.New().WhatThePreviewAsks(2));
+        Assert.Equal(WhatAPreviewAsks.ForASetOf(2), WhatAPreviewAsks.For(null, 2));
+    }
+
+    [Fact]
+    public void With_the_games_taken_off_again_nothing_is_remembered_of_them()
+    {
+        // The plan is of what is on the window. With that gone, or with
+        // the disc's name rubbed out so nothing is planned, a question
+        // about games that are no longer there would be about nothing.
+        MakeADisc screen = GamesThatDoNotShareADisc("Alan Wake", "Dead Space");
+        Assert.StartsWith("These 2 games", screen.WhatThePreviewAsks(2)!.Headline, StringComparison.Ordinal);
+
+        screen.Label = string.Empty;
+
+        Assert.Equal(WhatAPreviewAsks.ForASetOf(2), screen.WhatThePreviewAsks(2));
+
+        screen = GamesThatDoNotShareADisc("Alan Wake", "Dead Space");
+        screen.Remove(screen.Games[1]);
+        screen.Remove(screen.Games[0]);
+
+        Assert.Equal(WhatAPreviewAsks.ForASetOf(2), screen.WhatThePreviewAsks(2));
+    }
+
+    [Fact]
+    public void The_question_follows_the_size_chosen_when_the_games_come_to_fit()
+    {
+        MakeADisc screen = GamesThatDoNotShareADisc("Alan Wake", "Dead Space");
+        Assert.StartsWith("These 2 games", screen.WhatThePreviewAsks(2)!.Headline, StringComparison.Ordinal);
+
+        // A disc that holds both: one disc, one menu, nothing to ask about
+        // games, and two menus would be asked about as a set again.
+        screen.Medium = new Medium("TEST", "a bigger test disc", (2L * 1024 * 1024) + 5000);
+
+        Assert.Equal("one disc", screen.WhatItWillMake);
+        Assert.Equal(WhatAPreviewAsks.ForASetOf(2), screen.WhatThePreviewAsks(2));
+    }
+
     [Fact]
     public void The_window_asks_it_before_any_menu_opens_and_one_window_means_disc_1()
     {
@@ -101,7 +231,7 @@ public class TheQuestionsASetAsks
         // narrows the windows to the first disc's rather than none.
         string code = File.ReadAllText(Repository.File("src", "DiscWright.App", "MainWindow.xaml.cs"));
 
-        Assert.Contains("WhatAPreviewAsks.ForASetOf(menus.Length)", code, StringComparison.Ordinal);
+        Assert.Contains("_screen.WhatThePreviewAsks(menus.Length) is AQuestion crowd && Ask(crowd)", code, StringComparison.Ordinal);
         Assert.Contains("menus = [menus[0]];", code, StringComparison.Ordinal);
     }
 

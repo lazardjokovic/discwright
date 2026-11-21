@@ -105,6 +105,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
     // none while there is no plan to say.
     private int _discsItWillTake;
 
+    // What building what is on the window would make, or nothing while
+    // there is no plan to say.
+    private PlannedBuild? _whatItWouldMake;
+
     private BlanksOwned _blanks;
     private AChoiceFromTheBlanks? _fromTheBlanks;
     private bool _lookingAtTheDrives;
@@ -401,6 +405,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// Shown without anybody asking, because "which one am I running" is a
     /// question somebody should not have to press a button to answer.
     /// </remarks>
+    /// <summary>
+    /// What a preview that wrote so many menus asks before it opens any of
+    /// them, or nothing when there is one.
+    /// </summary>
+    public AQuestion? WhatThePreviewAsks(int menus) => WhatAPreviewAsks.For(_whatItWouldMake, menus);
+
     public string ThisBuild => _machine.ThisBuild;
 
     /// <summary>
@@ -4945,6 +4955,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // Settled below with the plan, and nothing until then.
         _theLargerDisc = null;
         _discsItWillTake = 0;
+        _whatItWouldMake = null;
 
         // Before the plan, so the plan is of the size it moved to. And the
         // line about it is said again either way: it goes when the last
@@ -4993,6 +5004,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 WhyNot = OutputFolder.Length == 0 ? Refusals.ThereIsNowhereToPutIt() : null;
                 WhatItWillMake = planned.InWords;
                 _discsItWillTake = planned.Discs;
+                _whatItWouldMake = planned;
                 Tell(nameof(WhatThereIsOfThatSize));
 
                 // A plan, whether or not there is anywhere to put what it
