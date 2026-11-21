@@ -865,6 +865,18 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// Stops the build that is running, after asking: what it has written
+    /// is deleted, and that is not a thing to do on one press.
+    /// </summary>
+    private void StopTheBuild(object sender, RoutedEventArgs e)
+    {
+        if (_screen.WhatStoppingWouldLose() is AQuestion losing && Ask(losing))
+        {
+            _screen.StopTheBuild();
+        }
+    }
+
     private async void MakeTheDisc(object sender, RoutedEventArgs e)
     {
         // The only async void in the program, and it has to be one: this is an

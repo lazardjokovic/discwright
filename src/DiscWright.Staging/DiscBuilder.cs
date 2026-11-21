@@ -82,31 +82,99 @@ public sealed class DiscBuilder(
         PlannedBuild build = ((Outcome<PlannedBuild>.Ok)planned).Value;
         List<BuiltDisc> made = [];
 
-        foreach (PlannedOutput output in build.Outputs)
+        // Every disc folder this build has begun, in the order it began
+        // them, and every folder it made for one game's discs. What a stop
+        // takes away again, and nothing else: a folder this build never
+        // reached may hold an earlier build, which is not its to touch.
+        List<string> begun = [];
+        List<string> ofTheirOwn = [];
+
+        // The writer hears the stop too, so one file of several gigabytes
+        // is given up part way and not at its end.
+        (writer as IListenForAStop)?.StopWhen(ct);
+
+        try
         {
-            ct.ThrowIfCancellationRequested();
-
-            string where = output.InItsOwnFolder
-                ? System.IO.Path.Combine(outputFolder, OnTheDisc.Tidied(output.Label))
-                : outputFolder;
-
-            // Narrowed with its add-ons, not only its games. Cut down to the
-            // games alone, every disc of a disc-each build offered the first
-            // game's add-ons on its menu and none of its own.
-            Outcome<BuiltDiscs> one = await Make(
-                project.KeepingOnly(output.Games, output.Label), output.Layout, medium, where, progress, ct);
-
-            if (one is Outcome<BuiltDiscs>.No stopped)
+            foreach (PlannedOutput output in build.Outputs)
             {
-                return stopped.Refusal;
+                ct.ThrowIfCancellationRequested();
+
+                string where = output.InItsOwnFolder
+                    ? System.IO.Path.Combine(outputFolder, OnTheDisc.Tidied(output.Label))
+                    : outputFolder;
+
+                if (output.InItsOwnFolder)
+                {
+                    ofTheirOwn.Add(where);
+                }
+
+                // Narrowed with its add-ons, not only its games. Cut down to the
+                // games alone, every disc of a disc-each build offered the first
+                // game's add-ons on its menu and none of its own.
+                Outcome<BuiltDiscs> one = await Make(
+                    project.KeepingOnly(output.Games, output.Label), output.Layout, medium, where, progress, begun, ct);
+
+                if (one is Outcome<BuiltDiscs>.No stopped)
+                {
+                    return stopped.Refusal;
+                }
+
+                made.AddRange(((Outcome<BuiltDiscs>.Ok)one).Value.Discs);
             }
 
-            made.AddRange(((Outcome<BuiltDiscs>.Ok)one).Value.Discs);
+            WriteTheProjectFile(project, medium, outputFolder);
+
+            return new BuiltDiscs(made);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new ABuildThatWasStopped(TakeAway(begun, ofTheirOwn));
+        }
+        finally
+        {
+            // The writer is kept for the next build and for every preview,
+            // and must not go on listening to a stop that has been heard.
+            (writer as IListenForAStop)?.StopWhen(CancellationToken.None);
+        }
+    }
+
+    /// <summary>
+    /// Deletes the disc folders a stopped build had begun, and the folders
+    /// it made for one game's discs if nothing is left in them. Says which
+    /// it could not, because something has them open.
+    /// </summary>
+    /// <remarks>
+    /// A disc folder stopped part way is no disc: some of the files, no
+    /// menu, no list of what should be there. It looks like one all the
+    /// same, and is named like one.
+    /// </remarks>
+    private List<string> TakeAway(List<string> begun, List<string> ofTheirOwn)
+    {
+        List<string> stayed = [];
+
+        if (writer is not IRemoveADiscFolder remover)
+        {
+            return begun;
         }
 
-        WriteTheProjectFile(project, medium, outputFolder);
+        foreach (string folder in begun)
+        {
+            try
+            {
+                remover.Remove(folder);
+            }
+            catch (Exception held) when (held is System.IO.IOException or UnauthorizedAccessException)
+            {
+                stayed.Add(folder);
+            }
+        }
 
-        return new BuiltDiscs(made);
+        foreach (string folder in ofTheirOwn)
+        {
+            remover.RemoveIfEmpty(folder);
+        }
+
+        return stayed;
     }
 
     /// <summary>
@@ -171,6 +239,7 @@ public sealed class DiscBuilder(
         Medium medium,
         string outputFolder,
         IProgress<BuildProgress>? progress,
+        List<string> begun,
         CancellationToken ct)
     {
         string label = forThisDisc.Label;
@@ -186,6 +255,10 @@ public sealed class DiscBuilder(
             string folder = System.IO.Path.Combine(
                 outputFolder,
                 layout.Discs.Count > 1 ? $"disc D{disc.Number}" : "disc");
+
+            // Begun, from here on: whatever was in it is about to go, and
+            // what goes into it is this build's.
+            begun.Add(folder);
 
             // Emptied, not just made. Built twice, a file left from the first
             // run is hashed into the second run's checksum list and burned,

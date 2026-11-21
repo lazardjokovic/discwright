@@ -129,7 +129,26 @@ public sealed class WindowsImageMaker(IFileSystem files) : IMakeImages
         }
         catch (COMException wrong)
         {
+            NotHalfAnImage.Leave(imagePath);
             return Refusals.WindowsCouldNotMakeTheImage(wrong.Message);
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped part way. What is there is the first part of an image
+            // and reads as one to anything that only looks at its name.
+            NotHalfAnImage.Leave(imagePath);
+            throw;
+        }
+        catch (System.IO.IOException wrong)
+        {
+            // Nearly always the disk filling up, which an image the size of
+            // the disc folder beside it does to a drive that had room for
+            // one of them. The owner's own, 21 November 2026: four games,
+            // 153 GB written, the last image stopped at 39 GB of 76, and the
+            // 39 GB left where it was, called Metro Exodus.iso, on a drive
+            // with nothing free. It reached the window as an exception.
+            NotHalfAnImage.Leave(imagePath);
+            return Refusals.TheImageCouldNotBeWritten(imagePath, wrong.Message);
         }
         finally
         {
