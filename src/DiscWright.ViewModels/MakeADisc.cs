@@ -1007,6 +1007,25 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string WhatSplittingWouldDo { get; private set; } = string.Empty;
 
     /// <summary>
+    /// Which games land on which disc, when several share a set, and that
+    /// they go on in the order of the list. Empty for anything else.
+    /// </summary>
+    /// <remarks>
+    /// Said before anything is built. Which games share a disc is the
+    /// person's to decide, and the list is how they decide it: this is what
+    /// the list comes to, and moving a game changes it.
+    /// </remarks>
+    public string WhereEachGameGoes { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// Whether "Give each game a disc of its own" has anything to decide:
+    /// several games, and more than one disc between them. Shown too while
+    /// it is ticked or the plan is refused, so there is always a way back
+    /// out of it.
+    /// </summary>
+    public bool ADiscForEachGameIsAChoice { get; private set; }
+
+    /// <summary>
     /// Why the button is dead, or null when it is not.
     /// </summary>
     /// <remarks>
@@ -2218,6 +2237,95 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(TheDiscFoldersWereKept));
     }
 
+    /// <summary>
+    /// Deletes what an earlier build left in this folder that this build did
+    /// not write over: the discs of a longer set, the set that games now
+    /// given a disc each used to share, and the folders of games that now
+    /// share a set.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The window asks before a build over an earlier one and says building
+    /// deletes it. It did so only by writing over it, so whatever the new
+    /// build did not happen to write stayed: a set of five rebuilt as three
+    /// kept discs four and five, with their images, and looked like a set of
+    /// five to anybody who opened the folder.
+    /// </para>
+    /// <para>
+    /// After this build and never before it. A build that is stopped or
+    /// fails leaves the earlier one as it was, wherever it had not yet
+    /// written.
+    /// </para>
+    /// <para>
+    /// Something that will not go is not a failed build. The discs are made,
+    /// and a line names what stayed and says what to do about it.
+    /// </para>
+    /// </remarks>
+    private async Task ClearAwayWhatWasNotReplaced(WhatAnEarlierBuildLeft before, BuiltDiscs made)
+    {
+        WhatAnEarlierBuildLeft left = before.NotAmong(
+            made.Discs.Select(disc => disc.Folder), made.Discs.Select(TheImageOf.That));
+
+        if (!left.IsThere || _machine.Remover is not IRemoveADiscFolder remover)
+        {
+            return;
+        }
+
+        Doing = "Deleting what the earlier build left";
+        Tell(nameof(Doing));
+
+        List<string> stayed = [];
+
+        // On the pool, as every deleting here is: a disc folder is gigabytes.
+        await Task.Run(() =>
+        {
+            foreach (string image in left.Images)
+            {
+                try
+                {
+                    remover.RemoveTheImage(image);
+                }
+                catch (Exception held) when (held is System.IO.IOException or UnauthorizedAccessException)
+                {
+                    stayed.Add(image);
+                }
+            }
+
+            foreach (string folder in left.Folders)
+            {
+                try
+                {
+                    remover.Remove(folder);
+                }
+                catch (Exception held) when (held is System.IO.IOException or UnauthorizedAccessException)
+                {
+                    stayed.Add(folder);
+                }
+            }
+
+            // A folder made for one game's discs, when nothing is left in
+            // it. One this build wrote into is not empty, and stays.
+            foreach (string above in left.OfOneGame)
+            {
+                remover.RemoveIfEmpty(above);
+            }
+        });
+
+        if (stayed.Count == 0)
+        {
+            return;
+        }
+
+        string says = stayed.Count == 1
+            ? $"An earlier build left {stayed[0]}, which could not be deleted because something has it open. "
+                + "Close whatever is using it and delete it by hand."
+            : $"An earlier build left {stayed.Count} things that could not be deleted because something has them "
+                + $"open, {stayed[0]} among them. Close whatever is using them and delete them by hand.";
+
+        AboutTheImage = AboutTheImage is null ? says : AboutTheImage + " " + says;
+        Tell(nameof(AboutTheImage));
+    }
+
     /// <summary>Why the last build stopped, or null when it did not.</summary>
     public Refusal? ItWentWrong { get; private set; }
 
@@ -2452,6 +2560,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Medium medium = Medium;
         string into = OutputFolder;
 
+        // Looked for before anything is written, because afterwards this
+        // build's own discs are there too and nothing tells the two apart.
+        WhatAnEarlierBuildLeft before = WhatAnEarlierBuildLeft.In(
+            _machine.Disk, into, project.Label, project.Games.Select(game => game.Name));
+
         try
         {
             // On the pool, not on this thread. The staging copy is
@@ -2479,6 +2592,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
                     if (ItWentWrong is null && project.Options.OnlyTheImage)
                     {
                         await LeaveOnlyTheImages(made);
+                    }
+
+                    // Only once this build is whole. Until then the earlier
+                    // one is the only finished disc there is.
+                    if (ItWentWrong is null)
+                    {
+                        await ClearAwayWhatWasNotReplaced(before, made);
                     }
 
                     break;
@@ -3536,7 +3656,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
             return null;
         }
 
-        AnEarlierBuild there = AnEarlierBuild.In(_machine.Disk, OutputFolder, Label);
+        // Wherever an earlier build of these games may have put them: at
+        // the top, and in a folder for each game. All of it goes when this
+        // build is made, so all of it is counted here.
+        WhatAnEarlierBuildLeft there = WhatAnEarlierBuildLeft.In(
+            _machine.Disk, OutputFolder, Label, _games.Select(game => game.Name));
 
         if (!there.IsThere)
         {
@@ -5198,6 +5322,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
             WhyNot = null;
             WhatItWillMake = string.Empty;
             WhatSplittingWouldDo = string.Empty;
+            WhereEachGameGoes = string.Empty;
+            ADiscForEachGameIsAChoice = false;
             _thePlanIsSound = false;
             Told();
             return;
@@ -5208,6 +5334,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
             WhyNot = Refusals.ADiscNeedsAName();
             WhatItWillMake = string.Empty;
             WhatSplittingWouldDo = string.Empty;
+            WhereEachGameGoes = string.Empty;
+            ADiscForEachGameIsAChoice = _games.Count > 1 && Options.ADiscForEachGame;
 
             // Nothing was planned, because a disc with no name is refused
             // before the planning. The menu carries the name, so there is
@@ -5242,12 +5370,23 @@ public sealed class MakeADisc : INotifyPropertyChanged
                 // The plan decides the words, ticked or not.
                 WhatSplittingWouldDo = planned.WhatCuttingComesTo(Options.CutFiles);
 
+                WhereEachGameGoes = planned.WhereEachGameGoes.Length > 0
+                    ? planned.WhereEachGameGoes + " They go on in the order of the list."
+                    : string.Empty;
+                ADiscForEachGameIsAChoice = _games.Count > 1 && (planned.Discs > 1 || Options.ADiscForEachGame);
+
                 break;
 
             case Outcome<PlannedBuild>.No refused:
                 WhyNot = refused.Refusal;
                 WhatItWillMake = string.Empty;
                 WhatSplittingWouldDo = string.Empty;
+                WhereEachGameGoes = string.Empty;
+
+                // Refused one way may not be refused the other: a game's
+                // own extras ride every disc of a set of its own, and go on
+                // once when the games share one.
+                ADiscForEachGameIsAChoice = _games.Count > 1;
                 _thePlanIsSound = false;
 
                 if (refused.Refusal.Remedy is { Kind: RemedyKind.ChangeMedium })
@@ -5442,6 +5581,8 @@ public sealed class MakeADisc : INotifyPropertyChanged
         // the total too and adding ends at Reconsider rather than there.
         Tell(nameof(WhatIsOnIt));
         Tell(nameof(WhatSplittingWouldDo));
+        Tell(nameof(WhereEachGameGoes));
+        Tell(nameof(ADiscForEachGameIsAChoice));
         Tell(nameof(WhyNot));
         Tell(nameof(Worry));
         Tell(nameof(CanMakeIt));

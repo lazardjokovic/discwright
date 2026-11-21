@@ -496,7 +496,7 @@
     except the one place noted in D.</p>
     <div class="panel" data-cases>
 
-      <div class="sub">The main window · 34 controls</div>
+      <div class="sub">The main window · 35 controls</div>
       <label class="case"><input type="checkbox" id="c1" data-controls="CheckForANewVersion"><span class="id">C1</span>
         <span class="what">Check for new version, first of the links under the name</span>
         <span class="look"><span class="live">Never grey.</span> It is the only way to ask, and one that
@@ -611,6 +611,12 @@
       <label class="case"><input type="checkbox" id="c11" data-controls="CutFiles"><span class="id">C11</span>
         <span class="what">Split a file too big for one disc</span>
         <span class="look"><span class="live">Live at all times</span>, including mid-build.</span></label>
+      <label class="case"><input type="checkbox" id="c11b" data-controls="ADiscForEachGame"><span class="id">C11b</span>
+        <span class="what">Give each game a disc of its own, and the line saying which games land on which disc</span>
+        <span class="look">Not there with one game, or with games that fit on one disc. Add games that do not fit on one disc: the box appears, unticked, and the line above it says which games land on which disc ("Disc 1: ... Disc 2: ...") and that they go on in the order of the list. The line at the bottom says how many games on a set of how many discs.
+        Drag a game to another place in the list and the line follows. Hovering the box says what it does. <span class="grey">Grey</span> during a run.
+        Ticked, the line goes, and the bottom line says a disc each or how many discs. Unticked again, the set is back.
+        Built unticked: <code>disc D1</code>, <code>disc D2</code> and so on side by side, and every disc's menu lists every game. Built ticked: a folder for each game, each with its own disc or set.</span></label>
       <label class="case"><input type="checkbox" id="c12" data-controls="WhichDrive"><span class="id">C12</span>
         <span class="what">WHICH DRIVE</span>
         <span class="look"><span class="live">Live at all times</span>, including mid-burn. See D8.</span></label>

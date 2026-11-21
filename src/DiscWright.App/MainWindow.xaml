@@ -990,6 +990,43 @@
                     </TextBlock.Style>
                 </TextBlock>
 
+                <!-- Several games that do not fit on one disc share a set,
+                     and this says which of them land on which disc before
+                     anything is built. Which games share a disc is the
+                     person's to decide and the list is how they decide it,
+                     so what the list comes to is said where it can be read.
+
+                     The owner, 21 November 2026, with three games that came
+                     to five discs, a disc or a set each: "it should be 3". -->
+                <TextBlock Margin="22,2,0,0"
+                           TextWrapping="Wrap"
+                           Text="{Binding WhereEachGameGoes}"
+                           Visibility="{Binding WhereEachGameGoes, Converter={StaticResource WhenAnything}}"
+                           AutomationProperties.AutomationId="WhereEachGameGoes">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource Aside}" />
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <!-- The other way, which was the only way until then. Here
+                     only while it has something to decide: several games,
+                     and more than one disc between them. -->
+                <CheckBox Margin="0,8,0,0"
+                          Content="Give each game a disc of its own"
+                          IsChecked="{Binding ADiscForEachGame}"
+                          IsEnabled="{Binding NothingIsRunning}"
+                          Visibility="{Binding ADiscForEachGameIsAChoice, Converter={StaticResource WhenSo}}"
+                          AutomationProperties.AutomationId="ADiscForEachGame">
+                    <CheckBox.ToolTip>
+                        <TextBlock TextWrapping="Wrap" MaxWidth="360">
+                            Games that do not fit on one disc share a set: they go on in the order of the
+                            list, each disc is filled before the next is begun, and the menu on every disc
+                            lists every game. Ticked, each game gets a disc to itself, or a set, named
+                            after it, with only that game on its menu. That takes more discs.
+                        </TextBlock>
+                    </CheckBox.ToolTip>
+                </CheckBox>
+
                 <!-- Chosen before anything is written, because being asked
                      in the middle of a burn is being asked at the worst
                      moment: the question arrives after somebody has walked

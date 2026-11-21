@@ -318,10 +318,15 @@ public sealed record PlannedBuild(IReadOnlyList<PlannedOutput> Outputs)
             }
 
             int discs = Outputs[0].Layout.Discs.Count;
+            int games = Outputs[0].Games.Count;
 
             // "one disc" rather than "1 disc", because this is a sentence
-            // somebody reads rather than a figure they compare.
-            return discs == 1 ? "one disc" : $"a set of {discs} discs";
+            // somebody reads rather than a figure they compare. And how
+            // many games, when several share the set: "a set of 3 discs"
+            // under three games left it open whether that was one of them.
+            return discs == 1 ? "one disc"
+                : games > 1 ? $"{games} games on a set of {discs} discs"
+                : $"a set of {discs} discs";
         }
     }
 

@@ -123,12 +123,12 @@ public class TheQuestionsASetAsks
         AQuestion asked = Assert.IsType<AQuestion>(screen.WhatThePreviewAsks(3));
 
         Assert.Equal(
-            "These 3 games do not fit on one disc, so each gets a disc and a menu of its own.",
+            "These 3 games do not fit on one disc, and each was given a disc and a menu of its own.",
             asked.Headline);
         Assert.DoesNotContain("set", asked.Headline + asked.Because, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("No menu lists them all", asked.Because, StringComparison.Ordinal);
         Assert.Contains("One window opens the first, Alan Wake.", asked.Because, StringComparison.Ordinal);
-        Assert.Contains("choose a size of disc that holds them all", asked.Because, StringComparison.Ordinal);
+        Assert.EndsWith("To have every game on every menu, untick " + (char)34 + "Give each game a disc of its own" + (char)34 + ".", asked.Because, StringComparison.Ordinal);
         Assert.Equal("Open one window", asked.TheLikelyOne);
         Assert.Equal("Open all 3", asked.TheOtherWay);
     }
@@ -164,7 +164,7 @@ public class TheQuestionsASetAsks
         AQuestion asked = Assert.IsType<AQuestion>(screen.WhatThePreviewAsks(discs));
 
         Assert.Equal(
-            $"These 2 games do not fit on one disc, so they go on {discs} discs, each with a menu of its own.",
+            $"These 2 games do not fit on one disc, and were given {discs} discs, each game's with a menu of its own.",
             asked.Headline);
         Assert.Equal($"Open all {discs}", asked.TheOtherWay);
     }

@@ -57,7 +57,7 @@ public sealed class SeveralGamesOnOneSet : IDisposable
         PlannedOutput set = Assert.Single(plan.Outputs);
 
         Assert.Equal(3, plan.Discs);
-        Assert.Equal("a set of 3 discs", plan.InWords);
+        Assert.Equal("3 games on a set of 3 discs", plan.InWords);
         Assert.Equal("THREE GAMES", set.Label);
         Assert.False(set.InItsOwnFolder);
         Assert.Equal(3, set.Games.Count);
