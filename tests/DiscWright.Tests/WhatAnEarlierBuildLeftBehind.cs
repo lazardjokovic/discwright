@@ -367,8 +367,18 @@ public sealed class WhatAnEarlierBuildLeftBehind : IDisposable
             }
         };
 
+        // Each image waits until the window has said the line about it.
+        _images!.Heard = disc =>
+        {
+            lock (said)
+            {
+                return said.Any(line => line.StartsWith($"TWO, disc {disc} of 2: writing the image, ", StringComparison.Ordinal));
+            }
+        };
+
         screen.ADiscForEachGame = false;
         await screen.MakeIt();
+        _images.Heard = null;
 
         Assert.Contains("Deleting what the earlier build left", said);
 
@@ -457,7 +467,15 @@ public sealed class WhatAnEarlierBuildLeftBehind : IDisposable
 
         internal MakeADisc? StopWith { get; set; }
 
-        public Task<Outcome<MadeImage>> Make(
+        /// <summary>
+        /// Whether the window has said what this reported. A report crosses
+        /// to the window by way of the thread pool, and an image that is
+        /// made at once can be over before it arrives, when it is rightly
+        /// ignored. A test that listens for the line waits for it here.
+        /// </summary>
+        internal Func<int, bool>? Heard { get; set; }
+
+        public async Task<Outcome<MadeImage>> Make(
             string stagedFolder, string imagePath, string label, bool wantsLegacyFileSystems,
             int discNumber, int ofDiscs, IProgress<ImageProgress>? progress, CancellationToken ct)
         {
@@ -470,13 +488,19 @@ public sealed class WhatAnEarlierBuildLeftBehind : IDisposable
 
             if (Refuse)
             {
-                return Task.FromResult<Outcome<MadeImage>>(Refusals.TheOldImageWillNotMoveAside(imagePath, "it is mounted"));
+                return Refusals.TheOldImageWillNotMoveAside(imagePath, "it is mounted");
             }
 
             progress?.Report(new ImageProgress(1, 2));
+
+            for (int tries = 0; Heard is not null && !Heard(discNumber) && tries < 500; tries++)
+            {
+                await Task.Delay(10, CancellationToken.None);
+            }
+
             File.WriteAllText(imagePath, "an image");
 
-            return Task.FromResult<Outcome<MadeImage>>(new MadeImage(imagePath, 8, null));
+            return new MadeImage(imagePath, 8, null);
         }
     }
 
