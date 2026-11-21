@@ -2423,7 +2423,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// whatever is picked.
     /// </para>
     /// </remarks>
-    public bool CanTakeSomethingOff => !IsWorking && WhatIsSelected is not null;
+    public bool CanTakeSomethingOff => !IsWorking && WhatIsSelected is { IsOnlyToLookAt: false };
 
     /// <summary>
     /// What the link that clears out the unticked rows says, or nothing when
@@ -2466,7 +2466,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
         for (int at = 0; at < _tree.Count; at++)
         {
-            if (_tree[at].EveryRow().Contains(row))
+            // A part of an installer is under its installer's row to be
+            // looked at and is not one of the branch's own rows, so it is
+            // found by the row it is shown under.
+            if (_tree[at].EveryRow().Contains(row)
+                || (row.IsOnlyToLookAt && _tree[at].EveryRow().Any(each => each.ShownUnderIt.Contains(row))))
             {
                 return at;
             }
@@ -4102,7 +4106,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
     {
         int at = _tree.IndexOf(thing.TheGameItIsIn);
 
-        if (at < 0 || at >= _games.Count)
+        // A part of an installer is not taken off by itself, whoever asks:
+        // the installer without one of its parts installs nothing.
+        if (at < 0 || at >= _games.Count || thing.IsOnlyToLookAt)
         {
             return;
         }

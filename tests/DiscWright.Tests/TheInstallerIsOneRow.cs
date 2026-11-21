@@ -253,4 +253,198 @@ public class TheInstallerIsOneRow
         Assert.Equal(4, game.Without(@"sub\setup_witcher-1.bin").Files.Count);
         Assert.Equal(4, game.Without(@"sub\other.bin").Files.Count);
     }
+
+    // ------------------------------------------- the parts can be looked at
+    //
+    // The owner, 21 November 2026: untick one and the installer will not
+    // work, so they must not be tickable, "but the user should still be
+    // able to drop them down if he wants, always collapsed by default".
+
+    private static AThingOnTheDisc TheInstallerRow(MakeADisc screen, int game = 0) =>
+        screen.WhatGoesOnIt[game].EveryThing().Single(row => row.What == TheTreeOfWhatGoesOn.TheInstaller);
+
+    [Fact]
+    public void Its_parts_are_under_it_to_be_looked_at_and_it_is_shut_until_somebody_opens_it()
+    {
+        MakeADisc screen = WithAGameInParts(3, out GameFolder game);
+        AThingOnTheDisc installer = TheInstallerRow(screen);
+
+        Assert.True(installer.CanBeOpened);
+        Assert.False(installer.IsOpened);
+
+        // Under it for the list to draw, and not inside it for anything
+        // that reads ticks or sizes.
+        Assert.False(installer.HasThingsInside);
+        Assert.Empty(installer.Inside);
+        Assert.Same(installer.ShownUnderIt, installer.WhatOpensUnderIt);
+        Assert.Same(installer, Assert.Single(screen.WhatGoesOnIt[0].EveryThing()));
+
+        // By number, with the file's own name for whoever points at it.
+        Assert.Equal(["Part 1 of 3", "Part 2 of 3", "Part 3 of 3"], installer.ShownUnderIt.Select(part => part.Name));
+        Assert.StartsWith("Part 2 of 3" + (char)10 + "setup_witcher-2.bin" + (char)10, installer.ShownUnderIt[1].InFull, StringComparison.Ordinal);
+        Assert.Equal(game.Files.Skip(1).Select(file => file.RelativePath), installer.ShownUnderIt.Select(part => part.ItsPath));
+
+        Assert.All(installer.ShownUnderIt, part =>
+        {
+            Assert.True(part.IsOnlyToLookAt);
+            Assert.Equal(TheTreeOfWhatGoesOn.APart, part.What);
+            Assert.Equal(Each, part.Bytes);
+            Assert.Equal(installer.HowDeep + 1, part.HowDeep);
+            Assert.Same(screen.WhatGoesOnIt[0], part.TheGameItIsIn);
+            Assert.False(part.CanBeOpened);
+            Assert.EndsWith(TheTreeOfWhatGoesOn.WhatAPartIs, part.InFull, StringComparison.Ordinal);
+        });
+
+        Assert.False(installer.IsOnlyToLookAt);
+        Assert.False(screen.WhatGoesOnIt[0].IsOnlyToLookAt);
+    }
+
+    [Fact]
+    public void Each_part_shows_its_own_size_and_they_add_up_to_the_rows_with_the_program()
+    {
+        // Parts are not all one size: the last is whatever was left over.
+        ListedFile installer = new("setup_witcher.exe", 7);
+        ListedFile[] parts = [new("setup_witcher-1.bin", 4000), new("setup_witcher-2.bin", 3000), new("setup_witcher-3.bin", 250)];
+
+        MakeADisc screen = TheMainWindowWithoutAWindow.New();
+        screen.Add(new GameFolder(
+            @"C:\games\witcher", GameKind.GogInstaller, "witcher", "witcher", installer, [installer, .. parts], [], null));
+
+        AThingOnTheDisc row = TheInstallerRow(screen);
+
+        Assert.Equal([4000L, 3000L, 250L], row.ShownUnderIt.Select(part => part.Bytes));
+        Assert.Equal(7 + row.ShownUnderIt.Sum(part => part.Bytes), row.Bytes);
+        Assert.All(row.ShownUnderIt, part => Assert.Equal(1, part.Files));
+    }
+
+    [Fact]
+    public void A_row_with_no_parts_has_nothing_shown_under_it_and_a_folder_shows_what_is_inside_it()
+    {
+        MakeADisc screen = WithAGameInParts(0, out _);
+        AThingOnTheDisc installer = TheInstallerRow(screen);
+
+        Assert.False(installer.CanBeOpened);
+        Assert.Empty(installer.WhatOpensUnderIt);
+
+        // A game is a folder: what opens under it is what is inside it.
+        AThingOnTheDisc game = screen.WhatGoesOnIt[0];
+
+        Assert.True(game.CanBeOpened);
+        Assert.Same(game.Inside, game.WhatOpensUnderIt);
+        Assert.Empty(game.ShownUnderIt);
+    }
+
+    [Fact]
+    public void A_part_cannot_be_taken_off_by_itself_whoever_asks()
+    {
+        MakeADisc screen = WithAGameInParts(3, out GameFolder game);
+        AThingOnTheDisc part = TheInstallerRow(screen).ShownUnderIt[1];
+
+        screen.WhatIsSelected = part;
+
+        // Picked, it names its game, and that is all picking it does.
+        Assert.Equal("witcher", screen.ThePickedGame);
+        Assert.False(screen.CanTakeSomethingOff);
+        Assert.False(screen.CanMoveThePickedUp);
+        Assert.False(screen.CanMoveThePickedDown);
+        Assert.Null(screen.MoveThePicked(1));
+        Assert.False(MakeADisc.HasAnOrder(part));
+        Assert.Null(MakeADisc.WhatADragCarries(part));
+
+        screen.TakeOff(part);
+
+        Assert.Equal(game.Files.Select(file => file.RelativePath), WhatGoesOn(screen));
+        Assert.Equal(3, TheInstallerRow(screen).ShownUnderIt.Count);
+
+        // The installer picked can be, and takes them all.
+        screen.WhatIsSelected = TheInstallerRow(screen);
+        Assert.True(screen.CanTakeSomethingOff);
+    }
+
+    [Fact]
+    public void A_game_let_go_over_a_part_of_another_game_takes_that_games_place()
+    {
+        MakeADisc screen = WithAGameInParts(2, out _);
+        screen.Add(TheMainWindowWithoutAWindow.AGame("gothic", Each, parts: 2));
+
+        AThingOnTheDisc first = screen.WhatGoesOnIt[0];
+        AThingOnTheDisc aPartOfTheSecond = TheInstallerRow(screen, 1).ShownUnderIt[1];
+        AThingOnTheDisc aPartOfItsOwn = TheInstallerRow(screen).ShownUnderIt[0];
+
+        Assert.False(screen.MayBeLetGoOver(first, aPartOfItsOwn));
+        Assert.True(screen.MayBeLetGoOver(first, aPartOfTheSecond));
+
+        screen.LetGoOver(first, aPartOfTheSecond);
+
+        Assert.Equal(["gothic", "witcher"], screen.WhatGoesOnIt.Select(each => each.Name));
+    }
+
+    [Fact]
+    public void Opened_it_stays_open_when_the_list_is_built_again_and_shut_it_stays_shut()
+    {
+        ListedFile installer = new("setup_witcher.exe", Each);
+        ListedFile part = new("setup_witcher-1.bin", Each);
+        ListedFile[] others = [new("soundtrack.zip", 10), new("wallpapers.zip", 20), new("manual.pdf", 30)];
+
+        MakeADisc screen = TheMainWindowWithoutAWindow.New();
+        screen.Add(new GameFolder(
+            @"C:\games\witcher", GameKind.GogInstaller, "witcher", "witcher", installer, [installer, part, .. others], [], null));
+
+        TheInstallerRow(screen).IsOpened = true;
+
+        // Taking another row off builds the branch again from what is left.
+        screen.TakeOff(screen.WhatGoesOnIt[0].EveryThing().Single(row => row.Name == "wallpapers.zip"));
+
+        Assert.True(TheInstallerRow(screen).IsOpened);
+        Assert.Equal(true, TheInstallerRow(screen).IsOn);
+
+        TheInstallerRow(screen).IsOpened = false;
+        TheInstallerRow(screen).IsOn = false;
+        screen.TakeOff(screen.WhatGoesOnIt[0].EveryThing().Single(row => row.Name == "manual.pdf"));
+
+        Assert.False(TheInstallerRow(screen).IsOpened);
+        Assert.Equal(false, TheInstallerRow(screen).IsOn);
+        Assert.Equal("Part 1 of 1", Assert.Single(TheInstallerRow(screen).ShownUnderIt).Name);
+    }
+
+    [Fact]
+    public void The_list_draws_a_part_with_no_tick_and_no_cross()
+    {
+        System.Xml.Linq.XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        System.Xml.Linq.XElement row = Assert.Single(System.Xml.Linq.XDocument
+            .Load(Repository.File("src", "DiscWright.App", "MainWindow.xaml")).Root!
+            .Descendants(xaml + "HierarchicalDataTemplate"));
+
+        // What opens under a row is what the row says, which for an
+        // installer is its parts.
+        Assert.Equal("{Binding WhatOpensUnderIt}", (string?)row.Attribute("ItemsSource"));
+
+        // The tick: hidden, not collapsed, so the name starts where every
+        // other name does.
+        System.Xml.Linq.XElement tick = Assert.Single(row.Descendants(xaml + "CheckBox"));
+        System.Xml.Linq.XElement when = Assert.Single(tick.Descendants(xaml + "DataTrigger"));
+
+        Assert.Equal("{Binding IsOnlyToLookAt}", (string?)when.Attribute("Binding"));
+        Assert.Equal("True", (string?)when.Attribute("Value"));
+
+        System.Xml.Linq.XElement then = Assert.Single(when.Elements(xaml + "Setter"));
+
+        Assert.Equal("Visibility", (string?)then.Attribute("Property"));
+        Assert.Equal("Hidden", (string?)then.Attribute("Value"));
+        Assert.Equal(
+            "{StaticResource {x:Type CheckBox}}",
+            (string?)Assert.Single(tick.Descendants(xaml + "Style")).Attribute("BasedOn"));
+
+        // The cross: not there at all, by the panel it sits in, and its own
+        // style still decides when it shows on every other row.
+        System.Xml.Linq.XElement cross = Assert.Single(
+            row.Descendants(xaml + "Button"),
+            each => (string?)each.Attribute("AutomationProperties.AutomationId") == "TakeOffThisRow");
+
+        Assert.Equal(
+            "{Binding IsOnlyToLookAt, Converter={StaticResource WhenNot}}",
+            (string?)cross.Parent!.Attribute("Visibility"));
+        Assert.Null(cross.Attribute("Visibility"));
+        Assert.Equal("{StaticResource OffTheRow}", (string?)cross.Attribute("Style"));
+    }
 }

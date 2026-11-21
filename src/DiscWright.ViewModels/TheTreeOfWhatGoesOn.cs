@@ -23,6 +23,13 @@ public static class TheTreeOfWhatGoesOn
     /// <summary>What an add-on row says it is.</summary>
     public const string AnAddOn = "an add-on";
 
+    /// <summary>What a row of one of an installer's numbered parts says it is.</summary>
+    public const string APart = "a part of it";
+
+    /// <summary>What a part says when pointed at.</summary>
+    public const string WhatAPartIs =
+        "A part of the installer, which holds the game itself. It goes on the disc with the installer, or not at all.";
+
     /// <summary>What a row of the game's own manual says it is.</summary>
     public const string TheManual = "the manual";
 
@@ -82,19 +89,40 @@ public static class TheTreeOfWhatGoesOn
             // alternative is an index out of range inside a window, and a
             // mutation pass will go on reporting it as a fault nothing
             // objects to.
-            under.Holding(isTheInstaller && parts.Count > 0
-                ? new AThingOnTheDisc(
-                    steps[^1],
-                    file.Bytes + parts.Sum(part => part.Bytes),
-                    TheInstaller,
-                    file.RelativePath,
-                    aside: WhatItsPartsAre(parts),
-                    files: 1 + parts.Count)
-                : new AThingOnTheDisc(
+            if (!isTheInstaller || parts.Count == 0)
+            {
+                under.Holding(new AThingOnTheDisc(
                     steps.Length == 0 ? file.RelativePath : steps[^1],
                     file.Bytes,
                     isTheInstaller ? TheInstaller : null,
                     file.RelativePath));
+
+                continue;
+            }
+
+            AThingOnTheDisc installer = new(
+                steps[^1],
+                file.Bytes + parts.Sum(part => part.Bytes),
+                TheInstaller,
+                file.RelativePath,
+                aside: WhatItsPartsAre(parts),
+                files: 1 + parts.Count);
+
+            // Each part where it can be seen by anybody who opens the row,
+            // which is shut until they do, and with nothing to tick.
+            //
+            // Called by its number and not by its file's name: a part is
+            // named as its installer is with a number on the end, the list
+            // cuts a long name short, and two parts read exactly alike,
+            // seen in the real window. The file's own name is what
+            // pointing at the row says.
+            for (int at = 0; at < parts.Count; at++)
+            {
+                installer.Showing(new AThingOnTheDisc(
+                    $"Part {at + 1} of {parts.Count}", parts[at].Bytes, APart, parts[at].RelativePath, aside: WhatAPartIs));
+            }
+
+            under.Holding(installer);
         }
 
         // Add-ons are not in the game's own listing. They were left behind in
@@ -208,11 +236,14 @@ public static class TheTreeOfWhatGoesOn
                 continue;
             }
 
-            if (row.HasThingsInside)
+            // An installer with its parts under it is both: a row that
+            // can be open, and a row with a tick.
+            if (row.CanBeOpened)
             {
                 row.IsOpened = itWas.IsOpened;
             }
-            else
+
+            if (!row.HasThingsInside)
             {
                 row.SetQuietly(itWas.IsOn == true);
             }
