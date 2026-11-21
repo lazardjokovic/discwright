@@ -998,7 +998,7 @@
 
                      The owner, 21 November 2026, with three games that came
                      to five discs, a disc or a set each: "it should be 3". -->
-                <TextBlock Margin="22,2,0,0"
+                <TextBlock Margin="22,5,0,0"
                            TextWrapping="Wrap"
                            Text="{Binding WhereEachGameGoes}"
                            Visibility="{Binding WhereEachGameGoes, Converter={StaticResource WhenAnything}}"

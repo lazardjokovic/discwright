@@ -5466,7 +5466,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
                     if (worth)
                     {
-                        Doing = $"{disc.Label}: {step}";
+                        Doing = TheImageOf.BeingWritten(disc, step);
                         HowFar = step.HowFar;
                     }
                 }

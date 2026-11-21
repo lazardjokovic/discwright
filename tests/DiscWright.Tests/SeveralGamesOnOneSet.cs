@@ -584,6 +584,21 @@ public sealed class SeveralGamesOnOneSet : IDisposable
         Assert.Equal("step 2 of 8, copying", new BuildProgress(2, 8, "copying", Of: string.Empty).ToString());
     }
 
+    [Fact]
+    public void While_an_image_is_written_the_line_says_which_disc_of_the_set_it_is()
+    {
+        ImageProgress half = new(1, 2);
+
+        Assert.Equal(
+            "THREE GAMES, disc 2 of 3: writing the image, " + half.HowFar.ToString("P0", System.Globalization.CultureInfo.CurrentCulture),
+            TheImageOf.BeingWritten(new BuiltDisc("THREE GAMES", 2, 3, @"C:\out\disc D2", 10), half));
+
+        // One disc says whose it is, as it always did.
+        Assert.Equal(
+            "Alan Wake: " + half,
+            TheImageOf.BeingWritten(new BuiltDisc("Alan Wake", 1, 1, @"C:\out\Alan Wake\disc", 10), half));
+    }
+
     // ---------------------------------------------------------------- helpers
 
     private static Medium ADisc(long room) => new("TEST", "a test disc", Overhead + room);

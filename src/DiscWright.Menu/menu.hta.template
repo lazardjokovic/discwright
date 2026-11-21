@@ -1181,7 +1181,15 @@ function sayTheSet(scan) {
     var sits = whereItIs();
     var words;
 
-    if (sits === "gathered" || restoring.what) {
+    if (!restoring.busy && !restoring.what && isInstalled(gameAt(DISC.games, showing))) {
+        // Installed, it is a game with a Play button, and where its files
+        // are on the discs is nothing that button needs. The line used to
+        // go on about them: "the button above asks for it", under Play,
+        // which asks for nothing (seen on a real set, 21 November 2026).
+        // Asked only when nothing is at work, so not twice a second under
+        // a copy.
+        words = "";
+    } else if (sits === "gathered" || restoring.what) {
         scan = scan || scanTheSet();
         words = restoreSentence(scan, SET.discIn, restoring, theShare().dir);
     } else if (restoring.wanting) {

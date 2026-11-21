@@ -457,12 +457,20 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
 
         string[] said = Page(discs, 1,
             "installedNow['Harbour Tales'] = true; installedNow['Lanternhold'] = true; installedNow['Quiet Orchard'] = true;\n"
-            + "for (var g = 0; g < 3; g++) { showGame(g); out.push(el('doIt').innerText); }\n"
+            + "for (var g = 0; g < 3; g++) { showGame(g); out.push(state()); }\n"
             + "showGame(2); doTheThing();\n"
             + "out.push(started.join(' + ') + ' closed=' + closed + ' busy=' + restoring.busy + ' page=' + shown('whereScreen'));\n");
 
         Assert.Equal(
-            ["Play", "Play", "Play", "close", "C:/Games/Quiet Orchard/game.exe in C:/Games/Quiet Orchard closed=true busy=false page=hidden"],
+            [
+                // Play, and nothing about which disc its files are on: the
+                // button asks for none of them.
+                "Play | (no line) | back live",
+                "Play | (no line) | back live",
+                "Play | (no line) | back live",
+                "close",
+                "C:/Games/Quiet Orchard/game.exe in C:/Games/Quiet Orchard closed=true busy=false page=hidden",
+            ],
             said);
     }
 
