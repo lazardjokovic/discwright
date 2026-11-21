@@ -569,6 +569,17 @@ function doTheThing() {
             askForItsDisc();
             return;
         }
+
+        // Here, as far as this page knows, and what it knows may be a disc
+        // ago: the menu stays open while discs are swapped by hand. Asked
+        // of the drive, then, and when the game is not on what is in it,
+        // its disc is asked for like any other. Not asked again once that
+        // disc has come in: a file that is missing from its own disc is
+        // said to be missing, and not waited for for ever.
+        if (sits === "here" && !restoring.itsDiscCameIn && !itIsOnTheDiscInTheDrive(game)) {
+            askForItsDisc();
+            return;
+        }
     }
 
     if (!doing) {
@@ -1301,6 +1312,50 @@ function theSetStops() {
     restoring.what = null;
 }
 
+// Whether what installs a game, or the game's own folder when nothing
+// does, is on the disc in the drive right now. A preview has no disc, and
+// says so when its button is pressed, so there it is not asked.
+function itIsOnTheDiscInTheDrive(game) {
+    if (whyNothingRuns()) {
+        return true;
+    }
+
+    return game.runs && String(game.runs).length > 0
+        ? !thereIsNo(onTheDisc(theDisc(), game.runs), false)
+        : !thereIsNo(theGamesFolder(theDisc(), game.folder), true);
+}
+
+// What this page believes is in the drive, put right when the drive says
+// otherwise. True when it changed.
+function theDiscInIs(number) {
+    if (number <= 0 || number === SET.discIn) {
+        return false;
+    }
+
+    SET.discIn = number;
+    document.title = discTitle(DISC.game, SET.discIn, SET.of);
+
+    return true;
+}
+
+// Asks the drive which disc of the set is in it and hands then() its
+// number, or 0 when there is no disc of a set in it. A look like the
+// wait's, which is a job and never a read from the page: see lookAtTheDisc.
+function seeWhichDiscIsIn(then) {
+    var look = lookAtTheDisc(theDisc());
+
+    function ask() {
+        if (!jobIsDone(look.job)) {
+            window.setTimeout(ask, 300);
+            return;
+        }
+
+        then(whichDiscTheSetFileSays(whatTheLookFound(look)));
+    }
+
+    window.setTimeout(ask, 50);
+}
+
 // A game whole on another disc of the set: ask for that disc, watch the
 // drive for it, and when it is in, do what the button does on a disc with
 // the game on it. Nothing is copied anywhere for a game like this.
@@ -1409,17 +1464,30 @@ function restoreGo() {
         return;
     }
 
-    // This disc holds nothing that is wanted: all of it is copied already,
-    // or, on a set several games share, none of this game is on it. So it
-    // is another disc that is wanted, and with none of this game on the
-    // one in the drive, the tray is opened for it.
-    if (scan.mineTotal === 0 || scan.mineHere >= scan.mineTotal) {
-        restoring.openTheTray = scan.mineTotal === 0;
-        waitForTheNextDisc(scan);
-        return;
-    }
+    // The drive is asked which disc is in it before anything is copied
+    // off it. The page stays open while discs are swapped, by hand as well
+    // as when it asks, and copying what it believed was in copied disc 2's
+    // files off disc 3: every one of them "would not copy", and the disc
+    // was called scratched.
+    seeWhichDiscIsIn(function (inTheDrive) {
+        theDiscInIs(inTheDrive);
 
-    copyThisDisc();
+        var now = scanTheSet();
+
+        showTheSet(gameAt(DISC.games, showing));
+
+        // Nothing in the drive that is wanted: no disc of the set at all,
+        // one whose share is copied already, or, on a set several games
+        // share, one with none of this game on it. Another is asked for,
+        // and unless this one was simply done with, the tray is opened.
+        if (inTheDrive === 0 || now.mineTotal === 0 || now.mineHere >= now.mineTotal) {
+            restoring.openTheTray = inTheDrive === 0 || now.mineTotal === 0;
+            waitForTheNextDisc(now);
+            return;
+        }
+
+        copyThisDisc();
+    });
 }
 
 // Every file of what was being copied is in the folder. For a game, its
@@ -1685,8 +1753,7 @@ function checkForTheNextDisc() {
     }
 
     if (wanted) {
-        SET.discIn = inTheDrive;
-        document.title = discTitle(DISC.game, SET.discIn, SET.of);
+        theDiscInIs(inTheDrive);
         restoring.wanting = 0;
         restoring.openTheTray = false;
 
@@ -1695,13 +1762,21 @@ function checkForTheNextDisc() {
             // and the press that asked for the disc is carried out.
             theSetStops();
             showGame(showing);
+            restoring.itsDiscCameIn = true;
             doTheThing();
+            restoring.itsDiscCameIn = false;
             return;
         }
 
         showTheSet(gameAt(DISC.games, showing));
         copyThisDisc();
         return;
+    }
+
+    // Not the one, and it is still the disc that is in: the page says so
+    // from here on, in its title and on its buttons.
+    if (theDiscInIs(inTheDrive)) {
+        showTheSet(gameAt(DISC.games, showing));
     }
 
     // Looked at, and not the one: out it comes, the once, so "put disc 3
@@ -1730,7 +1805,7 @@ function installFromTheFolder() {
         // is started, from the game's own folder inside the copy, or that
         // folder is opened for whoever knows which file it is.
         var folder = theGamesFolder(dir, game ? game.folder : "");
-        var plays = whatToRunAfterCopying(game, dir);
+        var plays = whatToRunAfterCopying(game, folder);
 
         theSetStops();
         showTheSet(game);

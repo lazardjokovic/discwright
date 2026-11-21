@@ -98,11 +98,13 @@ public sealed class WhatAnEarlierBuildLeftBehind : IDisposable
     [Fact]
     public void A_game_named_twice_or_with_no_name_is_looked_for_once_and_not_at_all()
     {
-        Stand(@"One\disc");
+        // A game with no name would be looked for in the folder itself,
+        // and what is at the top would be counted twice.
+        Stand("disc", @"One\disc");
 
         WhatAnEarlierBuildLeft there = WhatAnEarlierBuildLeft.In(new WindowsFileSystem(), _out, "TWO", ["One", "ONE", "", "One"]);
 
-        Assert.Equal([At(@"One\disc")], there.Folders);
+        Assert.Equal([At("disc"), At(@"One\disc")], there.Folders);
         Assert.Equal([At("One")], there.OfOneGame);
     }
 

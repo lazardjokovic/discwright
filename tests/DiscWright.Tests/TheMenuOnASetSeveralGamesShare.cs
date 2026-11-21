@@ -680,6 +680,8 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
 
         string[] said = Page(discs, 1,
             "showGame(1); doTheThing(); whereGo();\n"
+            + "out.push('looking: ' + state());\n"
+            + "pump(function () { return restoring.wanting > 0; });\n"
             + "out.push('pressed: ' + state() + ' | there=' + under(HDD));\n"
             + "pump(function () { return ejected > 0; });\n"
             + "out.push('disc 1 seen: ejected=' + ejected + ' there=' + under(HDD));\n"
@@ -693,6 +695,9 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
 
         Same(
             [
+                // The drive is asked which disc is in it before anything
+                // else, and for that moment nothing can be pressed.
+                "looking: Install from 2 discs (dead) | Nothing is copied yet. Still to come: discs 2, 3. | back dead",
                 "pressed: Install from 2 discs (dead) | Put disc 2 in. This carries on by itself once it is there. | back live | there=Lanternhold installer",
                 "disc 1 seen: ejected=1 there=Lanternhold installer",
                 "disc 3 copied: Install from 2 discs (dead) | Put disc 2 in. This carries on by itself once it is there. | back live | ejected=2",
@@ -1166,13 +1171,16 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
     {
         string[] discs = await Built(new DiscProject("BIG", [OnTheDisk("Big", 600, 1500)], new DiscOptions(CutFiles: true)), 1000);
 
+        // The tray opened after disc 1 and after disc 2, for the disc that
+        // followed each. Not after the last: nothing follows it, and a tray
+        // opened for a disc nobody is asked for reads as one more to find.
         string[] said = Page(discs, 1,
             "showGame(0);\n"
             + "var realJoin = joinThePieces;\n"
             + "joinThePieces = function (work) { work.say({ joining: '' }); work.after(['setup_big-1.bin']); };\n"
             + "doTheThing(); whereGo();\n"
             + "pump(function () { if (restoring.wanting > 0 && restoring.wanting !== SET.discIn) { putIn(restoring.wanting); } return alerts.length > 0 && !restoring.busy; }); drainSome();\n"
-            + "out.push('would not join: ' + alerts[alerts.length - 1].split(String.fromCharCode(10))[0] + ' | ' + state() + ' | started=' + started.length + ' timers=' + window.timers.length);\n"
+            + "out.push('would not join: ' + alerts[alerts.length - 1].split(String.fromCharCode(10))[0] + ' | ' + state() + ' | started=' + started.length + ' timers=' + window.timers.length + ' ejected=' + ejected);\n"
             + "joinThePieces = realJoin; alerts = [];\n"
             + "doTheThing(); pump(function () { return started.length > 0; });\n"
             + "out.push('again: ' + started.join(' + ') + ' | alerts=' + alerts.length + ' page=' + shown('whereScreen'));\n"
@@ -1181,7 +1189,7 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
         Same(
             [
                 "would not join: 1 file(s) could not be put back together: | Install disc 3 of 3 | "
-                    + "Every file is here. One file was cut to fit and still has to be put back together. | back live | started=0 timers=0",
+                    + "Every file is here. One file was cut to fit and still has to be put back together. | back live | started=0 timers=0 ejected=2",
                 "again: <HDD>/Big installer/setup_big.exe in <HDD>/Big installer | alerts=0 page=hidden",
                 "there: Big installer/setup_big-1.bin, Big installer/setup_big.exe",
             ],
@@ -1257,6 +1265,223 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             + "out.push(opened.join(' + ') + ' | started=' + started.length + ' closed=' + closed + ' | ' + el('doIt').innerText + (el('doIt').parentNode.className.indexOf('dead') >= 0 ? ' (dead)' : '') + ' busy=' + restoring.busy);\n");
 
         Assert.Equal(["open <HDD>/Loose installer | started=0 closed=false | Copy and open busy=false"], said);
+    }
+
+    // ============================================== a disc swapped by hand first
+
+    [Fact]
+    public async Task A_game_the_page_believes_is_on_this_disc_is_asked_of_the_drive_and_its_disc_asked_for_when_it_is_not()
+    {
+        string[] discs = await TheThreeGames();
+
+        // Opened from disc 1, and disc 3 put in by hand with the menu open.
+        string[] said = Page(discs, 1,
+            "showGame(0); putIn(3);\n"
+            + "out.push('believes: ' + state() + ' discIn=' + SET.discIn);\n"
+            + "doTheThing();\n"
+            + "out.push('pressed: ' + state() + ' | started=' + started.length + ' alerts=' + alerts.length);\n"
+            + "pump(function () { return ejected > 0; });\n"
+            + "out.push('looked: ' + state() + ' | discIn=' + SET.discIn + ' title=' + document.title + ' ejected=' + ejected);\n"
+            + "putIn(1); pump(function () { return started.length > 0; });\n"
+            + "out.push('started: ' + started.join(' + ') + ' | discIn=' + SET.discIn + ' alerts=' + alerts.length);\n");
+
+        Same(
+            [
+                "believes: Install | (no line) | back live discIn=1",
+                "pressed: Install (dead) | Put disc 1 in. This carries on by itself once it is there. | back live | started=0 alerts=0",
+
+                // It knows now which disc is in, and says where the game is.
+                "looked: Install from disc 1 (dead) | Put disc 1 in. This carries on by itself once it is there. | back live"
+                    + " | discIn=3 title=THREE GAMES (disc 3 of 3) ejected=1",
+                "started: <D1>/01 - Harbour Tales/setup_harbour_tales.exe in <D1>/01 - Harbour Tales | discIn=1 alerts=0",
+            ],
+            said);
+    }
+
+    [Fact]
+    public async Task A_file_missing_from_its_own_disc_is_not_waited_for_for_ever()
+    {
+        string[] discs = await TheThreeGames();
+
+        // The right disc is in and the installer is not on it. The drive is
+        // asked once, finds the disc it wanted, and the press goes ahead to
+        // whatever starting it says, which here is written down.
+        File.Delete(Path.Combine(discs[0], "01 - Harbour Tales", "setup_harbour_tales.exe"));
+
+        string[] said = Page(discs, 1,
+            "showGame(0); doTheThing();\n"
+            + "pump(function () { return started.length > 0; }); drainSome();\n"
+            + "out.push('started=' + started.length + ' looks=' + looks + ' ejected=' + ejected + ' wanting=' + restoring.wanting);\n");
+
+        Assert.Equal(["started=1 looks=1 ejected=0 wanting=0"], said);
+    }
+
+    [Fact]
+    public async Task What_is_copied_is_what_is_in_the_drive_and_not_what_the_page_believed_was()
+    {
+        string[] discs = await TheThreeGames();
+
+        // Opened from disc 2 and disc 3 put in by hand. Copying what it
+        // believed was in would ask disc 3 for disc 2's files.
+        string[] said = Page(discs, 2,
+            "showGame(1); putIn(3); doTheThing(); whereGo();\n"
+            + "pump(function () { return restoring.wanting > 0; });\n"
+            + "out.push(state() + ' | discIn=' + SET.discIn + ' alerts=' + alerts.length);\n"
+            + "out.push('there: ' + under(HDD));\n");
+
+        Same(
+            [
+                "Install from 2 discs (dead) | Put disc 2 in. This carries on by itself once it is there. | back live | discIn=3 alerts=0",
+                "there: Lanternhold installer/02 - Lanternhold/setup_lanternhold-2.bin, Lanternhold installer/02 - Lanternhold/setup_lanternhold-3.bin",
+            ],
+            said);
+    }
+
+    [Fact]
+    public async Task With_no_disc_of_the_set_in_the_drive_the_first_that_is_wanted_is_asked_for_and_nothing_is_called_scratched()
+    {
+        string[] discs = await TheThreeGames();
+
+        string[] said = Page(discs, 2,
+            "showGame(1); putIn(0); doTheThing(); whereGo();\n"
+            + "pump(function () { return ejected > 0; });\n"
+            + "out.push(state() + ' | discIn=' + SET.discIn + ' alerts=' + alerts.length + ' there=' + under(HDD));\n"
+            + "putIn(2); pump(function () { return restoring.wanting === 3; });\n"
+            + "out.push('disc 2 in: ' + under(HDD).split(', ').length + ' files, alerts=' + alerts.length);\n");
+
+        Same(
+            [
+                "Install from 2 discs (dead) | Put disc 2 in. This carries on by itself once it is there. | back live | discIn=2 alerts=0 there=Lanternhold installer",
+                "disc 2 in: 2 files, alerts=0",
+            ],
+            said);
+    }
+
+    // ================================================== what the set's list says
+
+    [Fact]
+    public async Task The_list_every_disc_carries_says_which_discs_each_game_is_on()
+    {
+        string[] discs = await TheThreeGames();
+
+        foreach (string disc in discs)
+        {
+            string list = File.ReadAllText(Path.Combine(disc, SetManifest.FileName));
+
+            Assert.Contains("This set holds 3 games, each in a folder of its own.", list, StringComparison.Ordinal);
+            Assert.Contains(
+                "  Harbour Tales   disc 1\n  Lanternhold     discs 2 and 3\n  Quiet Orchard   disc 3\n",
+                list,
+                StringComparison.Ordinal);
+            Assert.Contains(
+                "A game's own manual and extras are in its folder, on one disc with it:\n\n  Harbour Tales   disc 2\n  Lanternhold     disc 3\n",
+                list,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("This disc cannot install the game on its own", list, StringComparison.Ordinal);
+        }
+
+        // And one game with a set to itself is told what it always was.
+        Directory.Delete(_out, recursive: true);
+
+        string[] alone = await Built(new DiscProject("BIG", [OnTheDisk("Big", 600, 600, 600)], new DiscOptions()), 1000);
+
+        Assert.All(alone, disc =>
+            Assert.Contains(
+                "This disc cannot install the game on its own",
+                File.ReadAllText(Path.Combine(disc, SetManifest.FileName)),
+                StringComparison.Ordinal));
+    }
+
+    // ============================================================ more of add-ons
+
+    [Fact]
+    public async Task An_add_on_the_sets_list_does_not_know_is_started_from_the_disc_as_on_any_disc()
+    {
+        Spread spread = await ASetWithAnAddOnSpreadOverTwoDiscs();
+
+        // A list that has lost its rows says nothing about where anything
+        // is, so nothing is asked of it: no disc is named and nothing is
+        // fetched. Starting it says what is wrong, if anything is.
+        string[] said = Page(spread.Discs, 1,
+            "installedNow['Second'] = true; showGame(1);\n"
+            + "SET.rows = []; SET.joins = []; SET.shares = [];\n"
+            + "runTheAddOn(addOnNamed('soundtrack'));\n"
+            + "out.push(started.join(' + ') + ' | alerts=' + alerts.length + ' page=' + shown('whereScreen') + ' busy=' + restoring.busy);\n");
+
+        Assert.Equal(["<D1>/02 - Second/Add-ons/setup_second_soundtrack.exe | alerts=0 page=hidden busy=false"], said);
+    }
+
+    [Fact]
+    public async Task Updates_spread_over_discs_are_fetched_together_and_run_in_order_from_where_they_were_put()
+    {
+        GameFolder first = OnTheDisk("First", 450);
+        GameFolder second = OnTheDisk("Second", 300);
+
+        DiscProject project = new("TWO", [first, second], new DiscOptions())
+        {
+            AddOns =
+            [
+                new AddOn(1, AFile(@"Second own\patch_second_1_to_2.exe", 200), "Update 2", 200),
+                new AddOn(1, AFile(@"Second own\patch_second_2_to_3.exe", 400), "Update 3", 400),
+            ]
+        };
+
+        string[] discs = await Built(project, 1000);
+
+        Assert.Equal(2, discs.Length);
+        Assert.True(File.Exists(Path.Combine(discs[0], "02 - Second", "Add-ons", "patch_second_1_to_2.exe")));
+        Assert.True(File.Exists(Path.Combine(discs[1], "02 - Second", "Add-ons", "patch_second_2_to_3.exe")));
+
+        string[] said = Page(discs, 1,
+            "installedNow['Second'] = true; showGame(1);\n"
+            + "runTheUpdate();\n"
+            + "out.push('says: ' + tag(el('whereSays').innerText).split(' It needs ')[0]);\n"
+            + "whereGo(); pump(function () { return restoring.wanting > 0; });\n"
+            + "putIn(2); pump(function () { return started.length > 0; });\n"
+            + "out.push('started: ' + started.join(' + '));\n"
+            + "out.push('there: ' + under(HDD));\n");
+
+        Same(
+            [
+                "says: Update to 3 is spread over discs 1 and 2, so it cannot run from one of them. It is copied off them and put back together in <HDD>/Second installer.",
+                "started: cmd /s /c \"\"<HDD>/Second installer/02 - Second/Add-ons/patch_second_1_to_2.exe\" && "
+                    + "\"<HDD>/Second installer/02 - Second/Add-ons/patch_second_2_to_3.exe\"\"",
+                "there: Second installer/02 - Second/Add-ons/patch_second_1_to_2.exe, Second installer/02 - Second/Add-ons/patch_second_2_to_3.exe",
+            ],
+            said);
+    }
+
+    [Fact]
+    public async Task A_folder_of_game_files_spread_over_a_set_other_games_share_starts_from_its_own_folder_in_the_copy()
+    {
+        string folder = Path.Combine(_root, "src", "Loose");
+        Directory.CreateDirectory(folder);
+
+        ListedFile[] listed = [new("game.exe", 300), new("data one.pak", 600), new("data two.pak", 600)];
+
+        foreach (ListedFile file in listed)
+        {
+            File.WriteAllBytes(Path.Combine(folder, file.RelativePath), RandomBytes((int)file.Bytes));
+        }
+
+        GameFolder loose = new(folder, GameKind.FilesWithLauncher, "Loose", "Loose", null, listed, [listed[0]], null);
+
+        string[] discs = await Built(new DiscProject("TWO", [OnTheDisk("First", 500), loose], new DiscOptions()), 1000);
+
+        string[] said = Page(discs, 1,
+            "showGame(1);\n"
+            + "out.push('before: ' + el('doIt').innerText);\n"
+            + "doTheThing(); whereGo();\n"
+            + "pump(function () { if (restoring.wanting > 0 && restoring.wanting !== SET.discIn && !restoring.copying) { putIn(restoring.wanting); } return started.length > 0; });\n"
+            + "out.push('started: ' + started.join(' + ') + ' | closed=' + closed + ' busy=' + restoring.busy);\n");
+
+        Same(
+            [
+                "before: Copy and play from " + discs.Length + " discs",
+                "close",
+                "started: <HDD>/Loose installer/02 - Loose/game.exe in <HDD>/Loose installer/02 - Loose | closed=true busy=false",
+            ],
+            said);
     }
 
     // =================================================================== the discs
@@ -1467,7 +1692,11 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             before.Append(", D").Append(at + 1).Append(": ").Append(ThePageOnADiscOfASet.AsJScript(discs[at]));
         }
 
-        before.Append(" };\nvar HDD = ROOTS.HDD;\nvar URLS = [''");
+        string nothing = Path.Combine(_root, "no disc", "AUTORUN");
+        Directory.CreateDirectory(nothing);
+
+        before.Append(" };\nvar HDD = ROOTS.HDD;\nvar URLS = [")
+            .Append(ThePageOnADiscOfASet.AsJScript(new Uri(Path.Combine(nothing, "menu.hta")).AbsoluteUri));
 
         foreach (string disc in discs)
         {
