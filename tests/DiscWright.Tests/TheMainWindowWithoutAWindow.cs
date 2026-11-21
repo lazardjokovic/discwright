@@ -189,6 +189,7 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = New();
         window.OutputFolder = @"C:\out";
         window.Medium = ADiscHolding(1500);
+        window.ADiscForEachGame = true;
         window.Add(AGame("One", 1000));
         window.Add(AGame("Two", 1000));
 
@@ -201,6 +202,7 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = New();
         window.OutputFolder = @"C:\out";
         window.Medium = ADiscHolding(1500);
+        window.ADiscForEachGame = true;
         window.Add(AGame("Big", 1000, parts: 2));
         window.Add(AGame("Two", 1000));
 
@@ -216,6 +218,7 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = New();
         window.OutputFolder = @"C:\out";
         window.Medium = ADiscHolding(1500);
+        window.ADiscForEachGame = true;
         window.Add(AGame("One", 1000));
         window.Add(AGame("Two", 1000));
 
@@ -393,6 +396,7 @@ public class TheMainWindowWithoutAWindow
         MakeADisc window = New();
         window.OutputFolder = @"C:\out";
         window.Medium = ADiscHolding(1500);
+        window.ADiscForEachGame = true;
 
         GameFolder one = AGame("One", 1000);
         window.Add(one);

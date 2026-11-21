@@ -21,10 +21,37 @@ public sealed class CopyEachGamesOwnStep(IFileSystem files) : IBuildStep
     public string Says => "adding each game's manual and extras";
 
     public bool AppliesTo(BuildContext context) =>
-        context.Project.Games.Any(game => game.OwnOrNone.Count > 0);
+        context.Layout.EachGamesOwnIsPlaced
+            ? context.Disc.Files.Any(file => file.GoesWhole)
+            : context.Project.Games.Any(game => game.OwnOrNone.Count > 0);
 
     public Task Run(BuildContext context, CancellationToken ct)
     {
+        // On a set several games share, each game's own went into the plan
+        // and landed on one disc with the game. This disc gets the ones the
+        // plan gave it and no others: every game's artbook on every disc
+        // costs more discs than the games do.
+        if (context.Layout.EachGamesOwnIsPlaced)
+        {
+            foreach (PlannedFile own in context.Disc.Files.Where(file => file.GoesWhole))
+            {
+                ct.ThrowIfCancellationRequested();
+
+                context.Writer.MakeFolder(context.On(System.IO.Path.GetDirectoryName(own.RelativePath)!));
+
+                if (files.FolderExists(own.Source))
+                {
+                    CopyInto(context, own.Source, own.RelativePath, ct);
+                }
+                else
+                {
+                    context.Writer.Copy(own.Source, context.On(own.RelativePath));
+                }
+            }
+
+            return Task.CompletedTask;
+        }
+
         IReadOnlyList<GameFolder> games = context.Project.Games;
 
         for (int at = 0; at < games.Count; at++)

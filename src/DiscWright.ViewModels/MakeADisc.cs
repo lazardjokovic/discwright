@@ -1694,6 +1694,21 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// the build itself still needs room for both, because the image is
     /// made from the folder.
     /// </remarks>
+    /// <summary>
+    /// Whether several games that do not fit on one disc get a disc, or a
+    /// set, each, named after its own game, and not one set between them.
+    /// </summary>
+    /// <remarks>
+    /// Off as it comes. They got a disc each always until 2026-11-21, when
+    /// the owner's three games came to five discs where three hold them.
+    /// Still here for whoever wants each game's disc to stand by itself.
+    /// </remarks>
+    public bool ADiscForEachGame
+    {
+        get => Options.ADiscForEachGame;
+        set => Switch(Options with { ADiscForEachGame = value });
+    }
+
     public bool OnlyTheImage
     {
         get => Options.OnlyTheImage;

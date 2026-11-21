@@ -35,4 +35,10 @@ public sealed record PlanRequest(
     Medium Medium,
     long OverheadPerDisc,
     long BytesForTheExtras,
-    bool MayCutFiles);
+    bool MayCutFiles,
+
+    // Whether each game's own manual and extras are among the files, to be
+    // put down once, rather than counted in what rides every disc. Said by
+    // whoever asks and handed back in the layout, so the step that copies
+    // them knows which of the two it is doing.
+    bool EachGamesOwnIsPlaced = false);

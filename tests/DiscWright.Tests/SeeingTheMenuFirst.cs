@@ -218,6 +218,7 @@ public class SeeingTheMenuFirst
 
         DiscProject big = AProject() with
         {
+            Options = new DiscOptions(ADiscForEachGame: true),
             Games = [knight, grim],
             AddOns =
             [
@@ -793,6 +794,7 @@ public class SeeingTheMenuFirst
 
         DiscProject two = AProject() with
         {
+            Options = new DiscOptions(ADiscForEachGame: true),
             Games = [ABigGame("Hollow Knight"), ABigGame("Grim Fandango")]
         };
 

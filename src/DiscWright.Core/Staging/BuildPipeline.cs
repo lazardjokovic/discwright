@@ -47,7 +47,7 @@ public sealed class BuildPipeline(IReadOnlyList<IBuildStep> steps)
 /// <param name="Says">What is happening, in the step's own words.</param>
 /// <param name="Disc">Which disc is being made, from one.</param>
 /// <param name="OfDiscs">How many there are. One for a disc on its own.</param>
-public sealed record BuildProgress(int Step, int OfSteps, string Says, int Disc = 1, int OfDiscs = 1)
+public sealed record BuildProgress(int Step, int OfSteps, string Says, int Disc = 1, int OfDiscs = 1, string? Of = null)
 {
     /// <summary>
     /// "step 4 of 7, writing the menu", and for a set, "disc 2 of 3, step 4 of
@@ -58,8 +58,12 @@ public sealed record BuildProgress(int Step, int OfSteps, string Says, int Disc 
     /// of 1" to somebody making one disc is noise, and noise in a progress line
     /// is what makes people stop reading it.
     /// </remarks>
+    // Of is the game, said first, when several games each get discs of their
+    // own: "disc 1 of 2" twice over, for two different games, told nobody
+    // which was being built (the owner's log, 21 November 2026).
     public override string ToString() =>
-        OfDiscs > 1
-            ? $"disc {Disc} of {OfDiscs}, step {Step} of {OfSteps}, {Says}"
-            : $"step {Step} of {OfSteps}, {Says}";
+        (string.IsNullOrEmpty(Of) ? string.Empty : Of + ": ")
+            + (OfDiscs > 1
+                ? $"disc {Disc} of {OfDiscs}, step {Step} of {OfSteps}, {Says}"
+                : $"step {Step} of {OfSteps}, {Says}");
 }

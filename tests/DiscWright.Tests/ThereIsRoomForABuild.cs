@@ -148,6 +148,7 @@ public class ThereIsRoomForABuild
     {
         MakeADisc screen = TheScreen(new ADrive(free: 0), games: 3, each: 1000);
         screen.Medium = new Medium("TEST", "a small test disc", (2L * 1024 * 1024) + 1500);
+        screen.ADiscForEachGame = true;
         Assert.Equal("3 games, a disc each", screen.WhatItWillMake);
 
         Assert.Contains(

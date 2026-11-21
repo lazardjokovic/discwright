@@ -100,6 +100,7 @@ public static class AProjectFile
                     // Absent in every file written before 2.0.5, which all
                     // kept the folder.
                     OnlyTheImage: Yes(root, "IsoOnly"),
+                    ADiscForEachGame: Yes(root, "ADiscForEachGame"),
 
                     // Absent in every file written before 2.0.5, which is
                     // the menu as it comes.

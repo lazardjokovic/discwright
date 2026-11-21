@@ -104,6 +104,7 @@ public class TheQuestionsASetAsks
         MakeADisc screen = TheMainWindowWithoutAWindow.New();
         screen.OutputFolder = @"C:\out";
         screen.Medium = new Medium("TEST", "a test disc", (2L * 1024 * 1024) + 1500);
+        screen.ADiscForEachGame = true;
 
         foreach (string name in names)
         {
@@ -151,6 +152,7 @@ public class TheQuestionsASetAsks
         MakeADisc screen = TheMainWindowWithoutAWindow.New();
         screen.OutputFolder = @"C:\out";
         screen.Medium = new Medium("TEST", "a test disc", (2L * 1024 * 1024) + 1500);
+        screen.ADiscForEachGame = true;
         screen.Add(TheMainWindowWithoutAWindow.AGame("Small", 1000));
         screen.Add(TheMainWindowWithoutAWindow.AGame("Big", 1200, parts: 2));
 

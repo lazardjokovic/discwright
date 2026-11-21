@@ -142,6 +142,12 @@ public static class MenuWriter
                 ("plays", JScript.Literal(game.Plays)),
                 ("manual", JScript.Literal(game.Manual)),
                 ("extras", JScript.Literal(game.Extras)),
+
+                // What under the game's folder is not what installs it: its
+                // own manual and extras, on a set several games share. The
+                // menu works out which discs a game needs from everything
+                // under its folder but these.
+                ("apart", JScript.ListOf(game.Apart ?? [])),
                 ("addOns", JScript.ArrayOf(game.AddOns.Select(addOn => JScript.Fields(
                     ("name", JScript.Literal(addOn.Name)),
                     ("runs", JScript.Literal(addOn.Runs)))))))))).Append('\n');
@@ -452,7 +458,8 @@ public sealed record MenuGame(
     string? MatchName = null,
     string Plays = "",
     string Manual = "",
-    string Extras = "")
+    string Extras = "",
+    IReadOnlyList<string>? Apart = null)
 {
     /// <summary>Its add-ons, or none.</summary>
     public IReadOnlyList<MenuAddOn> AddOns => Given ?? [];

@@ -46,6 +46,21 @@ public static class Refusals
             new Remedy("Use a larger disc", RemedyKind.ChangeMedium));
 
     /// <summary>
+    /// One of a game's own manual or extras is bigger than a disc. It goes on
+    /// whole, so cutting is not the way out that it is for a file of the game.
+    /// </summary>
+    public static Refusal AGamesOwnIsBiggerThanADisc(PlanFile own, Medium medium, long roomPerDisc) =>
+        new("A game's manual or extras is bigger than a whole disc",
+            $"{System.IO.Path.GetFileName(own.Source.TrimEnd((char)92, '/'))} is {ByteSize.Describe(own.Bytes)}, and a "
+                + $"{medium.Name} leaves {ByteSize.Describe(roomPerDisc)} for files once the menu is on it. It goes on "
+                + "a disc whole or not at all, so leave it off the list, or use a larger disc.",
+            [
+                new Figure("the manual or extras", ByteSize.Describe(own.Bytes)),
+                new Figure("a disc leaves", ByteSize.Describe(roomPerDisc))
+            ],
+            new Remedy("Use a larger disc", RemedyKind.ChangeMedium));
+
+    /// <summary>
     /// The manual and extras alone are bigger than a disc, so no disc can carry
     /// them and there is nowhere to put them.
     /// </summary>

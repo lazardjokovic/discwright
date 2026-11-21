@@ -111,8 +111,15 @@ public sealed class DiscBuilder(
                 // Narrowed with its add-ons, not only its games. Cut down to the
                 // games alone, every disc of a disc-each build offered the first
                 // game's add-ons on its menu and none of its own.
+                // Which game it is at, said with every step, when the games
+                // get discs of their own: "disc 1 of 2" twice over told nobody
+                // which game was being built.
+                IProgress<BuildProgress>? saying = build.Outputs.Count > 1 && progress is not null
+                    ? new NamingTheGame(progress, output.Label)
+                    : progress;
+
                 Outcome<BuiltDiscs> one = await Make(
-                    project.KeepingOnly(output.Games, output.Label), output.Layout, medium, where, progress, begun, ct);
+                    project.KeepingOnly(output.Games, output.Label), output.Layout, medium, where, saying, begun, ct);
 
                 if (one is Outcome<BuiltDiscs>.No stopped)
                 {
@@ -136,6 +143,11 @@ public sealed class DiscBuilder(
             // and must not go on listening to a stop that has been heard.
             (writer as IListenForAStop)?.StopWhen(CancellationToken.None);
         }
+    }
+
+    private sealed class NamingTheGame(IProgress<BuildProgress> heard, string game) : IProgress<BuildProgress>
+    {
+        public void Report(BuildProgress value) => heard.Report(value with { Of = game });
     }
 
     /// <summary>

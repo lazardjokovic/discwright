@@ -63,6 +63,7 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures, IFo
         }
 
         List<string> written = [];
+        List<(PlannedOutput Output, PlannedDisc Disc, string Folder)> staged = [];
         HashSet<string> taken = new(StringComparer.OrdinalIgnoreCase);
 
         foreach (PlannedOutput output in planned.Outputs)
@@ -123,11 +124,57 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures, IFo
                 }
 
                 written.Add(System.IO.Path.Combine(folder, Folder, "menu.hta"));
+                staged.Add((output, disc, folder));
+            }
+        }
+
+        // A set's own list of every file on every disc, written from the
+        // plan, beside each previewed disc of a set.
+        //
+        // A preview stages the menu and the artwork and none of the files,
+        // so a previewed set had no list, and its menu said so: "This disc
+        // says it is part of a set, but its list of files is missing", on a
+        // window meant to show what the disc will look like (the owner, 21
+        // November 2026). With the list, a previewed set says what the real
+        // one will: which disc a game is on, and which discs it wants.
+        // Sizes are the plan's and the hashes are noughts, because nothing
+        // was read: a preview copies nothing and checks nothing.
+        foreach (PlannedOutput output in planned.Outputs.Where(each => each.Layout.Discs.Count > 1))
+        {
+            SetEntry[] entries =
+            [
+                .. output.Layout.Discs.SelectMany(disc => disc.Files.Select(file =>
+                    new SetEntry(disc.Number, file.RelativePath.Replace((char)92, '/'), NoHash, file.Bytes)))
+            ];
+
+            SetJoin[] joins =
+            [
+                .. output.Layout.Discs
+                    .SelectMany(disc => disc.Files)
+                    .Where(file => file.Part is not null)
+                    .GroupBy(file => file.Source, StringComparer.OrdinalIgnoreCase)
+                    .Select(pieces => pieces.OrderBy(piece => piece.Part!.Index).ToArray())
+                    .Select(inOrder => new SetJoin(
+                        DiscPlanner.TheWholeFileOf(inOrder[0].RelativePath).Replace((char)92, '/'),
+                        NoHash,
+                        inOrder[0].Part!.WholeBytes,
+                        [.. inOrder.Select(piece => piece.RelativePath.Replace((char)92, '/'))]))
+            ];
+
+            foreach ((PlannedOutput of, PlannedDisc disc, string folder) in staged.Where(each => ReferenceEquals(each.Output, output)))
+            {
+                writer.WriteText(
+                    System.IO.Path.Combine(folder, SetManifest.FileName),
+                    SetManifest.For(
+                        of.Label, entries, disc.Number, output.Layout.Discs.Count, medium.Name, DateTimeOffset.Now, joins));
             }
         }
 
         return written;
     }
+
+    /// <summary>What stands where a hash would be, in a list written from a plan with nothing read.</summary>
+    private static readonly string NoHash = new('0', 64);
 
     private IBuildStep[] TheSteps(bool theFirst) =>
     [
