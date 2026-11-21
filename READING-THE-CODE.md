@@ -131,7 +131,7 @@ Three decisions in there are not obvious and each has a comment saying why:
 - **The last piece keeps its slack**, so files after it share its disc instead of starting another.
 - **The extras go last, not first.** First fit fills every disc before the last one to the brim, so putting the extras at the front would push a file onto a disc that did not need to exist.
 
-**It is told nothing about games.** It takes a flat list of files. Deciding which games belong on which disc is a layer above it that does not exist yet, and `ARCHITECTURE.md` explains why that layer gives several games a disc each rather than packing them.
+**It is told nothing about games.** It takes a flat list of files. Deciding which games belong on which disc is the layer above it, `WhatWouldBeMade`. Several games that do not fit on one disc share one set there, in the order of the list, or get a disc each when that is asked for, and `ARCHITECTURE.md` explains why.
 
 ---
 

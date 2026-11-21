@@ -14,7 +14,7 @@ A game too big for one disc comes out as a numbered set, and **any disc of a set
 
 Two things are not finished, and it is worth knowing which:
 
-- **179 of the 248 cases in the pass by hand are still a person's job**, and the suite runs the other 69. The biggest part of what is left is the menu on the disc, which is an HTA and so invisible to UI Automation, although the set flow inside it now has a test that presses its real button under cscript.
+- **184 of the 254 cases in the pass by hand are still a person's job**, and the suite runs the other 70. The biggest part of what is left is the menu on the disc, which is an HTA and so invisible to UI Automation, although the set flow inside it now has a test that presses its real button under cscript.
 - **The version is `2.0.4`**. 2.0.0 was the first release of this app, after the PowerShell app's 0.11. It is set once, in [Directory.Build.props](Directory.Build.props), and the release workflow refuses a tag that disagrees with it.
 
 Where to read next:
@@ -92,7 +92,7 @@ A suite is worth what it objects to, so there are two ways of asking. `tools\Mut
 
 ### Testing by hand
 
-`tests/by-hand/test-matrix.html` is the pass somebody works through with the real program in front of them. Open it in a browser; it is one file, it needs nothing else, and it keeps its ticks, so a pass can be left half finished and picked up later. **248 cases, 69 of them run by the suite and 179 still by hand**, and every case that claims to be covered names the test that covers it, so the claim can be checked rather than believed.
+`tests/by-hand/test-matrix.html` is the pass somebody works through with the real program in front of them. Open it in a browser; it is one file, it needs nothing else, and it keeps its ticks, so a pass can be left half finished and picked up later. **254 cases, 70 of them run by the suite and 184 still by hand**, and every case that claims to be covered names the test that covers it, so the claim can be checked rather than believed.
 
 It covers what no automated test can reach: whether the window changes when it should, whether every control is live when it should be, whether a sentence still reads right at none and at one as well as at many, and the menu on the disc, which is an HTA and so invisible to UI Automation.
 
