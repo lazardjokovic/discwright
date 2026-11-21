@@ -61,9 +61,10 @@ public sealed record WhatAnEarlierBuildLeft(
         folders.AddRange(top.Folders.Select(folder => System.IO.Path.Combine(outputFolder, folder)));
         images.AddRange(top.Images.Select(image => System.IO.Path.Combine(outputFolder, image)));
 
+        // Tidied the way the build tidies a game's folder, which never
+        // comes to nothing: a game with no name at all is "game" there too.
         foreach (string game in games
                      .Select(OnTheDisc.Tidied)
-                     .Where(name => name.Length > 0)
                      .Distinct(StringComparer.OrdinalIgnoreCase))
         {
             string where = System.IO.Path.Combine(outputFolder, game);

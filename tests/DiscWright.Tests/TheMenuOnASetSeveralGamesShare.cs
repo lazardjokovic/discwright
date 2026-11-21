@@ -696,12 +696,13 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
         string[] discs = await TheThreeGames();
 
         string[] said = Page(discs, 1,
-            "showGame(1); doTheThing(); whereGo();\n"
+            "var copiedSaid = []; var reallySaid = discCopiedSays; discCopiedSays = function (n, b, next) { copiedSaid.push('disc ' + n + ', ' + b + ' bytes'); return reallySaid(n, b, next); };\n"
+            + "showGame(1); doTheThing(); whereGo();\n"
             + "out.push('looking: ' + state());\n"
             + "pump(function () { return restoring.wanting > 0; });\n"
             + "out.push('pressed: ' + state() + ' | there=' + under(HDD));\n"
             + "pump(function () { return ejected > 0; });\n"
-            + "out.push('disc 1 seen: ejected=' + ejected + ' there=' + under(HDD));\n"
+            + "out.push('disc 1 seen: ejected=' + ejected + ' there=' + under(HDD) + ' said copied=[' + copiedSaid.join('; ') + ']');\n"
 
             // Disc 3 first, though it asked for 2: either is wanted.
             + "putIn(3); pump(function () { return restoring.wanting === 2 && ejected > 1; });\n"
@@ -716,7 +717,9 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
                 // else, and for that moment nothing can be pressed.
                 "looking: Install from 2 discs (dead) | Nothing is copied yet. Still to come: discs 2, 3. | back dead",
                 "pressed: Install from 2 discs (dead) | Put disc 2 in. This carries on by itself once it is there. | back live | there=Lanternhold installer",
-                "disc 1 seen: ejected=1 there=Lanternhold installer",
+                // Nothing of it is on disc 1, and disc 1 is not said to have
+                // been copied, nought bytes of it.
+                "disc 1 seen: ejected=1 there=Lanternhold installer said copied=[]",
                 "disc 3 copied: Install from 2 discs (dead) | Put disc 2 in. This carries on by itself once it is there. | back live | ejected=2",
                 "there: Lanternhold installer/02 - Lanternhold/setup_lanternhold-2.bin, Lanternhold installer/02 - Lanternhold/setup_lanternhold-3.bin",
                 "started: <HDD>/Lanternhold installer/02 - Lanternhold/setup_lanternhold.exe in <HDD>/Lanternhold installer",
@@ -825,7 +828,13 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             // the disc's, which is on every disc and in no game's folder.
             + "opened = []; started = [];\n"
             + "for (var n = 1; n <= 3; n++) { putIn(n); showGame(2); openTheManual(); }\n"
-            + "out.push('the discs own: ' + started.join(' + ') + ' | alerts=' + alerts.length);\n");
+            + "out.push('the discs own: ' + started.join(' + ') + ' | alerts=' + alerts.length);\n"
+
+            // Gone from a disc altogether, it is no game's and on no list:
+            // no disc is named for it, and starting it says what is wrong.
+            + "new ActiveXObject('Scripting.FileSystemObject').DeleteFile(ROOTS.D1 + BACKSLASH + 'Extras' + BACKSLASH + 'collection manual.pdf', true);\n"
+            + "started = []; putIn(1); showGame(2); openTheManual();\n"
+            + "out.push('the discs own, missing: started=' + started.length + ' alerts=' + alerts.length);\n");
 
         Same(
             [
@@ -834,6 +843,7 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
                 "extras from disc 1: The extras of Harbour Tales are on disc 2. Put disc 2 in and press this again. | opened=0",
                 "extras with disc 2 in: open <D2>/01 - Harbour Tales/Extras | alerts=0 line=(no line)",
                 "the discs own: <D1>/Extras/collection manual.pdf + <D2>/Extras/collection manual.pdf + <D3>/Extras/collection manual.pdf | alerts=0",
+                "the discs own, missing: started=1 alerts=0",
             ],
             said);
     }
@@ -985,6 +995,14 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             + "whereCancel();\n"
             + "out.push('cancelled: what=' + (restoring.what ? 'kept' : 'gone') + ' busy=' + restoring.busy + ' there=' + under(HDD));\n"
 
+            // A folder that cannot be made, because a file has its name:
+            // refused, and nothing is kept of that either.
+            + "var f = new ActiveXObject('Scripting.FileSystemObject'); f.CreateTextFile(HDD + BACKSLASH + 'in the way', true).Close();\n"
+            + "theShare(1).dir = HDD + BACKSLASH + 'in the way' + BACKSLASH + 'Second installer';\n"
+            + "runTheAddOn(addOnNamed('isles')); whereGo();\n"
+            + "out.push('no folder: ' + alerts.join(' / ').split(HDD).join('<HDD>').split(BACKSLASH).join('/') + ' | what=' + (restoring.what ? 'kept' : 'gone') + ' busy=' + restoring.busy);\n"
+            + "alerts = []; f.DeleteFile(HDD + BACKSLASH + 'in the way', true); theShare(1).dir = '';\n"
+
             + "runTheAddOn(addOnNamed('isles')); whereGo(); pump(function () { return restoring.wanting > 0; });\n"
             + "out.push('disc 1 copied: ' + el('doIt').innerText + ' | ' + lineIs());\n"
             + "out.push('there: ' + under(HDD));\n"
@@ -1005,6 +1023,7 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
                 "says: isles is spread over discs 1 and 2, so it cannot run from one of them. It is copied off them and put back together in <HDD>/Second installer.",
                 "note: Afterwards, its own installer starts. | Where it is put back together",
                 "cancelled: what=gone busy=false there=",
+                "no folder: That folder could not be made: <HDD>/in the way/Second installer | what=gone busy=false",
                 "disc 1 copied: Play | Put disc 2 in. This carries on by itself once it is there.",
 
                 // Its installer alone: not the game's, which is on disc 1 too.

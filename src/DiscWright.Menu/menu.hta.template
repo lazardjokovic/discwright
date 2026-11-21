@@ -1525,9 +1525,8 @@ function whenItIsAllHere() {
     theSetStops();
     showGame(showing);
 
-    // What was just fetched is about to be run, and is not offered back
-    // until it has been.
-    withdrawTheCopysOffer();
+    // Whoever asked for it runs it, and takes the copy's offer away while
+    // it runs: see withdrawTheCopysOffer.
     then();
 }
 

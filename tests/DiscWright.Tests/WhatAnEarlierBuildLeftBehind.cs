@@ -98,8 +98,8 @@ public sealed class WhatAnEarlierBuildLeftBehind : IDisposable
     [Fact]
     public void A_game_named_twice_or_with_no_name_is_looked_for_once_and_not_at_all()
     {
-        // A game with no name would be looked for in the folder itself,
-        // and what is at the top would be counted twice.
+        // A game with no name is looked for where the build would put it,
+        // which is never the folder itself: nothing at the top is twice.
         Stand("disc", @"One\disc");
 
         WhatAnEarlierBuildLeft there = WhatAnEarlierBuildLeft.In(new WindowsFileSystem(), _out, "TWO", ["One", "ONE", "", "One"]);
@@ -372,6 +372,11 @@ public sealed class WhatAnEarlierBuildLeftBehind : IDisposable
 
         Assert.Contains("Deleting what the earlier build left", said);
 
+        // And while each image is written, whose it is and which disc of
+        // the set: the window passes on what is said and makes up nothing.
+        Assert.Contains(said, line => line.StartsWith("TWO, disc 1 of 2: writing the image, ", StringComparison.Ordinal));
+        Assert.Contains(said, line => line.StartsWith("TWO, disc 2 of 2: writing the image, ", StringComparison.Ordinal));
+
         // Not when there is nothing of an earlier build to delete.
         said.Clear();
         await screen.MakeIt();
@@ -468,6 +473,7 @@ public sealed class WhatAnEarlierBuildLeftBehind : IDisposable
                 return Task.FromResult<Outcome<MadeImage>>(Refusals.TheOldImageWillNotMoveAside(imagePath, "it is mounted"));
             }
 
+            progress?.Report(new ImageProgress(1, 2));
             File.WriteAllText(imagePath, "an image");
 
             return Task.FromResult<Outcome<MadeImage>>(new MadeImage(imagePath, 8, null));
