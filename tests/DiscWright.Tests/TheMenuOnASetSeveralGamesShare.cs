@@ -76,7 +76,7 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
     public void A_path_is_under_another_the_way_Windows_compares_names_and_nothing_is_under_nothing()
     {
         Assert.Equal(
-            ["true", "true", "true", "false", "false", "false", "false"],
+            ["true", "true", "true", "false", "false", "false", "false", "false"],
             Words(
                 "isAtOrUnder('01 - A/setup.exe', '01 - A')",
                 "isAtOrUnder('01 - A/Extras/Book/one.png', '01 - a/extras/book')",
@@ -89,6 +89,7 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
                 // Nothing is under the empty path, or every file on the set
                 // would be the game's with no folder of its own.
                 "isAtOrUnder('01 - A/setup.exe', '')",
+                "isAtOrUnder('/setup.exe', '')",
                 "isAtOrUnder('', '01 - A')"));
     }
 
