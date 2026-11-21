@@ -1051,18 +1051,20 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             + "out.push('at work: remove=' + shown('removeTheCopy'));\n"
             + "restoring.busy = false;\n"
 
+            // Never on a preview, where nothing is removed either. Asked
+            // while the copy is still there to be offered.
+            + "el('removeTheCopy').style.display = 'none'; thisIsAPreview(); showGame(1);\n"
+            + "out.push('a preview: remove=' + shown('removeTheCopy'));\n"
+            + "thisIsADisc = true;\n"
+
             // Looking removed nothing. Pressing it removes that game's copy,
             // and it is not offered again.
             + "showGame(1);\n"
-            + "out.push('still there: ' + under(HDD).split(', ').length + ' files');\n"
+            + "out.push('still there: ' + under(HDD).split(', ').length + ' files, remove=' + shown('removeTheCopy'));\n"
             + "removeTheCopyNow();\n"
             + "out.push('removed: remove=' + shown('removeTheCopy') + ' there=[' + under(HDD) + '] | ' + lineIs());\n"
             + "goBack(); showGame(1);\n"
-            + "out.push('and back: ' + state() + ' remove=' + shown('removeTheCopy'));\n"
-
-            // And never on a preview, where nothing is removed either.
-            + "thisIsAPreview(); showGame(1);\n"
-            + "out.push('a preview: remove=' + shown('removeTheCopy'));\n");
+            + "out.push('and back: ' + state() + ' remove=' + shown('removeTheCopy'));\n");
 
         Same(
             [
@@ -1071,10 +1073,10 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
                 "a game on this disc: remove=hidden",
                 "a game on another disc: remove=hidden",
                 "at work: remove=hidden",
-                "still there: 4 files",
+                "a preview: remove=hidden",
+                "still there: 4 files, remove=block",
                 "removed: remove=hidden there=[] | The copy is gone. Lanternhold is installed. Play starts it.",
                 "and back: Play | (no line) | back live remove=hidden",
-                "a preview: remove=hidden",
             ],
             said);
 
