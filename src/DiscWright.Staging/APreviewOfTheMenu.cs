@@ -166,7 +166,8 @@ public sealed class APreviewOfTheMenu(IStageWriter writer, IImages pictures, IFo
                 writer.WriteText(
                     System.IO.Path.Combine(folder, SetManifest.FileName),
                     SetManifest.For(
-                        of.Label, entries, disc.Number, output.Layout.Discs.Count, medium.Name, DateTimeOffset.Now, joins));
+                        of.Label, entries, disc.Number, output.Layout.Discs.Count, medium.Name, DateTimeOffset.Now, joins,
+                        WhatWouldBeMade.TheGamesOnASet(project, output.Layout)));
             }
         }
 

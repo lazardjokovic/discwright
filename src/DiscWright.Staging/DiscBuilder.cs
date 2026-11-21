@@ -352,7 +352,9 @@ public sealed class DiscBuilder(
         {
             writer.WriteText(
                 System.IO.Path.Combine(disc.Folder, SetManifest.FileName),
-                SetManifest.For(project.Label, entries, disc.Number, made.Count, medium.Name, DateTimeOffset.Now, joins));
+                SetManifest.For(
+                    project.Label, entries, disc.Number, made.Count, medium.Name, DateTimeOffset.Now, joins,
+                    WhatWouldBeMade.TheGamesOnASet(project, layout)));
         }
     }
 

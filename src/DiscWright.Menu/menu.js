@@ -2390,7 +2390,7 @@ function whichDiscsHold(rows, path) {
 }
 
 // What is said when what a button opens is not on the disc in the drive.
-// what is the thing, "Dead Space's manual". The button is not named: the
+// what is the thing, "The manual of Dead Space". The button is not named: the
 // one just pressed is the one meant, and a page that carries the word
 // Manual in its script carries it whether or not the disc has a manual.
 function itIsOnAnotherDiscSays(what, discs, plural) {

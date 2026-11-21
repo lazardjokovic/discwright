@@ -771,7 +771,7 @@ function openTheManual() {
 
     var game = gameAt(DISC.games, showing);
     var manual = theManualFor(game, DISC);
-    var elsewhere = whyItIsNotOnThisDisc(manual, game.name + "'s manual", false);
+    var elsewhere = whyItIsNotOnThisDisc(manual, "The manual of " + game.name, false);
 
     if (elsewhere) {
         alert(elsewhere);
@@ -815,7 +815,7 @@ function openTheExtras() {
 
     var game = gameAt(DISC.games, showing);
     var extras = theExtrasFor(game, DISC);
-    var elsewhere = whyItIsNotOnThisDisc(extras, game.name + "'s extras", true);
+    var elsewhere = whyItIsNotOnThisDisc(extras, "The extras of " + game.name, true);
 
     if (elsewhere) {
         alert(elsewhere);
@@ -834,7 +834,7 @@ function openTheExtras() {
     var discs = SET && DISC.games.length > 1 ? whichDiscsHold(SET.rows, extras) : [];
 
     if (discs.length > 1) {
-        sayUnderneath(someOfItIsElsewhereSays(game.name + "'s extras", discs));
+        sayUnderneath(someOfItIsElsewhereSays("The extras of " + game.name, discs));
     }
 }
 

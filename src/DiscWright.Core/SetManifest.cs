@@ -73,7 +73,8 @@ public static class SetManifest
         int discsInSet,
         string mediaName,
         DateTimeOffset written,
-        IReadOnlyList<SetJoin>? joins = null)
+        IReadOnlyList<SetJoin>? joins = null,
+        IReadOnlyList<SetGame>? games = null)
     {
         joins ??= [];
         long total = entries.Sum(entry => entry.Bytes);
@@ -107,29 +108,38 @@ public static class SetManifest
         Line("Every disc in this set carries this same file, describing every file on");
         Line("every disc. Any one disc can tell you what the whole set should be.");
         Line();
-        Line("This disc cannot install the game on its own, and neither can any other");
-        Line(string.Create(CultureInfo.InvariantCulture, $"disc in the set. The parts are spread across {discsInSet} discs."));
-        Line();
-        Line("To put the game back:");
-        Line();
-        Line("  1. Make one empty folder on a hard drive.");
-        Line("  2. Copy the contents of every disc in the set into that one folder.");
-        Line("     The order does not matter.");
 
-        if (joins.Count > 0)
+        if (games is { Count: > 1 })
         {
-            Line("  3. Put the files that were cut to fit back together. How is below.");
-            Line("  4. Run the installer from that folder, never from a disc.");
+            TheGamesThatShareIt(Line, entries, joins, games);
         }
         else
         {
-            Line("  3. Run the installer from that folder, never from a disc.");
+            Line("This disc cannot install the game on its own, and neither can any other");
+            Line(string.Create(CultureInfo.InvariantCulture, $"disc in the set. The parts are spread across {discsInSet} discs."));
+            Line();
+            Line("To put the game back:");
+            Line();
+            Line("  1. Make one empty folder on a hard drive.");
+            Line("  2. Copy the contents of every disc in the set into that one folder.");
+            Line("     The order does not matter.");
+
+            if (joins.Count > 0)
+            {
+                Line("  3. Put the files that were cut to fit back together. How is below.");
+                Line("  4. Run the installer from that folder, never from a disc.");
+            }
+            else
+            {
+                Line("  3. Run the installer from that folder, never from a disc.");
+            }
+
+            Line();
+            Line("The menu on any disc in the set does all of that for you: press Install on");
+            Line("any disc, put the others in when it asks, and it installs from the folder.");
+            Line("This file is here so it can be done by hand as well.");
         }
 
-        Line();
-        Line("The menu on any disc in the set does all of that for you: press Install on");
-        Line("any disc, put the others in when it asks, and it installs from the folder.");
-        Line("This file is here so it can be done by hand as well.");
         Line();
         Line(string.Create(CultureInfo.InvariantCulture, $"On this disc: {mine} of the {entries.Count} files."));
         Line();
@@ -187,6 +197,118 @@ public static class SetManifest
 
         return text.ToString();
     }
+
+    /// <summary>
+    /// What a set says of itself when several games share it: which discs
+    /// each game is on, and how one is put back by hand.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A set of one game says no disc of it can install the game, which is
+    /// true of it and was said of every set until 2026-11-21. On a set
+    /// several games share it is false as often as not: a game that is all
+    /// on one disc installs from that disc, and somebody reading that it
+    /// could not would copy three discs to a hard drive to install a game
+    /// that was whole on the one in their hand.
+    /// </para>
+    /// <para>
+    /// Every line here is indented or starts with a letter, like the rest of
+    /// the prose, so none of it is taken for a row by the three readers of
+    /// this file.
+    /// </para>
+    /// </remarks>
+    private static void TheGamesThatShareIt(
+        Action<string> line, IReadOnlyList<SetEntry> entries, IReadOnlyList<SetJoin> joins, IReadOnlyList<SetGame> games)
+    {
+        (SetGame Game, int[] Installs, int[] Reads)[] where =
+        [
+            .. games.Select(game => (
+                game,
+                TheDiscsOf(entries.Where(entry => IsAtOrUnder(entry.RelativePath, game.Folder) && !game.ApartOrNone.Any(apart => IsAtOrUnder(entry.RelativePath, apart)))),
+                TheDiscsOf(entries.Where(entry => game.ApartOrNone.Any(apart => IsAtOrUnder(entry.RelativePath, apart))))))
+        ];
+
+        int widest = Math.Max(4, where.Max(each => each.Game.Name.Length));
+
+        line(string.Create(
+            CultureInfo.InvariantCulture,
+            $"This set holds {games.Count} games, each in a folder of its own. The menu on any disc"));
+        line("lists them all and asks for the disc a game is on.");
+        line(string.Empty);
+        line("  " + "game".PadRight(widest) + "   is on");
+
+        foreach ((SetGame game, int[] installs, int[] _) in where)
+        {
+            line("  " + game.Name.PadRight(widest) + "   " + (installs.Length == 0 ? "no disc of this set" : DiscsInWords(installs)));
+        }
+
+        line(string.Empty);
+        line("A game that is all on one disc installs from that disc, like a game on a");
+        line("disc of its own.");
+
+        if (where.Any(each => each.Installs.Length > 1))
+        {
+            int step = 1;
+
+            line(string.Empty);
+            line("A game spread over several discs cannot install from any one of them. To");
+            line("put one back by hand:");
+            line(string.Empty);
+            line(string.Create(CultureInfo.InvariantCulture, $"  {step++}. Make one empty folder on a hard drive."));
+            line(string.Create(CultureInfo.InvariantCulture, $"  {step++}. Copy that game's folder off every disc it is on into that one folder,"));
+            line("     letting Windows merge them. The order does not matter.");
+
+            if (joins.Count > 0)
+            {
+                line(string.Create(CultureInfo.InvariantCulture, $"  {step++}. Put the files that were cut to fit back together. How is below."));
+            }
+
+            line(string.Create(CultureInfo.InvariantCulture, $"  {step}. Run the installer from that folder, never from a disc."));
+            line(string.Empty);
+            line("The menu does all of that for you: press that game's button on any disc,");
+            line("put the others in when it asks, and it installs from the folder. This");
+            line("file is here so it can be done by hand as well.");
+        }
+
+        if (where.Any(each => each.Reads.Length > 0))
+        {
+            line(string.Empty);
+            line("A game's own manual and extras are in its folder, on one disc with it:");
+            line(string.Empty);
+
+            foreach ((SetGame game, int[] _, int[] reads) in where.Where(each => each.Reads.Length > 0))
+            {
+                line("  " + game.Name.PadRight(widest) + "   " + DiscsInWords(reads));
+            }
+        }
+    }
+
+    private static int[] TheDiscsOf(IEnumerable<SetEntry> entries) =>
+        [.. entries.Select(entry => entry.Disc).Distinct().Order()];
+
+    /// <summary>Whether a path in the set is that one or under it, as Windows compares names.</summary>
+    private static bool IsAtOrUnder(string path, string under)
+    {
+        string here = path.Replace((char)92, '/');
+        string there = under.Replace((char)92, '/').TrimEnd('/');
+
+        return there.Length > 0
+            && (here.Equals(there, StringComparison.OrdinalIgnoreCase)
+                || here.StartsWith(there + "/", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Discs in words, the way the menu says them: disc 3, discs 1 and 2, discs 2 to 4.</summary>
+    private static string DiscsInWords(int[] discs) =>
+        discs.Length switch
+        {
+            0 => string.Empty,
+            1 => string.Create(CultureInfo.InvariantCulture, $"disc {discs[0]}"),
+            2 => string.Create(CultureInfo.InvariantCulture, $"discs {discs[0]} and {discs[1]}"),
+            _ when discs[^1] - discs[0] == discs.Length - 1 =>
+                string.Create(CultureInfo.InvariantCulture, $"discs {discs[0]} to {discs[^1]}"),
+            _ => "discs " + string.Join(", ", discs[..^1].Select(disc => disc.ToString(CultureInfo.InvariantCulture)))
+                + " and " + discs[^1].ToString(CultureInfo.InvariantCulture)
+        };
 
     /// <summary>
     /// The files that were cut to fit, the pieces each goes back together
@@ -282,6 +404,17 @@ public static class SetManifest
 /// <param name="Bytes">How big the finished file is.</param>
 /// <param name="Pieces">The pieces, in the order they go back together, as paths relative to the root.</param>
 public sealed record SetJoin(string RelativePath, string Sha256, long Bytes, IReadOnlyList<string> Pieces);
+
+/// <summary>
+/// One game on a set that several games share: its name, its folder on the
+/// discs, and what under that folder is its own manual and extras, which are
+/// for reading and are not what installs it.
+/// </summary>
+public sealed record SetGame(string Name, string Folder, IReadOnlyList<string>? Apart = null)
+{
+    /// <summary>Its own manual and extras, or none.</summary>
+    public IReadOnlyList<string> ApartOrNone => Apart ?? [];
+}
 
 /// <summary>One file somewhere in a set.</summary>
 /// <param name="Disc">Which disc it is on, from one.</param>

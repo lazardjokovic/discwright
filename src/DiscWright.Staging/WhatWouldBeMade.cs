@@ -185,6 +185,29 @@ public static class WhatWouldBeMade
             EachGamesOwnIsPlaced: true);
     }
 
+    /// <summary>
+    /// The games of a set several of them share, for the list every disc of
+    /// it carries, or nothing for any other set: one game has the set to
+    /// itself and the list says so in the words it always used.
+    /// </summary>
+    public static IReadOnlyList<SetGame>? TheGamesOnASet(DiscProject project, DiscLayout layout)
+    {
+        if (!layout.EachGamesOwnIsPlaced || project.Games.Count < 2)
+        {
+            return null;
+        }
+
+        return
+        [
+            .. project.Games.Select((game, at) =>
+            {
+                string folder = OnTheDisc.FolderFor(at + 1, game, project.Games.Count);
+
+                return new SetGame(game.Name, folder, [.. game.OwnOrNone.Select(own => own.OnTheDisc(folder))]);
+            })
+        ];
+    }
+
     private static string WhereItGoes(IReadOnlyList<GameFolder> games, GameFolder game, ListedFile file)
     {
         string folder = OnTheDisc.FolderFor(games.ToList().IndexOf(game) + 1, game, games.Count);
