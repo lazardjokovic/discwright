@@ -1312,6 +1312,17 @@
                                Visibility="{Binding AboutTheImage, Converter={StaticResource WhenAnything}}"
                                AutomationProperties.AutomationId="AboutTheImage" />
 
+                    <!-- What became of a build that was stopped: that what
+                         it had written is gone, or what could not be
+                         deleted. Left where it can be read, until the next
+                         build starts. -->
+                    <TextBlock Style="{StaticResource Aside}"
+                               Margin="0,6,0,0"
+                               TextWrapping="Wrap"
+                               Text="{Binding HowTheStopWent}"
+                               Visibility="{Binding HowTheStopWent, Converter={StaticResource WhenAnything}}"
+                               AutomationProperties.AutomationId="HowTheStopWent" />
+
                     <!-- How the last burn came out, left where it can be read
                          again. It arrived in a message box and was gone at
                          OK, and it is the one sentence somebody holding the
@@ -1471,6 +1482,23 @@
                             IsEnabled="{Binding CanBurn}"
                             Click="BurnIt"
                             AutomationProperties.AutomationId="BurnIt" />
+
+                    <!-- Stop, beside Build it while a build is running,
+                         since that is where the eye already is. Build it
+                         stays where it is and goes grey, as it always has
+                         while it cannot be pressed: a button that
+                         disappears leaves nothing to work towards. An
+                         ordinary button and not the accent: the accent is
+                         the thing to do next, and stopping is the thing to
+                         be able to do. It asks before it stops, because
+                         what was built is deleted. -->
+                    <Button Content="Stop"
+                            Style="{StaticResource Ordinary}"
+                            Margin="0,0,10,0"
+                            Visibility="{Binding CanStopTheBuild, Converter={StaticResource WhenSo}}"
+                            ToolTip="Stops the build and deletes what it has written so far. It asks first."
+                            Click="StopTheBuild"
+                            AutomationProperties.AutomationId="StopTheBuild" />
 
                     <Button Content="Build it"
                             Style="{StaticResource TheButton}"

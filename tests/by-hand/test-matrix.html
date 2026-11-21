@@ -496,7 +496,7 @@
     except the one place noted in D.</p>
     <div class="panel" data-cases>
 
-      <div class="sub">The main window · 32 controls</div>
+      <div class="sub">The main window · 34 controls</div>
       <label class="case"><input type="checkbox" id="c1" data-controls="CheckForANewVersion"><span class="id">C1</span>
         <span class="what">Check for new version, first of the links under the name</span>
         <span class="look"><span class="live">Never grey.</span> It is the only way to ask, and one that
@@ -679,6 +679,15 @@
         <span class="what">Build it</span>
         <span class="look"><span class="grey">Grey</span> without a game, without a name, without somewhere to
         put it, or while any red line stands.</span></label>
+      <label class="case"><input type="checkbox" id="c23b" data-controls="StopTheBuild HowTheStopWent"><span class="id">C23b</span>
+        <span class="what">"Stop", while a build is running</span>
+        <span class="look">Not there until Build it is pressed. While the build runs it is beside Build it, which is <span class="grey">grey</span>, and it is gone again when the build ends.
+        Press it: a question says what it has written will be deleted and that the games are not touched. <b>Keep building</b>, or shutting the question, changes nothing and the build goes on.
+        <b>Stop the build</b>: the line under the bar says "Stopping, and deleting what was built", within a second or two even in the middle of copying a file of several gigabytes, and then the bar is gone and the line under it says the build was stopped and what it had written was deleted.
+        Look in the folder: no <code>disc</code> folder and no image from this build. With games that each get a disc, no folder is left for a game whose disc was begun, and a game's folder left by an <b>earlier</b> build that this one had not reached is still there, untouched.
+        Stopped while the images are being written, after the folders are done: the folders and every image begun are gone, and <code>discproject.json</code> stays.
+        Build it again straight after: it builds, and is not stopped by the press before.
+        With the disc folder open in Explorer when Stop is pressed, the line names what could not be deleted.</span></label>
       <label class="case"><input type="checkbox" id="c23b"><span class="id">C23b</span>
         <span class="what">Build it, into a folder that already holds this disc</span>
         <span class="look">Build a disc, then press Build again without changing the folder: a question says the folder already holds a disc folder and its image and that building deletes them. <b>Build over it</b> wears the accent and answers to Enter.

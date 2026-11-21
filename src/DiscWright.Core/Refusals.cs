@@ -231,6 +231,19 @@ public static class Refusals
     public static Refusal WindowsCouldNotMakeTheImage(string windowsSaid) =>
         new("Windows could not make the image", "Windows said: " + windowsSaid);
 
+    /// <remarks>
+    /// Says what became of the part that was written, because a file of
+    /// forty gigabytes with an image's name is the first thing somebody
+    /// would otherwise go looking for, and that the disc folder is whole,
+    /// because it is and it is what the image is made from.
+    /// </remarks>
+    public static Refusal TheImageCouldNotBeWritten(string imagePath, string windowsSaid) =>
+        new("The image could not be written",
+            $"Writing {imagePath} stopped part way, most often because the drive it is on ran out of room: an image "
+                + "is as big as the disc folder beside it, so a build needs twice the size of the disc free. "
+                + "The part that was written has been deleted. The disc folder is whole. "
+                + "Windows said: " + windowsSaid);
+
     // ------------------------------------------------------- opening a disc
 
     /// <remarks>

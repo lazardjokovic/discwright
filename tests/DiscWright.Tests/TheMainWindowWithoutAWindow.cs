@@ -3818,7 +3818,8 @@ public class TheMainWindowWithoutAWindow
         IHasher? hasher = null,
         IKeepTheSetsPlace? note = null,
         WhereDiscsWouldGo? places = null,
-        IUpdateThisCopy? updater = null) =>
+        IUpdateThisCopy? updater = null,
+        IRemoveADiscFolder? remover = null) =>
         new(new TheMachine(
             new Codepage1252(),
             builder ?? new BuilderThatWorks(),
@@ -3837,7 +3838,8 @@ public class TheMainWindowWithoutAWindow
             _ => 1000,
             places,
             new AClockThatMovesItself().Patience,
-            updater));
+            updater,
+            remover));
 
     /// <summary>The note beside the discs, kept in memory.</summary>
     private sealed class ANoteInMemory(string? says = null) : IKeepTheSetsPlace

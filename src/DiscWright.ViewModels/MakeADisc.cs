@@ -2281,6 +2281,74 @@ public sealed class MakeADisc : INotifyPropertyChanged
         return null;
     }
 
+    // What stops the build that is running, or nothing while none is.
+    private CancellationTokenSource? _stopping;
+
+    /// <summary>
+    /// Whether a build is running that can be stopped. The window shows Stop
+    /// in place of Build it while this is so.
+    /// </summary>
+    /// <remarks>
+    /// Only a build. A burn has its own way of being given up, at the drive,
+    /// and stopping one half way leaves a disc that is spent.
+    /// </remarks>
+    public bool CanStopTheBuild => _stopping is { IsCancellationRequested: false };
+
+    /// <summary>How the last stop went: what it took away, or what it could not. Null when nothing was stopped.</summary>
+    public string? HowTheStopWent { get; private set; }
+
+    /// <summary>
+    /// What stopping the build would lose, asked before it is stopped.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The owner, 21 November 2026, forty minutes into a build with a game
+    /// of 150 GB in it: "should there be a way to stop the build? That
+    /// would of course delete everything that was created, with the
+    /// previous warning, and if the user clicks yes the build stops and
+    /// everything that was built is deleted." There was no way at all:
+    /// the builder had always known how to stop when told, and nothing on
+    /// the window ever told it.
+    /// </para>
+    /// <para>
+    /// The likely answer is to stop, because that is what was just pressed.
+    /// Shutting the question is the other answer, so a press that was a
+    /// mistake costs nothing.
+    /// </para>
+    /// </remarks>
+    public AQuestion? WhatStoppingWouldLose() =>
+        CanStopTheBuild
+            ? new AQuestion(
+                "Stop the build, and delete what it has made so far?",
+                "The disc folders and images this build has written are deleted, because a disc stopped part way "
+                    + "is not a disc and looks like one. It cannot be picked up where it left off. Your games "
+                    + "are not touched, and neither is anything else in the folder.",
+                "Stop the build",
+                "Keep building")
+            : null;
+
+    /// <summary>
+    /// Stops the build that is running. What it had written is taken away
+    /// as it stops, and <see cref="HowTheStopWent"/> says how that went.
+    /// </summary>
+    public void StopTheBuild()
+    {
+        if (!CanStopTheBuild)
+        {
+            return;
+        }
+
+        _stopping!.Cancel();
+
+        lock (_oneAtATime)
+        {
+            Doing = "Stopping, and deleting what was built";
+        }
+
+        Tell(nameof(Doing));
+        Tell(nameof(CanStopTheBuild));
+    }
+
     public async Task MakeIt(CancellationToken ct = default)
     {
         // CanMakeIt is already false while a build is running, so this is the
@@ -2313,9 +2381,24 @@ public sealed class MakeADisc : INotifyPropertyChanged
         HowTheDiscCameOut = null;
         HowTheSetWent = null;
         HowTheSaveWent = null;
+        HowTheStopWent = null;
         HowFar = 0;
         Doing = "Starting";
+
+        // Stopped by the Stop button, or by whoever called this and wants
+        // it stopped: either is a stop.
+        using CancellationTokenSource stopping = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _stopping = stopping;
+        ct = stopping.Token;
+
+        // What the image step has begun, and what the builder finished, for
+        // a stop that comes after the folders are built.
+        List<string> imagesBegun = [];
+        BuiltDiscs? built = null;
+
         Started();
+        Tell(nameof(CanStopTheBuild));
+        Tell(nameof(HowTheStopWent));
 
         Progress<BuildProgress> saying = new(step =>
         {
@@ -2366,11 +2449,13 @@ public sealed class MakeADisc : INotifyPropertyChanged
             switch (await Task.Run(() => _machine.Builder.Build(project, medium, into, saying, ct), CancellationToken.None))
             {
                 case Outcome<BuiltDiscs>.Ok(BuiltDiscs made):
+                    built = made;
+
                     // The folder is the disc and the image is the same disc as
                     // one file. Both, every time, because the folder is what
                     // somebody checks and the image is what they burn, and
                     // having to ask for the second one is a step nobody wants.
-                    ItWentWrong = await Images(made, ct);
+                    ItWentWrong = await Images(made, imagesBegun, ct);
                     Made = made;
 
                     // Only once every image is made, and only then: a
@@ -2388,13 +2473,29 @@ public sealed class MakeADisc : INotifyPropertyChanged
                     break;
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException stopped)
         {
-            // Not a failure, and not worth a word. Somebody who pressed stop
-            // knows why it stopped.
+            // Not a failure. But what it had written is not a disc, so it
+            // goes, and the line under the bar says that it went: somebody
+            // who pressed stop knows why it stopped and not what became of
+            // forty minutes of copying.
+            List<string> stayed = [.. (stopped as ABuildThatWasStopped)?.LeftBehind ?? []];
+
+            if (built is not null)
+            {
+                stayed.AddRange(await TakeAwayWhatWasBuilt(built, imagesBegun, into));
+            }
+
+            Made = null;
+            HowTheStopWent = stayed.Count == 0
+                ? "The build was stopped, and what it had written was deleted."
+                : "The build was stopped. Something has these open, so they could not be deleted: "
+                    + string.Join(", ", stayed) + ".";
         }
         finally
         {
+            _stopping = null;
+
             lock (_oneAtATime)
             {
                 IsWorking = false;
@@ -2403,8 +2504,73 @@ public sealed class MakeADisc : INotifyPropertyChanged
             }
 
             Started();
+            Tell(nameof(CanStopTheBuild));
+            Tell(nameof(HowTheStopWent));
+            Tell(nameof(Made));
             await LookAgainIfADiscMovedMeanwhile();
         }
+    }
+
+    /// <summary>
+    /// Takes away the disc folders a stopped build had finished and the
+    /// images it had begun, for a stop that came while the images were
+    /// being written. Says which it could not.
+    /// </summary>
+    /// <remarks>
+    /// The project file stays. It is the recipe and not the disc, it is
+    /// small, and it is how somebody builds the same thing again.
+    /// </remarks>
+    private async Task<List<string>> TakeAwayWhatWasBuilt(BuiltDiscs built, List<string> images, string into)
+    {
+        List<string> stayed = [];
+
+        if (_machine.Remover is not IRemoveADiscFolder remover)
+        {
+            return stayed;
+        }
+
+        // On the pool: a disc folder of sixty gigabytes takes a while to
+        // delete, and this is the thread the window is drawn on.
+        await Task.Run(() =>
+        {
+            foreach (string image in images)
+            {
+                try
+                {
+                    remover.RemoveTheImage(image);
+                }
+                catch (Exception held) when (held is System.IO.IOException or UnauthorizedAccessException)
+                {
+                    stayed.Add(image);
+                }
+            }
+
+            foreach (BuiltDisc disc in built.Discs)
+            {
+                try
+                {
+                    remover.Remove(disc.Folder);
+                }
+                catch (Exception held) when (held is System.IO.IOException or UnauthorizedAccessException)
+                {
+                    stayed.Add(disc.Folder);
+                }
+            }
+
+            // A folder made for one game's discs, when nothing is left in it.
+            foreach (string above in built.Discs
+                         .Select(disc => System.IO.Path.GetDirectoryName(disc.Folder))
+                         .Where(above => above is not null
+                                         && !string.Equals(
+                                             above.TrimEnd((char)92), into.TrimEnd((char)92), StringComparison.OrdinalIgnoreCase))
+                         .Distinct(StringComparer.OrdinalIgnoreCase)
+                         .Cast<string>())
+            {
+                remover.RemoveIfEmpty(above);
+            }
+        });
+
+        return stayed;
     }
 
     /// <summary>
@@ -5085,10 +5251,12 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// the older file systems were left off, is true of the disc somebody now
     /// holds and will not be said again.
     /// </remarks>
-    private async Task<Refusal?> Images(BuiltDiscs made, CancellationToken ct)
+    private async Task<Refusal?> Images(BuiltDiscs made, List<string> begun, CancellationToken ct)
     {
         foreach (BuiltDisc disc in made.Discs)
         {
+            ct.ThrowIfCancellationRequested();
+
             Progress<ImageProgress> saying = new(step =>
             {
                 bool worth;
@@ -5112,6 +5280,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
             });
 
             string image = TheImageOf.That(disc);
+
+            // Begun before it is made, so a stop in the middle of this one
+            // takes it away with the ones that were finished.
+            begun.Add(image);
 
             Outcome<MadeImage> one = await _machine.Images.Make(
                 disc.Folder,

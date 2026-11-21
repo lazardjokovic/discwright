@@ -30,4 +30,21 @@ public interface IRemoveADiscFolder
     /// It is not a disc folder this program named. Nothing has been deleted.
     /// </exception>
     void Remove(string discFolder);
+
+    /// <summary>
+    /// Takes away a folder a build made for one game's disc, if there is
+    /// nothing left in it. One with anything in it is left exactly as it is:
+    /// whatever is there is not this build's to judge.
+    /// </summary>
+    void RemoveIfEmpty(string folder)
+    {
+    }
+
+    /// <summary>
+    /// Deletes a disc image a stopped build had made. Only ever a file whose
+    /// name ends in <c>.iso</c>, and nothing when it is not there.
+    /// </summary>
+    void RemoveTheImage(string imagePath)
+    {
+    }
 }
