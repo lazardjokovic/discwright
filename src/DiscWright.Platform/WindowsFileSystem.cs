@@ -26,6 +26,35 @@ public sealed class WindowsFileSystem : IFileSystem
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// What is free to whoever is asking, which on a drive with quotas is
+    /// less than what is free on it, and is the figure that matters.
+    /// </remarks>
+    public long? RoomAt(string folder)
+    {
+        try
+        {
+            string? root = Path.GetPathRoot(Path.GetFullPath(folder));
+
+            if (string.IsNullOrEmpty(root))
+            {
+                return null;
+            }
+
+            DriveInfo drive = new(root);
+
+            return drive.IsReady ? drive.AvailableFreeSpace : null;
+        }
+        catch (Exception wrong) when (wrong is IOException or UnauthorizedAccessException
+                                          or ArgumentException or NotSupportedException)
+        {
+            // A share, a drive that has gone, a path that is no path: the
+            // answer is that it cannot be told, and that stops nobody.
+            return null;
+        }
+    }
+
     public FolderListing List(string path) => Walk(path, goingDown: true);
 
     /// <inheritdoc />

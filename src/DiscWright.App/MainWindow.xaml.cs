@@ -886,6 +886,13 @@ public partial class MainWindow : Window
         // Asked first, and here, because a question is the window's to put
         // up: the folder already holds an earlier build of this disc, and
         // building deletes it.
+        // Whether it will fit comes first: there is no point agreeing to
+        // delete an earlier build for one that is then not started.
+        if (_screen.WhetherThereIsRoom() is AQuestion tight && !Ask(tight))
+        {
+            return;
+        }
+
         if (_screen.WhatBuildingHereReplaces() is AQuestion replacing && !Ask(replacing))
         {
             return;
