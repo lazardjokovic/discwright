@@ -247,7 +247,12 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
                         != WhatAPatchAdds.NothingTheInstallerLacks)
                     .Select(addOn => new MenuAddOn(
                         addOn.Name,
-                        Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(addOn.Path))))
+                        Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(addOn.Path)),
+
+                        // Its parts, where the build put them: beside it and
+                        // under their own names.
+                        [.. addOn.PartsOrNone.Select(part =>
+                            Join(Join(folder, AddOn.Folder), System.IO.Path.GetFileName(part.Path)))]))
             ];
 
             // Only when there is exactly one. Several is a question nobody

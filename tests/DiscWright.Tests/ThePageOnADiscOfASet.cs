@@ -117,7 +117,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             menuUrl: new Uri(Path.Combine(disc1, "AUTORUN", "menu.hta")).AbsoluteUri,
             test:
                 "SET = loadTheSet();\n"
-                + "SET.dir = " + AsJScript(dest) + ";\n"
+                + "theShare().dir = " + AsJScript(dest) + ";\n"
                 + "var game = gameAt(DISC.games, 0);\n"
                 + "showTheSet(game);\n"
                 + "said();\n"
@@ -246,7 +246,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             menuUrl: new Uri(Path.Combine(disc, "AUTORUN", "menu.hta")).AbsoluteUri,
             test:
                 "SET = loadTheSet();\n"
-                + "SET.dir = " + AsJScript(dest) + ";\n"
+                + "theShare().dir = " + AsJScript(dest) + ";\n"
                 + "startIt = function (what, from) { out.push('start ' + what); return null; };\n"
                 + "var installedNow = false; isInstalled = function () { return installedNow; };\n"
                 + "doTheThing();\n"
@@ -1067,7 +1067,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             menuUrl: new Uri(Path.Combine(disc1, "AUTORUN", "menu.hta")).AbsoluteUri,
             test:
                 "SET = loadTheSet();\n"
-                + "SET.dir = " + AsJScript(dest) + ";\n"
+                + "theShare().dir = " + AsJScript(dest) + ";\n"
                 + "showTheSet(gameAt(DISC.games, 0));\n"
                 + "var started = 0; startIt = function () { started++; return null; };\n"
                 + "doTheThing();\n"
@@ -1158,7 +1158,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             test:
                 "thisIsAPreview();\n"
                 + "SET = loadTheSet();\n"
-                + "SET.dir = " + AsJScript(Path.Combine(_folder, "never made")) + ";\n"
+                + "theShare().dir = " + AsJScript(Path.Combine(_folder, "never made")) + ";\n"
                 + "doTheThing();\n"
                 + "WScript.Echo(alerts.join('|') + '|timers=' + window.timers.length);\n");
 
@@ -1214,7 +1214,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             "doTheThing();\n"
             + "whereCancel();\n"
             + "out.push('page=' + document.getElementById('whereScreen').style.display + ' game=' + document.getElementById('gameScreen').style.display"
-            + " + ' timers=' + window.timers.length + ' busy=' + restoring.busy + ' asked=' + (SET.asked ? 'yes' : 'no'));\n"
+            + " + ' timers=' + window.timers.length + ' busy=' + restoring.busy + ' asked=' + (theShare().asked ? 'yes' : 'no'));\n"
             + "doTheThing();\n"
             + "out.push('again=' + document.getElementById('whereScreen').style.display);\n"
             + "WScript.Echo(out.join('\\n'));\n");
@@ -1572,7 +1572,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             + "doTheThing();\n"
             + "out.push('go=' + document.getElementById('whereGo').className);\n"
             + "whereGo();\n"
-            + "out.push('timers=' + window.timers.length + ' asked=' + (SET.asked ? 'yes' : 'no') + ' page=' + document.getElementById('whereScreen').style.display);\n"
+            + "out.push('timers=' + window.timers.length + ' asked=' + (theShare().asked ? 'yes' : 'no') + ' page=' + document.getElementById('whereScreen').style.display);\n"
             + "WScript.Echo(out.join('\\n'));\n");
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -1591,7 +1591,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             "pickAFolder = function (title) { out.push('picker=' + title); return null; };\n"
             + "doTheThing();\n"
             + "whereChange();\n"
-            + "out.push('dir=' + SET.dir + ' page=' + document.getElementById('whereScreen').style.display + ' timers=' + window.timers.length);\n"
+            + "out.push('dir=' + theShare().dir + ' page=' + document.getElementById('whereScreen').style.display + ' timers=' + window.timers.length);\n"
             + "WScript.Echo(out.join('\\n'));\n");
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -1613,7 +1613,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             + "out.push('says=' + document.getElementById('whereSays').innerText);\n"
             + "whereGo();\n"
             + "pump(function () { return restoring.wanting > 0; });\n"
-            + "out.push('dir=' + SET.dir);\n"
+            + "out.push('dir=' + theShare().dir);\n"
             + "WScript.Echo(out.join('\\n'));\n");
 
         string[] lines = went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
@@ -1723,7 +1723,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             menuUrl: new Uri(Path.Combine(disc1, "AUTORUN", "menu.hta")).AbsoluteUri,
             test:
                 "SET = loadTheSet();\n"
-                + "SET.dir = " + AsJScript(suggested) + ";\n"
+                + "theShare().dir = " + AsJScript(suggested) + ";\n"
                 + "showTheSet(gameAt(DISC.games, 0));\n"
                 + test);
 

@@ -321,6 +321,11 @@ function showChooser() {
     // with a bracket in it would arrive as something worse.
     for (var j = 0; j < DISC.games.length; j++) {
         document.getElementById("gameRow" + j).innerText = DISC.games[j].name;
+
+        // On a set, which discs it is on, for whoever hovers over it.
+        if (SET) {
+            document.getElementById("gameRow" + j).parentNode.title = whereAGameIsSays(theShare(j));
+        }
     }
 
     fitTheGameList();
@@ -420,6 +425,13 @@ function showGame(index) {
     }
 
     if (SET) {
+        // What another game's screen left is not this one's: the button
+        // that removes a copy removes the copy of the game it was offered
+        // for, and on a set several games share that is not always this one.
+        if (DISC.games.length > 1) {
+            document.getElementById("removeTheCopy").style.display = "none";
+        }
+
         showTheSet(game);
     } else {
         document.getElementById("doIt").innerText = whatToDoWith(game, isInstalled(game));
@@ -542,8 +554,21 @@ function doTheThing() {
     }
 
     if (SET && !where) {
-        restoreGo();
-        return;
+        // Where its share of the set is decides it. Spread over discs, it
+        // is copied off them first. Whole on another disc, that disc is
+        // asked for. Whole on this one, it is a game on a disc, and the
+        // rest of this is what a disc that stands alone does.
+        var sits = whereItIs();
+
+        if (sits === "gathered") {
+            restoreGo();
+            return;
+        }
+
+        if (sits === "elsewhere") {
+            askForItsDisc();
+            return;
+        }
     }
 
     if (!doing) {
@@ -744,11 +769,41 @@ function openTheManual() {
         return;
     }
 
-    var wrong = openAManual(onTheDisc(theDisc(), theManualFor(gameAt(DISC.games, showing), DISC)));
+    var game = gameAt(DISC.games, showing);
+    var manual = theManualFor(game, DISC);
+    var elsewhere = whyItIsNotOnThisDisc(manual, game.name + "'s manual", false);
+
+    if (elsewhere) {
+        alert(elsewhere);
+        return;
+    }
+
+    var wrong = openAManual(onTheDisc(theDisc(), manual));
 
     if (wrong) {
         alert(wrong);
     }
+}
+
+// On a set several games share, a game's own manual and extras are on one
+// disc with it and not on every disc, so the button may be pressed with
+// another disc in. Then it says which disc, and not that a file is not
+// where the menu expected it. Nothing when it is here, when it is the
+// disc's own, which rides every disc, or when the set's list does not know
+// it: then the button does what it always did.
+function whyItIsNotOnThisDisc(path, what, plural) {
+    if (!SET || DISC.games.length < 2 || !path || whyNothingRuns()) {
+        return null;
+    }
+
+    var discs = whichDiscsHold(SET.rows, path);
+    var where = onTheDisc(theDisc(), path);
+
+    if (!discs.length || !thereIsNo(where, false) || !thereIsNo(where, true)) {
+        return null;
+    }
+
+    return itIsOnAnotherDiscSays(what, discs, plural);
 }
 
 // The extras of the game on screen, or the disc's, which are a folder rather
@@ -758,10 +813,28 @@ function openTheExtras() {
         return;
     }
 
-    var wrong = openTheFolder(onTheDisc(theDisc(), theExtrasFor(gameAt(DISC.games, showing), DISC)));
+    var game = gameAt(DISC.games, showing);
+    var extras = theExtrasFor(game, DISC);
+    var elsewhere = whyItIsNotOnThisDisc(extras, game.name + "'s extras", true);
+
+    if (elsewhere) {
+        alert(elsewhere);
+        return;
+    }
+
+    var wrong = openTheFolder(onTheDisc(theDisc(), extras));
 
     if (wrong) {
         alert(wrong);
+        return;
+    }
+
+    // Two extras of one game can land on two discs. What this disc holds
+    // is open, and the line says the rest is on another.
+    var discs = SET && DISC.games.length > 1 ? whichDiscsHold(SET.rows, extras) : [];
+
+    if (discs.length > 1) {
+        sayUnderneath(someOfItIsElsewhereSays(game.name + "'s extras", discs));
     }
 }
 
@@ -792,15 +865,26 @@ var addOnRunning = null;
 function runTheAddOn(which) {
     var game = gameAt(DISC.games, showing);
     var others = theOtherAddOns(game ? (game.addOns || []) : []);
-    var what = whatAnAddOnRuns(others[which], isInstalled(game), theDisc());
+    var installed = isInstalled(game);
 
     // Dead in the page as well, but a dead button somebody clicks anyway is
     // still a click, and a patch run before its game half-applies to nothing
     // and leaves no sign that it did. And one at a time: a second press
     // while the first installer is still coming up started a second one.
-    if (!what || addOnRunning !== null) {
+    if (!whatAnAddOnRuns(others[which], installed, theDisc()) || addOnRunning !== null) {
         return;
     }
+
+    var from = whereTheyRunFrom(
+        [others[which]],
+        whatTheAddOnButtonsSay([others[which].name], game.name)[0],
+        function () { runTheAddOn(which); });
+
+    if (from === null) {
+        return;
+    }
+
+    var what = whatAnAddOnRuns(others[which], installed, from);
 
     var wrong = startIt(what, "");
 
@@ -857,16 +941,94 @@ function watchTheAddOn(game, which, name, exeName) {
     window.setTimeout(look, 2000);
 }
 
+// Where add-ons of the game on screen run from: the root to run them under,
+// or null when this said or started something instead and nothing is to
+// run yet.
+//
+// On a disc that stands alone that is the disc, and nothing more is asked.
+// On a set it is the first of these that holds:
+//
+//   the copy    A game spread over discs is copied off them into a folder,
+//               add-ons and all, and while that folder holds these they run
+//               from it. Only there is an add-on whole whose installer is
+//               on one disc and its parts on the next.
+//   the disc    Every file of them is on the disc in the drive. Asked of
+//               the drive and not of what this page believes is in it, so a
+//               disc swapped by hand is found.
+//   one disc    They are whole on one other disc: it says which, and to
+//               press again with that one in.
+//   fetched     They are spread over discs, or one was cut to fit, and no
+//               copy is left to run from: after the game was installed and
+//               its copy removed, or years later. They alone are copied off
+//               their discs, and again() is called when they are all there.
+function whereTheyRunFrom(addOns, name, again) {
+    if (!SET || whyNothingRuns()) {
+        return theDisc();
+    }
+
+    // One job at a time on the drive, and one installer at a time.
+    if (restoring.busy || checking) {
+        return null;
+    }
+
+    var files = new ActiveXObject("Scripting.FileSystemObject");
+    var share = theShare();
+    var paths = whatAddOnsAreMadeOf(addOns);
+    var found = whereTheyAreInTheSet(share.rows, share.joins, paths);
+    var onThisDisc = true;
+    var i;
+
+    // The list does not know them, so nothing here can say where they are.
+    // As on any disc, then, and startIt says so if one is not there.
+    if (!found.known) {
+        return theDisc();
+    }
+
+    if (whereItIs() === "gathered"
+            && setScan(found.rows, found.joins, 0, sizeOfUnder(files, theRestoreFolder())).complete) {
+        return theRestoreFolder();
+    }
+
+    for (i = 0; i < paths.length; i++) {
+        if (thereIsNo(onTheDisc(theDisc(), paths[i]), false)) {
+            onThisDisc = false;
+        }
+    }
+
+    if (onThisDisc) {
+        return theDisc();
+    }
+
+    if (!found.cut && found.discs.length === 1) {
+        alert(itIsOnAnotherDiscSays(name, found.discs, false));
+        return null;
+    }
+
+    restoring.what = { rows: found.rows, joins: found.joins, discs: found.discs, asked: false, name: name, then: again };
+    restoreGo();
+
+    return null;
+}
+
 // The whole chain of patches, in order, off one press. cmd sequences the
 // installers and stops at the first that refuses; the dead gate is the
 // same one every add-on obeys.
 function runTheUpdate() {
     var game = gameAt(DISC.games, showing);
-    var line = theUpdateCommand(game ? (game.addOns || []) : [], isInstalled(game), theDisc());
+    var addOns = game ? (game.addOns || []) : [];
+    var installed = isInstalled(game);
 
-    if (!line) {
+    if (!theUpdateCommand(addOns, installed, theDisc())) {
         return;
     }
+
+    var from = whereTheyRunFrom(theUpdateChain(addOns), whatTheUpdateButtonSays(addOns), runTheUpdate);
+
+    if (from === null) {
+        return;
+    }
+
+    var line = theUpdateCommand(addOns, installed, from);
 
     var wrong = startTheCommand(line);
 
@@ -923,15 +1085,54 @@ function loadTheSet() {
         joins: setJoinsFrom(text),
         discIn: whichDiscTheSetFileSays(text) || DISC.discNumber,
         of: DISC.discsInSet,
-        dir: ""
+        shares: []
     };
 }
 
+// One game's share of the set, the one on screen unless another is asked
+// for: its rows, the discs they are on, where it is being put back together
+// (dir) and whether that has been asked on this window (asked). Worked out
+// once a game and kept. One game on a set has all of it, as it always did.
+function theShare(index) {
+    var at = index === undefined ? showing : index;
+
+    if (!SET.shares[at]) {
+        SET.shares[at] = aGamesShare(SET.rows, SET.joins, gameAt(DISC.games, at), DISC.games.length);
+        SET.shares[at].dir = "";
+        SET.shares[at].asked = false;
+    }
+
+    return SET.shares[at];
+}
+
+// Where the share of the game on screen is: here, elsewhere or gathered,
+// which are whereAShareIs's words in menu.js.
+function whereItIs() {
+    return whereAShareIs(theShare(), SET.discIn, DISC.games.length);
+}
+
+// What is being copied off the discs: the game on screen, or one of its
+// add-ons when that had to be fetched by itself (see whereTheyRunFrom).
+function theGathering() {
+    return restoring.what || theShare();
+}
+
+// The name the folder and the install page go by: the game's, which on a
+// disc of one game is also the disc's.
+function theNameOnTheSet() {
+    var game = gameAt(DISC.games, showing);
+
+    return DISC.games.length > 1 && game ? game.name : DISC.game;
+}
+
 // Where the game is being put back together. Worked out once and kept, so
-// every disc of the set lands in the same place.
+// every disc of the set lands in the same place. An add-on fetched by
+// itself goes into its game's folder, where the rest of the game would be.
 function theRestoreFolder() {
-    if (SET.dir) {
-        return SET.dir;
+    var share = theShare();
+
+    if (share.dir) {
+        return share.dir;
     }
 
     var home = "";
@@ -943,15 +1144,16 @@ function theRestoreFolder() {
 
     var files = new ActiveXObject("Scripting.FileSystemObject");
 
-    SET.dir = restoreFolderFor(home, DISC.game, hardDrivesWithRoom(files), setBytesNeeded(SET.rows, SET.joins));
+    share.dir = restoreFolderFor(home, theNameOnTheSet(), hardDrivesWithRoom(files), setBytesNeeded(share.rows, share.joins));
 
-    return SET.dir;
+    return share.dir;
 }
 
 function scanTheSet() {
     var files = new ActiveXObject("Scripting.FileSystemObject");
+    var mine = theGathering();
 
-    return setScan(SET.rows, SET.joins, SET.discIn, sizeOfUnder(files, theRestoreFolder()));
+    return setScan(mine.rows, mine.joins, SET.discIn, sizeOfUnder(files, theRestoreFolder()));
 }
 
 // The line under the buttons, and the bar above it while something copies.
@@ -965,8 +1167,21 @@ function sayTheSet(scan) {
         ? restoreBarPercent(restoring, (new Date()).getTime())
         : undefined;
 
-    line.innerText = restoreSentence(scan || scanTheSet(), SET.discIn, restoring, SET.dir);
-    line.style.display = "block";
+    var sits = whereItIs();
+    var words;
+
+    if (sits === "gathered" || restoring.what) {
+        scan = scan || scanTheSet();
+        words = restoreSentence(scan, SET.discIn, restoring, theShare().dir);
+    } else if (restoring.wanting) {
+        // Its disc is being waited for, which is the one thing to say.
+        words = restoreSentence(null, SET.discIn, restoring, "");
+    } else {
+        words = aSharedSetsLineSays(sits, theShare(), gameAt(DISC.games, showing).name);
+    }
+
+    line.innerText = words;
+    line.style.display = words ? "block" : "none";
 
     if (restoring.copying && restoring.all > 0) {
         bar.style.display = "block";
@@ -1000,11 +1215,25 @@ function keepTheBarMoving() {
 
 // The big button and the line, for a disc of a set.
 function showTheSet(game) {
-    var scan = scanTheSet();
+    var share = theShare();
+    var sits = whereItIs();
+    var scan = null;
 
+    // Asked of the folder only for a game that is copied into one. A game
+    // whole on one disc has no folder, and none is looked for.
+    if (sits === "gathered") {
+        scan = setScan(
+            share.rows, share.joins, SET.discIn,
+            sizeOfUnder(new ActiveXObject("Scripting.FileSystemObject"), theRestoreFolder()));
+    }
+
+    // One game with the set to itself says what it always said. On a set
+    // several games share, the button says where this one is.
     document.getElementById("doIt").innerText = restoring.installing
         ? "Installing\u2026"
-        : restoreButtonSays(scan, SET.discIn, SET.of, isInstalled(game), whatToDoWith(game, false));
+        : (DISC.games.length > 1
+            ? aSharedSetsButtonSays(sits, share, scan, isInstalled(game), whatToDoWith(game, false))
+            : restoreButtonSays(scan, SET.discIn, SET.of, isInstalled(game), whatToDoWith(game, false)));
     document.getElementById("doIt").parentNode.className = "btn next" + (restoring.busy || checking ? " dead" : "");
 
     // The check is dead while the set is being worked on, the owner's catch
@@ -1019,9 +1248,93 @@ function showTheSet(game) {
     document.getElementById("manual").className = "btn" + (aCopyIsReadingTheDisc() ? " dead" : "");
     document.getElementById("extras").className = "btn" + (aCopyIsReadingTheDisc() ? " dead" : "");
 
+    // And Back, while the set is at work for this game: every button on
+    // this page is about the game on screen, and the work would go on under
+    // another game's. Live while it only waits for a disc, where Back is
+    // the way out of having asked for the wrong one.
+    document.getElementById("back").className = "btn" + (restoring.busy && !theSetOnlyWaits() ? " dead" : "");
+
     if (!restoring.installing) {
-        sayTheSet(scan);
+        // An add-on being fetched has a scan of its own, which is not the
+        // game's: the line is about what is being copied.
+        sayTheSet(restoring.what ? undefined : scan);
     }
+}
+
+// Whether all the set is doing is waiting for a disc to be put in: nothing
+// copying, nothing being put back together, no installer running.
+function theSetOnlyWaits() {
+    return !!(restoring.busy && restoring.wanting
+        && !restoring.copying && !restoring.joining && !restoring.copied && !restoring.installing);
+}
+
+// Back drawn dead, where the set goes to work without the whole screen being
+// drawn again: an installer being started, and one running.
+function holdBack() {
+    if (SET) {
+        document.getElementById("back").className = "btn dead";
+    }
+}
+
+// Back to the list of games. Dead while the set works, and out of a wait
+// for a disc: what is copied so far stays where it is, and Install on that
+// game carries on from it.
+function goBack() {
+    if (SET && restoring.busy) {
+        if (!theSetOnlyWaits()) {
+            return;
+        }
+
+        theSetStops();
+    }
+
+    showChooser();
+}
+
+// The set stops what it was doing, with nothing started: a refusal, a disc
+// that would not copy, or somebody going back. Whatever was copied stays.
+function theSetStops() {
+    restoring.busy = false;
+    restoring.wanting = 0;
+    restoring.whole = false;
+    restoring.openTheTray = false;
+    restoring.what = null;
+}
+
+// A game whole on another disc of the set: ask for that disc, watch the
+// drive for it, and when it is in, do what the button does on a disc with
+// the game on it. Nothing is copied anywhere for a game like this.
+function askForItsDisc() {
+    var preview = whyNothingRuns();
+
+    if (preview) {
+        alert(preview);
+        return;
+    }
+
+    restoring.busy = true;
+    restoring.whole = true;
+    restoring.wanting = theShare().discs[0];
+
+    // What this page believes is in the drive may be a disc ago, swapped
+    // by hand with the menu open. So it looks first, and opens the tray
+    // only once it has seen that the disc in it is not the one.
+    restoring.openTheTray = true;
+
+    showTheSet(gameAt(DISC.games, showing));
+    lookForTheDiscIn(100);
+}
+
+// One look at the drive, a little later, and never two at once: a wait
+// stopped and another begun before the first look came round would
+// otherwise be two loops, each starting the copy when the disc arrived.
+function lookForTheDiscIn(ms) {
+    if (restoring.aLookIsDue) {
+        return;
+    }
+
+    restoring.aLookIsDue = true;
+    window.setTimeout(checkForTheNextDisc, ms);
 }
 
 // Pressing Install on a disc of a set: the whole job, from this disc to the
@@ -1036,10 +1349,12 @@ function restoreGo() {
 
     var files = new ActiveXObject("Scripting.FileSystemObject");
 
+    var mine = theGathering();
+
     // Where it goes, asked on its own page on the first press in this window
     // and not on the discs after it. The wording is installPageSays in
     // menu.js; the page shows it, and Copy and install comes back here.
-    if (!SET.asked) {
+    if (!mine.asked) {
         showWhere();
         return;
     }
@@ -1049,6 +1364,7 @@ function restoreGo() {
     try {
         makeTheWholePath(files, dir);
     } catch (cannotMake) {
+        theSetStops();
         alert("That folder could not be made: " + dir);
         return;
     }
@@ -1056,22 +1372,24 @@ function restoreGo() {
     var scan = scanTheSet();
 
     if (!scan.total) {
+        theSetStops();
         alert(restoreSentence(scan, SET.discIn, null, dir));
         return;
     }
 
     if (scan.complete) {
-        installFromTheFolder();
+        whenItIsAllHere();
         return;
     }
 
-    // Room for the whole set, asked once at the start rather than found out
-    // at ninety per cent on the last disc.
+    // Room for the whole of it, asked once at the start rather than found
+    // out at ninety per cent on the last disc.
     try {
         var drive = files.GetDrive(files.GetDriveName(dir));
-        var need = setBytesNeeded(SET.rows, SET.joins) - scan.bytes * (scan.ok / Math.max(1, scan.total));
+        var need = setBytesNeeded(mine.rows, mine.joins) - scan.bytes * (scan.ok / Math.max(1, scan.total));
 
         if (drive.FreeSpace < need) {
+            theSetStops();
             alert("There is not enough room to install this game.\n\nIt needs about "
                 + Math.round(need / 1048576) + " MB free in " + dir + " while it works, and the drive has "
                 + Math.round(drive.FreeSpace / 1048576) + " MB.");
@@ -1083,14 +1401,41 @@ function restoreGo() {
     restoring.busy = true;
     showTheSet(gameAt(DISC.games, showing));
 
-    // Everything this disc holds is already there, so it is another disc
-    // that is wanted.
-    if (scan.mineTotal > 0 && scan.mineHere >= scan.mineTotal) {
+    // Every file is here and one that was cut is still in pieces: an
+    // earlier go could not put it back together, for want of room as a
+    // rule. No disc is wanted, so it is tried again.
+    if (!scan.need.length) {
+        putThePiecesBack(files);
+        return;
+    }
+
+    // This disc holds nothing that is wanted: all of it is copied already,
+    // or, on a set several games share, none of this game is on it. So it
+    // is another disc that is wanted, and with none of this game on the
+    // one in the drive, the tray is opened for it.
+    if (scan.mineTotal === 0 || scan.mineHere >= scan.mineTotal) {
+        restoring.openTheTray = scan.mineTotal === 0;
         waitForTheNextDisc(scan);
         return;
     }
 
     copyThisDisc();
+}
+
+// Every file of what was being copied is in the folder. For a game, its
+// installer is run from there. For an add-on fetched by itself, whoever
+// asked for it is told, and runs it.
+function whenItIsAllHere() {
+    var then = restoring.what ? restoring.what.then : null;
+
+    if (!then) {
+        installFromTheFolder();
+        return;
+    }
+
+    theSetStops();
+    showGame(showing);
+    then();
 }
 
 // The install page: where the installer is put back together, asked before
@@ -1108,9 +1453,15 @@ function showWhere() {
         free = -1;
     }
 
-    page = installPageSays(DISC.game, dir, setBytesNeeded(SET.rows, SET.joins), free, scanTheSet(), SET.of);
+    var mine = theGathering();
 
-    document.getElementById("whereName").innerText = DISC.game;
+    page = restoring.what
+        ? anAddOnsPageSays(mine.name, dir, setBytesNeeded(mine.rows, mine.joins), free, scanTheSet(), mine.discs)
+        : installPageSays(
+            theNameOnTheSet(), dir, setBytesNeeded(mine.rows, mine.joins), free, scanTheSet(), SET.of,
+            DISC.games.length > 1 ? mine.discs : null);
+
+    document.getElementById("whereName").innerText = theNameOnTheSet();
     document.getElementById("whereHeadline").innerText = page.headline;
     document.getElementById("whereSays").innerText = page.says;
     document.getElementById("whereGo").innerText = page.go;
@@ -1136,7 +1487,7 @@ function whereGo() {
         return;
     }
 
-    SET.asked = true;
+    theGathering().asked = true;
     hideWhere();
     restoreGo();
 }
@@ -1145,18 +1496,19 @@ function whereGo() {
 // its own inside whatever was picked, so it never spills into somebody's
 // Downloads. Closing the picker changes nothing.
 function whereChange() {
-    var picked = pickAFolder("Where should the " + DISC.game + " installer go?");
+    var picked = pickAFolder("Where should the " + theNameOnTheSet() + " installer go?");
 
     if (!picked) {
         return;
     }
 
-    SET.dir = onTheDisc(picked, installerFolderName(DISC.game));
+    theShare().dir = onTheDisc(picked, installerFolderName(theNameOnTheSet()));
     showWhere();
 }
 
 // Cancel: nothing is copied, and the next press asks again.
 function whereCancel() {
+    theSetStops();
     hideWhere();
 }
 
@@ -1184,7 +1536,7 @@ function copyThisDisc() {
         files: files,
         discRoot: theDisc(),
         dir: theRestoreFolder(),
-        rows: SET.rows,
+        rows: theGathering().rows,
         discIn: SET.discIn,
         say: function (progress) {
             restoring.copying = progress.copying;
@@ -1203,52 +1555,67 @@ function copyThisDisc() {
         },
         after: function (bad) {
             if (bad > 0) {
-                restoring.busy = false;
+                var into = theRestoreFolder();
+
+                theSetStops();
                 showTheSet(gameAt(DISC.games, showing));
                 alert(bad + " of the files on this disc would not copy.\n\nIt may be scratched. Press Install to try again, "
-                    + "or copy them in Explorer into " + theRestoreFolder() + ".");
+                    + "or copy them in Explorer into " + into + ".");
                 return;
             }
 
-            joinThePieces({
-                files: files,
-                dir: theRestoreFolder(),
-                joins: SET.joins,
-                say: function (progress) {
-                    restoring.joining = progress.joining;
-                    sayTheSet();
-                },
-                after: function (failed) {
-                    if (failed.length) {
-                        alert(failed.length + " file(s) could not be put back together:\n\n" + failed.join("\n")
-                            + "\n\nThe pieces are still there, so nothing is lost. There may not be room.");
-                    }
+            putThePiecesBack(files);
+        }
+    });
+}
 
-                    var scan = scanTheSet();
-                    showTheSet(gameAt(DISC.games, showing));
+// Puts back together every cut file whose pieces are all here, and goes on
+// from what that leaves: installed from the folder when everything is in
+// it, the next disc asked for when one is still to come, and stopped, with
+// the button live again, when every disc is copied and a file would still
+// not go back together. That last one used to leave the button dead for as
+// long as the window stayed open.
+function putThePiecesBack(files) {
+    joinThePieces({
+        files: files,
+        dir: theRestoreFolder(),
+        joins: theGathering().joins,
+        say: function (progress) {
+            restoring.joining = progress.joining;
+            sayTheSet();
+        },
+        after: function (failed) {
+            if (failed.length) {
+                alert(failed.length + " file(s) could not be put back together:\n\n" + failed.join("\n")
+                    + "\n\nThe pieces are still there, so nothing is lost. There may not be room.");
+            }
 
-                    if (scan.complete) {
-                        installFromTheFolder();
-                    } else {
-                        // Said for two seconds before the tray opens, with the
-                        // bar full: a disc that copied in moments went straight
-                        // to an open tray and read to the owner, on
-                        // 2026-11-10, as nothing having happened. Not a timer
-                        // that pretends to work, a pause that says it did.
-                        restoring.copied = discCopiedSays(SET.discIn, restoring.all, scan.need[0]);
-                        sayTheSet(scan);
+            var scan = scanTheSet();
+            showTheSet(gameAt(DISC.games, showing));
 
-                        window.setTimeout(function () {
-                            restoring.copied = null;
+            if (scan.complete) {
+                whenItIsAllHere();
+            } else if (!scan.need.length) {
+                theSetStops();
+                showTheSet(gameAt(DISC.games, showing));
+            } else {
+                // Said for two seconds before the tray opens, with the
+                // bar full: a disc that copied in moments went straight
+                // to an open tray and read to the owner, on
+                // 2026-11-10, as nothing having happened. Not a timer
+                // that pretends to work, a pause that says it did.
+                restoring.copied = discCopiedSays(SET.discIn, restoring.all, scan.need[0]);
+                sayTheSet(scan);
 
-                            // This disc is done with, so out it comes, and
-                            // "put disc 2 in" arrives with the tray open.
-                            ejectTheDisc(theDisc());
-                            waitForTheNextDisc(scan);
-                        }, 2000);
-                    }
-                }
-            });
+                window.setTimeout(function () {
+                    restoring.copied = null;
+
+                    // This disc is done with, so out it comes, and
+                    // "put disc 2 in" arrives with the tray open.
+                    ejectTheDisc(theDisc());
+                    waitForTheNextDisc(scan);
+                }, 2000);
+            }
         }
     });
 }
@@ -1260,51 +1627,58 @@ function copyThisDisc() {
 // small read of one line.
 function waitForTheNextDisc(scan) {
     if (!scan.need.length) {
-        restoring.wanting = 0;
-        sayTheSet(scan);
+        theSetStops();
+        showTheSet(gameAt(DISC.games, showing));
         return;
     }
 
     restoring.wanting = scan.need[0];
-    sayTheSet(scan);
-    window.setTimeout(checkForTheNextDisc, 1500);
+
+    // Drawn whole and not only the line, because Back comes alive for the
+    // wait and that is drawn with the buttons.
+    showTheSet(gameAt(DISC.games, showing));
+    lookForTheDiscIn(1500);
 }
 
 // Never reads the disc itself: see lookAtTheDisc. A look is started, and
 // asked after every half second until it is done, so the window stays free
 // however long the drive takes to spin a new disc up.
 function checkForTheNextDisc() {
+    restoring.aLookIsDue = false;
+
     if (!restoring.wanting) {
         return;
     }
 
     if (restoring.looking && !jobIsDone(restoring.looking.job)) {
-        window.setTimeout(checkForTheNextDisc, 500);
+        lookForTheDiscIn(500);
         return;
     }
 
     var found = restoring.looking ? whatTheLookFound(restoring.looking) : null;
     restoring.looking = null;
 
-    var scan = scanTheSet();
+    // A game whole on one disc is not copied anywhere, so there is no
+    // folder to ask how far it has got: the disc it is on is all it wants.
+    var scan = restoring.whole ? null : scanTheSet();
 
-    if (scan.complete) {
+    if (scan && scan.complete) {
         restoring.wanting = 0;
         showTheSet(gameAt(DISC.games, showing));
-        installFromTheFolder();
+        whenItIsAllHere();
         return;
     }
 
     if (found === null) {
         restoring.looking = lookAtTheDisc(theDisc());
-        window.setTimeout(checkForTheNextDisc, 500);
+        lookForTheDiscIn(500);
         return;
     }
 
     var inTheDrive = whichDiscTheSetFileSays(found);
-    var wanted = false;
+    var wanted = restoring.whole && inTheDrive === restoring.wanting;
 
-    for (var i = 0; i < scan.need.length; i++) {
+    for (var i = 0; scan && i < scan.need.length; i++) {
         if (scan.need[i] === inTheDrive) {
             wanted = true;
         }
@@ -1314,12 +1688,30 @@ function checkForTheNextDisc() {
         SET.discIn = inTheDrive;
         document.title = discTitle(DISC.game, SET.discIn, SET.of);
         restoring.wanting = 0;
+        restoring.openTheTray = false;
+
+        if (restoring.whole) {
+            // Its disc is in. Now it is a game on the disc in the drive,
+            // and the press that asked for the disc is carried out.
+            theSetStops();
+            showGame(showing);
+            doTheThing();
+            return;
+        }
+
         showTheSet(gameAt(DISC.games, showing));
         copyThisDisc();
         return;
     }
 
-    window.setTimeout(checkForTheNextDisc, 1500);
+    // Looked at, and not the one: out it comes, the once, so "put disc 3
+    // in" arrives with the tray open.
+    if (restoring.openTheTray) {
+        restoring.openTheTray = false;
+        ejectTheDisc(theDisc());
+    }
+
+    lookForTheDiscIn(1500);
 }
 
 // Every file is in the folder: run the installer from there, and get out of
@@ -1332,7 +1724,23 @@ function installFromTheFolder() {
     var wrong;
 
     if (!run) {
-        wrong = openTheFolder(dir);
+        // A folder of game files, and nothing to install. The set is done
+        // with, so the button comes back: it used to stay dead for as long
+        // as the window was open. Then what the disc knows starts the game
+        // is started, from the game's own folder inside the copy, or that
+        // folder is opened for whoever knows which file it is.
+        var folder = theGamesFolder(dir, game ? game.folder : "");
+        var plays = whatToRunAfterCopying(game, dir);
+
+        theSetStops();
+        showTheSet(game);
+
+        if (plays && !startIt(plays, folder)) {
+            window.close();
+            return;
+        }
+
+        wrong = openTheFolder(folder);
 
         if (wrong) {
             alert(wrong);
@@ -1344,6 +1752,7 @@ function installFromTheFolder() {
     // Said first, and drawn, before the start that can hold the window: see
     // startingTheInstallerSays in menu.js.
     restoring.busy = true;
+    holdBack();
     document.getElementById("doIt").innerText = "Starting\u2026";
     document.getElementById("doIt").parentNode.className = "btn next dead";
     document.getElementById("restoreBar").style.display = "none";
@@ -1353,7 +1762,7 @@ function installFromTheFolder() {
         wrong = startIt(run, dir);
 
         if (wrong) {
-            restoring.busy = false;
+            theSetStops();
             showTheSet(game);
             alert(wrong);
             return;
@@ -1375,6 +1784,7 @@ function watchTheInstaller(game, run) {
 
     restoring.busy = true;
     restoring.installing = true;
+    holdBack();
     document.getElementById("doIt").innerText = "Installing\u2026";
     document.getElementById("doIt").parentNode.className = "btn next dead";
     document.getElementById("restoreBar").style.display = "none";
@@ -1404,8 +1814,12 @@ function watchTheInstaller(game, run) {
         } else {
             document.getElementById("doIt").innerText = whatToDoWith(game, installed);
             document.getElementById("doIt").parentNode.className = "btn next";
-            showAddOnsOf(game);
         }
+
+        // On a set as on any disc: the add-ons were drawn dead before the
+        // game was installed, and on a set they stayed drawn that way
+        // after it, under a line saying to install the game first.
+        showAddOnsOf(game);
 
         offerToRemoveTheCopy(installed);
     }
@@ -1420,7 +1834,7 @@ function watchTheInstaller(game, run) {
 function offerToRemoveTheCopy(installed) {
     var game = gameAt(DISC.games, showing);
     var files = new ActiveXObject("Scripting.FileSystemObject");
-    var dir = SET && SET.dir ? SET.dir : "";
+    var dir = SET ? theShare().dir : "";
     var bytes = SET && installed && mayRemoveTheCopy(dir) ? bytesIn(files, dir) : 0;
     var button = document.getElementById("removeTheCopy");
 
@@ -1434,7 +1848,7 @@ function offerToRemoveTheCopy(installed) {
 function removeTheCopyNow() {
     var game = gameAt(DISC.games, showing);
     var files = new ActiveXObject("Scripting.FileSystemObject");
-    var wrong = removeTheCopy(files, SET ? SET.dir : "");
+    var wrong = removeTheCopy(files, SET ? theShare().dir : "");
 
     if (wrong) {
         alert(wrong);
@@ -1765,7 +2179,7 @@ h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5
                 <div id="addOnNote"></div>
                 <a class="btn" id="manual" href="#" onclick="openTheManual(); return false;">Manual</a>
                 <a class="btn" id="extras" href="#" onclick="openTheExtras(); return false;">Extras</a>
-                <a class="btn" id="back" href="#" onclick="showChooser(); return false;">Back</a>
+                <a class="btn" id="back" href="#" onclick="goBack(); return false;">Back</a>
                 <a class="btn" href="#" onclick="doExit(); return false;">Exit</a>
             </div>
         </div>
