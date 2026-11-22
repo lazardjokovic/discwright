@@ -22,8 +22,12 @@
 
       2.0.4 on 2026-11-15: each game's own manual and extras, and a game's
       add-ons scrolling in its menu.
+
+      2.0.5 on 2026-11-22: several games sharing one set, the look of the
+      menu chosen, and a build that can be stopped and asks before it
+      overwrites or runs out of room.
     -->
-    <Version>2.0.4</Version>
+    <Version>2.0.5</Version>
 
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
