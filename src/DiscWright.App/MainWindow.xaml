@@ -411,13 +411,20 @@
                              is exactly the shape of a thing that looks tested
                              and is not. The button under the list is the only
                              one, and it was always the one that worked. -->
+                        <!-- And what a folder is to this program, said where
+                             somebody starts. Asked for in discwright#98:
+                             "a message upon first run to remind a user that
+                             they should have all the games they wish to add
+                             in individual folders". Not a box to dismiss:
+                             it is here until the first game is, and gone
+                             after. The wording is the owner's. -->
                         <TextBlock Style="{StaticResource Aside}"
                                    VerticalAlignment="Top"
                                    Margin="16,16,16,0"
                                    TextWrapping="Wrap"
                                    Visibility="{Binding Games.Count, Converter={StaticResource WhenNone}}"
                                    AutomationProperties.AutomationId="NothingYet"
-                                   Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in. Dropping one here works too, the installer's own exe included." />
+                                   Text="Nothing yet. Add the folder a game was downloaded into, or the folder it is installed in. Dropping one here works too, the installer's own exe included.&#x0a;&#x0a;Each game needs a folder of its own. If those folders sit in a parent folder, add the parent and every game in it comes in at once." />
 
                         <!-- A tree, because a game is not one thing.
                              It is an installer, its parts, whatever folders
