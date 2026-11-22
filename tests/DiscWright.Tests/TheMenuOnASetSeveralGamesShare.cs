@@ -365,6 +365,131 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             said[6]);
     }
 
+    [Fact]
+    public void A_buttons_words_are_squeezed_no_more_than_it_takes_to_fit_them()
+    {
+        Assert.Equal(
+            ["/", "0.6px/", "0/", "0/10px", "0/10px", "4"],
+            Words(
+                "function how(most) { var tried = 0; var h = theSqueezeThatFits(function (it) { tried++; return tried > most; }); return h.spacing + '/' + h.size; }",
+
+                // As the page draws it, when that fits. Then the letters
+                // closer, then touching, then a size smaller.
+                "how(0)", "how(1)", "how(2)", "how(3)",
+
+                // And the tightest there is when nothing fits: cut a little
+                // is better than cut a lot.
+                "how(99)",
+                "HOW_WORDS_ARE_SQUEEZED.length"));
+    }
+
+    [Fact]
+    public async Task The_page_squeezes_a_button_only_as_far_as_its_words_need_and_gives_the_letters_back()
+    {
+        string[] discs = await TheThreeGames();
+
+        // A button of 192 pixels, as the real one is, and words measured the
+        // way the real menu measured them: so many pixels a letter, and the
+        // spacing between them on top.
+        string[] said = Page(discs, 1,
+            "var box = { style: {}, clientWidth: 192, letters: 0 };\n"
+            + "function wide(it) { var gap = it.style.letterSpacing === '' ? 1.5 : parseFloat(it.style.letterSpacing); var size = it.style.fontSize === '10px' ? 0.9 : 1; return 14 + it.letters * (6.7 * size + gap); }\n"
+            + "function fitted(letters) { box.letters = letters; fitTheWordsOf(box, wide); return letters + ' letters: [' + box.style.letterSpacing + '] [' + box.style.fontSize + '] ' + (wide(box) > 192 ? 'cut' : 'fits'); }\n"
+            + "out.push(fitted(20)); out.push(fitted(23)); out.push(fitted(26)); out.push(fitted(29)); out.push(fitted(40)); out.push(fitted(15));\n"
+
+            // What has no style of its own to change is left alone, and so
+            // is nothing at all.
+            + "fitTheWordsOf({ clientWidth: 10 }); fitTheWordsOf(null); out.push('no harm');\n"
+
+            // And the two buttons whose words change are the two that are
+            // fitted, whenever the screen is.
+            + "var which = []; fitTheWordsOf = function (it) { which.push(it === el('removeTheCopy') ? 'remove the copy' : (it === el('doIt').parentNode ? 'the big button' : 'something else')); };\n"
+            + "fitTheAddOns(); out.push('fitted: ' + which.join(', '));\n");
+
+        Same(
+            [
+                "20 letters: [] [] fits",
+                "23 letters: [0.6px] [] fits",
+                "26 letters: [0] [] fits",
+                "29 letters: [0] [10px] fits",
+                "40 letters: [0] [10px] cut",
+
+                // A short word after a long one has its letters back.
+                "15 letters: [] [] fits",
+                "no harm",
+                "fitted: the big button, remove the copy",
+            ],
+            said);
+    }
+
+    [Fact]
+    public async Task What_one_games_screen_said_does_not_follow_to_the_list_or_to_another_game()
+    {
+        string[] discs = await TheThreeGames();
+
+        string[] said = Page(discs, 1,
+            // Harbour Tales's installer came and went, and it said so.
+            "showGame(0); doTheThing(); runningNow = true; tick(); runningNow = false; tick();\n"
+            + "out.push('on its own screen: ' + lineIs());\n"
+            + "goBack(); out.push('on the list: ' + lineIs());\n"
+            + "sayUnderneath('said on the list'); showGame(2); showGame(0);\n"
+            + "out.push('on its screen again: ' + lineIs());\n"
+
+            // The disc check's result is the disc's, and stays everywhere.
+            + "sayTheCheck('Every file on this disc is right.'); goBack(); out.push('the check, on the list: ' + lineIs());\n"
+            + "showGame(0); out.push('the check, on a game: ' + lineIs());\n"
+            + "sayTheCheck(null); sayUnderneath('a game said this'); goBack(); out.push('after the check is cleared: ' + lineIs());\n"
+
+            // While an installer runs the line is still true, and stays.
+            + "showGame(0); doTheThing(); out.push('installing: ' + lineIs());\n"
+            + "showChooser(); out.push('installing, list forced: ' + lineIs());\n");
+
+        Same(
+            [
+                "on its own screen: The installer closed, and Harbour Tales is not on this machine. Install runs it again.",
+                "on the list: (no line)",
+                "on its screen again: (no line)",
+                "the check, on the list: Every file on this disc is right.",
+                "the check, on a game: Every file on this disc is right.",
+                "after the check is cleared: (no line)",
+                "installing: Installing Harbour Tales. This menu waits for the installer and says when it is done.",
+                "installing, list forced: Installing Harbour Tales. This menu waits for the installer and says when it is done.",
+            ],
+            said);
+    }
+
+    [Fact]
+    public async Task On_a_disc_that_stands_alone_too_one_game_says_nothing_under_another()
+    {
+        // Two games that fit on one disc: no set, and nothing that draws
+        // the line again when another game's screen is shown.
+        string[] discs = await Built(
+            new DiscProject("TWO", [OnTheDisk("First", 300), OnTheDisk("Second", 300)], new DiscOptions()), 1000);
+
+        Assert.Single(discs);
+
+        string[] said = Page(discs, 1,
+            "out.push('a set: ' + (SET ? 'yes' : 'no'));\n"
+            + "showGame(0); sayUnderneath('about the first'); out.push('first: ' + lineIs());\n"
+            + "showGame(1); out.push('second: ' + lineIs());\n"
+            + "sayUnderneath('about the second'); showGame(1); out.push('second, drawn again: ' + lineIs());\n"
+            + "showChooser(); out.push('the list: ' + lineIs());\n"
+            + "sayTheCheck('Every file on this disc is right.'); showGame(0); showGame(1); showChooser(); out.push('the check: ' + lineIs());\n");
+
+        Same(
+            [
+                "a set: no",
+                "first: about the first",
+                "second: (no line)",
+
+                // The same screen drawn again keeps what it says.
+                "second, drawn again: about the second",
+                "the list: (no line)",
+                "the check: Every file on this disc is right.",
+            ],
+            said);
+    }
+
     // ============================================== what the page carries about it
 
     [Fact]

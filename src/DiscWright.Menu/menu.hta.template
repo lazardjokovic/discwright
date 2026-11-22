@@ -294,6 +294,8 @@ function headTheMainMenu(id, otherwise) {
 
 // The list of games, when there is more than one on the disc.
 function showChooser() {
+    forgetWhatAGameSaid();
+
     document.getElementById("gameScreen").style.display = "none";
     document.getElementById("chooserScreen").style.display = "block";
     headTheMainMenu("discName", DISC.game);
@@ -382,6 +384,8 @@ function fitAboveWhatIsBelow(listId, belowId) {
 function sayUnderneath(words) {
     var line = document.getElementById("stillWanted");
 
+    theLineIsTheChecks = false;
+
     if (words === null) {
         line.style.display = "none";
     } else {
@@ -393,6 +397,28 @@ function sayUnderneath(words) {
 }
 
 // The screen showing fitted again, after the line under it changed.
+// Whether the line under the screen is the disc check's. That one is about
+// the whole disc and stays wherever somebody goes. Any other was said on
+// one game's screen, about that game.
+var theLineIsTheChecks = false;
+
+// The line one game's screen left, taken away when that screen is left.
+//
+// It stayed. "The installer closed, and Emberfall is not on this machine"
+// sat under the list of games after Back, and under the next game's screen
+// after that, where it was about nothing on it (seen recording a real menu,
+// 22 November 2026). Not the check's line, which is the disc's, and not
+// while an installer runs or a set is at work: that line is still true, and
+// what follows it is said in the same place.
+function forgetWhatAGameSaid() {
+    if (theLineIsTheChecks || checking || restoring.busy || restoring.installing) {
+        return;
+    }
+
+    document.getElementById("restoreBar").style.display = "none";
+    sayUnderneath(null);
+}
+
 function fitThePanel() {
     if (document.getElementById("gameScreen").style.display === "block") {
         fitTheAddOns();
@@ -408,6 +434,11 @@ function showGame(index) {
     if (!game) {
         showChooser();
         return;
+    }
+
+    // Another game's screen says nothing of the last one's.
+    if (index !== showing) {
+        forgetWhatAGameSaid();
     }
 
     // Which one the buttons are about. Without this the one big button has no
@@ -464,7 +495,33 @@ function showGame(index) {
 // shown or hidden, so it is called again whenever Remove the copy comes or
 // goes above them.
 function fitTheAddOns() {
+    // The buttons whose words change, made to hold them, before the room
+    // under them is shared out.
+    fitTheWordsOf(document.getElementById("doIt").parentNode);
+    fitTheWordsOf(document.getElementById("removeTheCopy"));
     fitAboveWhatIsBelow("addOns", "gameBelow");
+}
+
+// A button made to hold its words: see HOW_WORDS_ARE_SQUEEZED in menu.js.
+// Tried loosest first every time, so a short word after a long one gets
+// its letters back. wide says how wide the words want to be, and is the
+// button's own answer unless a test hands in another.
+function fitTheWordsOf(box, wide) {
+    if (!box || !box.style) {
+        return;
+    }
+
+    var wants = wide || function (it) { return it.scrollWidth; };
+
+    var how = theSqueezeThatFits(function (how) {
+        box.style.letterSpacing = how.spacing;
+        box.style.fontSize = how.size;
+
+        return !(wants(box) > box.clientWidth);
+    });
+
+    box.style.letterSpacing = how.spacing;
+    box.style.fontSize = how.size;
 }
 
 // The add-ons of one game, under it, and DEAD until the game is installed.
@@ -1191,6 +1248,14 @@ function sayTheSet(scan) {
         ? restoreBarPercent(restoring, (new Date()).getTime())
         : undefined;
 
+    // The disc check's result is the disc's, and a game's screen being
+    // drawn does not wipe it. Once the set goes to work the line is the
+    // set's again.
+    if (theLineIsTheChecks && !restoring.busy && !restoring.what) {
+        fitThePanel();
+        return;
+    }
+
     var sits = whereItIs();
     var words;
 
@@ -1212,6 +1277,7 @@ function sayTheSet(scan) {
         words = aSharedSetsLineSays(sits, theShare(), gameAt(DISC.games, showing).name);
     }
 
+    theLineIsTheChecks = false;
     line.innerText = words;
     line.style.display = words ? "block" : "none";
 
@@ -2158,6 +2224,7 @@ function checkThisDisc() {
 
 function sayTheCheck(words) {
     sayUnderneath(words);
+    theLineIsTheChecks = words !== null;
 }
 
 function doExit() {

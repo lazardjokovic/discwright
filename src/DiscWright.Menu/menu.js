@@ -1321,6 +1321,35 @@ function shortEnoughForAButton(name, room) {
     return cut + "...";
 }
 
+// How a button's words are made to fit it, loosest first: as the page is
+// drawn, then with the letters closer, then touching, then a size smaller.
+//
+// A button holds about twenty-one letters at the spacing the menu is drawn
+// with, measured in the real menu on 2026-11-22: 192 pixels. "Remove the
+// copy, 650 MB" is 203, and was cut to "REMOVE THE COPY, 650..." with the one
+// figure that mattered gone. "Copy and play disc 1 of 2" had been cut the
+// same way since sets began. The words are right, so the letters give.
+var HOW_WORDS_ARE_SQUEEZED = [
+    { spacing: "", size: "" },
+    { spacing: "0.6px", size: "" },
+    { spacing: "0", size: "" },
+    { spacing: "0", size: "10px" }
+];
+
+// The first of those that fits, asked of whoever can measure, or the
+// tightest when none does. fits is handed one of them and says yes or no.
+function theSqueezeThatFits(fits) {
+    var i;
+
+    for (i = 0; i < HOW_WORDS_ARE_SQUEEZED.length; i++) {
+        if (fits(HOW_WORDS_ARE_SQUEEZED[i])) {
+            return HOW_WORDS_ARE_SQUEEZED[i];
+        }
+    }
+
+    return HOW_WORDS_ARE_SQUEEZED[HOW_WORDS_ARE_SQUEEZED.length - 1];
+}
+
 // What an add-on's button says on its own game's screen: its name, without
 // the game's name in front of it.
 //
