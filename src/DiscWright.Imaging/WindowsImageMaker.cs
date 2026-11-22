@@ -104,7 +104,7 @@ public sealed class WindowsImageMaker(IFileSystem files) : IMakeImages
             // Bound once. Reading Root makes a fresh wrapper every time, and a
             // wrapper nobody kept is a wrapper nobody can release.
             root = fsi.Root;
-            ((dynamic)root).AddTree(System.IO.Path.GetFullPath(stagedFolder), false);
+            ((dynamic)root).AddTree(PastTheOldLimit(stagedFolder), false);
 
             ct.ThrowIfCancellationRequested();
 
@@ -173,6 +173,39 @@ public sealed class WindowsImageMaker(IFileSystem files) : IMakeImages
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
+    }
+
+    /// <summary>
+    /// The staged folder, spelled so that Windows reads what is under it
+    /// however long the paths are.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// AddTree stops at the first folder or file whose whole path is past 260
+    /// characters, with "The system cannot find the path specified", and the
+    /// disc folder it was reading is whole, because the copy that made it has
+    /// no such limit. Reported from Reddit on 22 November 2026: a game built
+    /// to a folder on the Desktop made its image without its extras and never
+    /// with them, and the window blamed a full drive. Measured the same day:
+    /// a staged path of 299 characters fails as it is and behind a drive
+    /// letter made with subst, and passes behind this prefix.
+    /// </para>
+    /// <para>
+    /// A path on another machine takes the other spelling of the prefix.
+    /// </para>
+    /// </remarks>
+    public static string PastTheOldLimit(string folder)
+    {
+        string full = System.IO.Path.GetFullPath(folder);
+
+        if (full.StartsWith(@"\\?\", StringComparison.Ordinal))
+        {
+            return full;
+        }
+
+        return full.StartsWith(@"\\", StringComparison.Ordinal)
+            ? string.Concat(@"\\?\UNC\", full.AsSpan(2))
+            : @"\\?\" + full;
     }
 
     /// <summary>
