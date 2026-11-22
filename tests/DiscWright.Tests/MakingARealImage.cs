@@ -166,6 +166,54 @@ public class MakingARealImage : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => making);
     }
 
+    /// <remarks>
+    /// Reported from Reddit on 22 November 2026: a game built to a folder on
+    /// the Desktop made its image without its extras and never with them.
+    /// "The image could not be written", and Windows said "The system cannot
+    /// find the path specified". Windows' own image writer stops at the first
+    /// path past 260 characters unless the folder is spelled the long way.
+    /// </remarks>
+    [Fact]
+    public async Task Takes_a_file_whose_path_is_longer_than_Windows_used_to_allow()
+    {
+        string deep = Path.Combine(
+            "Extras", new string('a', 60), new string('b', 60), new string('c', 60), new string('d', 60));
+        string staged = Staged(("setup_a_game.exe", 1_000));
+        string folder = Path.Combine(staged, deep);
+        string file = Path.Combine(folder, "the_soundtrack_in_a_very_deep_folder.txt");
+
+        Directory.CreateDirectory(folder);
+
+        // Words of its own, so that finding them in the image means this
+        // file's contents went in and not only its name.
+        const string Within = "what the deep file holds, 22 November";
+        await File.WriteAllTextAsync(file, Within, Encoding.ASCII);
+
+        Assert.True(file.Length > 260, $"the path is only {file.Length} characters, which tests nothing");
+
+        string image = Path.Combine(_root, "DEEP.iso");
+
+        Outcome<MadeImage> made = await New().Make(staged, image, "DEEP", false, 1, 1, null, default);
+
+        Assert.IsType<Outcome<MadeImage>.Ok>(made);
+
+        byte[] bytes = await File.ReadAllBytesAsync(image);
+
+        Assert.True(
+            Holds(bytes, Encoding.Unicode.GetBytes("the_soundtrack_in_a_very_deep_folder.txt"))
+                || Holds(bytes, Encoding.BigEndianUnicode.GetBytes("the_soundtrack_in_a_very_deep_folder.txt"))
+                || Holds(bytes, Encoding.ASCII.GetBytes("the_soundtrack_in_a_very_deep_folder.txt")),
+            "the name of the deep file is nowhere in the image");
+        Assert.True(Holds(bytes, Encoding.ASCII.GetBytes(Within)), "what the deep file holds is nowhere in the image");
+    }
+
+    [Theory]
+    [InlineData(@"C:\Discs\A GAME", @"\\?\C:\Discs\A GAME")]
+    [InlineData(@"\\nas\games\A GAME", @"\\?\UNC\nas\games\A GAME")]
+    [InlineData(@"\\?\C:\Discs\A GAME", @"\\?\C:\Discs\A GAME")]
+    public void A_folder_is_spelled_the_long_way_wherever_it_is(string folder, string spelled) =>
+        Assert.Equal(spelled, WindowsImageMaker.PastTheOldLimit(folder));
+
     // ------------------------------------------------------------------ helpers
 
     private static WindowsImageMaker New() => new(new WindowsFileSystem());
