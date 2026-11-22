@@ -59,6 +59,24 @@ An icon (a `.ico`, or any PNG or JPG and DiscWright makes the icon), a backgroun
 
 ![Artwork, music and extras: the icon, the background, the music and the manual are chosen](docs/artwork.gif)
 
+**The menu is yours to arrange.** The list of buttons sits on the left or the right, so it stays clear of a logo in your picture. Choose the font, or bring a font file of your own, and the colour of the text. Give the main menu a heading of its own, or none, and take the window's frame off if the picture should stand alone. The manual and the extras can be rows in the list or small buttons in the corner.
+
+With a background, an icon and music, the menu opens looking like the game it holds. Until the game is installed the button says **Install**:
+
+![Hollow Knight is added, given its artwork, and its menu opens with Install over the picture, the list on the left](docs/real-hollow-knight.gif)
+
+On a PC that already has the game, the same disc says **Play**:
+
+![The Witcher is added with its artwork, and its menu opens with Play, because the game is installed on this PC](docs/real-the-witcher.gif)
+
+One tick moves the list to the left, and the small buttons in the corner go to the other side.
+
+![The list of the menu is moved to the left, and the preview follows](docs/menu-list-on-the-left.gif)
+
+A background can be filled, fitted, stretched or tiled. When it is cropped, drag and zoom to choose the part that is kept.
+
+![One background shown filled, fitted, stretched and tiled](docs/background-fill-fit-stretch-tile.gif)
+
 ### 3. See what it will look like
 
 The menu opens exactly as the disc will show it, before anything is built.
@@ -87,7 +105,15 @@ The menu copies the disc, opens the tray, asks for the next one, carries on by i
 
 ## More than one game, and not only GOG
 
-Add several and they go on one disc when they fit, with a chooser in the menu leading to each game's own screen. DLC, expansions, patches and mods go on the game they belong to, and stay greyed until that game is installed, because GOG's installer refuses a patch for a game that is not there several clicks into it. A game's patches fold into one **Update to 1.5.12620** button that runs them in order.
+Add several and they go on one disc when they fit, with a chooser in the menu leading to each game's own screen. DLC, expansions, patches and mods go on the game they belong to, and stay greyed until that game is installed, because GOG's installer refuses a patch for a game that is not there several clicks into it. A game's patches fold into one **Update to 1.5.12620** button that runs them in order. An add-on kept in another folder can be attached to its game by hand.
+
+**When they do not fit, they share one set.** The games fill the discs in the order of your list, so three games that come to two and a half discs take three, and the window says which game lands on which disc before anything is built. Drag a game to another place and the line follows. To give each game a disc of its own, tick **Give each game a disc of its own**.
+
+![Three games that no longer fit one disc: the window says which game lands on which disc, and follows a drag](docs/several-games-share-a-set.gif)
+
+Every disc's menu lists every game. A game on the disc in the drive installs straight from it. For a game on another disc the button says **Install from disc 2**, asks for that disc and carries on by itself once it is in.
+
+![The menu of a set: a game on this disc, a game on disc 2, and carrying on when disc 2 goes in](docs/every-menu-lists-every-game.gif)
 
 **Each game keeps its own manual and extras.** Adding a game asks about everything beside its installer: the game's manual, one of its extras, an add-on, or a file copied beside the installer with no button. It suggests the likely answer, and games added together can be answered once for all of them. On the disc, each game's screen opens its own Manual and Extras, and the list of games keeps any the disc carries for all of them.
 
@@ -178,4 +204,4 @@ DiscWright is an independent hobby project. It is **not affiliated with, endorse
 
 It works with GOG offline installers because those installers are DRM-free by design. That is GOG's whole proposition, and the only reason a tool like this can exist. DiscWright circumvents nothing. Use it with games you own, to make copies for yourself.
 
-Game names, logos and artwork shown here are the property of their respective owners, and appear only to demonstrate what the tool does. The recordings show *Hollow Knight*, made by Team Cherry, whose name, artwork and music belong to them. DiscWright is not affiliated with Team Cherry.
+Game names, logos and artwork shown here are the property of their respective owners, and appear only to demonstrate what the tool does. The recordings show *Hollow Knight*, made by Team Cherry, and *The Witcher: Enhanced Edition*, made by CD PROJEKT RED, whose names, artwork and music belong to them. DiscWright is not affiliated with, endorsed by or sponsored by either, and contains none of their games or artwork.
