@@ -260,6 +260,30 @@ public class SeveralGamesOnTheWindow
         Assert.Contains("Visibility=\"{Binding ADiscForEachGameIsAChoice, Converter={StaticResource WhenSo}}\"", theBox, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void The_empty_list_says_each_game_needs_a_folder_and_that_their_parent_brings_them_all()
+    {
+        System.Xml.Linq.XElement nothingYet = System.Xml.Linq.XDocument
+            .Load(Repository.File("src", "DiscWright.App", "MainWindow.xaml"))
+            .Descendants()
+            .Single(each => (string?)each.Attribute("AutomationProperties.AutomationId") == "NothingYet");
+
+        string says = (string)nothingYet.Attribute("Text")!;
+
+        // What it always said, then a line left empty, then what a folder
+        // is to this program, in the owner's words.
+        Assert.StartsWith("Nothing yet. Add the folder a game was downloaded into", says, StringComparison.Ordinal);
+        Assert.EndsWith(
+            "\n\nEach game needs a folder of its own. If those folders sit in a parent folder, "
+                + "add the parent and every game in it comes in at once.",
+            says,
+            StringComparison.Ordinal);
+
+        // Only while there is nothing on the list, and it wraps.
+        Assert.Equal("{Binding Games.Count, Converter={StaticResource WhenNone}}", (string?)nothingYet.Attribute("Visibility"));
+        Assert.Equal("Wrap", (string?)nothingYet.Attribute("TextWrapping"));
+    }
+
     private static Medium ADisc(long room) => new("TEST", "a test disc", (2L * 1024 * 1024) + room);
 
     /// <summary>The window with a disc of that much room and those games, each of a file of that size and so many more like it.</summary>
