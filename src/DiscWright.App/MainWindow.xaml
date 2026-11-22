@@ -1235,27 +1235,37 @@
                                  box, it reads as a table. -->
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <UniformGrid Columns="3" HorizontalAlignment="Left" />
+                                    <UniformGrid Columns="3" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="0,0,14,6">
+                                    <!-- A third of the width there is, whatever
+                                         that is, with the box taking what the
+                                         name leaves. At a width of their own
+                                         the three came to more than the column
+                                         has once it grows a scrollbar, and the
+                                         last box of each row lost its right
+                                         edge (the owner, on the recording,
+                                         22 November 2026). -->
+                                    <Grid Margin="0,0,12,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="45" />
+                                            <ColumnDefinition Width="*" MaxWidth="46" />
+                                        </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center"
-                                                   Width="40"
-                                                   Margin="0,0,5,0"
                                                    Text="{Binding Name}" />
                                         <!-- Named for a reader, and by an id
                                              of its own: every box is the
                                              same template, so one written
                                              here would be on all six. -->
-                                        <TextBox Width="46"
+                                        <TextBox Grid.Column="1"
                                                  MaxLength="4"
                                                  Text="{Binding Typed, UpdateSourceTrigger=PropertyChanged}"
                                                  ToolTip="{Binding InFull}"
                                                  AutomationProperties.Name="{Binding InFull}"
                                                  AutomationProperties.AutomationId="{Binding BoxId}" />
-                                    </StackPanel>
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

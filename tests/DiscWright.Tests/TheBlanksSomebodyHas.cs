@@ -502,7 +502,19 @@ public class TheBlanksSomebodyHas
         // wherever their names ended, which the owner saw on the recording.
         Assert.Equal("3", (string?)Assert.Single(boxes.Descendants(xaml + "UniformGrid")).Attribute("Columns"));
         Assert.Empty(boxes.Descendants(xaml + "WrapPanel"));
-        Assert.Equal("40", (string?)Assert.Single(boxes.Descendants(xaml + "TextBlock")).Attribute("Width"));
+        System.Xml.Linq.XElement[] columns = [.. boxes.Descendants(xaml + "ColumnDefinition")];
+
+        Assert.Equal(["45", "*"], columns.Select(each => (string?)each.Attribute("Width")));
+
+        // And no width of their own that the column may not have. Three
+        // names and three boxes at a fixed width came to more than the
+        // column holds once it grows a scrollbar, and the last box of each
+        // row lost its right edge. A box takes what its name leaves of a
+        // third of the width, and no more than it needs.
+        Assert.Equal("46", (string?)columns[1].Attribute("MaxWidth"));
+        Assert.Null(box.Attribute("Width"));
+        Assert.Null(Assert.Single(boxes.Descendants(xaml + "UniformGrid")).Attribute("HorizontalAlignment"));
+        Assert.Empty(boxes.Descendants(xaml + "StackPanel"));
 
         Assert.Equal("{Binding Typed, UpdateSourceTrigger=PropertyChanged}", (string?)box.Attribute("Text"));
 
