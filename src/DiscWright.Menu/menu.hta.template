@@ -179,8 +179,10 @@ function takeHoldOfTheWindow() {
     var e = window.event;
 
     // Only the left button, and never from something that is pressed for
-    // its own sake: a button dragged by mistake must still be a button.
-    if (!e || e.button !== 1 && e.button !== 0 || isSomethingToPress(e.srcElement)) {
+    // its own sake: a button dragged by mistake must still be a button, and
+    // a list's scrollbar must still scroll the list.
+    if (!e || e.button !== 1 && e.button !== 0 || isSomethingToPress(e.srcElement)
+            || isOnAScrollBar(e.srcElement, e.clientX)) {
         return;
     }
 
