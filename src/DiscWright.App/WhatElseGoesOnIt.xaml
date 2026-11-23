@@ -357,6 +357,39 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
+                    <!-- Any colour at all, from Windows' own colour dialog,
+                         discwright#98, 23 November 2026: "a custom colour
+                         option, which you click on for options (eg a colour
+                         wheel), which changes the value of the hash". A
+                         swatch of every colour, so it reads as the one that
+                         is not on the row. -->
+                    <Button Click="PickAnyBackgroundColour"
+                            Cursor="Hand"
+                            VerticalAlignment="Center"
+                            ToolTip="Any colour, from Windows' own colour picker. It fills the box."
+                            AutomationProperties.Name="Any colour"
+                            AutomationProperties.AutomationId="AnyBackgroundColour">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Width="22" Height="22"
+                                        CornerRadius="3"
+                                        BorderBrush="{DynamicResource Edge}"
+                                        BorderThickness="1">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="Red" Offset="0" />
+                                            <GradientStop Color="Yellow" Offset="0.2" />
+                                            <GradientStop Color="Lime" Offset="0.4" />
+                                            <GradientStop Color="Cyan" Offset="0.6" />
+                                            <GradientStop Color="Blue" Offset="0.8" />
+                                            <GradientStop Color="Magenta" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
+
                     <TextBox Width="86"
                              Margin="6,0,0,0"
                              VerticalAlignment="Center"
@@ -532,6 +565,39 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+
+                    <!-- Any colour at all, from Windows' own colour dialog,
+                         discwright#98, 23 November 2026: "a custom colour
+                         option, which you click on for options (eg a colour
+                         wheel), which changes the value of the hash". A
+                         swatch of every colour, so it reads as the one that
+                         is not on the row. -->
+                    <Button Click="PickAnyInk"
+                            Cursor="Hand"
+                            VerticalAlignment="Center"
+                            ToolTip="Any colour, from Windows' own colour picker. It fills the box."
+                            AutomationProperties.Name="Any colour"
+                            AutomationProperties.AutomationId="AnyInk">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border Width="22" Height="22"
+                                        CornerRadius="3"
+                                        BorderBrush="{DynamicResource Edge}"
+                                        BorderThickness="1">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="Red" Offset="0" />
+                                            <GradientStop Color="Yellow" Offset="0.2" />
+                                            <GradientStop Color="Lime" Offset="0.4" />
+                                            <GradientStop Color="Cyan" Offset="0.6" />
+                                            <GradientStop Color="Blue" Offset="0.8" />
+                                            <GradientStop Color="Magenta" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                </Border>
+                            </ControlTemplate>
+                        </Button.Template>
+                    </Button>
 
                     <TextBox Width="86"
                              Margin="6,0,0,0"

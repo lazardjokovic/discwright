@@ -127,6 +127,30 @@ public partial class WhatElseGoesOnIt : Window
     private void PickAnInk(object sender, RoutedEventArgs e) =>
         _screen.MenuInkText = (string)((FrameworkElement)sender).DataContext;
 
+    // Windows' own colour dialog, over this one and starting at the colour
+    // in the box. Cancelled, the box keeps what it had.
+    private void PickAnyBackgroundColour(object sender, RoutedEventArgs e)
+    {
+        string? picked = DiscWright.Platform.WindowsColourDialog.Ask(
+            new System.Windows.Interop.WindowInteropHelper(this).Handle, _screen.BackgroundColourText);
+
+        if (picked is not null)
+        {
+            _screen.BackgroundColourText = picked;
+        }
+    }
+
+    private void PickAnyInk(object sender, RoutedEventArgs e)
+    {
+        string? picked = DiscWright.Platform.WindowsColourDialog.Ask(
+            new System.Windows.Interop.WindowInteropHelper(this).Handle, _screen.MenuInkText);
+
+        if (picked is not null)
+        {
+            _screen.MenuInkText = picked;
+        }
+    }
+
     private void ChooseTheCover(object sender, RoutedEventArgs e) =>
         TakeAPicture("The picture for the printed cover", path => _screen.Cover = path);
 
