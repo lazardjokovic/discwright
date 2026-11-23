@@ -816,26 +816,33 @@ function thereIsNo(path, folder) {
 }
 
 // What a game's Manual button opens, from the root of the disc: the game's
-// own when it has one, and the disc's when it has none. Empty for neither.
+// own when it has one. Empty when it has none, on a disc of several games.
 //
 // The game's own since 2.0.4, asked for by xniwo on discwright#98 and on
 // Reddit: on a disc of nine games every game's screen used to offer the one
 // manual of the disc, which belonged to none of them.
 //
-// AND NOT THE DISC'S when those are small buttons in the corner. They are
-// offered there, once, on the main menu, and a game's screen is then about
-// the game alone: discwright#98, "completely separate from any game menus,
-// since game menus show their own manuals and extras".
+// AND NEVER THE DISC'S on a disc of several games, since 2.0.6. A game with
+// none of its own used to offer the disc's on its screen, under a button
+// that read as the game's: xniwo, discwright#98, 23 November 2026, the
+// disc's manual and extras showing "in every game's sub menu, wherever other
+// games have no manuals or extras of their own". The disc's are on the main
+// menu, a press away, and a game's screen is about the game alone, which is
+// what he asked for on 12 November: "completely separate from any game
+// menus". The owner agreed the same day.
+//
+// On a disc of one game its screen IS the main menu, and the disc's are
+// offered there, as rows or, when they are small buttons, in the corner.
 function theManualFor(game, disc) {
     if (game && game.manual && String(game.manual).length > 0) {
         return String(game.manual);
     }
 
-    if (disc && theDiscsOwnIsASmallButton(disc.look, "manual")) {
+    if (!disc || aDiscOfSeveralGames(disc) || theDiscsOwnIsASmallButton(disc.look, "manual")) {
         return "";
     }
 
-    return disc && disc.manual ? String(disc.manual) : "";
+    return disc.manual ? String(disc.manual) : "";
 }
 
 // The same for Extras.
@@ -844,11 +851,18 @@ function theExtrasFor(game, disc) {
         return String(game.extras);
     }
 
-    if (disc && theDiscsOwnIsASmallButton(disc.look, "extras")) {
+    if (!disc || aDiscOfSeveralGames(disc) || theDiscsOwnIsASmallButton(disc.look, "extras")) {
         return "";
     }
 
-    return disc && disc.extras ? String(disc.extras) : "";
+    return disc.extras ? String(disc.extras) : "";
+}
+
+// Whether the disc's menu lists more than one game, and so has a main menu
+// of its own above the games' screens. A set several games share lists
+// every game on every disc, so it counts them all.
+function aDiscOfSeveralGames(disc) {
+    return !!disc && !!disc.games && disc.games.length > 1;
 }
 
 // Whether the disc's own manual and extras are small buttons in the corner
