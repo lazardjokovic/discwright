@@ -971,6 +971,53 @@ function isSomethingToPress(node) {
     return false;
 }
 
+// Whether a press at this point across the page lands on a scrollbar: of the
+// thing pressed, or of anything it is in.
+//
+// A menu with no frame is moved by its picture, so a press on anything that
+// is not a button takes hold of the window. A list's scrollbar is not a
+// button and is not an element either: a press on it reports the list
+// itself. xniwo, discwright#98, 23 November 2026, a list of more games than
+// show: "with the borderless window frame enabled, I am unable to scroll
+// down a game list". Measured in the real menu the same day: four presses
+// on the bar's arrow scrolled nothing where they scroll 67 pixels with a
+// frame, and dragging its thumb dragged the window.
+function isOnAScrollBar(node, pointerX) {
+    var steps = 0;
+
+    while (node && steps < 12) {
+        if (aBarOfItsOwnIsUnder(node, pointerX)) {
+            return true;
+        }
+
+        node = node.parentNode;
+        steps++;
+    }
+
+    return false;
+}
+
+// A bar is what lies between the end of what an element shows and its own
+// right edge, when that is wider than any border: 17 pixels in an HTA.
+function aBarOfItsOwnIsUnder(node, pointerX) {
+    var shows = Number(node.clientWidth);
+    var at;
+
+    if (!(shows > 0)) {
+        return false;
+    }
+
+    try {
+        at = node.getBoundingClientRect();
+    } catch (notOnThePage) {
+        return false;
+    }
+
+    var whereItStarts = Number(at.left) + (Number(node.clientLeft) || 0) + shows;
+
+    return Number(at.right) - whereItStarts >= 12 && pointerX >= whereItStarts && pointerX <= Number(at.right);
+}
+
 // Whether the corner has a button that opens the disc in Explorer. Only a
 // real true says so, so a disc with no look, or a word in its place, has none.
 function thereIsAButtonThatOpensTheDisc(look) {

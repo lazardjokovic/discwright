@@ -2351,6 +2351,60 @@ public sealed class TheMenuScript : IDisposable
             Ask("(function () { var a = { tagName: 'DIV' }; var b = { tagName: 'DIV', parentNode: a }; a.parentNode = b; return String(isSomethingToPress(a)); })()"));
     }
 
+    // ------------------------------- a list's scrollbar, on a menu with no frame
+
+    /// <summary>
+    /// A list 200 wide from 20 across, with a border of one pixel and a bar
+    /// of 17: it shows 181, so its bar is from 202 to its edge at 220. And
+    /// the same list with nothing to scroll, a row inside the first, and
+    /// things that are no list at all.
+    /// </summary>
+    private const string Lists =
+        "var list = { clientWidth: 181, clientLeft: 1, getBoundingClientRect: function () { return { left: 20, right: 220 }; } };"
+        + "var still = { clientWidth: 198, clientLeft: 1, getBoundingClientRect: function () { return { left: 20, right: 220 }; } };"
+        + "var row = { clientWidth: 160, clientLeft: 1, parentNode: list, getBoundingClientRect: function () { return { left: 21, right: 183 }; } };"
+        + "var words = { clientWidth: 0, getBoundingClientRect: function () { return { left: 30, right: 90 }; } };"
+        + "var gone = { clientWidth: 181, clientLeft: 1, getBoundingClientRect: function () { throw new Error('not on the page'); } };"
+        + "var bare = { clientWidth: 181 };"
+        + "var round = { clientWidth: 100, getBoundingClientRect: function () { return { left: 0, right: 100 }; } };"
+        + "round.parentNode = { clientWidth: 100, parentNode: round, getBoundingClientRect: function () { return { left: 0, right: 100 }; } };";
+
+    [Theory]
+    [InlineData("list", 210, "true")]
+    [InlineData("list", 202, "true")]
+    [InlineData("list", 220, "true")]
+    [InlineData("list", 201, "false")]
+    [InlineData("list", 100, "false")]
+    [InlineData("list", 221, "false")]
+    [InlineData("still", 219, "false")]
+    [InlineData("row", 210, "true")]
+    [InlineData("row", 100, "false")]
+    [InlineData("words", 60, "false")]
+    [InlineData("gone", 210, "false")]
+    [InlineData("bare", 210, "false")]
+    [InlineData("round", 50, "false")]
+    [InlineData("null", 210, "false")]
+    public void A_press_on_a_lists_scrollbar_is_told_from_a_press_on_the_picture(string pressed, int across, string answer)
+    {
+        // xniwo, discwright#98, 23 November 2026: a menu with no frame is
+        // moved by its picture, and it took a press on the list's scrollbar
+        // for a press on the picture. The list would not scroll, and
+        // dragging the bar's thumb dragged the window.
+        Assert.Equal(answer, Ask($"(function () {{ {Lists} return String(isOnAScrollBar({pressed}, {across})); }})()"));
+    }
+
+    [Fact]
+    public void The_menu_asks_before_it_takes_hold_of_the_window()
+    {
+        string page = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.hta.template"));
+        int takes = page.IndexOf("function takeHoldOfTheWindow()", StringComparison.Ordinal);
+        int holds = page.IndexOf("held = {", takes, StringComparison.Ordinal);
+
+        Assert.True(takes >= 0 && holds > takes);
+        Assert.Contains("isOnAScrollBar(e.srcElement, e.clientX)", page[takes..holds], StringComparison.Ordinal);
+        Assert.Contains("isSomethingToPress(e.srcElement)", page[takes..holds], StringComparison.Ordinal);
+    }
+
     // ------------------------------------------ what a small button wears
 
     [Theory]
