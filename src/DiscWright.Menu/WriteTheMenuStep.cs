@@ -126,7 +126,8 @@ public sealed class WriteTheMenuStep(bool forADisc = true, bool playsMusic = tru
         bool thisDiscCarriesThem = context.Layout.CarriesTheExtras(context.Disc.Number);
 
         // The game's own count as much as the disc's: its screen opens its
-        // own first and the disc's when it has none.
+        // own, and the disc's on a disc of one game. On a disc of several the
+        // page decides per game, theManualFor in menu.js.
         IReadOnlyList<GameExtra> own = game?.OwnOrNone ?? [];
 
         // And the disc's do not count when they are small buttons in the

@@ -1041,6 +1041,46 @@ public sealed class TheMenuScript : IDisposable
             Ask("String(openTheFolder(" + AsJScript(missing) + "))"));
     }
 
+    [Theory]
+    [InlineData("{ manual: 'Extras/disc.pdf', extras: 'Extras', games: [{ name: 'A' }, { name: 'B' }] }")]
+    [InlineData("{ manual: 'Extras/disc.pdf', extras: 'Extras', games: [{ name: 'A' }, { name: 'B' }, { name: 'C' }], look: { discsOwn: 'list' } }")]
+    public void On_a_disc_of_several_games_a_games_screen_offers_only_its_own(string disc)
+    {
+        // xniwo, discwright#98, 23 November 2026: a game with none of its
+        // own offered the disc's manual and extras on its screen, under
+        // buttons that read as the game's. The owner: "show only the game's
+        // own". The disc's are on the main menu.
+        Assert.Equal("[]", Ask($"'[' + theManualFor({{ name: 'B', manual: '' }}, {disc}) + ']'"));
+        Assert.Equal("[]", Ask($"'[' + theExtrasFor({{ name: 'B' }}, {disc}) + ']'"));
+        Assert.Equal("[]", Ask($"'[' + theManualFor(null, {disc}) + ']'"));
+
+        // And a game that has its own still offers it.
+        Assert.Equal("[01 - A/Manual/a.pdf]", Ask($"'[' + theManualFor({{ name: 'A', manual: '01 - A/Manual/a.pdf' }}, {disc}) + ']'"));
+        Assert.Equal("[01 - A/Extras]", Ask($"'[' + theExtrasFor({{ name: 'A', extras: '01 - A/Extras' }}, {disc}) + ']'"));
+    }
+
+    [Fact]
+    public void On_a_disc_of_one_game_its_screen_is_the_main_menu_and_offers_the_discs()
+    {
+        const string one = "{ manual: 'Extras/disc.pdf', extras: 'Extras', games: [{ name: 'A' }] }";
+
+        Assert.Equal("[Extras/disc.pdf]", Ask($"'[' + theManualFor({{ name: 'A' }}, {one}) + ']'"));
+        Assert.Equal("[Extras]", Ask($"'[' + theExtrasFor({{ name: 'A' }}, {one}) + ']'"));
+
+        // Its own, when it has its own, before the disc's.
+        Assert.Equal("[01 - A/Manual/a.pdf]", Ask($"'[' + theManualFor({{ name: 'A', manual: '01 - A/Manual/a.pdf' }}, {one}) + ']'"));
+    }
+
+    [Theory]
+    [InlineData("{ games: [{}, {}] }", "true")]
+    [InlineData("{ games: [{}, {}, {}, {}, {}, {}, {}, {}, {}] }", "true")]
+    [InlineData("{ games: [{}] }", "false")]
+    [InlineData("{ games: [] }", "false")]
+    [InlineData("{ }", "false")]
+    [InlineData("null", "false")]
+    public void A_disc_is_of_several_games_when_its_menu_lists_more_than_one(string disc, string answer) =>
+        Assert.Equal(answer, Ask($"String(aDiscOfSeveralGames({disc}))"));
+
     [Fact]
     public void A_games_Manual_and_Extras_are_its_own_and_the_discs_only_when_it_has_none()
     {

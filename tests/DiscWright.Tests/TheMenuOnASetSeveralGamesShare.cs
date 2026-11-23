@@ -983,17 +983,14 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
             + "alerts = []; putIn(2); openTheExtras();\n"
             + "out.push('extras with disc 2 in: ' + opened.join(' + ') + ' | alerts=' + alerts.length + ' line=' + lineIs());\n"
 
-            // Quiet Orchard has no manual of its own, so its button opens
-            // the disc's, which is on every disc and in no game's folder.
-            + "opened = []; started = [];\n"
-            + "for (var n = 1; n <= 3; n++) { putIn(n); showGame(2); openTheManual(); }\n"
-            + "out.push('the discs own: ' + started.join(' + ') + ' | alerts=' + alerts.length);\n"
-
-            // Gone from a disc altogether, it is no game's and on no list:
-            // no disc is named for it, and starting it says what is wrong.
-            + "new ActiveXObject('Scripting.FileSystemObject').DeleteFile(ROOTS.D1 + BACKSLASH + 'Extras' + BACKSLASH + 'collection manual.pdf', true);\n"
-            + "started = []; putIn(1); showGame(2); openTheManual();\n"
-            + "out.push('the discs own, missing: started=' + started.length + ' alerts=' + alerts.length);\n");
+            // Quiet Orchard has no manual of its own, and since 2.0.6 its
+            // screen offers none: the disc's is the list of games', which
+            // opens it from whichever disc is in, since it rides every one.
+            + "opened = []; started = []; putIn(1); showGame(2);\n"
+            + "out.push('quiet orchard: manual=' + document.getElementById('manual').style.display);\n"
+            + "openTheManual(); out.push('pressed anyway: started=' + started.length + ' alerts=' + alerts.length);\n"
+            + "for (var n = 1; n <= 3; n++) { putIn(n); showChooser(); openTheDiscsManual(); }\n"
+            + "out.push('the discs own: ' + started.join(' + ') + ' | alerts=' + alerts.length);\n");
 
         Same(
             [
@@ -1001,8 +998,9 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
                 "manual with disc 3 in: <D3>/02 - Lanternhold/Manual/lanternhold_manual.zip | alerts=0",
                 "extras from disc 1: The extras of Harbour Tales are on disc 2. Put disc 2 in and press this again. | opened=0",
                 "extras with disc 2 in: open <D2>/01 - Harbour Tales/Extras | alerts=0 line=(no line)",
+                "quiet orchard: manual=none",
+                "pressed anyway: started=0 alerts=0",
                 "the discs own: <D1>/Extras/collection manual.pdf + <D2>/Extras/collection manual.pdf + <D3>/Extras/collection manual.pdf | alerts=0",
-                "the discs own, missing: started=1 alerts=0",
             ],
             said);
     }

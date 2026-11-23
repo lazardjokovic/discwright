@@ -475,7 +475,7 @@ function showGame(index) {
 
     // Only what this disc can honour. A Manual button on a disc with no manual
     // is a promise discovered by somebody who has already burned it. The
-    // game's own first, and the disc's when the game has none.
+    // game's own, and the disc's only on a disc of one game: see theManualFor.
     document.getElementById("manual").style.display = theManualFor(game, DISC) ? "block" : "none";
     document.getElementById("extras").style.display = theExtrasFor(game, DISC) ? "block" : "none";
 
@@ -836,8 +836,8 @@ function aCopyIsReadingTheDisc() {
     return !!(SET && restoring.busy && !restoring.installing);
 }
 
-// The manual of the game on screen, or the disc's when it has none, opened
-// with whatever reads a PDF on this machine.
+// The manual of the game on screen, or the disc's on a disc of one game,
+// opened with whatever reads a PDF on this machine.
 function openTheManual() {
     if (aCopyIsReadingTheDisc()) {
         return;
@@ -845,6 +845,13 @@ function openTheManual() {
 
     var game = gameAt(DISC.games, showing);
     var manual = theManualFor(game, DISC);
+
+    // Nothing to open: the button is not on this screen, and a press that
+    // reached it anyway must not open the top of the disc in its place.
+    if (!manual) {
+        return;
+    }
+
     var elsewhere = whyItIsNotOnThisDisc(manual, "The manual of " + game.name, false);
 
     if (elsewhere) {
@@ -889,6 +896,11 @@ function openTheExtras() {
 
     var game = gameAt(DISC.games, showing);
     var extras = theExtrasFor(game, DISC);
+
+    if (!extras) {
+        return;
+    }
+
     var elsewhere = whyItIsNotOnThisDisc(extras, "The extras of " + game.name, true);
 
     if (elsewhere) {

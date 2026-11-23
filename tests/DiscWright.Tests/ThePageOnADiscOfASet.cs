@@ -336,10 +336,11 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     [InlineData(1, true, false,
         "",
         "game: rows=none/none corner=block/block")]
-    // As it comes: rows, and nothing in the corner.
+    // As it comes: rows on the list of games, nothing in the corner, and
+    // since 2.0.6 nothing of the disc's on a game's screen either.
     [InlineData(2, false, false,
         "list: rows=block/block corner=none/none open=none at=,",
-        "game: rows=block/block corner=none/none")]
+        "game: rows=none/none corner=none/none")]
     // With the way into the disc as well, which is last in the row and stays.
     [InlineData(2, true, true,
         "list: rows=none/none corner=block/block open=block at=16px,52px",
@@ -390,15 +391,15 @@ public sealed class ThePageOnADiscOfASet : IDisposable
 
     [Theory]
     // Only the manual is a small button: the book is in the corner, Extras
-    // is still a row of the list, and a game's screen still offers the
-    // disc's extras and not its manual.
+    // is still a row of the list, and a game's screen, since 2.0.6, offers
+    // neither of the disc's.
     [InlineData(true, false,
         "list: rows=none/block corner=block/none",
-        "game: rows=none/block corner=none/none")]
+        "game: rows=none/none corner=none/none")]
     // And the other way about.
     [InlineData(false, true,
         "list: rows=block/none corner=none/block",
-        "game: rows=block/none corner=none/none")]
+        "game: rows=none/none corner=none/none")]
     public void With_one_tick_each_only_the_one_ticked_leaves_the_list_for_the_corner(
         bool manual, bool extras, string onTheList, string onAGame)
     {
@@ -1234,6 +1235,10 @@ public sealed class ThePageOnADiscOfASet : IDisposable
 
         string went = RunOnDisc1(disc1, Path.Combine(_folder, "suggested"),
             "var opened = 0; startIt = function () { opened++; return null; }; openTheFolder = function () { opened++; return null; };\n"
+
+            // Something to open: a press with nothing behind it opens
+            // nothing at all, since 2.0.6.
+            + "DISC.manual = 'Extras/manual.pdf'; DISC.extras = 'Extras';\n"
             + "restoring.busy = true;\n"
             + "showTheSet(gameAt(DISC.games, 0));\n"
             + "out.push('copying=' + document.getElementById('manual').className + ' / ' + document.getElementById('extras').className);\n"
@@ -1256,8 +1261,10 @@ public sealed class ThePageOnADiscOfASet : IDisposable
     {
         // The real page, pressed: The Witcher has its own manual, Hollow
         // Knight only its own extras, and the disc a manual of its own,
-        // which Hollow Knight's screen falls back to and the list of games
-        // offers by itself.
+        // which the list of games offers and, since 2.0.6, Hollow Knight's
+        // screen does not: xniwo, discwright#98, 23 November 2026, and the
+        // owner, "show only the game's own". A press on its Manual that got
+        // there anyway opens nothing.
         string disc = Path.Combine(_folder, "several");
         Directory.CreateDirectory(Path.Combine(disc, "AUTORUN"));
         File.WriteAllText(Path.Combine(disc, "AUTORUN", "menu.hta"), "<hta/>");
@@ -1284,7 +1291,7 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "openTheDiscsManual();\n"
                 + "showGame(0);\n"
                 + "out.push('witcher manual=' + shown('manual') + ' extras=' + shown('extras'));\n"
-                + "openTheManual();\n"
+                + "openTheManual(); openTheExtras();\n"
                 + "showGame(1);\n"
                 + "out.push('knight manual=' + shown('manual') + ' extras=' + shown('extras'));\n"
                 + "openTheManual(); openTheExtras();\n"
@@ -1297,9 +1304,9 @@ public sealed class ThePageOnADiscOfASet : IDisposable
             [
                 "list manual=block extras=none",
                 "witcher manual=block extras=none",
-                "knight manual=block extras=block",
+                "knight manual=none extras=block",
                 "start Extras/disc manual.pdf | start 01 - The Witcher/Manual/witcher manual.pdf"
-                    + " | start Extras/disc manual.pdf | open 02 - Hollow Knight/Extras"
+                    + " | open 02 - Hollow Knight/Extras"
             ],
             lines.Select(line => line.Replace("start /", "start ", StringComparison.Ordinal)
                 .Replace("open /", "open ", StringComparison.Ordinal)));

@@ -776,7 +776,7 @@
       <label class="case"><input type="checkbox" id="c27d" data-controls="DiscManualAsASmallButton DiscExtrasAsASmallButton OpenTheDiscButton"><span class="id">C27d</span>
         <span class="what">The menu's layout: the disc's own manual as a small button, its extras as one, and a button that opens the disc</span>
         <span class="look">All three always live. With a manual and an extras folder chosen below and the first two boxes ticked, Preview a disc of two games: the main menu's list has <b>no</b> Manual and Extras rows, and the corner has a book and a pair of pages after the music and the check. Hovering each says what it is. A game's screen shows neither, and offers a Manual only if that game has its own.
-        <b>One each:</b> with only the manual's box ticked the book is in the corner and Extras is still a row in the list, and a game's screen with no extras of its own still offers the disc's. The other way about with only the extras' box ticked.
+        <b>One each:</b> with only the manual's box ticked the book is in the corner and Extras is still a row in the list, and a game's screen with no extras of its own offers neither of the disc's. The other way about with only the extras' box ticked.
         On a disc of one game they are on that game's screen, which is its main menu.
         With the third box ticked there is an open folder at the end of the row on every screen. On a built disc it opens the top of the disc in Explorer; in Preview it says nothing opens from a preview.</span></label>
       <label class="case"><input type="checkbox" id="c27b" data-controls="BackgroundColourText"><span class="id">C27b</span>
@@ -1322,9 +1322,9 @@
         <span class="what">Several games, with and without their own, and the disc's beside them</span>
         <span class="look"><code>own-one-manual</code> and <code>own-bare-game</code>, with <i>Disc manual.pdf</i> and
         <i>Disc extras</i> from <code>disc-wide</code> chosen in Artwork, music and extras, built and mounted. The list
-        of games has Manual and Extras, opening the disc's. Quiet Harbour's screen opens its own. Bare Game's screen falls back to the
-        disc's: its Manual opens <i>Disc manual.pdf</i>. Clear the disc's two: the list of games has only Exit, Bare
-        Game's screen has neither button, Quiet Harbour's is unchanged.</span></label>
+        of games has Manual and Extras, opening the disc's. Quiet Harbour's screen opens its own. Bare Game's screen has <b>no</b>
+        Manual and no Extras: since 2.0.6 a game's screen on a disc of several offers only the game's own. Clear the disc's two: the list of games has only Exit, Bare
+        Game's screen still has neither button, Quiet Harbour's is unchanged.</span></label>
       <label class="case"><input type="checkbox" id="f22"><span class="id">F22</span>
         <span class="what">Goodies kept apart: <code>own-bare-game</code>, then the links under the list</span>
         <span class="look">No dialog when the game goes on, nothing is beside it. Pick it, Add a manual, choose
