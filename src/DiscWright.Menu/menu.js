@@ -1383,6 +1383,21 @@ var HOW_WORDS_ARE_SQUEEZED = [
     { spacing: "0", size: "10px" }
 ];
 
+// One of those as it is written at the size somebody chose for the menu:
+// the tightest is a pixel under the buttons' own, whatever that is, and the
+// others leave the size as the page set it. Since 2.0.6, xniwo,
+// discwright#98, 23 November 2026, where the buttons' size became a choice.
+// Without one it is 10, a pixel under the 11 the menu always had.
+function atTheSizeChosen(how, look) {
+    if (!how || how.size === "") {
+        return how;
+    }
+
+    var own = look ? Number(look.buttonSize) : NaN;
+
+    return { spacing: how.spacing, size: (own >= 8 && own <= 20 ? own - 1 : 10) + "px" };
+}
+
 // The first of those that fits, asked of whoever can measure, or the
 // tightest when none does. fits is handed one of them and says yes or no.
 function theSqueezeThatFits(fits) {

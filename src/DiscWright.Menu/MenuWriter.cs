@@ -144,7 +144,11 @@ public static class MenuWriter
             // What the page does about having no frame: its own way out and
             // a way to be moved. The frame itself is taken off in the tag
             // at the top, which is read before any script runs.
-            ("frame", JScript.Literal(look.NoFrame ? "none" : "window")))).Append(",\n");
+            ("frame", JScript.Literal(look.NoFrame ? "none" : "window")),
+
+            // A number of this program's own, never a project file's: the
+            // tightest squeeze of a long word is a pixel under it.
+            ("buttonSize", MenuTextSizes.For(look.TextSize).ButtonPixels.ToString(System.Globalization.CultureInfo.InvariantCulture)))).Append(",\n");
         data.Append("    games: ").Append(
             JScript.ArrayOf(facts.GamesOrTheOne.Select(game => JScript.Fields(
                 ("name", JScript.Literal(game.Name)),
@@ -222,6 +226,12 @@ public static class MenuWriter
                 "%%BUTTONINK%%",
                 SolidColour.Tidied((facts.Look ?? MenuLook.Plain).Ink) ?? MenuLook.TheButtonsOwnInk,
                 StringComparison.Ordinal)
+            // The size of the heading and the buttons, as numbers this
+            // program chose from four, so nothing a file says is written
+            // into the page's style.
+            .Replace("%%HEADSIZE%%", Pixels(TheSize(facts).HeadingPixels), StringComparison.Ordinal)
+            .Replace("%%HEADLINE%%", Pixels(TheSize(facts).HeadingLinePixels), StringComparison.Ordinal)
+            .Replace("%%BUTTONSIZE%%", Pixels(TheSize(facts).ButtonPixels), StringComparison.Ordinal)
             .Replace("%%SINGLE%%", facts.OnlyOneAtATime ? "yes" : "no", StringComparison.Ordinal)
             .Replace("%%ICON%%", Markup(facts.Icon), StringComparison.Ordinal)
             .Replace("%%PRIMARY%%", Markup(facts.PrimaryButton), StringComparison.Ordinal)
@@ -273,6 +283,10 @@ public static class MenuWriter
     /// a character outside the first plane is one reference and not two
     /// halves of one, which markup does not accept.
     /// </remarks>
+    private static AMenuTextSize TheSize(MenuFacts facts) => MenuTextSizes.For((facts.Look ?? MenuLook.Plain).TextSize);
+
+    private static string Pixels(int how) => how.ToString(System.Globalization.CultureInfo.InvariantCulture) + "px";
+
     private static string Markup(string value)
     {
         StringBuilder safe = new(value.Length);

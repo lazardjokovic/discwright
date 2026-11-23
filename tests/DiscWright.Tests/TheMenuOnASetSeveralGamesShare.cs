@@ -384,6 +384,40 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
     }
 
     [Fact]
+    public void The_tightest_squeeze_is_a_pixel_under_the_size_somebody_chose()
+    {
+        // Since 2.0.6 the buttons' size is a choice, xniwo, discwright#98,
+        // 23 November 2026, and the tightest squeeze follows it: at 14 a
+        // long word drops to 13, never all the way down to 10.
+        Assert.Equal(
+            ["/", "0.6px/", "0/", "0/13px", "0/10px", "0/9px", "0/10px", "0/10px", "0/10px", "0/10px", "none"],
+            Words(
+                "function at(i, look) { var h = atTheSizeChosen(HOW_WORDS_ARE_SQUEEZED[i], look); return h.spacing + '/' + h.size; }",
+
+                // The three that leave the size alone stay as they are.
+                "at(0, { buttonSize: 14 })", "at(1, { buttonSize: 14 })", "at(2, { buttonSize: 14 })",
+
+                // The tightest, at the sizes there are.
+                "at(3, { buttonSize: 14 })", "at(3, { buttonSize: 11 })", "at(3, { buttonSize: 10 })",
+
+                // And with no size, or one no step has, the 10 it always was.
+                "at(3, { })", "at(3, null)", "at(3, { buttonSize: 'large' })", "at(3, { buttonSize: 400 })",
+                "String(atTheSizeChosen(null, { buttonSize: 14 }) === null ? 'none' : 'something')"));
+    }
+
+    [Fact]
+    public void The_page_fits_a_buttons_words_at_the_size_chosen()
+    {
+        string page = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.hta.template"));
+        int fits = page.IndexOf("function fitTheWordsOf(", StringComparison.Ordinal);
+        int ends = page.IndexOf("\n}", fits, StringComparison.Ordinal);
+        string fitting = page[fits..ends];
+
+        // Both while it tries each squeeze and when it settles on one.
+        Assert.Equal(2, fitting.Split("atTheSizeChosen(how, DISC.look)").Length - 1);
+    }
+
+    [Fact]
     public async Task The_page_squeezes_a_button_only_as_far_as_its_words_need_and_gives_the_letters_back()
     {
         string[] discs = await TheThreeGames();

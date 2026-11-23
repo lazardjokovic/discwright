@@ -516,12 +516,15 @@ function fitTheWordsOf(box, wide) {
     var wants = wide || function (it) { return it.scrollWidth; };
 
     var how = theSqueezeThatFits(function (how) {
-        box.style.letterSpacing = how.spacing;
-        box.style.fontSize = how.size;
+        var at = atTheSizeChosen(how, DISC.look);
+
+        box.style.letterSpacing = at.spacing;
+        box.style.fontSize = at.size;
 
         return !(wants(box) > box.clientWidth);
     });
 
+    how = atTheSizeChosen(how, DISC.look);
     box.style.letterSpacing = how.spacing;
     box.style.fontSize = how.size;
 }
@@ -2269,10 +2272,10 @@ body {
 #panel { position: absolute; right: 0; top: 0; width: 240px; height: 480px;
          background: #060E11; background: rgba(6, 14, 17, 0.58);
          padding: 28px 22px; box-sizing: border-box; }
-h1 { margin: 0 0 22px 0; font-size: 15px; font-weight: bold; letter-spacing: 1.5px;
-     text-transform: uppercase; line-height: 20px; }
+h1 { margin: 0 0 22px 0; font-size: %%HEADSIZE%%; font-weight: bold; letter-spacing: 1.5px;
+     text-transform: uppercase; line-height: %%HEADLINE%%; }
 .btn { display: block; height: 38px; line-height: 38px; margin-bottom: 9px;
-       padding-left: 14px; font-size: 11px; font-weight: bold; letter-spacing: 1.5px;
+       padding-left: 14px; font-size: %%BUTTONSIZE%%; font-weight: bold; letter-spacing: 1.5px;
        text-transform: uppercase; color: %%BUTTONINK%%;
        background: #080F12; background: rgba(18, 32, 38, 0.22);
        border: 1px solid #27353B; text-decoration: none; overflow: hidden;

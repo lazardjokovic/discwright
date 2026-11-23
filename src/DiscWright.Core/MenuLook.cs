@@ -91,7 +91,8 @@ public sealed record MenuLook(
     bool HeadingHidden = false,
     MenuFont Font = MenuFont.Tahoma,
     bool NoFrame = false,
-    string? Ink = null)
+    string? Ink = null,
+    MenuTextSize TextSize = MenuTextSize.AsItIs)
 {
     /// <summary>What the heading is written in when nobody chose: nearly white.</summary>
     public const string TheHeadingsOwnInk = "#DFE9EE";

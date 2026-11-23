@@ -1928,6 +1928,27 @@ public sealed class MakeADisc : INotifyPropertyChanged
         }
     }
 
+    /// <summary>Every size the menu's words can be, for the list.</summary>
+    public IReadOnlyList<AMenuTextSize> TheMenusTextSizes { get; } = MenuTextSizes.All;
+
+    /// <summary>
+    /// How large the menu's heading and buttons are written. xniwo,
+    /// discwright#98, 23 November 2026: some fonts come out "quite small".
+    /// </summary>
+    public AMenuTextSize? TheMenusTextSize
+    {
+        get => MenuTextSizes.For(Options.LookOrPlain.TextSize);
+        set
+        {
+            // As with the face: a list empties its choice for a moment
+            // whenever its rows are read again.
+            if (value is not null)
+            {
+                SwitchTheLook(Options.LookOrPlain with { TextSize = value.Which });
+            }
+        }
+    }
+
     private void SwitchTheLook(MenuLook now, [CallerMemberName] string? name = null)
     {
         Switch(Options with { Look = now.OrNothingWhenPlain() }, name);
@@ -1965,6 +1986,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// <summary>Whether the sample has a heading, which the menu may not.</summary>
     public bool TheSampleHasAHeading => !MenuHeadingHidden;
 
+    /// <summary>
+    /// The sample heading's size: 9 at the menu's own 15, and as much larger
+    /// or smaller as the menu's will be.
+    /// </summary>
+    public double TheSampleHeadingSize => 9.0 * MenuTextSizes.For(Options.LookOrPlain.TextSize).HeadingPixels / 15;
+
+    /// <summary>The same for a button: 7.5 at the menu's own 11.</summary>
+    public double TheSampleButtonSize => 7.5 * MenuTextSizes.For(Options.LookOrPlain.TextSize).ButtonPixels / 11;
+
     private void TellTheSample()
     {
         Tell(nameof(TheSampleHeadingInk));
@@ -1972,6 +2002,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(TheSampleFont));
         Tell(nameof(TheSampleSide));
         Tell(nameof(TheSampleHasAHeading));
+        Tell(nameof(TheSampleHeadingSize));
+        Tell(nameof(TheSampleButtonSize));
+        Tell(nameof(TheMenusTextSize));
     }
 
     /// <summary>
