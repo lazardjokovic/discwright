@@ -27,6 +27,11 @@
          program's: behind the small picture of a menu's background, it is
          what shows where a picture fitted inside does not reach. -->
     <SolidColorBrush x:Key="TheMenusOwnDark" Color="#0C1316" />
+    <!-- The panel the menu's list sits on, and the edge of a button in it,
+         for the sample in the small picture. The menu's own, so the same
+         in both themes. -->
+    <SolidColorBrush x:Key="TheMenusPanel" Color="#94060E11" />
+    <SolidColorBrush x:Key="TheMenusButtonEdge" Color="#27353B" />
 
     <!-- A refusal and a worry must not look the same. One stops the build and
          the other is only worth knowing. -->

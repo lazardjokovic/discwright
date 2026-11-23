@@ -343,6 +343,49 @@ public sealed class AsABrush : IValueConverter
 }
 
 /// <summary>
+/// A face the screen names, or a font file it points at, as the face to
+/// write a sample of the menu in.
+/// </summary>
+/// <remarks>
+/// A font file is read for the first family in it. Windows reads TrueType
+/// and OpenType this way and not WOFF, so a WOFF file, or one it cannot
+/// read at all, is written in the window's own face: a sample in the wrong
+/// letters, never a dialog that will not open.
+/// </remarks>
+public sealed class AsAFace : IValueConverter
+{
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not string named || named.Length == 0)
+        {
+            return System.Windows.DependencyProperty.UnsetValue;
+        }
+
+        try
+        {
+            if (System.IO.Path.IsPathRooted(named))
+            {
+                return System.IO.File.Exists(named)
+                    ? System.Windows.Media.Fonts.GetFontFamilies(named).FirstOrDefault()
+                        ?? System.Windows.DependencyProperty.UnsetValue
+                    : System.Windows.DependencyProperty.UnsetValue;
+            }
+
+            return new System.Windows.Media.FontFamily(named);
+        }
+        catch (Exception wrong) when (wrong is ArgumentException or System.IO.IOException
+            or UnauthorizedAccessException or NotSupportedException or UriFormatException
+            or System.IO.FileFormatException)
+        {
+            return System.Windows.DependencyProperty.UnsetValue;
+        }
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException("Nothing becomes a font by being written in.");
+}
+
+/// <summary>
 /// Visible when there is something to show, collapsed when there is not.
 /// </summary>
 /// <remarks>

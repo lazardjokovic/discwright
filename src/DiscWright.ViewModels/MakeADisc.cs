@@ -1932,6 +1932,46 @@ public sealed class MakeADisc : INotifyPropertyChanged
     {
         Switch(Options with { Look = now.OrNothingWhenPlain() }, name);
         Tell(nameof(WhereTheCornerButtonsSit));
+        TellTheSample();
+    }
+
+    // ------------------------------------------- the menu's words, in small
+
+    /// <summary>
+    /// The colour the small picture's heading is written in: the one chosen,
+    /// or the menu's own for a heading.
+    /// </summary>
+    /// <remarks>
+    /// xniwo, discwright#98, 23 November 2026: a colour typed for the
+    /// backdrop showed in the dialog at once and one typed for the text
+    /// showed nowhere until the menu was previewed. The small picture now
+    /// carries the list's panel with a heading and two buttons in it,
+    /// written as the menu will write them.
+    /// </remarks>
+    public string TheSampleHeadingInk => MenuInk ?? MenuLook.TheHeadingsOwnInk;
+
+    /// <summary>The same for a button, which has a colour of its own.</summary>
+    public string TheSampleButtonInk => MenuInk ?? MenuLook.TheButtonsOwnInk;
+
+    /// <summary>
+    /// What the sample is written in: the font file somebody chose, by its
+    /// path, or else the name of the face chosen in the list.
+    /// </summary>
+    public string TheSampleFont => MenuFontFile ?? MenuFonts.For(Options.LookOrPlain.Font).Family;
+
+    /// <summary>The side of the small picture the list's panel takes.</summary>
+    public string TheSampleSide => ListOnTheLeft ? "Left" : "Right";
+
+    /// <summary>Whether the sample has a heading, which the menu may not.</summary>
+    public bool TheSampleHasAHeading => !MenuHeadingHidden;
+
+    private void TellTheSample()
+    {
+        Tell(nameof(TheSampleHeadingInk));
+        Tell(nameof(TheSampleButtonInk));
+        Tell(nameof(TheSampleFont));
+        Tell(nameof(TheSampleSide));
+        Tell(nameof(TheSampleHasAHeading));
     }
 
     /// <summary>
@@ -3419,7 +3459,11 @@ public sealed class MakeADisc : INotifyPropertyChanged
     public string? MenuFontFile
     {
         get => _artwork?.MenuFontPath;
-        set => ChangeTheArtwork(Art() with { MenuFontPath = Tidy(value) });
+        set
+        {
+            ChangeTheArtwork(Art() with { MenuFontPath = Tidy(value) });
+            Tell(nameof(TheSampleFont));
+        }
     }
 
     /// <summary>
@@ -5236,6 +5280,7 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(MenuHeadingHidden));
         Tell(nameof(MenuHeadingCanBeTyped));
         Tell(nameof(WhereTheCornerButtonsSit));
+        TellTheSample();
 
         // The artwork, the manual, the tune and the folder of extras, which a
         // project file carries and which nothing here announced.
