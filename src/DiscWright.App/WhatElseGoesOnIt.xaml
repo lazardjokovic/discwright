@@ -202,7 +202,7 @@
                                 <StackPanel Margin="5,7,5,0">
                                     <TextBlock Text="TITLE"
                                                Margin="0,0,0,6"
-                                               FontSize="9"
+                                               FontSize="{Binding TheSampleHeadingSize}"
                                                FontWeight="Bold"
                                                FontFamily="{Binding TheSampleFont, Converter={StaticResource AsAFace}}"
                                                Foreground="{Binding TheSampleHeadingInk, Converter={StaticResource AsABrush}}"
@@ -210,7 +210,7 @@
                                                AutomationProperties.AutomationId="TheSampleHeading" />
                                     <Border BorderBrush="{DynamicResource TheMenusButtonEdge}" BorderThickness="1" Padding="4,2" Margin="0,0,0,3">
                                         <TextBlock Text="INSTALL"
-                                                   FontSize="7.5"
+                                                   FontSize="{Binding TheSampleButtonSize}"
                                                    FontWeight="Bold"
                                                    FontFamily="{Binding TheSampleFont, Converter={StaticResource AsAFace}}"
                                                    Foreground="{Binding TheSampleButtonInk, Converter={StaticResource AsABrush}}"
@@ -218,7 +218,7 @@
                                     </Border>
                                     <Border BorderBrush="{DynamicResource TheMenusButtonEdge}" BorderThickness="1" Padding="4,2">
                                         <TextBlock Text="EXIT"
-                                                   FontSize="7.5"
+                                                   FontSize="{Binding TheSampleButtonSize}"
                                                    FontWeight="Bold"
                                                    FontFamily="{Binding TheSampleFont, Converter={StaticResource AsAFace}}"
                                                    Foreground="{Binding TheSampleButtonInk, Converter={StaticResource AsABrush}}" />
@@ -423,6 +423,32 @@
                             <!-- BasedOn, so the rows keep the themed look,
                                  and named, so a reader says the face's name
                                  and not what the row prints as. -->
+                            <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding InWords}" />
+                            </Style>
+                        </ComboBox.ItemContainerStyle>
+                    </ComboBox>
+                </Grid>
+
+                <!-- How large the heading and the buttons are, discwright#98,
+                     23 November 2026: a font of his own came out "quite
+                     small". Four steps, the largest as large as a button
+                     has room for. The sample in the small picture follows. -->
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="110" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Text size" />
+                    <ComboBox Grid.Column="1"
+                              HorizontalAlignment="Left"
+                              MinWidth="190"
+                              ItemsSource="{Binding TheMenusTextSizes}"
+                              SelectedItem="{Binding TheMenusTextSize}"
+                              DisplayMemberPath="InWords"
+                              ToolTip="How large the heading and the buttons are written. A word too long for its button at any size is drawn closer to fit."
+                              AutomationProperties.AutomationId="MenuTextSize">
+                        <ComboBox.ItemContainerStyle>
                             <Style TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
                                 <Setter Property="AutomationProperties.Name" Value="{Binding InWords}" />
                             </Style>

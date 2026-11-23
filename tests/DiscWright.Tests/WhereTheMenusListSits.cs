@@ -134,6 +134,35 @@ public class WhereTheMenusListSits
         Assert.Contains(nameof(MakeADisc.WhereTheCornerButtonsSit), told, StringComparer.Ordinal);
     }
 
+    [Fact]
+    public void An_opened_project_shows_its_text_size_in_the_list_and_the_sample()
+    {
+        MakeADisc screen = TheScreen();
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.OpenThis(new Reopened(
+            new DiscProject(
+                "OPENED",
+                [AGame("Hollow Knight")],
+                new DiscOptions(Look: new MenuLook(TextSize: MenuTextSize.Larger)),
+                Artwork: null,
+                Extras: null,
+                AddOns: []),
+            null,
+            null,
+            [],
+            []));
+
+        Assert.Equal(MenuTextSize.Larger, screen.TheMenusTextSize!.Which);
+
+        // The list reads its choice once, so it has to be told.
+        foreach (string named in new[] { nameof(MakeADisc.TheMenusTextSize), nameof(MakeADisc.TheSampleHeadingSize), nameof(MakeADisc.TheSampleButtonSize) })
+        {
+            Assert.Contains(named, told, StringComparer.Ordinal);
+        }
+    }
+
     [Theory]
     [InlineData("CheckBox", "ListOnTheLeft", "IsChecked")]
     [InlineData("CheckBox", "CornerAtTheBottom", "IsChecked")]
@@ -314,6 +343,42 @@ public class WhereTheMenusListSits
     }
 
     [Fact]
+    public void A_text_size_chosen_reaches_the_disc_and_the_sample_grows_with_it()
+    {
+        MakeADisc screen = TheScreen();
+
+        Assert.Equal(MenuTextSize.AsItIs, screen.TheMenusTextSize!.Which);
+        Assert.Equal(MenuTextSizes.All, screen.TheMenusTextSizes);
+        Assert.Equal(9.0, screen.TheSampleHeadingSize, 3);
+        Assert.Equal(7.5, screen.TheSampleButtonSize, 3);
+
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.TheMenusTextSize = MenuTextSizes.For(MenuTextSize.Largest);
+
+        Assert.Equal(MenuTextSize.Largest, screen.AsAProject().Options.LookOrPlain.TextSize);
+        Assert.Equal(MenuTextSize.Largest, screen.TheMenusTextSize!.Which);
+        Assert.Equal(9.0 * 19 / 15, screen.TheSampleHeadingSize, 3);
+        Assert.Equal(7.5 * 14 / 11, screen.TheSampleButtonSize, 3);
+
+        foreach (string named in new[] { nameof(MakeADisc.TheMenusTextSize), nameof(MakeADisc.TheSampleHeadingSize), nameof(MakeADisc.TheSampleButtonSize) })
+        {
+            Assert.Contains(named, told, StringComparer.Ordinal);
+        }
+
+        // A list emptying its choice for a moment is not somebody choosing.
+        screen.TheMenusTextSize = null;
+
+        Assert.Equal(MenuTextSize.Largest, screen.AsAProject().Options.LookOrPlain.TextSize);
+
+        // And back to the size as it was, the look is plain again.
+        screen.TheMenusTextSize = MenuTextSizes.For(MenuTextSize.AsItIs);
+
+        Assert.Null(screen.AsAProject().Options.Look);
+    }
+
+    [Fact]
     public void A_font_file_of_ones_own_is_what_the_sample_is_written_in()
     {
         MakeADisc screen = TheScreen();
@@ -444,7 +509,7 @@ public class WhereTheMenusListSits
 
         Assert.Contains("    border=\"thin\"\r\n", page.ReplaceLineEndings("\r\n"), StringComparison.Ordinal);
         Assert.Contains("    caption=\"yes\"\r\n", page.ReplaceLineEndings("\r\n"), StringComparison.Ordinal);
-        Assert.Contains("frame: \"window\"},", page, StringComparison.Ordinal);
+        Assert.Contains("frame: \"window\", buttonSize: 11},", page, StringComparison.Ordinal);
         Assert.DoesNotContain("%%CAPTION%%", page, StringComparison.Ordinal);
         Assert.DoesNotContain("%%BORDER%%", page, StringComparison.Ordinal);
     }
@@ -474,7 +539,7 @@ public class WhereTheMenusListSits
         // It is still in the taskbar, which is now the only place it has a
         // name, and still one window at a time.
         Assert.Contains("    showintaskbar=\"yes\"\r\n", tag, StringComparison.Ordinal);
-        Assert.Contains("frame: \"none\"},", page, StringComparison.Ordinal);
+        Assert.Contains("frame: \"none\", buttonSize: 11},", page, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -662,13 +727,13 @@ public class WhereTheMenusListSits
     {
         string page = MenuWriter.MenuPage(AMenu());
 
-        Assert.Contains("look: {listOn: \"right\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},", page, StringComparison.Ordinal);
+        Assert.Contains("look: {listOn: \"right\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\", buttonSize: 11},", page, StringComparison.Ordinal);
     }
 
     [Theory]
-    [InlineData(MenuSide.Left, false, "look: {listOn: \"left\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},")]
-    [InlineData(MenuSide.Right, true, "look: {listOn: \"right\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},")]
-    [InlineData(MenuSide.Left, true, "look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},")]
+    [InlineData(MenuSide.Left, false, "look: {listOn: \"left\", corner: \"top\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\", buttonSize: 11},")]
+    [InlineData(MenuSide.Right, true, "look: {listOn: \"right\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\", buttonSize: 11},")]
+    [InlineData(MenuSide.Left, true, "look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\", buttonSize: 11},")]
     public void A_page_carries_the_look_that_was_chosen(MenuSide side, bool bottom, string carried)
     {
         string page = MenuWriter.MenuPage(AMenu() with { Look = new MenuLook(side, bottom) });
@@ -810,7 +875,7 @@ public class WhereTheMenusListSits
 
         string page = wrote.Texts.Single(text => text.Path.EndsWith("menu.hta", StringComparison.Ordinal)).Text;
 
-        Assert.Contains("look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\"},", page, StringComparison.Ordinal);
+        Assert.Contains("look: {listOn: \"left\", corner: \"bottom\", discsOwn: \"list\", openTheDisc: false, heading: \"\", headingHidden: false, frame: \"window\", buttonSize: 11},", page, StringComparison.Ordinal);
     }
 
     /// <summary>

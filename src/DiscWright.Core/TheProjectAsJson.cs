@@ -211,6 +211,10 @@ public static class TheProjectAsJson
             writing.WriteString("Font", MenuFonts.For(look.Font).InWords);
             writing.WriteString("Frame", look.NoFrame ? "None" : "Window");
             WriteOrNull(writing, "Ink", SolidColour.Tidied(look.Ink));
+
+            // By the step's own name, since 2.0.6. A file from before has
+            // none, and is the menu's size as it always was.
+            writing.WriteString("TextSize", look.TextSize.ToString());
             writing.WriteEndObject();
 
             writing.WriteString("BgFit", fit.ToString());

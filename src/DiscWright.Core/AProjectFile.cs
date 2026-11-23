@@ -256,7 +256,10 @@ public static class AProjectFile
 
             // Tidied, so a file somebody edited yields a colour or nothing:
             // it is written into the page's style.
-            SolidColour.Tidied(Text(look, "Ink")))
+            SolidColour.Tidied(Text(look, "Ink")),
+
+            // A word that names no step, or none, is the size as it was.
+            MenuTextSizes.Named(Text(look, "TextSize")) ?? MenuTextSize.AsItIs)
             .OrNothingWhenPlain();
     }
 
