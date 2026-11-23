@@ -22,6 +22,7 @@
             <local:WhenNothing x:Key="WhenNothing" />
             <local:HeldBack x:Key="HeldBack" />
             <local:AsABrush x:Key="AsABrush" />
+            <local:AsAFace x:Key="AsAFace" />
             <local:AsARect x:Key="AsARect" />
         </ResourceDictionary>
     </Application.Resources>

@@ -252,6 +252,121 @@ public class WhereTheMenusListSits
         }
     }
 
+    // ------------------------------------------- the menu's words, in small
+
+    [Fact]
+    public void The_sample_is_written_in_the_menus_own_until_something_is_chosen()
+    {
+        MakeADisc screen = TheScreen();
+
+        Assert.Equal(MenuLook.TheHeadingsOwnInk, screen.TheSampleHeadingInk);
+        Assert.Equal(MenuLook.TheButtonsOwnInk, screen.TheSampleButtonInk);
+        Assert.NotEqual(screen.TheSampleHeadingInk, screen.TheSampleButtonInk);
+        Assert.Equal("Tahoma", screen.TheSampleFont);
+        Assert.Equal("Right", screen.TheSampleSide);
+        Assert.True(screen.TheSampleHasAHeading);
+    }
+
+    [Fact]
+    public void A_colour_typed_for_the_text_shows_in_the_sample_at_once()
+    {
+        // xniwo, discwright#98, 23 November 2026: the backdrop's colour
+        // showed in the dialog as it was typed and the text's did not.
+        MakeADisc screen = TheScreen();
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.MenuInkText = "FFE9B0";
+
+        Assert.Equal("#ffe9b0", screen.TheSampleHeadingInk);
+        Assert.Equal("#ffe9b0", screen.TheSampleButtonInk);
+        Assert.Contains(nameof(MakeADisc.TheSampleHeadingInk), told, StringComparer.Ordinal);
+        Assert.Contains(nameof(MakeADisc.TheSampleButtonInk), told, StringComparer.Ordinal);
+
+        // Half typed it is no colour, and the sample goes back to the
+        // menu's own and does not keep the last one that was.
+        told.Clear();
+        screen.MenuInkText = "FFE9";
+
+        Assert.Equal(MenuLook.TheHeadingsOwnInk, screen.TheSampleHeadingInk);
+        Assert.Equal(MenuLook.TheButtonsOwnInk, screen.TheSampleButtonInk);
+        Assert.Contains(nameof(MakeADisc.TheSampleButtonInk), told, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void The_sample_follows_the_side_the_face_and_the_heading()
+    {
+        MakeADisc screen = TheScreen();
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.ListOnTheLeft = true;
+        Assert.Equal("Left", screen.TheSampleSide);
+        Assert.Contains(nameof(MakeADisc.TheSampleSide), told, StringComparer.Ordinal);
+
+        screen.TheMenusFont = MenuFonts.For(MenuFont.Georgia);
+        Assert.Equal("Georgia", screen.TheSampleFont);
+        Assert.Contains(nameof(MakeADisc.TheSampleFont), told, StringComparer.Ordinal);
+
+        screen.MenuHeadingHidden = true;
+        Assert.False(screen.TheSampleHasAHeading);
+        Assert.Contains(nameof(MakeADisc.TheSampleHasAHeading), told, StringComparer.Ordinal);
+    }
+
+    [Fact]
+    public void A_font_file_of_ones_own_is_what_the_sample_is_written_in()
+    {
+        MakeADisc screen = TheScreen();
+        List<string> told = [];
+        screen.PropertyChanged += (_, moved) => told.Add(moved.PropertyName!);
+
+        screen.MenuFontFile = @"C:\Fonts\Mine.ttf";
+
+        Assert.Equal(@"C:\Fonts\Mine.ttf", screen.TheSampleFont);
+        Assert.Contains(nameof(MakeADisc.TheSampleFont), told, StringComparer.Ordinal);
+
+        screen.MenuFontFile = null;
+
+        Assert.Equal("Tahoma", screen.TheSampleFont);
+    }
+
+    [Fact]
+    public void The_small_picture_carries_the_sample_and_lets_a_press_through()
+    {
+        System.Xml.Linq.XNamespace xaml = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        System.Xml.Linq.XElement dialog = System.Xml.Linq.XDocument
+            .Load(Repository.File("src", "DiscWright.App", "WhatElseGoesOnIt.xaml")).Root!;
+
+        string? Id(System.Xml.Linq.XElement each) => (string?)each.Attribute("AutomationProperties.AutomationId");
+
+        System.Xml.Linq.XElement heading = Assert.Single(dialog.Descendants(xaml + "TextBlock"), each => Id(each) == "TheSampleHeading");
+        System.Xml.Linq.XElement button = Assert.Single(dialog.Descendants(xaml + "TextBlock"), each => Id(each) == "TheSampleButton");
+
+        Assert.Equal("{Binding TheSampleHeadingInk, Converter={StaticResource AsABrush}}", (string?)heading.Attribute("Foreground"));
+        Assert.Equal("{Binding TheSampleHasAHeading, Converter={StaticResource WhenSo}}", (string?)heading.Attribute("Visibility"));
+        Assert.Equal("{Binding TheSampleButtonInk, Converter={StaticResource AsABrush}}", (string?)button.Attribute("Foreground"));
+
+        foreach (System.Xml.Linq.XElement each in new[] { heading, button })
+        {
+            Assert.Equal("{Binding TheSampleFont, Converter={StaticResource AsAFace}}", (string?)each.Attribute("FontFamily"));
+        }
+
+        // The panel is on the list's side, and is not in the way of the
+        // frame beneath it, which is dragged to choose what the menu keeps.
+        System.Xml.Linq.XElement panel = heading.Ancestors(xaml + "Border").First();
+
+        Assert.Equal("{Binding TheSampleSide}", (string?)panel.Attribute("HorizontalAlignment"));
+        Assert.Equal("False", (string?)panel.Attribute("IsHitTestVisible"));
+
+        // And it is in the small picture, after the frame, so over it.
+        System.Xml.Linq.XElement frame = Assert.Single(
+            dialog.Descendants(xaml + "Border"),
+            each => (string?)each.Attribute(System.Xml.Linq.XName.Get("Name", "http://schemas.microsoft.com/winfx/2006/xaml")) == "TheFrame");
+
+        Assert.Same(frame.Parent, panel.Parent);
+        Assert.True(frame.IsBefore(panel));
+    }
+
     [Theory]
     [InlineData("FFE9")]
     [InlineData("mauve")]
