@@ -57,4 +57,34 @@ public static class SolidColour
 
         return "#" + bare.ToLowerInvariant();
     }
+
+    /// <summary>
+    /// A colour as Windows hands one back: red in the lowest byte, then
+    /// green, then blue, and the top byte nothing. As this program keeps it.
+    /// </summary>
+    public static string FromWindows(int colour) =>
+        "#"
+        + (colour & 0xFF).ToString("x2", System.Globalization.CultureInfo.InvariantCulture)
+        + ((colour >> 8) & 0xFF).ToString("x2", System.Globalization.CultureInfo.InvariantCulture)
+        + ((colour >> 16) & 0xFF).ToString("x2", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// A colour as Windows takes one, for its colour dialog to start at.
+    /// Black for anything that is not a colour, where Windows starts anyway.
+    /// </summary>
+    public static int ToWindows(string? text)
+    {
+        string? colour = Tidied(text);
+
+        if (colour is null)
+        {
+            return 0;
+        }
+
+        int red = Convert.ToInt32(colour.Substring(1, 2), 16);
+        int green = Convert.ToInt32(colour.Substring(3, 2), 16);
+        int blue = Convert.ToInt32(colour.Substring(5, 2), 16);
+
+        return red | (green << 8) | (blue << 16);
+    }
 }
