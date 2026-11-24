@@ -1954,11 +1954,54 @@ public sealed class TheMenuScript : IDisposable
     [InlineData("{ listOn: 'right', corner: 'bottom' }", 1, 2, "52,434")]
     [InlineData("{ listOn: 'left', corner: 'bottom' }", 0, 2, "678,434")]
     [InlineData("{ listOn: 'left', corner: 'bottom' }", 1, 2, "714,434")]
+    // No frame, the list on the left and the row at the top: the row stops
+    // short of the window's own cross. Anywhere else the cross is not in its
+    // corner and nothing moves.
+    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 0, 2, "658,16")]
+    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 1, 2, "694,16")]
+    [InlineData("{ listOn: 'left', corner: 'bottom', frame: 'none' }", 1, 2, "714,434")]
+    [InlineData("{ listOn: 'right', corner: 'top', frame: 'none' }", 0, 2, "16,16")]
+    [InlineData("{ listOn: 'left', corner: 'top', frame: 'window' }", 1, 2, "714,16")]
     public void A_corner_button_goes_where_the_look_puts_it(string look, int place, int howMany, string at)
     {
         Assert.Equal(
             at,
             Ask($"(function () {{ var at = whereACornerButtonGoes({look}, {place}, {howMany}); return at.left + ',' + at.top; }})()"));
+    }
+
+    [Theory]
+    [InlineData("right", "top")]
+    [InlineData("right", "bottom")]
+    [InlineData("left", "top")]
+    [InlineData("left", "bottom")]
+    public void No_corner_button_is_ever_under_the_cross_of_a_menu_with_no_frame(string side, string corner)
+    {
+        // The cross: 6 from the top and the right, 22 by 20 with a border of
+        // one, so 730 to 754 across and 6 to 28 down. Every box of a row of
+        // one to five, with 6 between it and the cross at least.
+        string row = Ask(
+            "(function () { var all = [], n, i, at; for (n = 1; n <= 5; n++) { for (i = 0; i < n; i++) { "
+            + $"at = whereACornerButtonGoes({{ listOn: '{side}', corner: '{corner}', frame: 'none' }}, i, n); "
+            + "all.push(at.left + ',' + at.top); } } return all.join(';'); })()");
+
+        foreach (string[] at in row.Split(';').Select(each => each.Split(',')))
+        {
+            int left = int.Parse(at[0], System.Globalization.CultureInfo.InvariantCulture);
+            int top = int.Parse(at[1], System.Globalization.CultureInfo.InvariantCulture);
+            bool meets = left < 754 + 6 && left + 30 > 730 - 6 && top < 28 + 6 && top + 30 > 6 - 6;
+
+            Assert.False(meets, $"a box at {left},{top} is within 6 of the cross");
+            Assert.InRange(left, 16, 760 - 16 - 30);
+        }
+    }
+
+    [Fact]
+    public void The_cross_the_row_keeps_clear_of_is_the_one_the_page_draws()
+    {
+        string page = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.hta.template"));
+
+        Assert.Contains("#shut { position: absolute; right: 6px; top: 6px; width: 22px; height: 20px;", page, StringComparison.Ordinal);
+        Assert.Contains("border: 1px solid #27353B;", page[page.IndexOf("#shut {", StringComparison.Ordinal)..], StringComparison.Ordinal);
     }
 
     [Theory]
