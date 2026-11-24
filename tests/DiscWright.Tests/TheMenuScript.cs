@@ -1659,6 +1659,132 @@ public sealed class TheMenuScript : IDisposable
     }
 
     [Fact]
+    public void Stop_ends_a_real_copy_takes_away_the_half_file_and_keeps_what_was_copied()
+    {
+        // Since 2.0.6, the owner's request: a set's copy could not be stopped
+        // once it began. A real robocopy of a 2 GB file, stopped on the first
+        // look after it starts. robocopy sizes the file to its full length
+        // before it writes it, so the half file left behind would be the
+        // right size, and the next Install would take it as copied.
+        string disc = Path.Combine(_folder, "stop disc");
+        string dest = Path.Combine(_folder, "stop put back");
+        Directory.CreateDirectory(disc);
+        File.WriteAllText(Path.Combine(disc, "small.dat"), "12345");
+
+        using (FileStream big = File.Create(Path.Combine(disc, "big.bin")))
+        {
+            big.SetLength(2L * 1024 * 1024 * 1024);
+        }
+
+        const string rows = "[{disc: 1, sha256: 'a', bytes: 5, path: 'small.dat'}, {disc: 1, sha256: 'b', bytes: 2147483648, path: 'big.bin'}]";
+
+        string went = Ask(
+            "(function () { var f = new ActiveXObject('Scripting.FileSystemObject'); var out = [];"
+
+            // A window whose timer is turned by hand, so the copy's looks
+            // happen here, one at a time, as they would in the menu.
+            + " var queue = []; window = { setTimeout: function (go) { queue.push(go); } };"
+            + " var stopNow = false;"
+            + " var work = {files: f, discRoot: " + AsJScript(disc) + ", dir: " + AsJScript(dest) + ", rows: " + rows + ", discIn: 1,"
+            + "   say: function (p) { if (p.copying === '2 of 2') { stopNow = true; } },"
+            + "   stop: function () { return stopNow; },"
+            + "   stopped: function () { out.push('stopped'); },"
+            + "   after: function (bad) { out.push('finished bad=' + bad); }};"
+            + " copyTheSetDisc(work);"
+            + " var turns = 0; while (queue.length && turns < 600) { WScript.Sleep(100); queue.shift()(); turns++; }"
+            + " out.push('waiting=' + queue.length);"
+            + " out.push('running=' + (work.running ? 'yes' : 'no'));"
+            + " out.push('small=' + (f.FileExists(" + AsJScript(Path.Combine(dest, "small.dat")) + ") ? f.GetFile(" + AsJScript(Path.Combine(dest, "small.dat")) + ").Size : 'gone'));"
+            + " out.push('big=' + (f.FileExists(" + AsJScript(Path.Combine(dest, "big.bin")) + ") ? 'still there' : 'gone'));"
+
+            // And nothing is left copying: no robocopy with this disc in its
+            // command line, half a second on.
+            + " WScript.Sleep(500); var left = 0, all = new Enumerator(wmiFor('cimv2').ExecQuery(\"SELECT CommandLine FROM Win32_Process WHERE Name = 'robocopy.exe'\"));"
+            + " for (; !all.atEnd(); all.moveNext()) { if (String(all.item().CommandLine).indexOf('stop disc') >= 0) { left++; } }"
+            + " out.push('robocopy left=' + left);"
+            + " return out.join(' | '); })()");
+
+        Assert.Equal("stopped | waiting=0 | running=no | small=5 | big=gone | robocopy left=0", went);
+
+    }
+
+    [Fact]
+    public void Stop_ends_the_command_before_what_it_started_so_it_cannot_say_the_job_finished()
+    {
+        // A stand-in for WMI that lists one command with one child and keeps
+        // the order things are ended in.
+        Assert.Equal(
+            "cmd 7 | robocopy 8 | ended=2",
+            Ask("(function () { var ended = [];"
+                + " function aProcess(name, id) { return { Name: name, ProcessId: id, Terminate: function () { ended.push(name + ' ' + id); } }; }"
+                + " function listOf(items) { var i = 0; return { atEnd: function () { return i >= items.length; }, moveNext: function () { i++; }, item: function () { return items[i]; } }; }"
+                + " Enumerator = function (list) { return list; };"
+                + " wmiFor = function () { return { ExecQuery: function (q) {"
+                + "   return q.indexOf('ParentProcessId = 7') >= 0 ? listOf([aProcess('robocopy', 8)]) : listOf([aProcess('cmd', 7)]); } }; };"
+                + " var n = stopAJob({ flag: 'C:/temp/dwjob1_2_3.done' });"
+                + " return ended.join(' | ') + ' | ended=' + n; })()"));
+    }
+
+    [Fact]
+    public void Stop_with_nothing_copying_does_nothing()
+    {
+        Assert.Equal("false", Ask("String(theCopyEnds({ files: null, running: null }))"));
+        Assert.Equal("false", Ask("String(theCopyEnds(null))"));
+
+        // Nothing found to end, as a job that had just finished.
+        Assert.Equal(
+            "0",
+            Ask("(function () { wmiFor = function () { return { ExecQuery: function () { return { atEnd: function () { return true; } }; } }; };"
+                + " Enumerator = function (list) { return list; };"
+                + " return String(stopAJob({ flag: 'C:/temp/x.done' })); })()"));
+
+        // And WMI not there at all.
+        Assert.Equal("0", Ask("(function () { wmiFor = function () { throw new Error('no WMI'); }; return String(stopAJob({ flag: 'x' })); })()"));
+    }
+
+    [Fact]
+    public void A_look_that_says_false_ends_the_waiting_and_after_is_never_called()
+    {
+        Assert.Equal(
+            "looks=1 queued=0 after=no",
+            Ask("(function () { var queue = [], looks = 0, called = 'no';"
+                + " window = { setTimeout: function (go) { queue.push(go); } };"
+                + " jobIsDone = function () { return false; };"
+                + " waitForJob({ flag: 'x' }, function () { called = 'yes'; }, function () { looks++; return false; });"
+                + " while (queue.length) { queue.shift()(); }"
+                + " return 'looks=' + looks + ' queued=' + queue.length + ' after=' + called; })()"));
+
+        // A look that says nothing, as every look did before, keeps waiting.
+        Assert.Equal(
+            "looks=3 after=yes",
+            Ask("(function () { var queue = [], looks = 0, called = 'no', n = 0;"
+                + " window = { setTimeout: function (go) { queue.push(go); } };"
+                + " jobIsDone = function () { return ++n > 3; }; jobCode = function () { return 0; };"
+                + " waitForJob({ flag: 'x' }, function () { called = 'yes'; }, function () { looks++; });"
+                + " while (queue.length) { queue.shift()(); }"
+                + " return 'looks=' + looks + ' after=' + called; })()"));
+    }
+
+    [Fact]
+    public void The_page_has_Stop_while_a_disc_copies_and_ends_the_copy_when_it_closes()
+    {
+        string page = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.hta.template"));
+
+        Assert.Contains("<a class=\"btn\" id=\"stopTheCopy\" href=\"#\" onclick=\"stopTheCopy(); return false;\" style=\"display: none\">Stop</a>", page, StringComparison.Ordinal);
+        Assert.Contains("document.getElementById(\"stopTheCopy\").style.display = restoring.copying && theSetsCopy ? \"block\" : \"none\";", page, StringComparison.Ordinal);
+        Assert.Contains("stop: function () {\r\n            return !!restoring.stopping;", page.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains("window.onunload = theCopyGoesWithTheMenu;", page, StringComparison.Ordinal);
+
+        int exit = page.IndexOf("function doExit() {", StringComparison.Ordinal);
+
+        Assert.Contains("theCopyGoesWithTheMenu();", page[exit..page.IndexOf("window.close();", exit, StringComparison.Ordinal)], StringComparison.Ordinal);
+
+        // And the line says it was stopped, until Install is pressed again.
+        Assert.Contains("words = \"Stopped. \" + words;", page, StringComparison.Ordinal);
+        Assert.Contains("function restoreGo() {\r\n    restoring.stopped = false;", page.Replace("\r\n", "\n", StringComparison.Ordinal).Replace("\n", "\r\n", StringComparison.Ordinal), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Copies_a_game_off_a_disc_without_holding_on_to_the_thread()
     {
         // THE BAR HAS TO BE ABLE TO MOVE. FileSystemObject.CopyFile does not
@@ -1957,8 +2083,8 @@ public sealed class TheMenuScript : IDisposable
     // No frame, the list on the left and the row at the top: the row stops
     // short of the window's own cross. Anywhere else the cross is not in its
     // corner and nothing moves.
-    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 0, 2, "658,16")]
-    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 1, 2, "694,16")]
+    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 0, 2, "630,16")]
+    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 1, 2, "666,16")]
     [InlineData("{ listOn: 'left', corner: 'bottom', frame: 'none' }", 1, 2, "714,434")]
     [InlineData("{ listOn: 'right', corner: 'top', frame: 'none' }", 0, 2, "16,16")]
     [InlineData("{ listOn: 'left', corner: 'top', frame: 'window' }", 1, 2, "714,16")]
@@ -1977,8 +2103,9 @@ public sealed class TheMenuScript : IDisposable
     public void No_corner_button_is_ever_under_the_cross_of_a_menu_with_no_frame(string side, string corner)
     {
         // The cross: 6 from the top and the right, 22 by 20 with a border of
-        // one, so 730 to 754 across and 6 to 28 down. Every box of a row of
-        // one to five, with 6 between it and the cross at least.
+        // one, so 730 to 754 across and 6 to 28 down. The dash that
+        // minimises beside it, 702 to 726. Every box of a row of one to
+        // five, with 6 between it and either at least.
         string row = Ask(
             "(function () { var all = [], n, i, at; for (n = 1; n <= 5; n++) { for (i = 0; i < n; i++) { "
             + $"at = whereACornerButtonGoes({{ listOn: '{side}', corner: '{corner}', frame: 'none' }}, i, n); "
@@ -1988,9 +2115,9 @@ public sealed class TheMenuScript : IDisposable
         {
             int left = int.Parse(at[0], System.Globalization.CultureInfo.InvariantCulture);
             int top = int.Parse(at[1], System.Globalization.CultureInfo.InvariantCulture);
-            bool meets = left < 754 + 6 && left + 30 > 730 - 6 && top < 28 + 6 && top + 30 > 6 - 6;
+            bool meets = left < 754 + 6 && left + 30 > 702 - 6 && top < 28 + 6 && top + 30 > 6 - 6;
 
-            Assert.False(meets, $"a box at {left},{top} is within 6 of the cross");
+            Assert.False(meets, $"a box at {left},{top} is within 6 of the cross or the dash");
             Assert.InRange(left, 16, 760 - 16 - 30);
         }
     }
@@ -2002,6 +2129,61 @@ public sealed class TheMenuScript : IDisposable
 
         Assert.Contains("#shut { position: absolute; right: 6px; top: 6px; width: 22px; height: 20px;", page, StringComparison.Ordinal);
         Assert.Contains("border: 1px solid #27353B;", page[page.IndexOf("#shut {", StringComparison.Ordinal)..], StringComparison.Ordinal);
+        Assert.Contains("#tuck { position: absolute; right: 34px; top: 6px; width: 22px; height: 20px;", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Minimising_puts_the_menu_out_of_sight_and_the_desktop_in_front()
+    {
+        // Since 2.0.6, the owner's request. A window with no frame has no
+        // minimise of its own: measured, no system menu, no minimise box,
+        // and Alt+Space does nothing. Moved off the screen with the desktop
+        // in front, the menu's taskbar button is a button to press.
+        Assert.Equal(
+            "at -32000,-32000 | kept 120,80 | activated Program Manager",
+            Ask("(function () { var said = [];"
+                + " var win = { screenLeft: 120, screenTop: 80, moveTo: function (x, y) { said.push('at ' + x + ',' + y); } };"
+                + " var shell = { AppActivate: function (title) { said.push('activated ' + title); return true; } };"
+                + " tuckAway(win, shell);"
+                + " return said[0] + ' | kept ' + win.tuckedAt.left + ',' + win.tuckedAt.top + ' | ' + said[1]; })()"));
+    }
+
+    [Fact]
+    public void A_menu_put_away_comes_back_where_it_was_and_only_once()
+    {
+        Assert.Equal(
+            "true at 120,80 | false",
+            Ask("(function () { var said = [];"
+                + " var win = { screenLeft: 120, screenTop: 80, moveTo: function (x, y) { said.push('at ' + x + ',' + y); } };"
+                + " tuckAway(win, { AppActivate: function () { } }); said = [];"
+                + " var first = bringBack(win); var at = said.join(' ');"
+                + " var second = bringBack(win);"
+                + " return first + ' ' + at + ' | ' + second + (said.length > 1 ? ' and moved again' : ''); })()"));
+
+        // A window never put away is not moved when it comes to the front.
+        Assert.Equal("false", Ask("String(bringBack({ moveTo: function () { throw new Error('moved'); } }))"));
+
+        // And with no desktop to put in front, it is still put away.
+        Assert.Equal(
+            "at -32000,-32000",
+            Ask("(function () { var said = []; tuckAway({ screenLeft: 1, screenTop: 2, moveTo: function (x, y) { said.push('at ' + x + ',' + y); } },"
+                + " { AppActivate: function () { throw new Error('no desktop'); } }); return said.join(' '); })()"));
+    }
+
+    [Fact]
+    public void The_page_offers_the_dash_beside_the_cross_and_brings_the_menu_back_when_it_is_in_front()
+    {
+        string page = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.hta.template")).Replace("\r\n", "\n", StringComparison.Ordinal);
+
+        Assert.Contains("<div id=\"tuck\" style=\"display: none\" title=\"Minimise\"\n         onclick=\"tuckAway(window, new ActiveXObject('WScript.Shell')); return false;\">&#8211;</div>", page, StringComparison.Ordinal);
+
+        int shows = page.IndexOf("function showTheWindowsOwnWayOut()", StringComparison.Ordinal);
+        string showing = page[shows..page.IndexOf("\n}\n", shows, StringComparison.Ordinal)];
+
+        // Only with no frame, which has nothing else to minimise with.
+        Assert.Contains("if (!theWindowHasNoFrame(DISC.look)) {\n        return;", showing, StringComparison.Ordinal);
+        Assert.Contains("document.getElementById(\"tuck\").style.display = \"block\";", showing, StringComparison.Ordinal);
+        Assert.Contains("bringBack(window);", showing, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -2381,6 +2563,7 @@ public sealed class TheMenuScript : IDisposable
     [InlineData("{ tagName: 'DIV', className: 'btn next dead' }", "true")]
     [InlineData("{ tagName: 'DIV', className: 'corner wing' }", "true")]
     [InlineData("{ tagName: 'DIV', id: 'shut' }", "true")]
+    [InlineData("{ tagName: 'DIV', id: 'tuck' }", "true")]
     [InlineData("{ tagName: 'SPAN', parentNode: { tagName: 'A' } }", "true")]
     [InlineData("{ tagName: 'SPAN', parentNode: { tagName: 'DIV', parentNode: { tagName: 'DIV', className: 'corner' } } }", "true")]
     [InlineData("{ tagName: 'DIV', id: 'stage' }", "false")]

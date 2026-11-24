@@ -117,7 +117,8 @@ public class TheMenuWriter
         Assert.Contains("if (SET && !where)", page, StringComparison.Ordinal);
         Assert.Contains("restoreGo();", page, StringComparison.Ordinal);
         Assert.Contains("restoreButtonSays(scan, SET.discIn, SET.of, isInstalled(game), whatToDoWith(game, false))", page, StringComparison.Ordinal);
-        Assert.Contains("copyTheSetDisc({", page, StringComparison.Ordinal);
+        Assert.Contains("theSetsCopy = {", page, StringComparison.Ordinal);
+        Assert.Contains("copyTheSetDisc(theSetsCopy);", page, StringComparison.Ordinal);
         Assert.Contains("joinThePieces({", page, StringComparison.Ordinal);
         Assert.Contains("lookForTheDiscIn(1500);", page, StringComparison.Ordinal);
         Assert.Contains("id=\"restoreBar\"", page, StringComparison.Ordinal);
