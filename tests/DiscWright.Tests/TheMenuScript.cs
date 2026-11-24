@@ -2831,6 +2831,35 @@ public sealed class TheMenuScript : IDisposable
         Assert.Equal("47", Ask("chooserListRoom(480, 28, 400, 47)"));
     }
 
+    [Theory]
+    [InlineData(60, "50")]
+    [InlineData(66, "66")]
+    [InlineData(81, "66")]
+    [InlineData(82, "82")]
+    [InlineData(200, "194")]
+    [InlineData(20, "50")]
+    [InlineData(0, "50")]
+    [InlineData(-40, "50")]
+    public void The_line_under_the_screen_shows_whole_lines_and_two_at_least(int room, string height)
+    {
+        // Found measuring every look of the menu in the real mshta, 24
+        // November 2026: a box of whatever height was left cut its last line
+        // through the middle. 18 above the first line, 16 a line.
+        Assert.Equal(height, Ask($"String(aBoxOfWholeLines({room}, 18, 16))"));
+    }
+
+    [Fact]
+    public void The_page_gives_the_line_a_box_of_whole_lines()
+    {
+        string page = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.hta.template"));
+
+        Assert.Contains("under.style.height = aBoxOfWholeLines(room, 18, 16) + \"px\";", page, StringComparison.Ordinal);
+
+        // And the two numbers are the line's own: its margin above and its
+        // line's height.
+        Assert.Contains("#stillWanted { margin-top: 18px; font-size: 11px; line-height: 16px;", page, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Watches_a_real_robocopy_read_its_file()
     {

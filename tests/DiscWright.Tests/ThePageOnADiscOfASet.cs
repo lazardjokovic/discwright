@@ -1417,7 +1417,8 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "out.push(sizes('addOns'));\n"
 
                 // A long verdict, eleven lines and its gap: the list is cut to
-                // one button, and the line gets the 155 left under Exit.
+                // one button, and the line gets as many whole lines of the 155
+                // left under Exit as fit: its 18 above and eight lines, 146.
                 + "el('underAll').offsetHeight = 194; el('underAll').scrollHeight = 194; el('underAll').offsetTop = 297;\n"
                 + "sayTheCheck('2 of 13 files on this disc are wrong or missing');\n"
                 + "out.push(sizes('addOns'));\n"
@@ -1435,7 +1436,9 @@ public sealed class ThePageOnADiscOfASet : IDisposable
                 + "sayTheCheck('2 of 13 files on this disc are wrong or missing');\n"
                 + "out.push(sizes('gameList'));\n"
 
-                // Next to no room at all, and the line still keeps two lines.
+                // Next to no room at all, and the line still keeps two whole
+                // lines and the 18 above them, 50. It kept 32 until 24 November
+                // 2026, which forgot the 18 and showed less than one line.
                 + "el('underAll').offsetTop = 440;\n"
                 + "sayTheCheck('2 of 13 files on this disc are wrong or missing');\n"
                 + "out.push(sizes('gameList'));\n"
@@ -1444,10 +1447,10 @@ public sealed class ThePageOnADiscOfASet : IDisposable
         Assert.Equal(
             [
                 "addOns=202px under=auto",
-                "addOns=47px under=155px",
+                "addOns=47px under=146px",
                 "addOns=152px under=auto",
-                "gameList=122px under=152px",
-                "gameList=122px under=32px"
+                "gameList=122px under=146px",
+                "gameList=122px under=50px"
             ],
             went.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries));
     }

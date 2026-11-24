@@ -136,6 +136,20 @@ function chooserListRoom(panelHeight, bottomPadding, listTop, belowTheList) {
     return room < 47 ? 47 : room;
 }
 
+// The height of the box the line under the screen scrolls in, for the room
+// left: as much of it as holds whole lines, and two lines at least. above is
+// the space before the first line, line the height of one.
+//
+// The room left is any number of pixels, and a box of that height cut its
+// last line through the middle: found measuring every look of the menu in
+// the real mshta on 24 November 2026, a long heading at Largest in Courier
+// New leaving the disc check's sentence half a line short.
+function aBoxOfWholeLines(room, above, line) {
+    var lines = Math.floor((room - above) / line);
+
+    return above + (lines < 2 ? 2 : lines) * line;
+}
+
 // Which screen the menu opens on.
 //
 // One game and it opens on that game, because a chooser offering one choice is

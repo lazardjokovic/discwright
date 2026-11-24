@@ -375,8 +375,10 @@ function fitAboveWhatIsBelow(listId, belowId) {
     // long line never runs off the panel either. Two lines at least.
     room = panel - 28 - under.offsetTop;
 
+    // In whole lines, so the last one showing is never cut through the
+    // middle: 18 above the first, as #stillWanted's margin, and 16 a line.
     if (under.scrollHeight > room) {
-        under.style.height = (room < 32 ? 32 : room) + "px";
+        under.style.height = aBoxOfWholeLines(room, 18, 16) + "px";
     }
 }
 
