@@ -1191,17 +1191,35 @@ function cornerIsAtTheBottom(look) {
 // reads the same either way. A box is 28 with a border of one all round,
 // sixteen from the edges and six from its neighbour, which is where the two
 // of them have always been on a menu with its list on the right.
+//
+// On a menu with no frame the window's own cross is in the top right corner,
+// 24 wide and 6 from the edge, so a row there stops 6 short of it. Before
+// that it sat on the cross: the owner, 24 November 2026, "button X goes over
+// small buttons".
 function whereACornerButtonGoes(look, place, howMany) {
     var box = 30;
     var edge = 16;
     var step = box + 6;
+    var right = 760 - edge - (theCrossIsInTheCorner(look) ? CLEAR_OF_THE_CROSS : 0);
 
     return {
         left: listIsOnTheLeft(look)
-            ? 760 - edge - box - step * (howMany - 1 - place)
+            ? right - box - step * (howMany - 1 - place)
             : edge + step * place,
         top: cornerIsAtTheBottom(look) ? 480 - edge - box : edge
     };
+}
+
+// How much further in from the right a row in the top right corner sits on
+// a menu with no frame: the cross is 6 from the edge and 24 wide, and the
+// row keeps 6 from it, so it ends 36 from the edge where it ended 16.
+var CLEAR_OF_THE_CROSS = 20;
+
+// Whether a row against the right edge would share the top right corner
+// with the cross of a menu with no frame. Only a row whose list is on the
+// left is ever against the right edge, so that is the only row it moves.
+function theCrossIsInTheCorner(look) {
+    return theWindowHasNoFrame(look) && !cornerIsAtTheBottom(look);
 }
 
 // What to run once a game has been copied, or nothing.
