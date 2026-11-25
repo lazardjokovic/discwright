@@ -1515,48 +1515,54 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <DockPanel Margin="0,6,0,0"
-                               Visibility="{Binding Notices[Worry], Converter={StaticResource WhenSo}}">
-                        <Button DockPanel.Dock="Right"
-                            Style="{StaticResource PutAside}"
-                            Tag="Worry"
-                            Click="PutTheNoticeAside"
-                            ToolTip="Hide this until it says something else"
-                            AutomationProperties.Name="Hide this until it says something else"
-                            AutomationProperties.AutomationId="PutAsideWorry" />
-                        <TextBlock Foreground="{DynamicResource WorryInk}"
-                                   FontSize="12"
-                                   TextWrapping="Wrap"
-                                   Text="{Binding Worry.Headline}"
-                                   ToolTip="{Binding Worry.Because}"
-                                   AutomationProperties.AutomationId="Worry" />
-                    </DockPanel>
+                    <!-- The worry whole, headline, figures and its way out,
+                         so its cross hides all of it. Only the headline went,
+                         the first time it was pressed in the real window, and
+                         the name typed and "Rename the disc" stayed behind
+                         under nothing. -->
+                    <StackPanel Visibility="{Binding Notices[Worry], Converter={StaticResource WhenSo}}"
+                                AutomationProperties.AutomationId="TheWorry">
+                        <DockPanel Margin="0,6,0,0">
+                            <Button DockPanel.Dock="Right"
+                                    Style="{StaticResource PutAside}"
+                                    Tag="Worry"
+                                    Click="PutTheNoticeAside"
+                                    ToolTip="Hide this until it says something else"
+                                    AutomationProperties.Name="Hide this until it says something else"
+                                    AutomationProperties.AutomationId="PutAsideWorry" />
+                            <TextBlock Foreground="{DynamicResource WorryInk}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Text="{Binding Worry.Headline}"
+                                       ToolTip="{Binding Worry.Because}"
+                                       AutomationProperties.AutomationId="Worry" />
+                        </DockPanel>
 
-                    <!-- A worry carries figures too, and the one that has
-                         them is the one that needs them most: it shows the
-                         name you typed beside the name the disc will really
-                         show, which is what makes the decision obvious. -->
-                    <ItemsControl Margin="0,4,0,0"
-                                  ItemsSource="{Binding Worry.Figures}"
-                                  Visibility="{Binding Worry.Figures.Count, Converter={StaticResource WhenSome}}"
-                                  AutomationProperties.AutomationId="WorryFigures">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
-                                    <TextBlock Style="{StaticResource Aside}"
-                                               Text="{Binding Label}"
-                                               AutomationProperties.Name="{Binding Label}" />
-                                    <TextBlock Margin="6,0,0,0"
-                                               FontSize="12"
-                                               FontWeight="SemiBold"
-                                               Foreground="{DynamicResource Ink}"
-                                               Text="{Binding Value}"
-                                               AutomationProperties.Name="{Binding Value}" />
+                        <!-- A worry carries figures too, and the one that has
+                             them is the one that needs them most: it shows the
+                             name you typed beside the name the disc will really
+                             show, which is what makes the decision obvious. -->
+                        <ItemsControl Margin="0,4,0,0"
+                                      ItemsSource="{Binding Worry.Figures}"
+                                      Visibility="{Binding Worry.Figures.Count, Converter={StaticResource WhenSome}}"
+                                      AutomationProperties.AutomationId="WorryFigures">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,18,0">
+                                        <TextBlock Style="{StaticResource Aside}"
+                                                   Text="{Binding Label}"
+                                                   AutomationProperties.Name="{Binding Label}" />
+                                        <TextBlock Margin="6,0,0,0"
+                                                   FontSize="12"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource Ink}"
+                                                   Text="{Binding Value}"
+                                                   AutomationProperties.Name="{Binding Value}" />
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -1572,6 +1578,7 @@
                             Visibility="{Binding WhatTheWorrysWayOutIsCalled, Converter={StaticResource WhenAnything}}"
                             Click="TakeTheWorrysWayOut"
                             AutomationProperties.AutomationId="TheWorrysWayOut" />
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">

@@ -823,11 +823,16 @@ public class TheWindowsMarkup
             // line put aside cannot be shown by a binding left behind.
             Assert.Null(line.Attribute("Visibility"));
 
+            // The line and its cross share a row.
             XElement panel = line.Parent!;
             Assert.Equal(Xaml + "DockPanel", panel.Name);
+
+            // And what hides is the nearest thing above the line that can be
+            // hidden: that row, or for the worry, the worry whole.
+            XElement hides = line.Ancestors().First(each => each.Attribute("Visibility") is not null);
             Assert.Equal(
                 "{Binding Notices[" + which + "], Converter={StaticResource WhenSo}}",
-                (string?)panel.Attribute("Visibility"));
+                (string?)hides.Attribute("Visibility"));
 
             XElement cross = Assert.Single(panel.Elements(Xaml + "Button"));
             Assert.Equal(which, (string?)cross.Attribute("Tag"));
@@ -839,6 +844,15 @@ public class TheWindowsMarkup
                 "Hide this until it says something else",
                 (string?)cross.Attribute("AutomationProperties.Name"));
         }
+
+        // The worry's figures and its way out go with it. The first press of
+        // its cross in the real window, 25 November 2026, hid the headline
+        // alone and left "you typed" and "Rename the disc" under nothing.
+        XElement worry = Assert.Single(Window().Descendants(), each => IdOf(each) == "TheWorry");
+        Assert.Equal("{Binding Notices[Worry], Converter={StaticResource WhenSo}}", (string?)worry.Attribute("Visibility"));
+        Assert.Contains(worry.Descendants(), each => IdOf(each) == "Worry");
+        Assert.Contains(worry.Descendants(), each => IdOf(each) == "WorryFigures");
+        Assert.Contains(worry.Descendants(), each => IdOf(each) == "TheWorrysWayOut");
 
         // And every amber line on the window is one of them, so a new one
         // added without a cross is caught here.
