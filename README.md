@@ -12,10 +12,10 @@ The way PC games came in a box.
 
 **From the [Microsoft Store](https://apps.microsoft.com/detail/9NS2FK1N3KKC).** Microsoft signs the Store copy, so Windows opens it without a warning, and the Store keeps it up to date.
 
-**Or from GitHub, [DiscWright 2.0.5 for Windows](../../releases/latest):**
+**Or from GitHub, [DiscWright 2.0.6 for Windows](../../releases/latest):**
 
-- **`DiscWright-2.0.5-setup.exe`** installs it for your user only, with no administrator prompt, and adds it to the Start menu.
-- **`DiscWright-2.0.5-portable.exe`** is the same app as one file. Put it anywhere and double-click it. Nothing is installed; like the installed app, it keeps its log in `%LOCALAPPDATA%\DiscWright`.
+- **`DiscWright-2.0.6-setup.exe`** installs it for your user only, with no administrator prompt, and adds it to the Start menu.
+- **`DiscWright-2.0.6-portable.exe`** is the same app as one file. Put it anywhere and double-click it. Nothing is installed; like the installed app, it keeps its log in `%LOCALAPPDATA%\DiscWright`.
 
 Windows 10 or 11, 64-bit. Everything the app needs is inside it; there is nothing else to install.
 
