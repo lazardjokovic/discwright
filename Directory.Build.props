@@ -26,8 +26,12 @@
       2.0.5 on 2026-11-22: several games sharing one set, the look of the
       menu chosen, and a build that can be stopped and asks before it
       overwrites or runs out of room.
+
+      2.0.6 on 2026-11-25: a set's copy can be stopped, a menu with no
+      frame can be minimised, text size and any colour for the menu, each
+      game's manual on disc 1 of a set, and images of deep folders.
     -->
-    <Version>2.0.5</Version>
+    <Version>2.0.6</Version>
 
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
