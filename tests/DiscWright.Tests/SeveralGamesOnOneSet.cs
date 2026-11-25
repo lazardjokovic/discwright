@@ -86,21 +86,26 @@ public sealed class SeveralGamesOnOneSet : IDisposable
 
         Assert.Equal(
             [
-                // Alan Wake's installer and both parts: 1 + 4000 + 3790.
-                @"01 - Alan Wake\setup_alan_wake.exe|01 - Alan Wake\setup_alan_wake-1.bin|01 - Alan Wake\setup_alan_wake-2.bin",
+                // Alan Wake's installer and both parts: 1 + 4000 + 3790. And
+                // Dead Space's manual, 3, moved here once the plan was made:
+                // disc 1 had the room, and disc 1 is where somebody chooses.
+                @"01 - Alan Wake\setup_alan_wake.exe|01 - Alan Wake\setup_alan_wake-1.bin|01 - Alan Wake\setup_alan_wake-2.bin"
+                    + @"|02 - Dead Space\Manual\deadspace_manual.zip",
 
-                // Its own extras, which did not fit after them, then Dead
-                // Space as far as it goes: 1210 + 28 + 3910.
+                // Alan Wake's own extras, which did not fit after them and
+                // have no room on disc 1, then Dead Space as far as it goes:
+                // 1210 + 28 + 3910.
                 @"01 - Alan Wake\Extras\alan_wake_extras.zip|02 - Dead Space\setup_dead_space.exe|02 - Dead Space\setup_dead_space-1.bin",
 
-                // The rest of it, its own, and all of Hollow Knight.
-                @"02 - Dead Space\setup_dead_space-2.bin|02 - Dead Space\setup_dead_space-3.bin|02 - Dead Space\Manual\deadspace_manual.zip"
+                // The rest of it, and all of Hollow Knight, exactly where they
+                // were before the manual moved: moving it never moves a game.
+                @"02 - Dead Space\setup_dead_space-2.bin|02 - Dead Space\setup_dead_space-3.bin"
                     + @"|03 - Hollow Knight\setup_hollow_knight.exe|03 - Hollow Knight\Add-ons\patch_hollow_knight_1_to_2.exe"
                     + @"|03 - Hollow Knight\Add-ons\patch_hollow_knight_2_to_3.exe",
             ],
             set.Layout.Discs.Select(disc => string.Join("|", disc.Files.Select(file => file.RelativePath))));
 
-        Assert.Equal([7791L, 5148L, 6018L], set.Layout.Discs.Select(disc => disc.Bytes));
+        Assert.Equal([7794L, 5148L, 6015L], set.Layout.Discs.Select(disc => disc.Bytes));
         Assert.All(set.Layout.Discs, disc => Assert.True(disc.Bytes <= 7920));
     }
 
@@ -110,14 +115,17 @@ public sealed class SeveralGamesOnOneSet : IDisposable
         PlannedBuild plan = Planned(TheOwnersThree(), room: 7920);
         PlannedOutput set = plan.Outputs[0];
 
+        // By what installs: Alan Wake's extras on disc 2 and Dead Space's
+        // manual on disc 1 are for reading, and do not make either game
+        // a game of that disc.
         Assert.Equal(
-            "Disc 1: Alan Wake. Disc 2: Alan Wake, Dead Space. Disc 3: Dead Space, Hollow Knight.",
+            "Disc 1: Alan Wake. Disc 2: Dead Space. Disc 3: Dead Space, Hollow Knight.",
             plan.WhereEachGameGoes);
 
-        Assert.Equal([1, 2], set.DiscsOf(set.Games[0]));
+        Assert.Equal([1], set.DiscsOf(set.Games[0]));
         Assert.Equal([2, 3], set.DiscsOf(set.Games[1]));
         Assert.Equal([3], set.DiscsOf(set.Games[2]));
-        Assert.Equal(["Alan Wake", "Dead Space"], set.GamesOn(set.Layout.Discs[1]).Select(game => game.Name));
+        Assert.Equal(["Dead Space"], set.GamesOn(set.Layout.Discs[1]).Select(game => game.Name));
     }
 
     [Fact]
@@ -289,6 +297,152 @@ public sealed class SeveralGamesOnOneSet : IDisposable
         Assert.Equal([2, 3, 4], set.DiscsOf(set.Games[1]).Where(disc => disc > 1));
     }
 
+    // --------------------------------- each game's own, moved earlier when there is room
+
+    /// <summary>A disc of 1000, laid down in this order, and the plan it makes.</summary>
+    private static DiscLayout PlanOf(params PlanFile[] files) =>
+        Assert.IsType<Outcome<DiscLayout>.Ok>(DiscPlanner.Plan(new PlanRequest(
+            files, ADisc(1000), Overhead, 0, MayCutFiles: false, EachGamesOwnIsPlaced: true))).Value;
+
+    private static string[] Discs(DiscLayout layout) =>
+        [.. layout.Discs.Select(disc => disc.Number + ": " + string.Join(", ", disc.Files.Select(file => file.RelativePath)) + " (" + disc.Bytes + ")")];
+
+    private static PlanFile Own(string path, long bytes, string near) =>
+        new(path, @"C:\own\" + path, bytes, KeepWhole: true, EarlierWhenThereIsRoom: true, Near: near);
+
+    [Fact]
+    public void A_games_own_moves_to_disc_1_when_disc_1_has_the_room()
+    {
+        // The owner, 25 November 2026: disc 1 is where somebody goes through
+        // the games, and wants a game's manual before choosing it.
+        DiscLayout layout = PlanOf(
+            new PlanFile(@"01 - A\a.bin", @"C:\a", 700),
+            new PlanFile(@"02 - B\b1.bin", @"C:\b1", 900),
+            new PlanFile(@"02 - B\b2.bin", @"C:\b2", 800),
+            Own(@"02 - B\Manual\b.pdf", 50, "02 - B"));
+
+        Assert.Equal(
+            [@"1: 01 - A\a.bin, 02 - B\Manual\b.pdf (750)", @"2: 02 - B\b1.bin (900)", @"3: 02 - B\b2.bin (800)"],
+            Discs(layout));
+    }
+
+    [Fact]
+    public void Without_room_on_disc_1_it_goes_to_the_games_own_first_disc_when_that_is_earlier()
+    {
+        DiscLayout layout = PlanOf(
+            new PlanFile(@"01 - A\a.bin", @"C:\a", 990),
+            new PlanFile(@"02 - B\b1.bin", @"C:\b1", 900),
+            new PlanFile(@"02 - B\b2.bin", @"C:\b2", 800),
+            Own(@"02 - B\Manual\b.pdf", 50, "02 - B"));
+
+        Assert.Equal(
+            [@"1: 01 - A\a.bin (990)", @"2: 02 - B\b1.bin, 02 - B\Manual\b.pdf (950)", @"3: 02 - B\b2.bin (800)"],
+            Discs(layout));
+    }
+
+    [Fact]
+    public void With_no_room_earlier_it_stays_where_the_plan_put_it()
+    {
+        DiscLayout layout = PlanOf(
+            new PlanFile(@"01 - A\a.bin", @"C:\a", 990),
+            new PlanFile(@"02 - B\b1.bin", @"C:\b1", 990),
+            new PlanFile(@"02 - B\b2.bin", @"C:\b2", 800),
+            Own(@"02 - B\Manual\b.pdf", 50, "02 - B"));
+
+        Assert.Equal(
+            [@"1: 01 - A\a.bin (990)", @"2: 02 - B\b1.bin (990)", @"3: 02 - B\b2.bin, 02 - B\Manual\b.pdf (850)"],
+            Discs(layout));
+    }
+
+    [Fact]
+    public void A_disc_a_move_leaves_empty_goes_and_the_rest_close_up()
+    {
+        // The artbook alone on a disc of its own, which disc 1 had room for.
+        DiscLayout layout = PlanOf(
+            new PlanFile(@"01 - A\a.bin", @"C:\a", 500),
+            new PlanFile(@"02 - B\b.bin", @"C:\b", 900),
+            Own(@"02 - B\Extras\artbook.zip", 400, "02 - B"));
+
+        Assert.Equal([@"1: 01 - A\a.bin, 02 - B\Extras\artbook.zip (900)", @"2: 02 - B\b.bin (900)"], Discs(layout));
+        Assert.Equal([1, 2], layout.Discs.Select(disc => disc.Number));
+    }
+
+    [Fact]
+    public void Several_take_disc_1_in_the_order_of_the_list_as_long_as_it_has_room()
+    {
+        DiscLayout layout = PlanOf(
+            new PlanFile(@"01 - A\a.bin", @"C:\a", 600),
+            Own(@"01 - A\Manual\a.pdf", 300, "01 - A"),
+            new PlanFile(@"02 - B\b.bin", @"C:\b", 900),
+            Own(@"02 - B\Manual\b.pdf", 50, "02 - B"),
+            new PlanFile(@"03 - C\c.bin", @"C:\c", 950),
+            Own(@"03 - C\Manual\c.pdf", 80, "03 - C"));
+
+        // A's manual is on disc 1 already. B's fits beside it, 950. C's does
+        // not, and C's first disc is earlier than the one its manual is on,
+        // but has no room either, so it stays.
+        Assert.Equal(
+            [
+                @"1: 01 - A\a.bin, 01 - A\Manual\a.pdf, 02 - B\Manual\b.pdf (950)",
+                @"2: 02 - B\b.bin (900)",
+                @"3: 03 - C\c.bin (950)",
+                @"4: 03 - C\Manual\c.pdf (80)",
+            ],
+            Discs(layout));
+    }
+
+    [Theory]
+    [InlineData(100L, 300L, 900L, 50L)]
+    [InlineData(950L, 40L, 990L, 10L)]
+    [InlineData(400L, 700L, 600L, 450L)]
+    [InlineData(10L, 980L, 20L, 990L)]
+    public void Moving_a_games_own_never_moves_a_game(long a, long aOwn, long b, long bOwn)
+    {
+        PlanFile[] files =
+        [
+            new(@"01 - A\a1.bin", @"C:\a1", a),
+            new(@"01 - A\a2.bin", @"C:\a2", 600),
+            Own(@"01 - A\Extras\a.zip", aOwn, "01 - A"),
+            new(@"02 - B\b1.bin", @"C:\b1", b),
+            new(@"02 - B\b2.bin", @"C:\b2", 500),
+            Own(@"02 - B\Manual\b.pdf", bOwn, "02 - B"),
+        ];
+
+        // The same plan with nothing moved: exactly how it always was.
+        DiscLayout moved = PlanOf(files);
+        DiscLayout asItWas = PlanOf([.. files.Select(file => file with { EarlierWhenThereIsRoom = false })]);
+
+        string[] GameFiles(DiscLayout layout) =>
+            [.. layout.Discs.SelectMany(disc => disc.Files.Where(file => !file.GoesWhole).Select(file => disc.Number + " " + file.RelativePath))];
+
+        // Every file that installs is on the same disc, in the same order.
+        Assert.Equal(GameFiles(asItWas), GameFiles(moved));
+
+        // Never more discs, and nothing over the room.
+        Assert.True(moved.Discs.Count <= asItWas.Discs.Count);
+        Assert.All(moved.Discs, disc => Assert.True(disc.Bytes <= 1000, $"disc {disc.Number} holds {disc.Bytes}"));
+
+        // And each own is no later than it was.
+        int WhereIs(DiscLayout layout, string path) => layout.Discs.First(disc => disc.Files.Any(file => file.RelativePath == path)).Number;
+
+        Assert.True(WhereIs(moved, @"01 - A\Extras\a.zip") <= WhereIs(asItWas, @"01 - A\Extras\a.zip"));
+        Assert.True(WhereIs(moved, @"02 - B\Manual\b.pdf") <= WhereIs(asItWas, @"02 - B\Manual\b.pdf"));
+    }
+
+    [Fact]
+    public void A_game_whose_own_is_on_disc_1_is_on_disc_1_only_when_something_of_it_that_installs_is()
+    {
+        GameFolder first = AGame("First", 600);
+        GameFolder second = AGame("Second", 900) with { Own = [AnOwn(@"C:\own\second book.pdf", GameExtraKind.Manual)] };
+
+        PlannedOutput set = Assert.Single(Planned(new DiscProject("TWO", [first, second], new DiscOptions()), room: 1000, _ => 100).Outputs);
+
+        // Second's book went to disc 1, beside First; Second itself is on disc 2.
+        Assert.Contains(set.Layout.Discs[0].Files, file => file.RelativePath == @"02 - Second\Manual\second book.pdf");
+        Assert.Equal(["First"], set.GamesOn(set.Layout.Discs[0]).Select(game => game.Name));
+        Assert.Equal([2], set.DiscsOf(set.Games[1]));
+    }
+
     [Fact]
     public void The_planner_keeps_a_whole_thing_whole_and_says_so_in_what_it_hands_back()
     {
@@ -361,13 +515,15 @@ public sealed class SeveralGamesOnOneSet : IDisposable
         Assert.Equal(
             ["setup_alan_wake-1.bin", "setup_alan_wake-2.bin", "setup_alan_wake.exe"],
             FilesUnder(built.Discs[0], "01 - Alan Wake"));
-        Assert.False(Directory.Exists(Path.Combine(built.Discs[0].Folder, "02 - Dead Space")));
+
+        // Of Dead Space, only its manual is on disc 1, to read there.
+        Assert.Equal([@"Manual\deadspace_manual.zip"], FilesUnder(built.Discs[0], "02 - Dead Space"));
 
         Assert.Equal([@"Extras\alan_wake_extras.zip"], FilesUnder(built.Discs[1], "01 - Alan Wake"));
         Assert.Equal(["setup_dead_space-1.bin", "setup_dead_space.exe"], FilesUnder(built.Discs[1], "02 - Dead Space"));
 
         Assert.Equal(
-            [@"Manual\deadspace_manual.zip", "setup_dead_space-2.bin", "setup_dead_space-3.bin"],
+            ["setup_dead_space-2.bin", "setup_dead_space-3.bin"],
             FilesUnder(built.Discs[2], "02 - Dead Space"));
         Assert.Equal(
             [@"Add-ons\patch_hollow_knight_1_to_2.exe", @"Add-ons\patch_hollow_knight_2_to_3.exe", "setup_hollow_knight.exe"],
@@ -416,11 +572,13 @@ public sealed class SeveralGamesOnOneSet : IDisposable
         Assert.Equal(3, built.Discs.Count);
         Assert.All(built.Discs, disc => Assert.True(Directory.EnumerateFiles(disc.Folder, "collection manual.pdf", SearchOption.AllDirectories).Any()));
 
+        // Once each: Alan Wake's extras where the plan put them, since disc 1
+        // has no room for them, and Dead Space's manual on disc 1.
         Assert.Equal(
             [false, true, false],
             built.Discs.Select(disc => Directory.EnumerateFiles(disc.Folder, "alan_wake_extras.zip", SearchOption.AllDirectories).Any()));
         Assert.Equal(
-            [false, false, true],
+            [true, false, false],
             built.Discs.Select(disc => Directory.EnumerateFiles(disc.Folder, "deadspace_manual.zip", SearchOption.AllDirectories).Any()));
     }
 

@@ -172,8 +172,15 @@ public static class WhatWouldBeMade
             files.AddRange(AddOnsOf(project, games, at).Select(each =>
                 new PlanFile(each.RelativePath, each.Source, each.Bytes)));
 
-            files.AddRange(game.OwnOrNone.Select(own =>
-                new PlanFile(own.OnTheDisc(folder), own.Path, sizeOf(own.Path), KeepWhole: true)));
+            // Its own manual and extras, whole, after its files as they always
+            // were, and then moved to disc 1 when there is room: disc 1 is
+            // where somebody goes through the games and wants to read about
+            // one before choosing it. Until 25 November 2026 they stayed here,
+            // which put Dead Space's manual on the last disc of the owner's
+            // set, and the menu on disc 1 asked for disc 3 to open it. See
+            // PlanFile.EarlierWhenThereIsRoom.
+            files.AddRange(game.OwnOrNone.Select(own => new PlanFile(
+                own.OnTheDisc(folder), own.Path, sizeOf(own.Path), KeepWhole: true, EarlierWhenThereIsRoom: true, Near: folder)));
         }
 
         return new PlanRequest(
@@ -477,9 +484,14 @@ public sealed record PlannedOutput(
         {
             string folder = OnTheDisc.FolderFor(at + 1, Games[at], Games.Count);
 
-            // One game is the disc: everything on it is that game's.
+            // One game is the disc: everything on it is that game's. With
+            // several, a game is on a disc when something of it that installs
+            // is there: its own manual and extras may sit on disc 1 for
+            // reading, and a game whose installer is all on disc 3 is not on
+            // disc 1 for that.
             if (folder.Length == 0
-                || disc.Files.Any(file => file.RelativePath.StartsWith(folder + (char)92, StringComparison.OrdinalIgnoreCase)))
+                || disc.Files.Any(file => !file.GoesWhole
+                    && file.RelativePath.StartsWith(folder + (char)92, StringComparison.OrdinalIgnoreCase)))
             {
                 there.Add(Games[at]);
             }

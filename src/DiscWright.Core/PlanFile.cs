@@ -18,4 +18,26 @@ namespace DiscWright.Core;
 /// The planner still knows nothing about what it is, only that it will not
 /// divide.
 /// </param>
-public sealed record PlanFile(string RelativePath, string Source, long Bytes, bool KeepWhole = false);
+/// <param name="EarlierWhenThereIsRoom">
+/// Laid down in the order of the list like every file, and then, once every
+/// disc is planned, moved to disc 1 when disc 1 has the room, or else to the
+/// first disc of the game it belongs to when that is earlier and has it. A
+/// game's own manual and extras on a set several games share: disc 1 is where
+/// somebody goes through the games and wants to read about one before
+/// choosing it. Moved after the plan and never before it, so every game's
+/// installer is on exactly the discs it would have been on, and no game
+/// installs any worse for its manual being easy to reach. Taken out of the
+/// list first, a game could start a disc earlier and spread over one more
+/// disc, measured on 25 November 2026. The owner asked for it that day, after
+/// a real set put Dead Space's manual on disc 3.
+/// </param>
+/// <param name="Near">
+/// The folder of the game it belongs to, to find that game's first disc by.
+/// </param>
+public sealed record PlanFile(
+    string RelativePath,
+    string Source,
+    long Bytes,
+    bool KeepWhole = false,
+    bool EarlierWhenThereIsRoom = false,
+    string Near = "");

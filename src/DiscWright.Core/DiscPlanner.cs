@@ -70,6 +70,51 @@ public static class DiscPlanner
         return number.Length > 0 && number.All(char.IsAsciiDigit) ? piecePath[..at] : piecePath;
     }
 
+    /// <summary>
+    /// Moves a planned file to disc 1 when disc 1 has room for it, or else to
+    /// the first disc of the game it is near when that is earlier than where
+    /// it is and has room. Otherwise it stays where the plan put it.
+    /// </summary>
+    private static void MoveEarlierIfThereIsRoom(List<PlannedDisc> discs, PlanFile file, long room)
+    {
+        int now = discs.FindIndex(disc => disc.Files.Any(each => each.RelativePath == file.RelativePath));
+
+        if (now <= 0)
+        {
+            return;
+        }
+
+        PlannedFile moving = discs[now].Files.First(each => each.RelativePath == file.RelativePath);
+        bool Fits(int at) => discs[at].Bytes + moving.Bytes <= room;
+
+        int to = -1;
+
+        if (Fits(0))
+        {
+            to = 0;
+        }
+        else if (file.Near.Length > 0)
+        {
+            string prefix = file.Near + (char)92;
+            int first = discs.FindIndex(disc => disc.Files.Any(each =>
+                !each.GoesWhole && each.RelativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+
+            if (first >= 0 && first < now && Fits(first))
+            {
+                to = first;
+            }
+        }
+
+        if (to < 0)
+        {
+            return;
+        }
+
+        PlannedDisc leaving = discs[now];
+        discs[now] = leaving with { Files = [.. leaving.Files.Where(each => !ReferenceEquals(each, moving))], Bytes = leaving.Bytes - moving.Bytes };
+        discs[to] = discs[to] with { Files = [.. discs[to].Files, moving], Bytes = discs[to].Bytes + moving.Bytes };
+    }
+
     public static Outcome<DiscLayout> Plan(PlanRequest request)
     {
         long room = request.Medium.Capacity - request.OverheadPerDisc;
@@ -217,6 +262,16 @@ public static class DiscPlanner
         {
             FinishThisDisc();
         }
+
+        // Then what is better earlier, moved there once every game is down:
+        // see PlanFile.EarlierWhenThereIsRoom.
+        foreach (PlanFile file in request.Files.Where(each => each.EarlierWhenThereIsRoom))
+        {
+            MoveEarlierIfThereIsRoom(discs, file, RoomHere());
+        }
+
+        // A disc a move left with nothing on it goes, and the rest close up.
+        discs = [.. discs.Where(disc => disc.Files.Count > 0).Select((disc, at) => disc with { Number = at + 1 })];
 
         return new DiscLayout(discs, room, reserved > 0, request.EachGamesOwnIsPlaced);
     }

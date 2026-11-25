@@ -273,7 +273,7 @@ public static class SetManifest
         if (where.Any(each => each.Reads.Length > 0))
         {
             line(string.Empty);
-            line("A game's own manual and extras are in its folder, on one disc with it:");
+            line("A game's own manual and extras are in its folder, on one disc of the set:");
             line(string.Empty);
 
             foreach ((SetGame game, int[] _, int[] reads) in where.Where(each => each.Reads.Length > 0))

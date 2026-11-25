@@ -971,11 +971,14 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
         string[] discs = await TheThreeGames(withAManualOfTheDiscsOwn: true);
 
         string[] said = Page(discs, 1,
-            // Lanternhold's manual is on disc 3.
+            // Lanternhold's manual is on disc 1 since 2.0.6, where there was
+            // room and where somebody chooses a game: it opens from there,
+            // and from disc 3, where the game ends, it says which disc.
             "showGame(1); openTheManual();\n"
-            + "out.push('manual from disc 1: ' + alerts.join(' / ') + ' | opened=' + started.concat(opened).length);\n"
-            + "alerts = []; putIn(3); openTheManual();\n"
-            + "out.push('manual with disc 3 in: ' + started.join(' + ') + ' | alerts=' + alerts.length);\n"
+            + "out.push('manual from disc 1: ' + started.join(' + ') + ' | alerts=' + alerts.length);\n"
+            + "started = []; putIn(3); openTheManual();\n"
+            + "out.push('manual with disc 3 in: ' + alerts.join(' / ') + ' | opened=' + started.concat(opened).length);\n"
+            + "alerts = [];\n"
 
             // Harbour Tales's extras are on disc 2.
             + "started = []; putIn(1); showGame(0); openTheExtras();\n"
@@ -994,8 +997,8 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
 
         Same(
             [
-                "manual from disc 1: The manual of Lanternhold is on disc 3. Put disc 3 in and press this again. | opened=0",
-                "manual with disc 3 in: <D3>/02 - Lanternhold/Manual/lanternhold_manual.zip | alerts=0",
+                "manual from disc 1: <D1>/02 - Lanternhold/Manual/lanternhold_manual.zip | alerts=0",
+                "manual with disc 3 in: The manual of Lanternhold is on disc 1. Put disc 1 in and press this again. | opened=0",
                 "extras from disc 1: The extras of Harbour Tales are on disc 2. Put disc 2 in and press this again. | opened=0",
                 "extras with disc 2 in: open <D2>/01 - Harbour Tales/Extras | alerts=0 line=(no line)",
                 "quiet orchard: manual=none",
@@ -1653,8 +1656,10 @@ public sealed class TheMenuOnASetSeveralGamesShare : IDisposable
                 "  Harbour Tales   disc 1\n  Lanternhold     discs 2 and 3\n  Quiet Orchard   disc 3\n",
                 list,
                 StringComparison.Ordinal);
+            // Lanternhold's manual is on disc 1, where there was room, and
+            // Harbour Tales' extras where the plan put them.
             Assert.Contains(
-                "A game's own manual and extras are in its folder, on one disc with it:\n\n  Harbour Tales   disc 2\n  Lanternhold     disc 3\n",
+                "A game's own manual and extras are in its folder, on one disc of the set:\n\n  Harbour Tales   disc 2\n  Lanternhold     disc 1\n",
                 list,
                 StringComparison.Ordinal);
             Assert.DoesNotContain("This disc cannot install the game on its own", list, StringComparison.Ordinal);
