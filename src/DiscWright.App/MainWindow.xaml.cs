@@ -1191,6 +1191,18 @@ public partial class MainWindow : Window
     /// <summary>
     /// Opens today's log, or the folder when today has nothing in it yet.
     /// </summary>
+    /// <summary>
+    /// Hides an amber line until it says something else, so a warning somebody
+    /// has read and decided about stops taking a line of the window.
+    /// </summary>
+    private void PutTheNoticeAside(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: string which })
+        {
+            _screen.Notices.PutAside(which);
+        }
+    }
+
     private void OpenTheLog(object sender, RoutedEventArgs e)
     {
         if (TheLog is not TheLogOnDisk log)

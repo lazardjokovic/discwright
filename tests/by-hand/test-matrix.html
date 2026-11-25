@@ -496,7 +496,7 @@
     except the one place noted in D.</p>
     <div class="panel" data-cases>
 
-      <div class="sub">The main window · 35 controls</div>
+      <div class="sub">The main window · 42 controls</div>
       <label class="case"><input type="checkbox" id="c1" data-controls="CheckForANewVersion"><span class="id">C1</span>
         <span class="what">Check for new version, first of the links under the name</span>
         <span class="look"><span class="live">Never grey.</span> It is the only way to ask, and one that
@@ -516,6 +516,12 @@
         <span class="look"><span class="live">Never grey.</span> Opens today's file in whatever opens text,
         or the log folder when nothing has been written today. After a burn the file names the drives, what they
         held, every question and its answer, and the files a read back failed on.</span></label>
+      <label class="case"><input type="checkbox" id="c1d" data-controls="PutAsideWhatTheDownloadsSay PutAsideAPatchWithNothingToPatch PutAsideWhoWearsTheSameName PutAsideWhatDidNotComeBack PutAsideWhyThatMatters PutAsideAboutTheDiscInTheDrive PutAsideWorry"><span class="id">C1d</span>
+        <span class="what">The small cross at the end of each amber line</span>
+        <span class="look"><span class="live">Shown whenever its line is.</span> Hides that line, and only that one.
+        It comes back the moment the line says something else: a different game, a different disc in the drive,
+        a different name. Start a new disc brings every line back. The line about the disc in the drive is not
+        shown at all for the disc just burned, until the drive is empty or holds a blank.</span></label>
       <label class="case"><input type="checkbox" id="c2" data-controls="StartANewDisc"><span class="id">C2</span>
         <span class="what">Start a new disc</span>
         <span class="look"><span class="grey">Grey</span> on a window with nothing on it, and during a

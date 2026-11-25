@@ -799,9 +799,73 @@ public class TheWindowsMarkup
         // spent by the time anybody finds out.
         Assert.Equal("{DynamicResource WorryInk}", (string?)said.Attribute("Foreground"));
 
+        // Shown by its panel, which can be put aside: see the crosses below.
         Assert.Equal(
-            "{Binding WhatTheDownloadsSay, Converter={StaticResource WhenAnything}}",
-            (string?)said.Attribute("Visibility"));
+            "{Binding Notices[WhatTheDownloadsSay], Converter={StaticResource WhenSo}}",
+            (string?)said.Parent!.Attribute("Visibility"));
+    }
+
+    [Fact]
+    public void Every_amber_line_has_a_cross_that_puts_that_line_aside()
+    {
+        // The owner, 25 November 2026: an amber line read and decided about
+        // can go, until it says something else. One test over all of them,
+        // because a cross tagged with the wrong name hides the wrong line,
+        // and a panel bound to the wrong name hides with somebody else's.
+        Assert.Equal(7, TheNotices.Names.Count);
+
+        foreach (string which in TheNotices.Names)
+        {
+            XElement line = Assert.Single(
+                Window().Descendants(Xaml + "TextBlock"), each => IdOf(each) == which);
+
+            // No visibility of its own: the panel's is the only one, so a
+            // line put aside cannot be shown by a binding left behind.
+            Assert.Null(line.Attribute("Visibility"));
+
+            // The line and its cross share a row.
+            XElement panel = line.Parent!;
+            Assert.Equal(Xaml + "DockPanel", panel.Name);
+
+            // And what hides is the nearest thing above the line that can be
+            // hidden: that row, or for the worry, the worry whole.
+            XElement hides = line.Ancestors().First(each => each.Attribute("Visibility") is not null);
+            Assert.Equal(
+                "{Binding Notices[" + which + "], Converter={StaticResource WhenSo}}",
+                (string?)hides.Attribute("Visibility"));
+
+            XElement cross = Assert.Single(panel.Elements(Xaml + "Button"));
+            Assert.Equal(which, (string?)cross.Attribute("Tag"));
+            Assert.Equal("PutTheNoticeAside", (string?)cross.Attribute("Click"));
+            Assert.Equal("{StaticResource PutAside}", (string?)cross.Attribute("Style"));
+            Assert.Equal("Right", (string?)cross.Attribute("DockPanel.Dock"));
+            Assert.Equal("PutAside" + which, IdOf(cross));
+            Assert.Equal(
+                "Hide this until it says something else",
+                (string?)cross.Attribute("AutomationProperties.Name"));
+        }
+
+        // The worry's figures and its way out go with it. The first press of
+        // its cross in the real window, 25 November 2026, hid the headline
+        // alone and left "you typed" and "Rename the disc" under nothing.
+        XElement worry = Assert.Single(Window().Descendants(), each => IdOf(each) == "TheWorry");
+        Assert.Equal("{Binding Notices[Worry], Converter={StaticResource WhenSo}}", (string?)worry.Attribute("Visibility"));
+        Assert.Contains(worry.Descendants(), each => IdOf(each) == "Worry");
+        Assert.Contains(worry.Descendants(), each => IdOf(each) == "WorryFigures");
+        Assert.Contains(worry.Descendants(), each => IdOf(each) == "TheWorrysWayOut");
+
+        // And every amber line on the window is one of them, so a new one
+        // added without a cross is caught here.
+        string[] amber =
+        [
+            .. Window().Descendants(Xaml + "TextBlock")
+                .Where(each => (string?)each.Attribute("Foreground") == "{DynamicResource WorryInk}")
+                .Select(IdOf)
+                .OfType<string>(),
+        ];
+
+        Assert.NotEmpty(amber);
+        Assert.All(amber, id => Assert.Contains(id, TheNotices.Names));
     }
 
     [Fact]
@@ -1916,8 +1980,8 @@ public class TheWindowsMarkup
         Assert.Equal("{DynamicResource WorryInk}", (string?)news.Attribute("Foreground"));
         Assert.Equal("Wrap", (string?)news.Attribute("TextWrapping"));
         Assert.Equal(
-            "{Binding WhatDidNotComeBack, Converter={StaticResource WhenAnything}}",
-            (string?)news.Attribute("Visibility"));
+            "{Binding Notices[WhatDidNotComeBack], Converter={StaticResource WhenSo}}",
+            (string?)news.Parent!.Attribute("Visibility"));
     }
 
     [Fact]

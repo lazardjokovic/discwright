@@ -130,6 +130,21 @@ public sealed class MakeADisc : INotifyPropertyChanged
     private IReadOnlyList<Recorder> _lastSeen = [];
 
     /// <summary>
+    /// The drive that holds the disc just written, until a look at the drives
+    /// finds it empty or holding a blank.
+    /// </summary>
+    /// <remarks>
+    /// A disc just written is read only, so the line under the size said "The
+    /// disc in D: is a DVD-ROM, read only" the moment a burn had gone well,
+    /// in amber, about the very disc the window had just made. The owner saw
+    /// it after the real three-DVD set on 25 November 2026. That disc is not
+    /// a blank somebody has put in by mistake, so it is not worth a word.
+    /// </remarks>
+    private string? _justWritten;
+
+    private TheNotices? _notices;
+
+    /// <summary>
     /// What each drive said about shutting its own tray, by letter.
     /// </summary>
     /// <remarks>
@@ -955,8 +970,23 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
     private void SayWhatIsInTheDrives(IReadOnlyList<Recorder>? drives = null)
     {
+        IReadOnlyList<Recorder> seen = drives ?? _lastSeen;
+
+        bool TheOneJustWritten(Recorder drive) =>
+            string.Equals(drive.Drive, _justWritten, StringComparison.OrdinalIgnoreCase);
+
+        // Only a fresh look can say the disc has gone: what was seen before
+        // the burn still has the blank in it.
+        if (drives is not null && _justWritten is not null
+            && drives.FirstOrDefault(TheOneJustWritten) is not Recorder { NothingInIt: false, MediaType: not 0, Blank: false })
+        {
+            _justWritten = null;
+        }
+
         string said = TheDiscsThatAreIn.WhatIsWorthSaying(
-            drives ?? _lastSeen, _medium, _theDrive?.Drive) ?? string.Empty;
+            _justWritten is null ? seen : [.. seen.Where(drive => !TheOneJustWritten(drive))],
+            _medium,
+            _theDrive?.Drive) ?? string.Empty;
 
         if (drives is not null)
         {
@@ -3905,6 +3935,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
         WhatDidNotComeBack = null;
         TheImages = [];
 
+        // Every amber line back: what was put aside was about the disc that
+        // has just gone.
+        Notices.Forget();
+
         foreach (string gone in new[]
         {
             nameof(Made), nameof(TheSetToBurn), nameof(AboutTheImage), nameof(ItWentWrong), nameof(HowTheDiscCameOut),
@@ -4234,6 +4268,10 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// </remarks>
     private async Task HowTheDiscCameBack(Recorder onto, WhichDisc which, CancellationToken ct)
     {
+        // Written, and back in the drive: see _justWritten.
+        _justWritten = onto.Drive;
+        SayWhatIsInTheDrives();
+
         switch (await _reading.HowItCameOut(onto, which, Made, ct))
         {
             case Outcome<DiscCheck>.Ok(DiscCheck how):
@@ -5732,5 +5770,38 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Reconsider();
     }
 
-    private void Tell(string? name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    private void Tell(string? name)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        // Through here, so an amber line whose words change is looked at
+        // again without each of the places that change it having to know.
+        if (_notices is not null && (name is null || TheNotices.Names.Contains(name)))
+        {
+            _notices.Look();
+        }
+    }
+
+    /// <summary>
+    /// The amber lines, and which of them somebody has put aside with the
+    /// small cross beside each one. See <see cref="TheNotices"/>.
+    /// </summary>
+    public TheNotices Notices => _notices ??= new TheNotices(TheWordsOf);
+
+    /// <summary>What an amber line says now, by the name of what it shows.</summary>
+    private string? TheWordsOf(string notice) => notice switch
+    {
+        nameof(WhatTheDownloadsSay) => WhatTheDownloadsSay,
+        nameof(APatchWithNothingToPatch) => APatchWithNothingToPatch,
+        nameof(WhoWearsTheSameName) => WhoWearsTheSameName,
+        nameof(WhatDidNotComeBack) => WhatDidNotComeBack,
+        nameof(WhyThatMatters) => WhyThatMatters,
+        nameof(AboutTheDiscInTheDrive) => AboutTheDiscInTheDrive,
+        // With its figures, because the headline is the same for every name
+        // Windows cannot show, and a different name is a different worry.
+        nameof(Worry) => Worry is Refusal worry
+            ? string.Join(" | ", [worry.Headline, .. worry.Figures.Select(figure => figure.Label + ": " + figure.Value)])
+            : null,
+        _ => null,
+    };
 }
