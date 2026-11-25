@@ -56,6 +56,56 @@ public class BurningOneDiscAndWatchingIt
     }
 
     [Fact]
+    public async Task The_disc_just_written_is_not_called_the_wrong_kind_until_it_has_come_out()
+    {
+        // The owner, 25 November 2026, after the real three-DVD set: the line
+        // under the size said in amber that the disc in the drive was read
+        // only, about the disc the window had just written and checked.
+        Recorder written = new("id-E", "E:", "A Drive", 1, false, 0, [750]);
+
+        // What it says about that disc in a window that did not write it.
+        AWindowWatched other = new();
+        other.Drives.Holds = written;
+        await other.Window.LookAtTheDrives();
+        Assert.StartsWith("The disc in E: is a CD-ROM", other.Window.AboutTheDiscInTheDrive, StringComparison.Ordinal);
+
+        AWindowWatched watched = new();
+        await watched.Burn();
+        watched.Drives.Holds = written;
+        await watched.Window.LookAtTheDrives();
+
+        Assert.Equal(string.Empty, watched.Window.AboutTheDiscInTheDrive);
+        Assert.False(watched.Window.TheDiscIsADifferentSize);
+        Assert.True(watched.Window.HowTheDiscCameOut?.Good);
+
+        // Out of the drive, and a disc like it put back in: one somebody chose
+        // to put there, and worth the word again.
+        watched.Drives.Holds = new("id-E", "E:", "A Drive", 0, false, 0, [750], NothingInIt: true);
+        await watched.Window.LookAtTheDrives();
+        watched.Drives.Holds = written;
+        await watched.Window.LookAtTheDrives();
+
+        Assert.Equal(other.Window.AboutTheDiscInTheDrive, watched.Window.AboutTheDiscInTheDrive);
+    }
+
+    [Fact]
+    public async Task A_blank_in_the_drive_after_a_burn_is_spoken_about_as_any_blank_is()
+    {
+        AWindowWatched watched = new();
+        await watched.Burn();
+
+        // A blank DVD in the drive that wrote a CD, with a CD chosen: the
+        // next disc, and the wrong size for the one being made.
+        watched.Window.Medium = Media.Cd;
+        watched.Drives.Holds = new("id-E", "E:", "A Drive", 9, true, 2_295_104, [750]);
+        await watched.Window.LookAtTheDrives();
+
+        Assert.Equal("CD", watched.Window.Medium.Key);
+
+        Assert.NotEqual(string.Empty, watched.Window.AboutTheDiscInTheDrive);
+    }
+
+    [Fact]
     public async Task A_disc_burned_takes_one_blank_of_its_size_off_the_count_and_writes_that_down()
     {
         // discwright#98: the count goes down as discs are written, so it is
@@ -383,7 +433,7 @@ public class BurningOneDiscAndWatchingIt
                 new NoEncoding(),
                 new ABuilderThatMakesADisc(this),
                 new ImagesThatWork(),
-                new OneBlankDisc(),
+                Drives,
                 Burner,
                 new AnEraserThatRefuses(),
                 new ADiskThatMatchesWhatWasBuilt(),
@@ -448,6 +498,8 @@ public class BurningOneDiscAndWatchingIt
         internal MakeADisc Window { get; }
 
         internal ABurnerThatSaysWhatItIsDoing Burner { get; } = new();
+
+        internal OneBlankDisc Drives { get; } = new();
 
         internal List<string> Said { get; } = [];
 
@@ -609,8 +661,10 @@ public class BurningOneDiscAndWatchingIt
 
     private sealed class OneBlankDisc : IFindRecorders
     {
-        public IReadOnlyList<Recorder> All() =>
-            [new("id-E", "E:", "A Drive", 2, true, 360_000, [750])];
+        /// <summary>What the drive holds, a blank CD-R until a test says otherwise.</summary>
+        internal Recorder Holds { get; set; } = new("id-E", "E:", "A Drive", 2, true, 360_000, [750]);
+
+        public IReadOnlyList<Recorder> All() => [Holds];
     }
 
     private sealed class AnEraserThatRefuses : IEraseDiscs

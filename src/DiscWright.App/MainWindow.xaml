@@ -253,55 +253,95 @@
 
                      Here rather than in a box when the game is added, because
                      a box is dismissed and the burn is an hour later. -->
-                <TextBlock DockPanel.Dock="Bottom"
+                <DockPanel DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource WorryInk}"
-                           Text="{Binding WhatTheDownloadsSay}"
-                           Visibility="{Binding WhatTheDownloadsSay, Converter={StaticResource WhenAnything}}"
-                           AutomationProperties.AutomationId="WhatTheDownloadsSay" />
+                           Visibility="{Binding Notices[WhatTheDownloadsSay], Converter={StaticResource WhenSo}}">
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource PutAside}"
+                            Tag="WhatTheDownloadsSay"
+                            Click="PutTheNoticeAside"
+                            ToolTip="Hide this until it says something else"
+                            AutomationProperties.Name="Hide this until it says something else"
+                            AutomationProperties.AutomationId="PutAsideWhatTheDownloadsSay" />
+                    <TextBlock TextWrapping="Wrap"
+                               Foreground="{DynamicResource WorryInk}"
+                               Text="{Binding WhatTheDownloadsSay}"
+                               AutomationProperties.AutomationId="WhatTheDownloadsSay" />
+                </DockPanel>
 
-                <TextBlock DockPanel.Dock="Bottom"
+                <DockPanel DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource WorryInk}"
-                           Text="{Binding APatchWithNothingToPatch}"
-                           Visibility="{Binding APatchWithNothingToPatch, Converter={StaticResource WhenAnything}}"
-                           AutomationProperties.AutomationId="APatchWithNothingToPatch" />
+                           Visibility="{Binding Notices[APatchWithNothingToPatch], Converter={StaticResource WhenSo}}">
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource PutAside}"
+                            Tag="APatchWithNothingToPatch"
+                            Click="PutTheNoticeAside"
+                            ToolTip="Hide this until it says something else"
+                            AutomationProperties.Name="Hide this until it says something else"
+                            AutomationProperties.AutomationId="PutAsideAPatchWithNothingToPatch" />
+                    <TextBlock TextWrapping="Wrap"
+                               Foreground="{DynamicResource WorryInk}"
+                               Text="{Binding APatchWithNothingToPatch}"
+                               AutomationProperties.AutomationId="APatchWithNothingToPatch" />
+                </DockPanel>
 
                 <!-- Two rows reading alike here are two menu buttons reading
                      alike on the burned disc. A notice and never a refusal:
                      two editions of one game are an ordinary thing to burn,
                      and what was asked for (discwright#98) was being told,
                      not being stopped. -->
-                <TextBlock DockPanel.Dock="Bottom"
+                <DockPanel DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource WorryInk}"
-                           Text="{Binding WhoWearsTheSameName}"
-                           Visibility="{Binding WhoWearsTheSameName, Converter={StaticResource WhenAnything}}"
-                           AutomationProperties.AutomationId="WhoWearsTheSameName" />
+                           Visibility="{Binding Notices[WhoWearsTheSameName], Converter={StaticResource WhenSo}}">
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource PutAside}"
+                            Tag="WhoWearsTheSameName"
+                            Click="PutTheNoticeAside"
+                            ToolTip="Hide this until it says something else"
+                            AutomationProperties.Name="Hide this until it says something else"
+                            AutomationProperties.AutomationId="PutAsideWhoWearsTheSameName" />
+                    <TextBlock TextWrapping="Wrap"
+                               Foreground="{DynamicResource WorryInk}"
+                               Text="{Binding WhoWearsTheSameName}"
+                               AutomationProperties.AutomationId="WhoWearsTheSameName" />
+                </DockPanel>
 
                 <!-- What the opened project named that is no longer where it
                      left it, discwright#98. The games that did not come back
                      cannot be rows, so this line is their only trace. It used
                      to be a box, and a box is gone at OK while the games are
                      still gone an hour later. -->
-                <TextBlock DockPanel.Dock="Bottom"
+                <DockPanel DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource WorryInk}"
-                           Text="{Binding WhatDidNotComeBack}"
-                           Visibility="{Binding WhatDidNotComeBack, Converter={StaticResource WhenAnything}}"
-                           AutomationProperties.AutomationId="WhatDidNotComeBack" />
+                           Visibility="{Binding Notices[WhatDidNotComeBack], Converter={StaticResource WhenSo}}">
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource PutAside}"
+                            Tag="WhatDidNotComeBack"
+                            Click="PutTheNoticeAside"
+                            ToolTip="Hide this until it says something else"
+                            AutomationProperties.Name="Hide this until it says something else"
+                            AutomationProperties.AutomationId="PutAsideWhatDidNotComeBack" />
+                    <TextBlock TextWrapping="Wrap"
+                               Foreground="{DynamicResource WorryInk}"
+                               Text="{Binding WhatDidNotComeBack}"
+                               AutomationProperties.AutomationId="WhatDidNotComeBack" />
+                </DockPanel>
 
-                <TextBlock DockPanel.Dock="Bottom"
+                <DockPanel DockPanel.Dock="Bottom"
                            Margin="0,2,0,0"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource WorryInk}"
-                           Text="{Binding WhyThatMatters}"
-                           Visibility="{Binding WhyThatMatters, Converter={StaticResource WhenAnything}}"
-                           AutomationProperties.AutomationId="WhyThatMatters" />
+                           Visibility="{Binding Notices[WhyThatMatters], Converter={StaticResource WhenSo}}">
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource PutAside}"
+                            Tag="WhyThatMatters"
+                            Click="PutTheNoticeAside"
+                            ToolTip="Hide this until it says something else"
+                            AutomationProperties.Name="Hide this until it says something else"
+                            AutomationProperties.AutomationId="PutAsideWhyThatMatters" />
+                    <TextBlock TextWrapping="Wrap"
+                               Foreground="{DynamicResource WorryInk}"
+                               Text="{Binding WhyThatMatters}"
+                               AutomationProperties.AutomationId="WhyThatMatters" />
+                </DockPanel>
 
                 <!-- A disc that copies a folder rather than starting it is a
                      thing somebody may well mean to make, so this is ordinary
@@ -896,27 +936,35 @@
                     </ComboBox.ItemContainerStyle>
                 </ComboBox>
 
-                <TextBlock Margin="0,4,0,0"
-                           TextWrapping="Wrap"
-                           Text="{Binding AboutTheDiscInTheDrive}"
-                           Visibility="{Binding AboutTheDiscInTheDrive, Converter={StaticResource WhenAnything}}"
-                           AutomationProperties.AutomationId="AboutTheDiscInTheDrive">
-                    <!-- The style goes here and not in Resources, and there is
-                         no Style attribute as well. An implicit style sitting
-                         in an element's own Resources applies to its children
-                         and never to itself, and a Style attribute would win
-                         over it anyway, so the trigger below would have been
-                         dead markup that looked right. -->
-                    <TextBlock.Style>
-                        <Style TargetType="TextBlock" BasedOn="{StaticResource Aside}">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding TheDiscIsADifferentSize}" Value="True">
-                                    <Setter Property="Foreground" Value="{DynamicResource WorryInk}" />
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </TextBlock.Style>
-                </TextBlock>
+                <DockPanel Margin="0,4,0,0"
+                           Visibility="{Binding Notices[AboutTheDiscInTheDrive], Converter={StaticResource WhenSo}}">
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource PutAside}"
+                            Tag="AboutTheDiscInTheDrive"
+                            Click="PutTheNoticeAside"
+                            ToolTip="Hide this until it says something else"
+                            AutomationProperties.Name="Hide this until it says something else"
+                            AutomationProperties.AutomationId="PutAsideAboutTheDiscInTheDrive" />
+                    <TextBlock TextWrapping="Wrap"
+                               Text="{Binding AboutTheDiscInTheDrive}"
+                               AutomationProperties.AutomationId="AboutTheDiscInTheDrive">
+                        <!-- The style goes here and not in Resources, and there is
+                             no Style attribute as well. An implicit style sitting
+                             in an element's own Resources applies to its children
+                             and never to itself, and a Style attribute would win
+                             over it anyway, so the trigger below would have been
+                             dead markup that looked right. -->
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock" BasedOn="{StaticResource Aside}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding TheDiscIsADifferentSize}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource WorryInk}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </DockPanel>
 
                 <!-- Whether this needs somebody in the room.
 
@@ -1467,14 +1515,22 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <TextBlock Foreground="{DynamicResource WorryInk}"
-                               FontSize="12"
-                               Margin="0,6,0,0"
-                               TextWrapping="Wrap"
-                               Text="{Binding Worry.Headline}"
-                               ToolTip="{Binding Worry.Because}"
-                               Visibility="{Binding Worry, Converter={StaticResource WhenAnything}}"
-                               AutomationProperties.AutomationId="Worry" />
+                    <DockPanel Margin="0,6,0,0"
+                               Visibility="{Binding Notices[Worry], Converter={StaticResource WhenSo}}">
+                        <Button DockPanel.Dock="Right"
+                            Style="{StaticResource PutAside}"
+                            Tag="Worry"
+                            Click="PutTheNoticeAside"
+                            ToolTip="Hide this until it says something else"
+                            AutomationProperties.Name="Hide this until it says something else"
+                            AutomationProperties.AutomationId="PutAsideWorry" />
+                        <TextBlock Foreground="{DynamicResource WorryInk}"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"
+                                   Text="{Binding Worry.Headline}"
+                                   ToolTip="{Binding Worry.Because}"
+                                   AutomationProperties.AutomationId="Worry" />
+                    </DockPanel>
 
                     <!-- A worry carries figures too, and the one that has
                          them is the one that needs them most: it shows the

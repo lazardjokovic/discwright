@@ -2069,6 +2069,107 @@ public class TheMainWindowWithoutAWindow
         Assert.Equal(string.Empty, window.AboutTheDiscInTheDrive);
     }
 
+    // ------------------------------------------- an amber line, put aside with its cross
+
+    [Fact]
+    public async Task An_amber_line_put_aside_stays_hidden_until_it_says_something_else()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+        window.Medium = Media.Dvd5;
+        await window.LookAtTheDrives();
+
+        string said = window.AboutTheDiscInTheDrive;
+        Assert.NotEmpty(said);
+        Assert.True(window.Notices[nameof(MakeADisc.AboutTheDiscInTheDrive)]);
+
+        window.Notices.PutAside(nameof(MakeADisc.AboutTheDiscInTheDrive));
+
+        // Hidden, and only hidden: what it says is still what it says, and
+        // nothing that reads it to decide anything sees a difference.
+        Assert.False(window.Notices[nameof(MakeADisc.AboutTheDiscInTheDrive)]);
+        Assert.Equal(said, window.AboutTheDiscInTheDrive);
+        Assert.True(window.TheDiscIsADifferentSize);
+
+        // Another look at the same disc says the same thing, and stays hidden.
+        await window.LookAtTheDrives();
+        Assert.False(window.Notices[nameof(MakeADisc.AboutTheDiscInTheDrive)]);
+
+        // Something else to say, and it is back.
+        window.Medium = Media.Bd25;
+        Assert.NotEqual(said, window.AboutTheDiscInTheDrive);
+        Assert.True(window.Notices[nameof(MakeADisc.AboutTheDiscInTheDrive)]);
+
+        // And going back to the first words is a second time, not the first.
+        window.Medium = Media.Dvd5;
+        Assert.Equal(said, window.AboutTheDiscInTheDrive);
+        Assert.True(window.Notices[nameof(MakeADisc.AboutTheDiscInTheDrive)]);
+    }
+
+    [Fact]
+    public async Task Putting_one_line_aside_leaves_every_other_where_it_was()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+        window.OutputFolder = @"C:\out";
+        window.Add(AGame("Hollow Knight", 1000));
+        window.Label = new string([(char)0x0414, (char)0x0430, (char)0x043d, (char)0x043d, (char)0x044b, (char)0x0435]);
+        window.Medium = Media.Dvd5;
+        await window.LookAtTheDrives();
+
+        Assert.True(window.Notices[nameof(MakeADisc.Worry)]);
+        Assert.True(window.Notices[nameof(MakeADisc.AboutTheDiscInTheDrive)]);
+
+        window.Notices.PutAside(nameof(MakeADisc.Worry));
+
+        Assert.False(window.Notices[nameof(MakeADisc.Worry)]);
+        Assert.True(window.Notices[nameof(MakeADisc.AboutTheDiscInTheDrive)]);
+
+        // A line with nothing to say is not shown, and putting it aside does
+        // nothing that comes back to bite: once it has words, it shows them.
+        Assert.False(window.Notices[nameof(MakeADisc.WhatDidNotComeBack)]);
+        window.Notices.PutAside(nameof(MakeADisc.WhatDidNotComeBack));
+        Assert.False(window.Notices[nameof(MakeADisc.WhatDidNotComeBack)]);
+
+        // And a different name that cannot be shown is a different worry.
+        window.Label = new string([(char)0x041a, (char)0x043d, (char)0x0438, (char)0x0433, (char)0x0430]);
+        Assert.True(window.Notices[nameof(MakeADisc.Worry)]);
+    }
+
+    [Fact]
+    public async Task Starting_a_new_disc_brings_every_line_back()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+        window.Add(AGame("A Game", 1000));
+        window.Medium = Media.Dvd5;
+        await window.LookAtTheDrives();
+
+        window.Notices.PutAside(nameof(MakeADisc.AboutTheDiscInTheDrive));
+        Assert.False(window.Notices[nameof(MakeADisc.AboutTheDiscInTheDrive)]);
+
+        window.StartAgain();
+        window.Medium = Media.Dvd5;
+        await window.LookAtTheDrives();
+
+        Assert.True(window.Notices[nameof(MakeADisc.AboutTheDiscInTheDrive)]);
+    }
+
+    [Fact]
+    public async Task The_window_is_told_whenever_a_line_is_put_aside_or_its_words_change()
+    {
+        MakeADisc window = New(drives: new ADriveHolding(3, true, 359_847));
+        window.Medium = Media.Dvd5;
+        await window.LookAtTheDrives();
+
+        List<string?> told = [];
+        window.Notices.PropertyChanged += (_, about) => told.Add(about.PropertyName);
+
+        window.Notices.PutAside(nameof(MakeADisc.AboutTheDiscInTheDrive));
+        Assert.Equal(["Item[]"], told);
+
+        told.Clear();
+        window.Medium = Media.Bd25;
+        Assert.Contains("Item[]", told);
+    }
+
     /// <summary>A drive that pulls its own tray in, like most of them.</summary>
     private sealed class ATrayThatShuts : IWorkTheTray
     {
