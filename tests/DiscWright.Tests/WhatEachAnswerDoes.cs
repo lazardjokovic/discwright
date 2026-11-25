@@ -47,6 +47,13 @@ public sealed class WhatEachAnswerDoes
     [InlineData("MANUAL.CHM", WhatBecomesOfIt.Manual)]
     [InlineData("manual.jpg", WhatBecomesOfIt.Extra)]
     [InlineData("soundtrack.zip", WhatBecomesOfIt.Extra)]
+    // GOG zips its manuals: deadspace_manual.zip, The_Witcher_manual.zip and
+    // The_Witcher_guide.zip, from the owner's real downloads.
+    [InlineData("deadspace_manual.zip", WhatBecomesOfIt.Manual)]
+    [InlineData("The_Witcher_manual.zip", WhatBecomesOfIt.Manual)]
+    [InlineData("The_Witcher_guide.zip", WhatBecomesOfIt.Manual)]
+    [InlineData("The_Witcher_artbook.zip", WhatBecomesOfIt.Extra)]
+    [InlineData("manual.7z", WhatBecomesOfIt.Extra)]
     [InlineData("README.txt", WhatBecomesOfIt.Extra)]
     [InlineData("cover.png", WhatBecomesOfIt.Extra)]
     public void Suggests_the_manual_for_something_called_one_and_an_extra_for_the_rest(string name, WhatBecomesOfIt expected)

@@ -82,7 +82,7 @@ public class TheListOfASetSeveralGamesShare
         // Harbour Tales installs from disc 1 although its extras are on
         // disc 2: they are for reading, and are listed apart.
         Assert.Contains(
-            "A game's own manual and extras are in its folder, on one disc with it:\n"
+            "A game's own manual and extras are in its folder, on one disc of the set:\n"
                 + "\n"
                 + "  Harbour Tales   disc 2\n"
                 + "  Lanternhold     disc 3\n",

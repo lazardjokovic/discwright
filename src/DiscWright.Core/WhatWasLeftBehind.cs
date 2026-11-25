@@ -383,7 +383,10 @@ public sealed record LeftBehind(
         : LooksLikeAManual ? WhatBecomesOfIt.Manual
         : WhatBecomesOfIt.Extra;
 
-    private static readonly string[] ManualsAre = [".pdf", ".chm", ".htm", ".html", ".txt", ".rtf"];
+    // A zip as well, since 2.0.6: GOG hands its manuals over zipped, as
+    // deadspace_manual.zip and The_Witcher_manual.zip, and the owner's real
+    // set on 25 November 2026 offered Dead Space's as an extra.
+    private static readonly string[] ManualsAre = [".pdf", ".chm", ".htm", ".html", ".txt", ".rtf", ".zip"];
 
     private bool LooksLikeAManual
     {
