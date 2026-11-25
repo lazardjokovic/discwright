@@ -988,7 +988,7 @@ function isSomethingToPress(node) {
 
         if (tag === "A" || tag === "BUTTON" || tag === "INPUT" || tag === "SELECT"
                 || wears.indexOf(" corner ") >= 0 || wears.indexOf(" btn ") >= 0
-                || String(node.id || "") === "shut") {
+                || String(node.id || "") === "shut" || String(node.id || "") === "tuck") {
             return true;
         }
 
@@ -1211,9 +1211,10 @@ function whereACornerButtonGoes(look, place, howMany) {
 }
 
 // How much further in from the right a row in the top right corner sits on
-// a menu with no frame: the cross is 6 from the edge and 24 wide, and the
-// row keeps 6 from it, so it ends 36 from the edge where it ended 16.
-var CLEAR_OF_THE_CROSS = 20;
+// a menu with no frame: the cross is 6 from the edge and 24 wide, the dash
+// that minimises 4 from it and 24 wide, and the row keeps 6 from that, so
+// it ends 64 from the edge where it ended 16.
+var CLEAR_OF_THE_CROSS = 48;
 
 // Whether a row against the right edge would share the top right corner
 // with the cross of a menu with no frame. Only a row whose list is on the
@@ -2929,8 +2930,11 @@ function waitForJob(job, after, meanwhile) {
     }
 
     if (typeof window !== "undefined" && window.setTimeout) {
-        if (meanwhile) {
-            meanwhile();
+        // A look that answers false has ended the job itself, and nothing
+        // will ever finish it: the waiting ends with it, and after is never
+        // called. Stop, since 2.0.6.
+        if (meanwhile && meanwhile() === false) {
+            return;
         }
 
         window.setTimeout(function () { waitForJob(job, after, meanwhile); }, 400);
@@ -3155,8 +3159,14 @@ function copyTheSetDisc(work) {
         }
 
         var job = startAJob(setCopyCommand(work.discRoot, work.dir, row.path));
+        var watching = howMuchHasBeenRead(job, saying, row.bytes, work.say);
+
+        // What is copying now, for a stop to end: see theCopyEnds.
+        work.running = { job: job, path: onTheDisc(work.dir, row.path) };
 
         waitForJob(job, function (code) {
+            work.running = null;
+
             if (code >= 8 || sizeOf(row.path) !== row.bytes) {
                 state.bad++;
             } else {
@@ -3174,10 +3184,156 @@ function copyTheSetDisc(work) {
 
             state.at++;
             next();
-        }, howMuchHasBeenRead(job, saying, row.bytes, work.say));
+        }, function () {
+            // Somebody pressed Stop: the copy ends here, the file it was in
+            // the middle of goes, and what was copied before it stays.
+            if (work.stop && work.stop()) {
+                theCopyEnds(work);
+                work.say({ copying: "", done: state.done, all: state.all });
+
+                if (work.stopped) {
+                    work.stopped();
+                }
+
+                return false;
+            }
+
+            watching();
+            return true;
+        });
     }
 
     next();
+}
+
+// Ends the file a set is copying, if one is, and takes away what it left.
+//
+// Since 2.0.6, the owner's request: a set's copy could not be stopped once
+// it began, and closing the menu left robocopy running out of sight. Two
+// things have to happen. The job ends: the command around robocopy first,
+// so it cannot go on to say robocopy finished, then robocopy. And the file
+// goes: robocopy sizes a file to its full length before it writes it, so
+// half a file left behind is the right size, and the next Install would
+// take it as copied and install from it. Everything copied before it stays,
+// and the next Install carries on from there.
+function theCopyEnds(work) {
+    var running = work && work.running;
+
+    if (!running) {
+        return false;
+    }
+
+    work.running = null;
+    stopAJob(running.job);
+
+    // The file is let go of when robocopy's process has gone, a moment after
+    // it is told to. Tried for two seconds.
+    var until = (new Date()).getTime() + 2000;
+
+    do {
+        try {
+            if (!work.files.FileExists(running.path)) {
+                return true;
+            }
+
+            work.files.DeleteFile(running.path, true);
+            return true;
+        } catch (stillHeld) {
+            waitAMoment(100);
+        }
+    } while ((new Date()).getTime() < until);
+
+    return false;
+}
+
+// A menu with no frame, put out of the way: what minimising is for it.
+//
+// Since 2.0.6, the owner's request. Windows gives a window with no frame no
+// minimise of its own, and the page has no way to ask for one: measured, a
+// frameless HTA has no system menu and no minimise box, and Alt+Space does
+// nothing. So the window moves off the screen, where Windows itself keeps a
+// minimised window, and the desktop is made the window in front, so the
+// menu's button on the taskbar is a button to press. Pressing it, or Alt+Tab
+// to it, makes it the window in front again, and bringBack puts it where it
+// was. Nothing outside the page is started, so nothing can be refused.
+function tuckAway(win, shell) {
+    win.tuckedAt = { left: win.screenLeft, top: win.screenTop };
+    win.moveTo(-32000, -32000);
+
+    try {
+        shell.AppActivate("Program Manager");
+    } catch (noDesktop) {
+        // Out of sight and still in front: pressing the taskbar button then
+        // minimises it the ordinary way, and pressing it again brings it
+        // back, which is when bringBack puts it where it was.
+    }
+}
+
+// Where a menu put out of the way was, put back when it is the window in
+// front again. Nothing when it was not put away.
+function bringBack(win) {
+    if (!win.tuckedAt) {
+        return false;
+    }
+
+    win.moveTo(win.tuckedAt.left, win.tuckedAt.top);
+    win.tuckedAt = null;
+    return true;
+}
+
+// Ends a job started with startAJob: the command it runs in, and whatever
+// that command started. The command first, so that when its program ends it
+// does not go on to write the flag that says the job finished. Nothing when
+// nothing is found, as a job that had just finished.
+function stopAJob(job) {
+    var ended = 0;
+
+    try {
+        var wmi = wmiFor("cimv2");
+        var name = String(job.flag).split(BACKSLASH).join("/").split("/").pop();
+        var commands = new Enumerator(wmi.ExecQuery(
+            "SELECT * FROM Win32_Process WHERE Name = 'cmd.exe' AND CommandLine LIKE '%" + name + "%'"));
+
+        for (; !commands.atEnd(); commands.moveNext()) {
+            var command = commands.item();
+            var started = [];
+            var children = new Enumerator(wmi.ExecQuery(
+                "SELECT * FROM Win32_Process WHERE ParentProcessId = " + command.ProcessId));
+
+            for (; !children.atEnd(); children.moveNext()) {
+                started.push(children.item());
+            }
+
+            try { command.Terminate(); ended++; } catch (goneAlready) { }
+
+            for (var i = 0; i < started.length; i++) {
+                try { started[i].Terminate(); ended++; } catch (goneToo) { }
+            }
+        }
+    } catch (cannotAsk) {
+    }
+
+    return ended;
+}
+
+// Waits without a window to wait in: a short busy pause, for the moment a
+// stopped process takes to let go of its file. Under the menu's engine there
+// is no Sleep, and under cscript there is.
+function waitAMoment(ms) {
+    // Called and not looked at: the script host's own methods cannot be
+    // read as properties, and asking whether WScript.Sleep is there throws.
+    if (typeof WScript !== "undefined") {
+        try {
+            WScript.Sleep(ms);
+            return;
+        } catch (noSleep) {
+        }
+    }
+
+    var until = (new Date()).getTime() + ms;
+
+    while ((new Date()).getTime() < until) {
+    }
 }
 
 // What a copy does while one file works: about once a second, it asks how

@@ -159,6 +159,12 @@ function showTheWindowsOwnWayOut() {
     }
 
     document.getElementById("shut").style.display = "block";
+    document.getElementById("tuck").style.display = "block";
+
+    // Back where it was when it is the window in front again: see tuckAway.
+    window.onfocus = function () {
+        bringBack(window);
+    };
 
     // Clear of the cross, when the list is the thing under it.
     document.getElementById("panel").style.paddingTop = howFarDownTheListStarts(DISC.look) + "px";
@@ -1158,6 +1164,10 @@ var SET = null;
 // the copy, and a second press would have started a second copy.
 var restoring = { copying: "", joining: "", wanting: 0, done: 0, all: 0, startedAt: 0, rate: 0, busy: false, ticking: false, installing: false };
 
+// The disc of a set being copied now, as copyTheSetDisc was handed it, or
+// null. Stop ends it, and so does closing the menu: see theCopyEnds.
+var theSetsCopy = null;
+
 function readTheSetFile() {
     try {
         var files = new ActiveXObject("Scripting.FileSystemObject");
@@ -1296,9 +1306,18 @@ function sayTheSet(scan) {
         words = aSharedSetsLineSays(sits, theShare(), gameAt(DISC.games, showing).name);
     }
 
+    // Stopped by hand: said first, until the set goes to work again.
+    if (restoring.stopped && !restoring.busy && words) {
+        words = "Stopped. " + words;
+    }
+
     theLineIsTheChecks = false;
     line.innerText = words;
     line.style.display = words ? "block" : "none";
+
+    // Stop, under the big button, while a disc of the set is copying and
+    // at no other time: see stopTheCopy.
+    document.getElementById("stopTheCopy").style.display = restoring.copying && theSetsCopy ? "block" : "none";
 
     if (restoring.copying && restoring.all > 0) {
         bar.style.display = "block";
@@ -1501,6 +1520,7 @@ function lookForTheDiscIn(ms) {
 // Pressing Install on a disc of a set: the whole job, from this disc to the
 // installer, with nothing asked on the way unless something is wrong.
 function restoreGo() {
+    restoring.stopped = false;
     var preview = whyNothingRuns();
 
     if (preview) {
@@ -1717,8 +1737,10 @@ function copyThisDisc() {
     var files = new ActiveXObject("Scripting.FileSystemObject");
 
     restoring.wanting = 0;
+    restoring.stopped = false;
+    restoring.stopping = false;
 
-    copyTheSetDisc({
+    theSetsCopy = {
         files: files,
         discRoot: theDisc(),
         dir: theRestoreFolder(),
@@ -1739,7 +1761,21 @@ function copyThisDisc() {
                 sayTheSet();
             }
         },
+        stop: function () {
+            return !!restoring.stopping;
+        },
+        stopped: function () {
+            theSetsCopy = null;
+            restoring.stopping = false;
+            restoring.stopped = true;
+            restoring.copying = "";
+            theSetStops();
+            document.getElementById("stopTheCopy").className = "btn";
+            showTheSet(gameAt(DISC.games, showing));
+        },
         after: function (bad) {
+            theSetsCopy = null;
+
             if (bad > 0) {
                 var into = theRestoreFolder();
 
@@ -1752,7 +1788,22 @@ function copyThisDisc() {
 
             putThePiecesBack(files);
         }
-    });
+    };
+
+    copyTheSetDisc(theSetsCopy);
+}
+
+// Stop, while a disc of a set copies. Since 2.0.6, the owner's request: a
+// copy could not be stopped once it began. The file it is in the middle of
+// is taken away and everything before it stays, so Install carries on from
+// there. Pressed twice, it is still one stop.
+function stopTheCopy() {
+    if (!theSetsCopy || restoring.stopping) {
+        return;
+    }
+
+    restoring.stopping = true;
+    document.getElementById("stopTheCopy").className = "btn dead";
 }
 
 // Puts back together every cut file whose pieces are all here, and goes on
@@ -2247,6 +2298,8 @@ function sayTheCheck(words) {
 }
 
 function doExit() {
+    theCopyGoesWithTheMenu();
+
     // Stopped by hand, because the control outlives the window often enough
     // to leave music playing in an empty room.
     try {
@@ -2258,6 +2311,20 @@ function doExit() {
 
     window.close();
 }
+
+// A copy of a set does not outlive its menu. Before 2.0.6 closing the menu
+// part way through a disc left robocopy copying out of sight, and the half
+// file it was writing looked whole to the next Install: see theCopyEnds.
+// From Exit, from the cross of a menu with no frame, and from the window's
+// own close.
+function theCopyGoesWithTheMenu() {
+    if (theSetsCopy) {
+        theCopyEnds(theSetsCopy);
+        theSetsCopy = null;
+    }
+}
+
+window.onunload = theCopyGoesWithTheMenu;
 </script>
 
 <style>
@@ -2373,6 +2440,14 @@ h1 { margin: 0 0 22px 0; font-size: %%HEADSIZE%%; font-weight: bold; letter-spac
         border: 1px solid #27353B;
         background: #060E11; background: rgba(6, 14, 17, 0.85); }
 #shut:hover { background: #C42B1C; border-color: #C42B1C; color: #FFFFFF; }
+/* The dash that minimises, beside the cross and the same size, as a window's
+   own minimise sits beside its close. */
+#tuck { position: absolute; right: 34px; top: 6px; width: 22px; height: 20px;
+        line-height: 17px; text-align: center; font-family: Arial, sans-serif;
+        font-size: 15px; cursor: default; color: #CBD6DB; z-index: 5;
+        border: 1px solid #27353B;
+        background: #060E11; background: rgba(6, 14, 17, 0.85); }
+#tuck:hover { background: #1B2A30; border-color: #3A4A52; color: #FFFFFF; }
 /* The install page's words: the folder wraps, because a path is long and the
    panel is narrow. */
 #whereSays { margin: 0 0 12px 0; font-size: 11px; line-height: 15px; color: #CBD6DB; word-wrap: break-word; }
@@ -2403,6 +2478,7 @@ h1 { margin: 0 0 22px 0; font-size: %%HEADSIZE%%; font-weight: bold; letter-spac
             <h1 id="gameName"></h1>
             <a class="btn next" href="#" onclick="doTheThing(); return false;"><span id="doIt"></span></a>
             <a class="btn" id="removeTheCopy" href="#" onclick="removeTheCopyNow(); return false;" style="display: none"></a>
+            <a class="btn" id="stopTheCopy" href="#" onclick="stopTheCopy(); return false;" style="display: none">Stop</a>
             <div id="addOns"></div>
             <!-- Under the add-ons and outside them, so however far they scroll,
                  Manual, Extras, Back and Exit stay on the panel. -->
@@ -2454,6 +2530,8 @@ h1 { margin: 0 0 22px 0; font-size: %%HEADSIZE%%; font-weight: bold; letter-spac
     <div id="openDisc" class="corner wing" style="display: none" title="Open the disc in Explorer"
          onclick="openTheDiscItself(); return false;">1</div>
 
+    <div id="tuck" style="display: none" title="Minimise"
+         onclick="tuckAway(window, new ActiveXObject('WScript.Shell')); return false;">&#8211;</div>
     <div id="shut" style="display: none" title="Close"
          onclick="doExit(); return false;">&#215;</div>
 </div>
