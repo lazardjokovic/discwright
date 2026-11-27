@@ -1193,9 +1193,10 @@ function cornerIsAtTheBottom(look) {
 // of them have always been on a menu with its list on the right.
 //
 // On a menu with no frame the window's own cross is in the top right corner,
-// 24 wide and 6 from the edge, so a row there stops 6 short of it. Before
-// that it sat on the cross: the owner, 24 November 2026, "button X goes over
-// small buttons".
+// 24 wide and 6 from the edge, so a row there stops short of it and of the
+// dash beside it. Before that it sat on the cross: the owner, 24 November
+// 2026, "button X goes over small buttons". Since 2.0.7 the two sit level
+// with the row: see howFarDownTheWindowsButtonsSit.
 function whereACornerButtonGoes(look, place, howMany) {
     var box = 30;
     var edge = 16;
@@ -1212,15 +1213,30 @@ function whereACornerButtonGoes(look, place, howMany) {
 
 // How much further in from the right a row in the top right corner sits on
 // a menu with no frame: the cross is 6 from the edge and 24 wide, the dash
-// that minimises 4 from it and 24 wide, and the row keeps 6 from that, so
-// it ends 64 from the edge where it ended 16.
-var CLEAR_OF_THE_CROSS = 48;
+// that minimises 4 from it and 24 wide, and the row keeps 16 from that, so
+// it ends 74 from the edge where it ended 16. Sixteen rather than the six
+// between the row's own boxes, so the window's two read as a pair of their
+// own: xniwo's picture of it, discwright#98, 26 November 2026.
+var CLEAR_OF_THE_CROSS = 58;
 
 // Whether a row against the right edge would share the top right corner
 // with the cross of a menu with no frame. Only a row whose list is on the
 // left is ever against the right edge, so that is the only row it moves.
 function theCrossIsInTheCorner(look) {
     return theWindowHasNoFrame(look) && !cornerIsAtTheBottom(look);
+}
+
+// How far down the cross and the dash of a menu with no frame sit.
+//
+// Six from the top, as a window keeps its own, except when the row of small
+// buttons shares their corner. Then they sit level with it, their middle on
+// the row's middle: the row is 16 down and 30 tall, they are 23 tall, so 20
+// puts their middle half a pixel below the row's, which is as near as an odd
+// box gets to an even one. They sat at 6, fourteen pixels above the row's
+// middle: xniwo, discwright#98, 26 November 2026, "Icons don't align very
+// well when 'no window frame' is enabled".
+function howFarDownTheWindowsButtonsSit(look) {
+    return theCrossIsInTheCorner(look) && listIsOnTheLeft(look) ? 20 : 6;
 }
 
 // What to run once a game has been copied, or nothing.

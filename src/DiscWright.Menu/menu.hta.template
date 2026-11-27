@@ -158,6 +158,10 @@ function showTheWindowsOwnWayOut() {
         return;
     }
 
+    var down = howFarDownTheWindowsButtonsSit(DISC.look) + "px";
+
+    document.getElementById("shut").style.top = down;
+    document.getElementById("tuck").style.top = down;
     document.getElementById("shut").style.display = "block";
     document.getElementById("tuck").style.display = "block";
 
@@ -2433,17 +2437,26 @@ h1 { margin: 0 0 22px 0; font-size: %%HEADSIZE%%; font-weight: bold; letter-spac
 /* The cross a menu with no frame closes by: top right, where a window keeps
    its own, above the list when the list is on that side. Always Arial, so
    it is the same cross whatever the menu is written in. Red under the
-   pointer, as Windows' own is. */
-#shut { position: absolute; right: 6px; top: 6px; width: 22px; height: 20px;
-        line-height: 19px; text-align: center; font-family: Arial, sans-serif;
+   pointer, as Windows' own is.
+
+   21 HIGH INSIDE, AN ODD NUMBER, so a glyph one pixel thick has a middle row
+   to sit on, and each line height is the one that leaves as many empty rows
+   above its glyph as below. Measured in the real mshta on 27 November 2026,
+   every line height from 14 to 23 at 20 and at 21 high: at 20 high and the
+   19 and 17 these had, the cross had 5 rows above it and 8 below and the
+   dash 9 and 10, the "risen (very) slightly" xniwo saw, discwright#98. At 21
+   high, 22 gives the cross 7 and 7 and 18 gives the dash 10 and 10.
+   howFarDownTheWindowsButtonsSit says how far down both sit. */
+#shut { position: absolute; right: 6px; top: 6px; width: 22px; height: 21px;
+        line-height: 22px; text-align: center; font-family: Arial, sans-serif;
         font-size: 15px; cursor: default; color: #CBD6DB; z-index: 5;
         border: 1px solid #27353B;
         background: #060E11; background: rgba(6, 14, 17, 0.85); }
 #shut:hover { background: #C42B1C; border-color: #C42B1C; color: #FFFFFF; }
 /* The dash that minimises, beside the cross and the same size, as a window's
    own minimise sits beside its close. */
-#tuck { position: absolute; right: 34px; top: 6px; width: 22px; height: 20px;
-        line-height: 17px; text-align: center; font-family: Arial, sans-serif;
+#tuck { position: absolute; right: 34px; top: 6px; width: 22px; height: 21px;
+        line-height: 18px; text-align: center; font-family: Arial, sans-serif;
         font-size: 15px; cursor: default; color: #CBD6DB; z-index: 5;
         border: 1px solid #27353B;
         background: #060E11; background: rgba(6, 14, 17, 0.85); }

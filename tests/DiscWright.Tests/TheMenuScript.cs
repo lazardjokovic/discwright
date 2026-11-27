@@ -2083,8 +2083,8 @@ public sealed class TheMenuScript : IDisposable
     // No frame, the list on the left and the row at the top: the row stops
     // short of the window's own cross. Anywhere else the cross is not in its
     // corner and nothing moves.
-    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 0, 2, "630,16")]
-    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 1, 2, "666,16")]
+    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 0, 2, "620,16")]
+    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", 1, 2, "656,16")]
     [InlineData("{ listOn: 'left', corner: 'bottom', frame: 'none' }", 1, 2, "714,434")]
     [InlineData("{ listOn: 'right', corner: 'top', frame: 'none' }", 0, 2, "16,16")]
     [InlineData("{ listOn: 'left', corner: 'top', frame: 'window' }", 1, 2, "714,16")]
@@ -2102,10 +2102,13 @@ public sealed class TheMenuScript : IDisposable
     [InlineData("left", "bottom")]
     public void No_corner_button_is_ever_under_the_cross_of_a_menu_with_no_frame(string side, string corner)
     {
-        // The cross: 6 from the top and the right, 22 by 20 with a border of
-        // one, so 730 to 754 across and 6 to 28 down. The dash that
+        // The cross: 6 from the right, 22 by 21 with a border of one, so 730
+        // to 754 across and 23 down from where it sits. The dash that
         // minimises beside it, 702 to 726. Every box of a row of one to
-        // five, with 6 between it and either at least.
+        // five, with 6 between it and either at least, wherever they sit.
+        int down = int.Parse(
+            Ask($"howFarDownTheWindowsButtonsSit({{ listOn: '{side}', corner: '{corner}', frame: 'none' }})"),
+            System.Globalization.CultureInfo.InvariantCulture);
         string row = Ask(
             "(function () { var all = [], n, i, at; for (n = 1; n <= 5; n++) { for (i = 0; i < n; i++) { "
             + $"at = whereACornerButtonGoes({{ listOn: '{side}', corner: '{corner}', frame: 'none' }}, i, n); "
@@ -2115,7 +2118,7 @@ public sealed class TheMenuScript : IDisposable
         {
             int left = int.Parse(at[0], System.Globalization.CultureInfo.InvariantCulture);
             int top = int.Parse(at[1], System.Globalization.CultureInfo.InvariantCulture);
-            bool meets = left < 754 + 6 && left + 30 > 702 - 6 && top < 28 + 6 && top + 30 > 6 - 6;
+            bool meets = left < 754 + 6 && left + 30 > 702 - 6 && top < down + 23 + 6 && top + 30 > down - 6;
 
             Assert.False(meets, $"a box at {left},{top} is within 6 of the cross or the dash");
             Assert.InRange(left, 16, 760 - 16 - 30);
@@ -2127,9 +2130,46 @@ public sealed class TheMenuScript : IDisposable
     {
         string page = File.ReadAllText(Repository.File("src", "DiscWright.Menu", "menu.hta.template"));
 
-        Assert.Contains("#shut { position: absolute; right: 6px; top: 6px; width: 22px; height: 20px;", page, StringComparison.Ordinal);
+        Assert.Contains("#shut { position: absolute; right: 6px; top: 6px; width: 22px; height: 21px;", page, StringComparison.Ordinal);
         Assert.Contains("border: 1px solid #27353B;", page[page.IndexOf("#shut {", StringComparison.Ordinal)..], StringComparison.Ordinal);
-        Assert.Contains("#tuck { position: absolute; right: 34px; top: 6px; width: 22px; height: 20px;", page, StringComparison.Ordinal);
+        Assert.Contains("#tuck { position: absolute; right: 34px; top: 6px; width: 22px; height: 21px;", page, StringComparison.Ordinal);
+
+        // The line heights measured to centre each glyph at that height.
+        Assert.Contains("line-height: 22px;", page[page.IndexOf("#shut {", StringComparison.Ordinal)..page.IndexOf("#shut:hover", StringComparison.Ordinal)], StringComparison.Ordinal);
+        Assert.Contains("line-height: 18px;", page[page.IndexOf("#tuck {", StringComparison.Ordinal)..page.IndexOf("#tuck:hover", StringComparison.Ordinal)], StringComparison.Ordinal);
+
+        // And the page moves both to where the script says.
+        Assert.Contains("var down = howFarDownTheWindowsButtonsSit(DISC.look) + \"px\";", page, StringComparison.Ordinal);
+        Assert.Contains("document.getElementById(\"shut\").style.top = down;", page, StringComparison.Ordinal);
+        Assert.Contains("document.getElementById(\"tuck\").style.top = down;", page, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// xniwo, discwright#98, 26 November 2026: with no frame and the small
+    /// buttons in the top right, the cross and the dash sat fourteen pixels
+    /// above the row's middle. Level with it now, and only there.
+    /// </summary>
+    [Theory]
+    [InlineData("{ listOn: 'left', corner: 'top', frame: 'none' }", "20")]
+    [InlineData("{ listOn: 'left', corner: 'bottom', frame: 'none' }", "6")]
+    [InlineData("{ listOn: 'right', corner: 'top', frame: 'none' }", "6")]
+    [InlineData("{ listOn: 'right', corner: 'bottom', frame: 'none' }", "6")]
+    public void The_cross_and_the_dash_sit_level_with_a_row_that_shares_their_corner(string look, string down)
+    {
+        Assert.Equal(down, Ask($"String(howFarDownTheWindowsButtonsSit({look}))"));
+
+        if (down == "20")
+        {
+            // Row 16 to 46, middle 31; cross and dash 20 to 43, middle 31.5.
+            string rowTop = Ask($"String(whereACornerButtonGoes({look}, 0, 3).top)");
+            double rowMiddle = int.Parse(rowTop, System.Globalization.CultureInfo.InvariantCulture) + 30 / 2.0;
+            double theirs = 20 + 23 / 2.0;
+            Assert.InRange(Math.Abs(rowMiddle - theirs), 0, 0.5);
+
+            // And sixteen from the dash, so the two read as their own pair.
+            string rowEnd = Ask($"(function () {{ var at = whereACornerButtonGoes({look}, 2, 3); return String(at.left + 30); }})()");
+            Assert.Equal("686", rowEnd);
+        }
     }
 
     [Fact]
