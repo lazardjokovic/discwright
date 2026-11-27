@@ -95,7 +95,11 @@ public sealed record DiscProject(
 /// One record with defaults, so adding an option touches three named places:
 /// here, its binding in the window, and its test. Not eleven.
 /// </remarks>
-/// <param name="Menu">A menu that runs itself when the disc goes in.</param>
+/// <param name="Menu">
+/// Whether the disc has a menu at all. Off, it is the games and what goes
+/// with them, an ordinary disc Explorer opens, and nothing that only the menu
+/// uses is put on it.
+/// </param>
 /// <param name="Checksums">
 /// A list the disc carries so somebody can prove it is still good in ten years
 /// without this program. On by default, because that is the promise.
@@ -133,7 +137,15 @@ public sealed record DiscOptions(
     // Several games that do not fit on one disc share a set, and this is the
     // other way: a disc, or a set, for each game on its own, named after it,
     // which is what they got before 2026-11-21 whether asked for or not.
-    bool ADiscForEachGame = false)
+    bool ADiscForEachGame = false,
+
+    // Whether a disc with a menu asks Windows to open it when it goes in, the
+    // two lines of autorun.inf that name it. Its own choice since xniwo,
+    // discwright#98, 26 November 2026: the one box said "A menu that opens
+    // when the disc goes in", he read it as the opening alone, and unticked
+    // it took the whole menu away. Off, the menu is still on the disc, opened
+    // from Start Here or the AUTORUN folder.
+    bool OpensByItself = true)
 {
     /// <summary>The look chosen, or the plain one.</summary>
     public MenuLook LookOrPlain => Look ?? MenuLook.Plain;

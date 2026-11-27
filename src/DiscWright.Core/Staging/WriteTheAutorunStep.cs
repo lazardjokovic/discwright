@@ -34,7 +34,8 @@ public sealed class WriteTheAutorunStep : IBuildStep
         // chosen an icon for, and pointed Windows at a file no step wrote.
         context.Writer.WriteAutorunText(
             context.On("autorun.inf"),
-            AutorunFile.For(context.WhatThisDiscIsCalled, context.TheIconOnTheDisc, context.Project.Options.Menu));
+            AutorunFile.For(context.WhatThisDiscIsCalled, context.TheIconOnTheDisc,
+                context.Project.Options.Menu && context.Project.Options.OpensByItself));
 
         return Task.CompletedTask;
     }

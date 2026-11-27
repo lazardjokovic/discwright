@@ -663,6 +663,54 @@ public sealed class BuildingADisc : IDisposable
     }
 
     [Fact]
+    public async Task Keeps_the_whole_menu_when_only_its_opening_by_itself_is_turned_off()
+    {
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+
+        BuiltDisc disc = Assert.Single((await Build(Project(game) with { Options = new DiscOptions(OpensByItself: false) })).Discs);
+
+        // xniwo, discwright#98, 26 November 2026, expected exactly this of the
+        // old box: "it would still write a menu but just not auto launch".
+        Assert.True(File.Exists(On(disc, @"AUTORUN\menu.hta")));
+        Assert.True(File.Exists(On(disc, @"AUTORUN\menu.js")));
+        Assert.True(File.Exists(On(disc, "Start Here.hta")));
+
+        string autorun = File.ReadAllText(On(disc, "autorun.inf"));
+        Assert.DoesNotContain("shellexecute", autorun, StringComparison.Ordinal);
+        Assert.DoesNotContain("action=", autorun, StringComparison.Ordinal);
+        Assert.Contains("label=HOLLOW KNIGHT", autorun, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Leaves_the_menus_background_and_tune_off_a_disc_with_no_menu()
+    {
+        GameFolder game = AGogDownload("Hollow Knight", 500);
+        string tune = Path.Combine(_root, "tune.mp3");
+        File.WriteAllBytes(tune, new byte[64]);
+
+        DiscProject project = Project(game) with
+        {
+            Options = new DiscOptions(Menu: false),
+            Artwork = new DiscArtwork(BackgroundPath: APicture("bg", 1920, 1080)),
+            Extras = new DiscExtras(MusicPath: tune),
+        };
+
+        BuiltDisc disc = Assert.Single((await Build(project)).Discs);
+
+        // What the window now says when the menu is off: the line under the
+        // button and the dialog both name these as left off.
+        string[] names =
+        [
+            .. Directory.GetFiles(disc.Folder, "*", SearchOption.AllDirectories)
+                .Select(each => Path.GetFileNameWithoutExtension(each).ToLowerInvariant())
+        ];
+
+        Assert.DoesNotContain("music", names);
+        Assert.DoesNotContain("background", names);
+        Assert.False(Directory.Exists(On(disc, "AUTORUN")));
+    }
+
+    [Fact]
     public async Task Leaves_the_checksums_off_when_they_were_not_asked_for()
     {
         GameFolder game = AGogDownload("Hollow Knight", 500);

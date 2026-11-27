@@ -494,8 +494,18 @@ public class EveryKindOfDisc
         // mentioned anywhere.
         bool nothingOnIt = wanted.Artwork == "none" && wanted.Extras == "none";
 
-        if (nothingOnIt
-            != (screen.WhatElseIsChosen == "Nothing chosen. A disc with none of it is still a disc."))
+        // With no menu it says so first, and nothing more when nothing else
+        // was chosen: xniwo asked to be warned, discwright#98.
+        string saysNothing = wanted.Menu
+            ? "Nothing chosen. A disc with none of it is still a disc."
+            : "There is no menu on this disc.";
+
+        if (!wanted.Menu && !screen.WhatElseIsChosen.StartsWith("There is no menu on this disc.", StringComparison.Ordinal))
+        {
+            return $"There is no menu and the line says \"{screen.WhatElseIsChosen}\".";
+        }
+
+        if (nothingOnIt != (screen.WhatElseIsChosen == saysNothing))
         {
             return $"Artwork is {wanted.Artwork} and extras are {wanted.Extras}, "
                 + $"and it says \"{screen.WhatElseIsChosen}\".";

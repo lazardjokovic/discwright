@@ -172,6 +172,7 @@ public class TheWindowChecksItself
     [InlineData("a list of what every file should be")]
     [InlineData("readable by Windows 98")]
     [InlineData("a Start Here file")]
+    [InlineData("the menu opening by itself")]
     [InlineData("keeping only the image")]
     [InlineData("a disc for each game")]
     [InlineData("the menu's list on the left")]
@@ -307,7 +308,7 @@ public class TheWindowChecksItself
         nameof(MakeADisc.OutputFolder), nameof(MakeADisc.Medium), nameof(MakeADisc.TheSizeChosen),
         nameof(MakeADisc.CutFiles),
         nameof(MakeADisc.Menu), nameof(MakeADisc.Checksums), nameof(MakeADisc.LegacyFileSystems),
-        nameof(MakeADisc.StartHere), nameof(MakeADisc.OnlyTheImage), nameof(MakeADisc.ADiscForEachGame),
+        nameof(MakeADisc.StartHere), nameof(MakeADisc.OpensByItself), nameof(MakeADisc.OnlyTheImage), nameof(MakeADisc.ADiscForEachGame),
         nameof(MakeADisc.ListOnTheLeft), nameof(MakeADisc.CornerAtTheBottom),
         nameof(MakeADisc.DiscsOwnAsSmallButtons), nameof(MakeADisc.OpenTheDiscButton),
         nameof(MakeADisc.DiscManualAsASmallButton), nameof(MakeADisc.DiscExtrasAsASmallButton),
@@ -349,6 +350,7 @@ public class TheWindowChecksItself
             case "a list of what every file should be": screen.Checksums = false; break;
             case "readable by Windows 98": screen.LegacyFileSystems = true; break;
             case "a Start Here file": screen.StartHere = false; break;
+            case "the menu opening by itself": screen.OpensByItself = false; break;
             case "keeping only the image": screen.OnlyTheImage = true; break;
             case "a disc for each game": screen.ADiscForEachGame = true; break;
             case "the menu's list on the left": screen.ListOnTheLeft = true; break;
@@ -397,6 +399,7 @@ public class TheWindowChecksItself
             case "a list of what every file should be": screen.Checksums = true; break;
             case "readable by Windows 98": screen.LegacyFileSystems = false; break;
             case "a Start Here file": screen.StartHere = true; break;
+            case "the menu opening by itself": screen.OpensByItself = true; break;
             case "keeping only the image": screen.OnlyTheImage = false; break;
             case "a disc for each game": screen.ADiscForEachGame = false; break;
             case "the menu's list on the left": screen.ListOnTheLeft = false; break;
@@ -1250,7 +1253,7 @@ public class TheWindowChecksItself
             DiscProject project = new(
                 "OPENED",
                 [.. Enumerable.Range(1, (games % 3) + 1).Select(at => AGogGame($"Opened {at}", 1000))],
-                new DiscOptions(Menu: false, Checksums: false, LegacyFileSystems: true, CutFiles: true, StartHere: false),
+                new DiscOptions(Menu: false, Checksums: false, LegacyFileSystems: true, CutFiles: true, StartHere: false, OpensByItself: false),
                 Artwork: new DiscArtwork(
                     @"C:\art\icon.png",
                     @"C:\art\back.png",

@@ -102,6 +102,10 @@ public static class AProjectFile
                     OnlyTheImage: Yes(root, "IsoOnly"),
                     ADiscForEachGame: Yes(root, "ADiscForEachGame"),
 
+                    // Absent in every file written before 2.0.7, where a disc
+                    // with a menu always asked Windows to open it.
+                    OpensByItself: Yes(root, "OpensByItself", whenMissing: true),
+
                     // Absent in every file written before 2.0.5, which is
                     // the menu as it comes.
                     Look: TheLookIn(root)),

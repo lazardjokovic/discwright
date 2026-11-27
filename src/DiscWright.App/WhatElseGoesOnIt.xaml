@@ -34,6 +34,16 @@
             <TextBlock Style="{StaticResource Aside}"
                        Margin="0,3,0,0"
                        Text="None of it is required. A disc with none of this is still a disc." />
+            <!-- Only while the disc has no menu: the background, the look
+                 and the music below are the menu's, and were chosen here
+                 and quietly left off the disc until 2.0.7. -->
+            <TextBlock Style="{StaticResource Aside}"
+                       Margin="0,6,0,0"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource WorryInk}"
+                       Text="{Binding WhatTheMenuLeavesOut}"
+                       Visibility="{Binding WhatTheMenuLeavesOut, Converter={StaticResource WhenAnything}}"
+                       AutomationProperties.AutomationId="WhatTheMenuLeavesOut" />
         </StackPanel>
 
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
