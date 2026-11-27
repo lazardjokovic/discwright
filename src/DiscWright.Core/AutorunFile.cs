@@ -48,14 +48,19 @@ public static class AutorunFile
     /// is not there. <c>icon=</c> used to be written either way, and a disc
     /// built with no chosen artwork pointed Windows at a file nothing wrote.
     /// </param>
-    /// <param name="hasMenu">Whether this disc has a menu to open.</param>
-    public static string For(string label, string? iconFileName, bool hasMenu)
+    /// <param name="opensTheMenu">
+    /// Whether the disc asks Windows to open its menu when it goes in: a disc
+    /// with a menu, whose maker left it to open by itself. A menu that is on
+    /// the disc and not asked for here is still opened from Start Here or its
+    /// folder; what goes is only Windows offering it.
+    /// </param>
+    public static string For(string label, string? iconFileName, bool opensTheMenu)
     {
         string safeLabel = WithoutControlCharacters(label);
 
         List<string> lines = ["[autorun]"];
 
-        if (hasMenu)
+        if (opensTheMenu)
         {
             lines.Add("shellexecute=" + MenuPath);
         }
@@ -67,7 +72,7 @@ public static class AutorunFile
 
         lines.Add("label=" + safeLabel);
 
-        if (hasMenu)
+        if (opensTheMenu)
         {
             // What the AutoPlay prompt offers. Without it Windows says "Run
             // menu.hta", which tells somebody nothing about what is in their

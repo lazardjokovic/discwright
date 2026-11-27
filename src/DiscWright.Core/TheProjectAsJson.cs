@@ -224,6 +224,10 @@ public static class TheProjectAsJson
             writing.WriteBoolean("IsoOnly", project.Options.OnlyTheImage);
             writing.WriteBoolean("ADiscForEachGame", project.Options.ADiscForEachGame);
 
+            // Since 2.0.7, after everything older versions wrote. They skip
+            // it, and their discs always asked to open the menu.
+            writing.WriteBoolean("OpensByItself", project.Options.OpensByItself);
+
             // Only when somebody chose one. A file without it is a menu in
             // one of the faces every Windows has, as every menu was.
             if (art?.MenuFontPath is string font)

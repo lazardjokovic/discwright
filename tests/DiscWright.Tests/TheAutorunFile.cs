@@ -10,7 +10,7 @@ public class TheAutorunFile
     [Fact]
     public void Gives_the_disc_its_name_and_its_icon()
     {
-        string file = AutorunFile.For("HOLLOW KNIGHT", "disc.ico", hasMenu: true);
+        string file = AutorunFile.For("HOLLOW KNIGHT", "disc.ico", opensTheMenu: true);
 
         Assert.Contains("label=HOLLOW KNIGHT", file, StringComparison.Ordinal);
         Assert.Contains("icon=disc.ico", file, StringComparison.Ordinal);
@@ -19,7 +19,7 @@ public class TheAutorunFile
     [Fact]
     public void Points_at_the_menu_and_says_what_running_it_means()
     {
-        string file = AutorunFile.For("HOLLOW KNIGHT", "disc.ico", hasMenu: true);
+        string file = AutorunFile.For("HOLLOW KNIGHT", "disc.ico", opensTheMenu: true);
 
         Assert.Contains(@"shellexecute=AUTORUN\menu.hta", file, StringComparison.Ordinal);
 
@@ -31,7 +31,7 @@ public class TheAutorunFile
     [Fact]
     public void Leaves_the_menu_out_when_there_is_none()
     {
-        string file = AutorunFile.For("HOLLOW KNIGHT", "disc.ico", hasMenu: false);
+        string file = AutorunFile.For("HOLLOW KNIGHT", "disc.ico", opensTheMenu: false);
 
         // The disc still has a name and an icon. It simply opens in Explorer.
         Assert.DoesNotContain("shellexecute", file, StringComparison.Ordinal);
@@ -48,7 +48,7 @@ public class TheAutorunFile
         // icon on it got a line pointing Windows at a file that was not
         // there. A directive naming nothing is worse than no directive: the
         // file reads as though somebody meant it.
-        string file = AutorunFile.For("HOLLOW KNIGHT", icon, hasMenu: true);
+        string file = AutorunFile.For("HOLLOW KNIGHT", icon, opensTheMenu: true);
 
         Assert.DoesNotContain("icon=", file, StringComparison.Ordinal);
 
@@ -62,7 +62,7 @@ public class TheAutorunFile
     {
         // Ours lives beside the menu rather than at the root, so the path
         // has a separator in it and autorun.inf has to carry it whole.
-        string file = AutorunFile.For("X", @"AUTORUN\menu.ico", hasMenu: true);
+        string file = AutorunFile.For("X", @"AUTORUN\menu.ico", opensTheMenu: true);
 
         Assert.Contains(@"icon=AUTORUN\menu.ico", file, StringComparison.Ordinal);
     }
@@ -70,7 +70,7 @@ public class TheAutorunFile
     [Fact]
     public void Turns_off_the_prompts_about_the_wrong_thing()
     {
-        string file = AutorunFile.For("X", "disc.ico", hasMenu: true);
+        string file = AutorunFile.For("X", "disc.ico", opensTheMenu: true);
 
         // Explorer otherwise offers to import the disc's pictures or play its
         // music, which for a game disc is a question about the wrong thing.
@@ -82,7 +82,7 @@ public class TheAutorunFile
     [Fact]
     public void Is_written_one_directive_to_a_line_with_Windows_line_endings()
     {
-        string file = AutorunFile.For("X", "disc.ico", hasMenu: true);
+        string file = AutorunFile.For("X", "disc.ico", opensTheMenu: true);
 
         Assert.StartsWith("[autorun]\r\n", file, StringComparison.Ordinal);
         Assert.EndsWith("\r\n", file, StringComparison.Ordinal);
@@ -101,7 +101,7 @@ public class TheAutorunFile
         // below would be chosen by whoever wrote the project file, on a disc
         // the person burning it believed was theirs.
         string file = AutorunFile.For(
-            "My Game\r\nopen=Extras\\payload.exe", "disc.ico", hasMenu: false);
+            "My Game\r\nopen=Extras\\payload.exe", "disc.ico", opensTheMenu: false);
 
         // Asserted per LINE rather than on the whole file. The stripped label
         // really does still contain the text "open=", harmlessly, as part of
@@ -117,7 +117,7 @@ public class TheAutorunFile
     [Fact]
     public void Will_not_let_an_icon_name_do_it_either()
     {
-        string file = AutorunFile.For("X", "disc.ico\r\nopen=payload.exe", hasMenu: false);
+        string file = AutorunFile.For("X", "disc.ico\r\nopen=payload.exe", opensTheMenu: false);
 
         Assert.DoesNotContain("\r\nopen=", file, StringComparison.Ordinal);
     }
@@ -156,14 +156,39 @@ public class TheAutorunFile
         Assert.Empty(wrote.Texts);
     }
 
+    /// <summary>
+    /// The menu is opened by autorun.inf only when there is one and its
+    /// maker left it to open by itself: two choices since xniwo read the
+    /// one box as the second alone, discwright#98, 26 November 2026.
+    /// </summary>
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, false)]
+    public async Task Opens_the_menu_only_when_there_is_one_and_it_is_asked_to(bool menu, bool byItself, bool opens)
+    {
+        RecordingWriter wrote = new();
+
+        await new WriteTheAutorunStep().Run(
+            ContextFor(wrote, disc: 1, of: 1, new DiscOptions(Menu: menu, OpensByItself: byItself)),
+            CancellationToken.None);
+
+        string file = Written(wrote);
+
+        Assert.Equal(opens, file.Contains(@"shellexecute=AUTORUN\menu.hta", StringComparison.Ordinal));
+        Assert.Equal(opens, file.Contains("action=Run HOLLOW KNIGHT", StringComparison.Ordinal));
+        Assert.Contains("label=HOLLOW KNIGHT", file, StringComparison.Ordinal);
+    }
+
     private static string Written(RecordingWriter wrote) => wrote.AutorunTexts.Single().Text;
 
-    private static BuildContext ContextFor(RecordingWriter wrote, int disc, int of)
+    private static BuildContext ContextFor(RecordingWriter wrote, int disc, int of, DiscOptions? options = null)
     {
         List<PlannedDisc> discs = [.. Enumerable.Range(1, of).Select(number => new PlannedDisc(number, [], 0))];
 
         return new BuildContext(
-            new DiscProject("HOLLOW KNIGHT", [], new DiscOptions()),
+            new DiscProject("HOLLOW KNIGHT", [], options ?? new DiscOptions()),
             new DiscLayout(discs, 1_000_000, false),
             discs[disc - 1],
             wrote.AStageAt(@"C:\stage"),

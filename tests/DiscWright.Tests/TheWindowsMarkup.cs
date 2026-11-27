@@ -426,16 +426,21 @@ public class TheWindowsMarkup
         Assert.Null(links.Attribute("Visibility"));
     }
 
-    [Fact]
-    public void Start_Here_sits_under_the_menu_and_is_dead_without_one()
+    [Theory]
+    [InlineData("OpensByItself", 1)]
+    [InlineData("StartHere", 2)]
+    public void A_way_into_the_menu_sits_under_it_and_is_dead_without_one(string id, int below)
     {
-        // A Start Here file opens the menu, so with no menu it has nothing to
-        // open. Dead rather than hidden, so somebody can see it is there and
-        // why it cannot be ticked. And dead during a run, like every option.
-        XElement box = Window().Descendants(Xaml + "CheckBox").Single(each => IdOf(each) == "StartHere");
+        // A Start Here file opens the menu, and so does the disc going in, so
+        // with no menu neither has anything to open. Dead rather than hidden,
+        // so somebody can see it is there, and the hover says why even then.
+        // And dead during a run, like every option.
+        XElement box = Window().Descendants(Xaml + "CheckBox").Single(each => IdOf(each) == id);
 
-        Assert.Equal("{Binding StartHere}", (string?)box.Attribute("IsChecked"));
+        Assert.Equal("{Binding " + id + "}", (string?)box.Attribute("IsChecked"));
         Assert.Null(box.Attribute("Visibility"));
+        Assert.Equal("True", (string?)box.Attribute(XName.Get("ToolTipService.ShowOnDisabled")));
+        Assert.Contains("Needs A menu.", box.Descendants(Xaml + "TextBlock").Single().Value, StringComparison.Ordinal);
 
         XElement style = box.Descendants(Xaml + "Style").Single();
         Assert.Contains(
@@ -453,9 +458,33 @@ public class TheWindowsMarkup
         // and the owner called that a visual bug on 2026-11-10.
         Assert.Null(box.Attribute("Margin"));
 
-        // Straight after the menu's own box, so it reads as belonging to it.
+        // Straight after the menu's own box, the opening first and then Start
+        // Here, so they read as belonging to it.
         XElement[] boxes = [.. box.Parent!.Elements(Xaml + "CheckBox")];
-        Assert.Equal("Menu", IdOf(boxes[Array.IndexOf(boxes, box) - 1]));
+        Assert.Equal("Menu", IdOf(boxes[Array.IndexOf(boxes, box) - below]));
+    }
+
+    [Fact]
+    public void The_menus_box_says_a_menu_and_nothing_about_when_it_opens()
+    {
+        // "A menu that opens when the disc goes in" was read as the opening
+        // alone and took the whole menu away: xniwo, discwright#98.
+        XElement box = Window().Descendants(Xaml + "CheckBox").Single(each => IdOf(each) == "Menu");
+
+        Assert.Equal("A menu", (string?)box.Attribute("Content"));
+        Assert.Equal(
+            "It opens by itself when the disc goes in",
+            (string?)Window().Descendants(Xaml + "CheckBox").Single(each => IdOf(each) == "OpensByItself").Attribute("Content"));
+    }
+
+    [Fact]
+    public void The_preview_says_why_it_is_grey()
+    {
+        XElement button = Window().Descendants(Xaml + "Button").Single(each => IdOf(each) == "PreviewTheMenu");
+
+        Assert.Equal("{Binding CanPreview}", (string?)button.Attribute("IsEnabled"));
+        Assert.Equal("{Binding ThePreviewSays}", (string?)button.Attribute("ToolTip"));
+        Assert.Equal("True", (string?)button.Attribute(XName.Get("ToolTipService.ShowOnDisabled")));
     }
 
     [Fact]
@@ -1670,7 +1699,10 @@ public class TheWindowsMarkup
         // same surprise caught the owner from both directions: disc 1 of 2
         // taken for the whole answer, then the crowd of windows read as a
         // bug. A set asks first now, and the hover says so.
-        string hover = (string?)preview.Attribute("ToolTip") ?? string.Empty;
+        // The words are the screen's since 2.0.7, because with no menu the
+        // hover says why the button is grey instead.
+        Assert.Equal("{Binding ThePreviewSays}", (string?)preview.Attribute("ToolTip"));
+        string hover = MakeADisc.APreviewOfASetAsksFirst;
 
         Assert.Contains("A set asks first", hover, StringComparison.Ordinal);
 

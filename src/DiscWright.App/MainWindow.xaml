@@ -392,9 +392,11 @@
                          Pressing it opens a window, which is what a button
                          does. It lived on the header row above and made that
                          row button-tall; on the toolbar it is level with what
-                         is done to the list, and still dead unless there is a
-                         menu to preview, so it cannot show something that is
-                         not going to be on the disc. -->
+                         is done to the list. Dead unless there is a menu to
+                         preview, and the hover says so then: this comment
+                         claimed it long before it was true, and xniwo found
+                         the button lit with the menu off, doing nothing,
+                         discwright#98, 26 November 2026. -->
                     <!-- It says it opens one window per disc, because a set
                          opens several and the second can land exactly behind
                          the first. Somebody looked at disc 1 of 2, took it for
@@ -409,7 +411,8 @@
                             Margin="8,0,0,0"
                             IsEnabled="{Binding CanPreview}"
                             Click="PreviewTheMenu"
-                            ToolTip="A set asks first: one window, or one per disc. Every disc carries the manual and the extras."
+                            ToolTip="{Binding ThePreviewSays}"
+                            ToolTipService.ShowOnDisabled="True"
                             AutomationProperties.AutomationId="PreviewTheMenu" />
                 </Grid>
 
@@ -1172,20 +1175,51 @@
                           Header="More options"
                           AutomationProperties.AutomationId="MoreOptions">
                     <StackPanel Margin="4,10,0,0">
-                        <!-- On by default, and the only option here whose
-                             effect depends on a setting that is not ours. The
-                             tooltip says so, because a disc that does nothing
-                             when it goes in looks broken, and the reason is on
-                             the other person's machine. -->
-                        <CheckBox Content="A menu that opens when the disc goes in"
+                        <!-- Whether there is a menu at all, and nothing else.
+                             It said "A menu that opens when the disc goes in"
+                             until 2.0.7, and xniwo read that as the opening
+                             alone, discwright#98, 26 November 2026: unticked,
+                             it took the whole menu away. The opening is the
+                             box below it now. -->
+                        <CheckBox Content="A menu"
                                   IsChecked="{Binding Menu}"
                                   IsEnabled="{Binding NothingIsRunning}"
                                   AutomationProperties.AutomationId="Menu">
                             <CheckBox.ToolTip>
                                 <TextBlock TextWrapping="Wrap" MaxWidth="360">
-                                    A disc opens its menu by itself only where AutoRun is switched on, and
-                                    Windows has been turning that off for years. Where it is off, the disc
-                                    opens in Explorer instead and the menu is the AUTORUN folder.
+                                    The disc's own menu, to install or play the games, read the manuals and
+                                    check the disc. Without it the disc is the games and their files, and the
+                                    menu's background, look and music are not put on it.
+                                </TextBlock>
+                            </CheckBox.ToolTip>
+                        </CheckBox>
+
+                        <!-- The only option here whose effect depends on a
+                             setting that is not ours, so the tooltip says so:
+                             a disc that does nothing when it goes in looks
+                             broken, and the reason is on the other person's
+                             machine. Grey with no menu, as Start Here is, and
+                             the hover says why even then. -->
+                        <CheckBox Content="It opens by itself when the disc goes in"
+                                  IsChecked="{Binding OpensByItself}"
+                                  ToolTipService.ShowOnDisabled="True"
+                                  AutomationProperties.AutomationId="OpensByItself">
+                            <CheckBox.Style>
+                                <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+                                    <Setter Property="IsEnabled" Value="{Binding NothingIsRunning}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Menu}" Value="False">
+                                            <Setter Property="IsEnabled" Value="False" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </CheckBox.Style>
+                            <CheckBox.ToolTip>
+                                <TextBlock TextWrapping="Wrap" MaxWidth="360">
+                                    Asks Windows to open the menu when the disc goes in. It does only where
+                                    AutoRun is switched on, and Windows has been turning that off for years.
+                                    Left off, the menu is still on the disc, opened from Start Here or the
+                                    AUTORUN folder. Needs A menu.
                                 </TextBlock>
                             </CheckBox.ToolTip>
                         </CheckBox>
@@ -1199,6 +1233,7 @@
                              (discwright#181). -->
                         <CheckBox Content="A Start Here file at the top of the disc"
                                   IsChecked="{Binding StartHere}"
+                                  ToolTipService.ShowOnDisabled="True"
                                   AutomationProperties.AutomationId="StartHere">
                             <CheckBox.Style>
                                 <Style TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
@@ -1214,7 +1249,7 @@
                                 <TextBlock TextWrapping="Wrap" MaxWidth="360">
                                     Start Here.hta opens the menu by hand on a computer where AutoRun is off,
                                     which is most of them now. Without it the menu is still on the disc, in
-                                    the AUTORUN folder.
+                                    the AUTORUN folder. Needs A menu.
                                 </TextBlock>
                             </CheckBox.ToolTip>
                         </CheckBox>

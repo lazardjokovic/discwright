@@ -537,8 +537,9 @@
         back.</span></label>
       <label class="case"><input type="checkbox" id="c4" data-controls="PreviewTheMenu"><span class="id">C4</span>
         <span class="what">See what it will look like</span>
-        <span class="look"><span class="grey">Grey</span> with no game, no name, or a plan that will not work.
-        <b>Not</b> grey for a missing ISO folder: a preview writes somewhere temporary of its own.</span></label>
+        <span class="look"><span class="grey">Grey</span> with no game, no name, a plan that will not work, or
+        <b>A menu</b> off, when hovering it says there is no menu to see. <b>Not</b> grey for a missing ISO
+        folder: a preview writes somewhere temporary of its own.</span></label>
       <label class="case"><input type="checkbox" id="c5" data-controls="Games"><span class="id">C5</span>
         <span class="what">The tick box on every row of the list</span>
         <span class="look"><span class="live">Live at all times</span>, including mid-build. See D4.</span></label>
@@ -641,9 +642,16 @@
         <span class="look"><span class="live">Live at all times.</span> Opening and closing it must not move
         anything else on the window.</span></label>
       <label class="case"><input type="checkbox" id="c17" data-controls="Menu"><span class="id">C17</span>
-        <span class="what">A menu that opens when the disc goes in</span>
-        <span class="look"><span class="live">Live at all times</span>, including mid-build. On by
-        default.</span></label>
+        <span class="what">A menu</span>
+        <span class="look"><span class="grey">Grey</span> during a run only. On by default. Off, the two boxes
+        under it go grey and say why when hovered, the preview goes grey, the line under Artwork, music and
+        extras starts "There is no menu on this disc." and names a background or music as left off, and the
+        dialog says the same in amber at its top. The built disc has no AUTORUN folder.</span></label>
+      <label class="case"><input type="checkbox" id="c17c" data-controls="OpensByItself"><span class="id">C17c</span>
+        <span class="what">It opens by itself when the disc goes in</span>
+        <span class="look"><span class="grey">Grey</span> while the menu is off and during a run. On by default. Off,
+        the built disc still has its menu and Start Here.hta, and autorun.inf has no shellexecute= or action=
+        line, so AutoPlay offers to open the folder.</span></label>
       <label class="case"><input type="checkbox" id="c17b" data-controls="StartHere"><span class="id">C17b</span>
         <span class="what">A Start Here file at the top of the disc, under the menu option</span>
         <span class="look"><span class="grey">Grey</span> while the menu is off and during a run. On by default. Off,

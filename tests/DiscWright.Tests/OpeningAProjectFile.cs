@@ -48,6 +48,22 @@ public class OpeningAProjectFile
         // Written before the option existed, and every disc of that time had
         // Start Here.hta, so a file that does not say comes back with it on.
         Assert.True(opened.Options.StartHere);
+
+        // Written before 2.0.7, when a disc with a menu always asked Windows
+        // to open it.
+        Assert.True(opened.Options.OpensByItself);
+    }
+
+    [Fact]
+    public void Reads_a_menu_that_does_not_open_by_itself()
+    {
+        OpenedProject opened = Open("""
+            { "Games": [{ "Folder": "D:\\a" }], "Menu": true, "OpensByItself": false }
+            """);
+
+        Assert.True(opened.Options.Menu);
+        Assert.False(opened.Options.OpensByItself);
+        Assert.True(opened.Options.StartHere);
     }
 
     [Fact]

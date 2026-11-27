@@ -328,7 +328,16 @@ public sealed class MakeADisc : INotifyPropertyChanged
     /// one.
     /// </para>
     /// </remarks>
-    public bool CanPreview => !IsWorking && _thePlanIsSound;
+    /// <remarks>
+    /// <para>
+    /// And not without a menu. The button was lit with the menu off from the
+    /// day it was made, beside a comment saying it was dead then, wrote
+    /// nothing and opened nothing, and said nothing about why: xniwo,
+    /// discwright#98, 26 November 2026. The PowerShell app had always greyed
+    /// it.
+    /// </para>
+    /// </remarks>
+    public bool CanPreview => !IsWorking && _thePlanIsSound && Options.Menu;
 
     /// <summary>
     /// What to call the folder this project's preview goes in.
@@ -1701,12 +1710,70 @@ public sealed class MakeADisc : INotifyPropertyChanged
             ? "Without its installer, the disc will not install the game."
             : null;
 
-    /// <summary>Whether the disc gets a menu that opens when it goes in.</summary>
+    /// <summary>Whether the disc has a menu at all.</summary>
+    /// <remarks>
+    /// Everything that only the menu uses says so when it goes: the preview,
+    /// the line naming what the disc has, and the dialog where the menu's
+    /// background, look and music are chosen. xniwo, discwright#98, 26
+    /// November 2026, with it off: "nothing will happen when you click on
+    /// 'See what it will look like'".
+    /// </remarks>
     public bool Menu
     {
         get => Options.Menu;
-        set => Switch(Options with { Menu = value });
+        set
+        {
+            if (Options.Menu == value)
+            {
+                return;
+            }
+
+            Switch(Options with { Menu = value });
+            Tell(nameof(CanPreview));
+            Tell(nameof(ThePreviewSays));
+            Tell(nameof(WhatElseIsChosen));
+            Tell(nameof(WhatTheMenuLeavesOut));
+        }
     }
+
+    /// <summary>
+    /// Whether a disc with a menu asks Windows to open it when it goes in.
+    /// </summary>
+    public bool OpensByItself
+    {
+        get => Options.OpensByItself;
+        set => Switch(Options with { OpensByItself = value });
+    }
+
+    /// <summary>
+    /// What the dialog of the menu's things says while there is no menu, or
+    /// nothing.
+    /// </summary>
+    /// <remarks>
+    /// The background, the menu's look and the music are offered there either
+    /// way, and with no menu none of them goes on the disc. Chosen and then
+    /// quietly left off was what the window did until 2.0.7.
+    /// </remarks>
+    public string? WhatTheMenuLeavesOut =>
+        Options.Menu
+            ? null
+            : "This disc has no menu, so its background, look and music are not put on it. "
+                + "Tick A menu under More options to use them.";
+
+    /// <summary>What the preview button says when it is hovered.</summary>
+    /// <remarks>
+    /// The reason when there is no menu, because that grey has no red line
+    /// to explain it: the box that decides it is folded away under More
+    /// options.
+    /// </remarks>
+    public string ThePreviewSays =>
+        Options.Menu
+            ? APreviewOfASetAsksFirst
+            : "There is no menu to see. A menu is off, under More options.";
+
+    /// <summary>What the preview says when there is a menu to see.</summary>
+    public const string APreviewOfASetAsksFirst =
+        "A set asks first: one window, or one per disc. Every disc carries the manual and the extras.";
 
     /// <summary>Whether the disc carries a list of what every file should be.</summary>
     public bool Checksums
@@ -3605,9 +3672,15 @@ public sealed class MakeADisc : INotifyPropertyChanged
         {
             List<string> got = [];
 
+            // The background and the tune are the menu's, and with no menu
+            // they are not copied. This line named them anyway until 2.0.7.
+            bool menu = Options.Menu;
+            List<string> leftOff = [];
+
             if (DiscIcon is not null) { got.Add("an icon"); }
-            if (Background is not null) { got.Add("a background"); }
-            if (Music is not null) { got.Add("music"); }
+            if (Background is not null) { if (menu) { got.Add("a background"); } else { leftOff.Add("background"); } }
+            if (Music is not null) { (menu ? got : leftOff).Add("music"); }
+
             if (Manual is not null) { got.Add("a manual"); }
             if (ExtrasFolder is not null) { got.Add("extras"); }
 
@@ -3625,12 +3698,33 @@ public sealed class MakeADisc : INotifyPropertyChanged
 
             if (Cover is not null || DiscFace is not null) { got.Add("artwork to print"); }
 
-            return got.Count switch
+            if (menu)
             {
-                0 => "Nothing chosen. A disc with none of it is still a disc.",
-                1 => "This disc has " + got[0] + ".",
-                _ => "This disc has " + string.Join(", ", got.Take(got.Count - 1)) + " and " + got[^1] + "."
-            };
+                return got.Count == 0
+                    ? "Nothing chosen. A disc with none of it is still a disc."
+                    : "This disc has " + InAList(got) + ".";
+            }
+
+            // Said first, because it is the one thing here nobody can see
+            // from the disc's list: xniwo asked to be warned, discwright#98.
+            string said = "There is no menu on this disc.";
+
+            if (got.Count > 0)
+            {
+                said += " It has " + InAList(got) + ".";
+            }
+
+            if (leftOff.Count > 0)
+            {
+                said += " The " + InAList(leftOff) + " chosen for the menu " + (leftOff.Count == 1 ? "is" : "are") + " left off.";
+            }
+
+            return said;
+
+            static string InAList(List<string> items) =>
+                items.Count == 1
+                    ? items[0]
+                    : string.Join(", ", items.Take(items.Count - 1)) + " and " + items[^1];
         }
     }
 
@@ -5333,6 +5427,9 @@ public sealed class MakeADisc : INotifyPropertyChanged
         Tell(nameof(LegacyFileSystems));
         Tell(nameof(CutFiles));
         Tell(nameof(StartHere));
+        Tell(nameof(OpensByItself));
+        Tell(nameof(ThePreviewSays));
+        Tell(nameof(WhatTheMenuLeavesOut));
         Tell(nameof(ListOnTheLeft));
         Tell(nameof(CornerAtTheBottom));
         Tell(nameof(DiscsOwnAsSmallButtons));

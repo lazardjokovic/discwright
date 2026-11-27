@@ -2656,6 +2656,46 @@ public class TheMainWindowWithoutAWindow
         Assert.Contains("artwork to print", window.WhatElseIsChosen, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// With no menu the line says so first, and names the background and the
+    /// tune as left off rather than as on the disc: they were named as on it
+    /// until 2.0.7, and the build has never copied them without a menu.
+    /// </summary>
+    [Fact]
+    public void Says_there_is_no_menu_and_what_that_leaves_off()
+    {
+        MakeADisc window = New();
+        window.DiscIcon = @"C:\art\icon.png";
+        window.Background = @"C:\art\back.png";
+        window.Music = @"C:\music\tune.mp3";
+        window.Manual = @"C:\extras\how.txt";
+
+        Assert.Equal("This disc has an icon, a background, music and a manual.", window.WhatElseIsChosen);
+        Assert.Null(window.WhatTheMenuLeavesOut);
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.Menu = false;
+
+        Assert.Equal(
+            "There is no menu on this disc. It has an icon and a manual. The background and music chosen for the menu are left off.",
+            window.WhatElseIsChosen);
+        Assert.NotNull(window.WhatTheMenuLeavesOut);
+        Assert.Contains(nameof(MakeADisc.WhatElseIsChosen), told);
+        Assert.Contains(nameof(MakeADisc.WhatTheMenuLeavesOut), told);
+
+        window.Music = null;
+        Assert.Equal(
+            "There is no menu on this disc. It has an icon and a manual. The background chosen for the menu is left off.",
+            window.WhatElseIsChosen);
+
+        window.Background = null;
+        window.DiscIcon = null;
+        window.Manual = null;
+        Assert.Equal("There is no menu on this disc.", window.WhatElseIsChosen);
+    }
+
     /// <summary>One that does not answer until it is told to, and counts.</summary>
     private sealed class AnAskerThatWaitsToAnswer : IAskWhatIsReleased
     {
@@ -3484,6 +3524,52 @@ public class TheMainWindowWithoutAWindow
         // Which is what Build has always done in this state, so the box
         // could only ever have come from the preview.
         Assert.False(window.CanMakeIt);
+    }
+
+    /// <summary>
+    /// xniwo, discwright#98, 26 November 2026: with the menu off, "nothing
+    /// will happen when you click on 'See what it will look like'". Grey now,
+    /// and the hover says why, since nothing on the window would.
+    /// </summary>
+    [Fact]
+    public void Will_not_offer_a_preview_of_a_disc_with_no_menu_and_says_why()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+        Assert.True(window.CanPreview);
+        string lit = window.ThePreviewSays;
+
+        List<string?> told = [];
+        window.PropertyChanged += (_, what) => told.Add(what.PropertyName);
+
+        window.Menu = false;
+
+        Assert.False(window.CanPreview);
+        Assert.Contains(nameof(MakeADisc.CanPreview), told);
+        Assert.Contains(nameof(MakeADisc.ThePreviewSays), told);
+        Assert.Equal("There is no menu to see. A menu is off, under More options.", window.ThePreviewSays);
+
+        window.Menu = true;
+
+        Assert.True(window.CanPreview);
+        Assert.Equal(lit, window.ThePreviewSays);
+    }
+
+    /// <summary>
+    /// The opening by itself is its own choice and leaves the preview alone:
+    /// the menu is still on the disc to look at.
+    /// </summary>
+    [Fact]
+    public void Still_offers_a_preview_of_a_menu_that_does_not_open_by_itself()
+    {
+        MakeADisc window = New();
+        window.Add(AGame("Hollow Knight", 1000));
+
+        window.OpensByItself = false;
+
+        Assert.True(window.CanPreview);
+        Assert.False(window.Options.OpensByItself);
+        Assert.True(window.Options.Menu);
     }
 
     [Fact]
